@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core;
@@ -117,6 +118,19 @@ namespace ExcelReader.Tests.Native
             public bool IsDate1904 => inner.IsDate1904;
             public string SheetName => inner.SheetName;
             public int SheetCount => inner.SheetCount;
+
+            public IExcelSheet FirstSheet => inner.FirstSheet;
+
+            public IExcelSheet SheetAt(int index)
+            {
+                return inner.SheetAt(index);
+            }
+
+            public bool TryGetSheet(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out IExcelSheet sheet)
+            {
+                return inner.TryGetSheet(name, out sheet);
+            }
+
             public string SheetNameAt(int index)
             {
                 return inner.SheetNameAt(index);

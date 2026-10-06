@@ -6,19 +6,9 @@ namespace ExcelReader.Core.Reader
     /// without boxing to the format-agnostic <see cref="IExcelRowEnumerator"/>.
     /// </summary>
     /// <typeparam name="TEnumerator">The concrete row enumerator type this reader produces.</typeparam>
-    public interface IExcelRowReader<TEnumerator>
+    public interface IExcelRowReader<TEnumerator> : IExcelSheet<TEnumerator>
         where TEnumerator : IExcelRowEnumerator
     {
-        /// <summary>Gets a value indicating whether the workbook's date system is 1904-based rather than the default 1900-based system.</summary>
-        bool IsDate1904 { get; }
-
-        /// <summary>Gets an enumerator that reads the current sheet's rows synchronously from the start.</summary>
-        TEnumerator GetEnumerator();
-
-        /// <summary>Gets an enumerator that reads the current sheet's rows asynchronously from the start.</summary>
-        /// <remarks>Setup that needs I/O, such as opening the sheet part or loading shared strings, runs on the first <see cref="IExcelRowEnumerator.MoveNextAsync"/>, so this call does not block.</remarks>
-        /// <param name="ct">A token observed by that deferred setup and by every <see cref="IExcelRowEnumerator.MoveNextAsync"/> call.</param>
-        TEnumerator GetAsyncEnumerator(CancellationToken ct = default);
     }
 
     /// <summary>
@@ -39,13 +29,13 @@ namespace ExcelReader.Core.Reader
     /// to new enumerators; its file or stream is released when the last enumerator is disposed.
     /// </para>
     /// </remarks>
-    public interface IExcelRowReader : IExcelRowReader<IExcelRowEnumerator>, IDisposable, IAsyncDisposable
+    public interface IExcelRowReader : IExcelRowReader<IExcelRowEnumerator>, IExcelWorkbook
     {
+        /// <summary>Gets a value indicating whether the workbook's date system is 1904-based rather than the default 1900-based system.</summary>
+        new bool IsDate1904 { get; }
+
         /// <summary>Gets the name of the currently selected sheet.</summary>
         string SheetName { get; }
-
-        /// <summary>Gets the number of sheets in the workbook.</summary>
-        int SheetCount { get; }
 
         /// <summary>Gets the name of the sheet at the given zero-based index, without changing the current sheet.</summary>
         /// <param name="index">The zero-based sheet index. Must be within <c>[0, SheetCount)</c>.</param>
