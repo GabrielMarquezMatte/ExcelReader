@@ -10,25 +10,25 @@ memory-footprint measurements, approaches that were tried and rejected. That liv
 
 ## The four format families
 
-Each format has its own workbook (`CsvReader` for CSV) and a writer implementing `IWorkbookWriter<TSheet>`
-(`src/ExcelReader.Core/Writer/IWorkbookWriter.cs`):
+Each format has its own workbook (`CsvReader` for CSV) and a writer implementing
+`IWorkbookWriter<TSheet>` (`src/ExcelReader.Core/Writer/IWorkbookWriter.cs`):
 
 | Format | Workbook | Writer | Sheet/row writer |
 |---|---|---|---|
 | XLSX | `XlsxWorkbook` | `XlsxWorkbookWriter` | `XlsxSheetWriter`/`XlsxRowWriter` |
 | XLSB | `XlsbWorkbook` | `XlsbWorkbookWriter` | `XlsbSheetWriter`/`XlsbRowWriter` |
-| XLS  | `XlsWorkbook` | `XlsWorkbookWriter`  | `XlsSheetWriter`/`XlsRowWriter` |
-| CSV  | `CsvReader`  | `CsvWorkbookWriter`  | `CsvSheetWriter`/`CsvRowWriter` |
+| XLS  | `XlsWorkbook`  | `XlsWorkbookWriter`  | `XlsSheetWriter`/`XlsRowWriter` |
+| CSV  | `CsvReader`    | `CsvWorkbookWriter`  | `CsvSheetWriter`/`CsvRowWriter` |
 
 CSV has one extra layer: `CsvWriter` is the low-level RFC4180 writer (buffered rows straight to the
 stream, no sheets/styles/shared-strings machinery); `CsvWorkbookWriter` adapts it to the shared
 `IWorkbookWriter<CsvSheetWriter>` contract, exposing exactly one sheet.
 
-All four open through `Excel.Open`/`OpenAsync`, which return an `IExcelWorkbook` and take an optional
-`ExcelFileFormat`. The three signed formats are detected from the file's first bytes; CSV carries no signature, so it is named
-rather than detected, and its dialect rides along in `ExcelReaderOptions.Csv`. That one options
-object is what the native ABI's `xl_open_options` maps onto, so `ReadApi.Open` dispatches formats
-rather than reimplementing them.
+All four open through `Excel.Open`/`OpenAsync`, which return an `IExcelWorkbook` and take an
+optional `ExcelFileFormat`. The three signed formats are detected from the file's first bytes; CSV
+carries no signature, so it is named rather than detected, and its dialect rides along in
+`ExcelReaderOptions.Csv`. That one options object is what the native ABI's `xl_open_options` maps
+onto, so `ReadApi.Open` dispatches formats rather than reimplementing them.
 
 A workbook, a sheet and an enumerator are three separate things. The workbook (`XlsxWorkbook` and its
 siblings, `IExcelWorkbook`) owns the shared state: the file or stream, the sheet list, the shared
@@ -214,6 +214,7 @@ Both live in `ExcelReader.Cli`, not `CliCommands.cs` - the interactive/plain dec
 concern rather than by size:
 
 - `XlsxWorkbook.cs` / `XlsbWorkbook.cs` — fields, constructors, the sheet list, dispose.
+- `XlsbWorkbookParts.cs` (XLSB only) — parses `workbook.bin` for the sheet names, paths and visibility.
 - `*.Loading.cs` (XLSX only) — one-time workbook-level XML parsing (sheets, shared strings, date1904).
 - `XlsxWorkbook.Memory.cs` (XLSX only) — the shared-string parse over an already-decompressed in-memory
   part, so it never suspends even under `await foreach`.
