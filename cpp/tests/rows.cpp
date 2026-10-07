@@ -150,7 +150,7 @@ int main()
             }
             auto decoded = workbook->sheet(0).read_all_decoded();
             check(decoded.has_value(), "a read after another cursor drained is not an error");
-            check(decoded.has_value() && !decoded->empty(), "and it still reads every row, from the start");
+            check(decoded.has_value() && decoded->size() == rows.size(), "and it still reads every row, from the start");
         }
     }
 

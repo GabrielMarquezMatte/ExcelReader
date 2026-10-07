@@ -11,9 +11,15 @@ int main()
         return 1;
     }
 
-    auto cursor = workbook->rows();
+    auto cursor = workbook->sheet(0).rows();
+    if (!cursor.has_value())
+    {
+        std::fprintf(stderr, "FAIL: the installed package could not open a cursor\n");
+        return 1;
+    }
+
     int rows = 0;
-    while (cursor.next_row().has_value())
+    while (cursor->next_row().has_value())
     {
         ++rows;
     }
