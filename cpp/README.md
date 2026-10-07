@@ -91,7 +91,7 @@ template<> struct xl::ExcelMapper<Row> {
 };
 
 auto workbook = xl::Workbook::open("book.xlsx");
-auto table = xl::parse_sheet<Row>(*workbook);
+auto table = xl::parse_sheet<Row>(workbook->sheet(0));
 for (const auto& row : *table) { /* ... */ }
 ```
 
@@ -99,25 +99,61 @@ for (const auto& row : *table) { /* ... */ }
 
 ```cpp
 for (const auto& name : *workbook->sheet_names()) { /* ... */ }
-workbook->move_to_sheet(1);
 
 // Guess a schema from the header row plus a sample of the data, before committing to one.
-for (const auto& column : *workbook->infer_schema(1, 100)) {
+for (const auto& column : *workbook->sheet(1).infer_schema(1, 100)) {
     // column.name is nullopt when the column must be resolved by column.index instead.
 }
 ```
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 
+A workbook hands out sheets. An `xl::Sheet` is the workbook handle and an index: it owns nothing,
+it is cheap to copy, and every read on it opens its own cursor. `workbook->sheet(i)` makes no native
+call; an index outside the workbook is reported by the first read on the returned sheet.
+
+```cpp
+auto workbook = xl::Workbook::open("report.xlsx");
+if (!workbook) { /* workbook.error().message */ }
+
+auto sheets = workbook->sheets().value();
+for (xl::Sheet sheet : sheets)
+{
+    std::println("{} {}", sheet.index(), sheet.name().value());
+}
+
+if (auto totals = workbook->sheet_by_name("Totals").value())
+{
+    auto cursor = totals->rows();
+    while (auto row = cursor->next_row())
+    {
+        // ...
+    }
+}
+```
+
+One open workbook can be read from several threads, which loads the shared-string table once:
+
+```cpp
+std::vector<std::jthread> threads;
+for (xl::Sheet sheet : sheets)
+{
+    threads.emplace_back([sheet] { auto table = xl::parse_sheet<Row>(sheet); /* ... */ });
+}
+```
+
+A cursor, a typed reader and an Arrow stream are each used by one thread at a time, and keep
+working after the workbook is destroyed. A `Sheet` does not: take what you need from it first.
+
 ## Reading rows one at a time
 
-`Workbook::rows()` returns a cursor over the current sheet. Each row borrows a buffer the cursor
+`Sheet::rows()` returns a cursor over that sheet. Each row borrows a buffer the cursor
 reuses, so iterating allocates nothing per row. A clean end of sheet arrives as an error carrying
 `XL_EOF`:
 
 ```cpp
 auto workbook = xl::Workbook::open("book.xlsx").value();
-auto cursor = workbook.rows();
+auto cursor = workbook.sheet(0).rows().value();
 while (auto row = cursor.next_row())
 {
     for (auto cell : *row)
@@ -133,7 +169,7 @@ Each row is invalidated by the next `next_row()`. To hold every row at once, use
 destroyed:
 
 ```cpp
-auto rows = workbook.read_all_decoded().value();
+auto rows = workbook.sheet(0).read_all_decoded().value();
 for (auto row : rows)
 {
     std::println("{} cells", row.size());
@@ -149,7 +185,7 @@ delivered a batch at a time:
 
 ```cpp
 auto workbook = xl::Workbook::open("book.xlsx").value();
-auto reader = xl::typed_reader<Row>(workbook, 1, 10'000).value();
+auto reader = xl::typed_reader<Row>(workbook.sheet(0), 1, 10'000).value();
 for (auto &batch : reader)
 {
     if (!batch) { break; }
@@ -163,11 +199,8 @@ for (auto &batch : reader)
 per batch — `0` means one unbounded batch, identical to `parse_sheet`; negative is an error. Each
 batch is independent and outlives the reader.
 
-A workbook serves one chunked read at a time, of either kind (typed or Arrow — see
-[Arrow export](#arrow-export) below), and any other read on it while one is live invalidates that
-reader: its next call reports a latched error rather than resuming from the moved cursor. C++ cannot
-enforce that at compile time the way the Rust binding does — finish or destroy the reader before
-starting another read.
+Several typed readers and Arrow streams may be open on one workbook at once; each read is
+independent.
 
 ### Encrypted workbooks
 
@@ -219,7 +252,7 @@ Arrow implementation you already link.
 #include <xl/excelreader_arrow.hpp>
 
 auto workbook = xl::Workbook::open("book.xlsx");
-auto table = xl::parse_arrow<Row>(*workbook);
+auto table = xl::parse_arrow<Row>(workbook->sheet(0));
 // table->array / table->schema are a top-level struct array; both release in ~ArrowTable.
 ```
 
@@ -228,7 +261,7 @@ Batched: `xl::arrow_stream<T>` is `xl::parse_arrow<T>` delivered a batch at a ti
 each batch outlives the stream that produced it:
 
 ```cpp
-auto stream = xl::arrow_stream<Row>(*workbook, 1, 10'000);
+auto stream = xl::arrow_stream<Row>(workbook->sheet(0), 1, 10'000);
 while (true)
 {
     auto batch = stream->next();
@@ -237,8 +270,7 @@ while (true)
 }
 ```
 
-Same `header_row`/`batch_size` meaning, and the same one-chunked-read-at-a-time rule, as
-`xl::typed_reader` above.
+Same `header_row`/`batch_size` meaning as `xl::typed_reader` above.
 
 ## Writing
 
