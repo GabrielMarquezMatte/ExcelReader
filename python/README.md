@@ -380,6 +380,42 @@ with open_bytes(payload) as workbook:
     ...
 ```
 
+### From your own bytes
+
+`open_source()` takes any object with a `size` and a `read_at(offset, buffer)` that fills `buffer`
+and returns the count. The library asks for 4 MiB blocks and caches them, and every sheet can still
+be read on its own thread.
+
+```python
+import urllib.request
+
+class HttpSource:
+    def __init__(self, url):
+        self.url = url
+        with urllib.request.urlopen(urllib.request.Request(url, method="HEAD")) as response:
+            self.size = int(response.headers["Content-Length"])
+
+    def read_at(self, offset, buffer):
+        request = urllib.request.Request(self.url, headers={"Range": f"bytes={offset}-{offset + len(buffer) - 1}"})
+        with urllib.request.urlopen(request) as response:
+            data = response.read()
+        buffer[: len(data)] = data
+        return len(data)
+
+with open_source(HttpSource("https://example.com/book.xlsx")) as workbook:
+    ...
+```
+
+`open_stream()` reads anything with `readinto()` or `read()`, such as `sys.stdin.buffer`. A CSV is
+read as it arrives; an XLSX, XLSB or XLS is read whole first.
+
+```python
+with open_stream(sys.stdin.buffer, "csv") as workbook:
+    ...
+```
+
+Both callbacks run with the GIL held. For a file on disk, `open_workbook()` is faster.
+
 ### Reader options
 
 `open_workbook()`/`open_bytes()` take an optional `OpenOptions` for CSV dialect settings and reader

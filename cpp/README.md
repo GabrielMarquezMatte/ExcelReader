@@ -245,6 +245,33 @@ if (!encrypted) { /* encrypted.error().message */ }
 Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
 packages can be encrypted, matching what `Workbook::open`/`open_memory` can decrypt.
 
+### Reading from your own bytes
+
+Derive from `xl::Source` to read from anything you can read at an offset; `read_at` is called from
+several threads, in cached 4 MiB blocks. Derive from `xl::InputStream` for a stream that cannot
+seek: a CSV is read as it arrives, an XLSX, XLSB or XLS is read whole first.
+
+```cpp
+class StdinStream final : public xl::InputStream
+{
+public:
+    std::expected<std::size_t, std::string> read(std::span<std::byte> buffer) override
+    {
+        std::cin.read(reinterpret_cast<char *>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
+        if (std::cin.bad())
+        {
+            return std::unexpected(std::string("reading stdin failed"));
+        }
+        return static_cast<std::size_t>(std::cin.gcount());
+    }
+};
+
+auto workbook = xl::Workbook::open_stream(std::make_unique<StdinStream>(), XL_FORMAT_CSV);
+```
+
+The workbook owns the object you pass and deletes it once nothing needs it. A returned error
+string or a thrown exception becomes the `xl::Error` of the call that needed the bytes.
+
 ### Arrow export
 
 `<xl/excelreader_arrow.hpp>` is a separate header — including `<xl/excelreader.hpp>` never pulls the
