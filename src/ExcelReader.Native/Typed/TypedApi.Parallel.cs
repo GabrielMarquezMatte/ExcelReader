@@ -9,8 +9,8 @@ namespace ExcelReader.Native.Typed
         [ThreadStatic]
         internal static bool LastParseRanInParallel;
 
-        internal static int ParseTypedTable(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, int degreeOfParallelism,
-            string cause, out NativeTable table, int chunkSizeOverride = 0)
+        internal static int ParseTypedTable(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, int degreeOfParallelism,
+            out NativeTable table, int chunkSizeOverride = 0)
         {
             table = default;
             LastParseRanInParallel = false;
@@ -24,17 +24,17 @@ namespace ExcelReader.Native.Typed
                 return NativeStatus.InvalidArgument;
             }
             int dop = ParallelCsvFactory.Normalize(degreeOfParallelism);
-            if (dop > 1 && handle.Workbook is CsvReader csv && csv.TryGetChunkSource(out CsvChunkSource source)
+            if (sheet == 0 && dop > 1 && handle.Workbook is CsvReader csv && csv.TryGetChunkSource(out CsvChunkSource source)
                 && ParallelCsvFactory.CanPartition(dop, source.Length, csv.Options))
             {
                 LastParseRanInParallel = true;
-                return ParseCsvInParallel(handle, source, csv.Options, specs, headerRow, degreeOfParallelism, cause, chunkSizeOverride, out table);
+                return ParseCsvInParallel(handle, source, csv.Options, specs, headerRow, degreeOfParallelism, chunkSizeOverride, out table);
             }
-            return ParseSequential(handle, specs, headerRow, cause, out table);
+            return ParseSequential(handle, sheet, specs, headerRow, out table);
         }
 
         private static int ParseCsvInParallel(NativeHandle handle, CsvChunkSource source, CsvReaderOptions reader, NativeColumnSpec[] specs,
-            int headerRow, int degreeOfParallelism, string cause, int chunkSizeOverride, out NativeTable table)
+            int headerRow, int degreeOfParallelism, int chunkSizeOverride, out NativeTable table)
         {
             table = default;
             if (!TryValidateArguments(specs, headerRow, out string? argumentError))
@@ -42,7 +42,6 @@ namespace ExcelReader.Native.Typed
                 NativeApi.SetLastError(argumentError);
                 return NativeStatus.InvalidArgument;
             }
-            handle.FaultLiveSession(cause);
             NativeApi.ClearLastError();
             try
             {

@@ -1,9 +1,31 @@
 using System.Text;
+using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Native.Reading
 {
     internal static partial class ReadApi
     {
+        internal static int ResolveSheet(NativeHandle handle, int sheet, out IExcelSheet? resolved)
+        {
+            resolved = null;
+            if (sheet < 0)
+            {
+                NativeApi.SetLastError($"sheet must be a zero-based index; got {sheet}.");
+                return NativeStatus.InvalidArgument;
+            }
+
+            try
+            {
+                resolved = handle.Workbook.SheetAt(sheet);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
         internal static int SheetCount(NativeHandle? handle, out int count)
         {
             count = 0;

@@ -1,4 +1,5 @@
 using ExcelReader.Core.Reader;
+using ExcelReader.Native.Reading;
 
 namespace ExcelReader.Native.Typed
 {
@@ -6,7 +7,6 @@ namespace ExcelReader.Native.Typed
     {
         internal sealed class TypedParseSession : IDisposable
         {
-            private readonly NativeHandle _handle;
             private readonly NativeColumnSpec[] _specs;
             private readonly int[] _columnIndices;
             private readonly long _maxRows;
@@ -16,10 +16,9 @@ namespace ExcelReader.Native.Typed
             private string? _faultMessage;
             private bool _disposed;
 
-            private TypedParseSession(NativeHandle handle, NativeColumnSpec[] specs, int[] columnIndices,
+            private TypedParseSession(NativeColumnSpec[] specs, int[] columnIndices,
                 long maxRows, bool isDate1904, IExcelRowEnumerator rows)
             {
-                _handle = handle;
                 _specs = specs;
                 _columnIndices = columnIndices;
                 _maxRows = maxRows;
@@ -27,7 +26,7 @@ namespace ExcelReader.Native.Typed
                 _rows = rows;
             }
 
-            internal static int Open(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, long maxRows,
+            internal static int Open(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, long maxRows,
                 out TypedParseSession? session)
             {
                 session = null;
@@ -35,36 +34,6 @@ namespace ExcelReader.Native.Typed
                 {
                     return NativeStatus.InvalidHandle;
                 }
-                if (handle.LiveSession is not null)
-                {
-                    NativeApi.SetLastError("this workbook already has a chunked read open; close it "
-                        + "(xl_typed_reader_close, or the Arrow stream's own release) before opening another.");
-                    return NativeStatus.Error;
-                }
-
-                int status = OpenCore(handle, specs, headerRow, maxRows, faultCause: null, out session);
-                if (status == NativeStatus.Ok)
-                {
-                    handle.LiveSession = session;
-                }
-                return status;
-            }
-
-            internal static int OpenTransient(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
-                string cause, out TypedParseSession? session)
-            {
-                session = null;
-                if (handle is null)
-                {
-                    return NativeStatus.InvalidHandle;
-                }
-                return OpenCore(handle, specs, headerRow, maxRows: 0, faultCause: cause, out session);
-            }
-
-            private static int OpenCore(NativeHandle handle, NativeColumnSpec[] specs, int headerRow, long maxRows,
-                string? faultCause, out TypedParseSession? session)
-            {
-                session = null;
                 if (maxRows < 0)
                 {
                     NativeApi.SetLastError($"max_rows must be 0 (unbounded) or positive; got {maxRows}.");
@@ -76,16 +45,17 @@ namespace ExcelReader.Native.Typed
                     return NativeStatus.InvalidArgument;
                 }
 
-                if (faultCause is not null)
+                NativeApi.ClearLastError();
+                int status = ReadApi.ResolveSheet(handle, sheet, out IExcelSheet? resolved);
+                if (status != NativeStatus.Ok)
                 {
-                    handle.FaultLiveSession(faultCause);
+                    return status;
                 }
 
-                NativeApi.ClearLastError();
                 IExcelRowEnumerator? rows = null;
                 try
                 {
-                    rows = handle.Sheet.GetEnumerator();
+                    rows = resolved!.GetEnumerator();
                     int[] columnIndices = new int[specs.Length];
                     if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
                     {
@@ -94,8 +64,7 @@ namespace ExcelReader.Native.Typed
                         return NativeStatus.InvalidArgument;
                     }
 
-                    session = new TypedParseSession(handle, specs, columnIndices, maxRows,
-                        handle.Workbook.IsDate1904, rows);
+                    session = new TypedParseSession(specs, columnIndices, maxRows, handle.Workbook.IsDate1904, rows);
                     return NativeStatus.Ok;
                 }
                 catch (Exception exception)
@@ -165,22 +134,12 @@ namespace ExcelReader.Native.Typed
                 }
             }
 
-            internal void Fault(string message)
-            {
-                if (_disposed || _faulted)
-                {
-                    return;
-                }
-                _faulted = true;
-                _faultMessage = message;
-                _handle.ReleaseLiveSession(this);
-                ReleaseRows();
-            }
-
             private int Fail(string message)
             {
-                Fault(message);
-                NativeApi.SetLastError(_faultMessage!);
+                _faulted = true;
+                _faultMessage = message;
+                ReleaseRows();
+                NativeApi.SetLastError(message);
                 return NativeStatus.Error;
             }
 
@@ -198,9 +157,7 @@ namespace ExcelReader.Native.Typed
                     return;
                 }
                 _disposed = true;
-                _handle.ReleaseLiveSession(this);
                 ReleaseRows();
-                GC.KeepAlive(_handle);
             }
         }
     }

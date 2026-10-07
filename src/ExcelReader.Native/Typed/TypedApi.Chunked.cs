@@ -2,11 +2,11 @@ namespace ExcelReader.Native.Typed
 {
     internal static unsafe partial class TypedApi
     {
-        internal static int OpenTypedReader(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
+        internal static int OpenTypedReader(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow,
             long maxRows, out nint reader)
         {
             reader = 0;
-            int status = TypedParseSession.Open(handle, specs, headerRow, maxRows, out TypedParseSession? session);
+            int status = TypedParseSession.Open(handle, sheet, specs, headerRow, maxRows, out TypedParseSession? session);
             if (status != NativeStatus.Ok)
             {
                 return status;

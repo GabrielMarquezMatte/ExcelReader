@@ -56,7 +56,7 @@ namespace ExcelReader.Tests.Native
                     new() { Names = ["name"], Type = NativeColumnType.String },
                     new() { Names = ["qty"], Type = NativeColumnType.Int64 },
                 ];
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, 0, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
                 try
                 {
                     Assert.Equal("+s", Marshal.PtrToStringUTF8(schema.Format));
@@ -109,7 +109,7 @@ namespace ExcelReader.Tests.Native
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs = [new() { Names = ["flag"], Type = NativeColumnType.Bool }];
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, 0, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
                 try
                 {
                     ArrowArray column = ArrowChildArray(array, 0);
@@ -146,7 +146,7 @@ namespace ExcelReader.Tests.Native
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true }];
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, 0, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
                 try
                 {
                     ArrowArray column = ArrowChildArray(array, 0);
@@ -176,7 +176,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
-                int status = ArrowApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema);
+                int status = ArrowApi.ParseArrow(handle, 0, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema);
 
                 Assert.Equal(NativeStatus.Error, status);
                 Assert.Equal(IntPtr.Zero, array.Release);
@@ -193,7 +193,7 @@ namespace ExcelReader.Tests.Native
         public void ParseArrow_Should_Reject_A_Null_Handle()
         {
             NativeColumnSpec[] specs = [new() { Index = 0, Type = NativeColumnType.String }];
-            Assert.Equal(NativeStatus.InvalidHandle, ArrowApi.ParseArrow(null, specs, headerRow: 1, out _, out _));
+            Assert.Equal(NativeStatus.InvalidHandle, ArrowApi.ParseArrow(null, 0, specs, headerRow: 1, out _, out _));
         }
 
         [Fact]
@@ -205,7 +205,7 @@ namespace ExcelReader.Tests.Native
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, 0, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
 
                 ExercisedReleaseArrow(ref array, ref schema);
                 ExercisedReleaseArrow(ref array, ref schema);

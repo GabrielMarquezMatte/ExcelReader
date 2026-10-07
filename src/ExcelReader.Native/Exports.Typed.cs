@@ -6,19 +6,8 @@ namespace ExcelReader.Native
     internal static unsafe partial class Exports
     {
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed")]
-        public static int ParseTyped(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, NativeTable* outTable)
-        {
-            return ParseTypedTable(handle, specs, specCount, headerRow, 1, "xl_parse_typed", outTable);
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed_ex")]
-        public static int ParseTypedEx(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism, NativeTable* outTable)
-        {
-            return ParseTypedTable(handle, specs, specCount, headerRow, degreeOfParallelism, "xl_parse_typed_ex", outTable);
-        }
-
-        private static int ParseTypedTable(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism,
-            string cause, NativeTable* outTable)
+        public static int ParseTyped(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
+            int degreeOfParallelism, NativeTable* outTable)
         {
             if (specs is null || outTable is null || !TypedApi.IsValidSpecCount(specCount))
             {
@@ -33,7 +22,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = TypedApi.ParseTypedTable(Resolve(handle), decoded, headerRow, degreeOfParallelism, cause, out NativeTable table);
+                int status = TypedApi.ParseTypedTable(Resolve(handle), sheet, decoded, headerRow, degreeOfParallelism, out NativeTable table);
                 *outTable = table;
                 return status;
             }
@@ -63,7 +52,7 @@ namespace ExcelReader.Native
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_open")]
-        public static int TypedReaderOpen(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow,
+        public static int TypedReaderOpen(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             long maxRows, nint* outReader)
         {
             if (outReader is null)
@@ -83,7 +72,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = TypedApi.OpenTypedReader(Resolve(handle), decoded, headerRow, maxRows, out nint reader);
+                int status = TypedApi.OpenTypedReader(Resolve(handle), sheet, decoded, headerRow, maxRows, out nint reader);
                 *outReader = reader;
                 return status;
             }

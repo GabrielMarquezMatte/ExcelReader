@@ -20,7 +20,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             using NativeHandle live = handle!;
             Assert.Equal(NativeStatus.Ok,
-                TypedApi.TypedParseSession.Open(live, Specs(), headerRow: 0, maxRows, out TypedApi.TypedParseSession? session));
+                TypedApi.TypedParseSession.Open(live, 0, Specs(), headerRow: 0, maxRows, out TypedApi.TypedParseSession? session));
             using TypedApi.TypedParseSession open = session!;
 
             List<string> values = [];
@@ -111,7 +111,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
             using NativeHandle live = handle!;
             Assert.Equal(NativeStatus.Ok,
-                TypedApi.TypedParseSession.Open(live, TallSpecs(), headerRow: 1, maxRows, out TypedApi.TypedParseSession? session));
+                TypedApi.TypedParseSession.Open(live, 0, TallSpecs(), headerRow: 1, maxRows, out TypedApi.TypedParseSession? session));
             using TypedApi.TypedParseSession open = session!;
 
             List<TallRow> rows = [];
@@ -257,7 +257,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
             using NativeHandle live = handle!;
             Assert.Equal(NativeStatus.Ok,
-                TypedApi.TypedParseSession.Open(live, TallSpecs(), headerRow: 1, maxRows, out TypedApi.TypedParseSession? session));
+                TypedApi.TypedParseSession.Open(live, 0, TallSpecs(), headerRow: 1, maxRows, out TypedApi.TypedParseSession? session));
             using TypedApi.TypedParseSession open = session!;
 
             List<long> sizes = [];
@@ -315,7 +315,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             using NativeHandle live = handle!;
 
-            int status = TypedApi.OpenTypedReader(live, Specs(), headerRow: 0, maxRows: -1, out nint reader);
+            int status = TypedApi.OpenTypedReader(live, 0, Specs(), headerRow: 0, maxRows: -1, out nint reader);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Equal(0, reader);
@@ -325,7 +325,7 @@ namespace ExcelReader.Tests.Native
         public void OpenTypedReader_Should_Reject_A_Null_Handle()
         {
             Assert.Equal(NativeStatus.InvalidHandle,
-                TypedApi.OpenTypedReader(null, Specs(), headerRow: 0, maxRows: 10, out nint reader));
+                TypedApi.OpenTypedReader(null, 0, Specs(), headerRow: 0, maxRows: 10, out nint reader));
             Assert.Equal(0, reader);
         }
 
@@ -334,7 +334,7 @@ namespace ExcelReader.Tests.Native
         {
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             using NativeHandle live = handle!;
-            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, Specs(), 0, 10, out nint reader));
+            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, 0, Specs(), 0, 10, out nint reader));
 
             TypedApi.CloseTypedReader(reader);
 
@@ -347,7 +347,7 @@ namespace ExcelReader.Tests.Native
         {
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             using NativeHandle live = handle!;
-            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, Specs(), 0, 10, out nint reader));
+            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, 0, Specs(), 0, 10, out nint reader));
 
             TypedApi.CloseTypedReader(reader);
             TypedApi.CloseTypedReader(reader);

@@ -230,7 +230,7 @@ namespace ExcelReader.Tests.Arrow
                     };
                 }
 
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray nativeArray, out ArrowSchema nativeSchema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, 0, specs, headerRow: 1, out ArrowArray nativeArray, out ArrowSchema nativeSchema));
                 try
                 {
                     Assert.Equal(managedBatch.Length, nativeArray.Length);

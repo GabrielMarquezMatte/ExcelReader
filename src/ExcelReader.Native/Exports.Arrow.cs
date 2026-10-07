@@ -7,20 +7,8 @@ namespace ExcelReader.Native
     internal static unsafe partial class Exports
     {
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow")]
-        public static int ParseArrow(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, ArrowArray* outArray, ArrowSchema* outSchema)
-        {
-            return ParseArrowTable(handle, specs, specCount, headerRow, 1, "xl_parse_arrow", outArray, outSchema);
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow_ex")]
-        public static int ParseArrowEx(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism,
-            ArrowArray* outArray, ArrowSchema* outSchema)
-        {
-            return ParseArrowTable(handle, specs, specCount, headerRow, degreeOfParallelism, "xl_parse_arrow_ex", outArray, outSchema);
-        }
-
-        private static int ParseArrowTable(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism,
-            string cause, ArrowArray* outArray, ArrowSchema* outSchema)
+        public static int ParseArrow(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
+            int degreeOfParallelism, ArrowArray* outArray, ArrowSchema* outSchema)
         {
             if (specs is null || outArray is null || outSchema is null || !TypedApi.IsValidSpecCount(specCount))
             {
@@ -36,7 +24,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = ArrowApi.ParseArrow(Resolve(handle), decoded, headerRow, degreeOfParallelism, cause, out ArrowArray array, out ArrowSchema schema);
+                int status = ArrowApi.ParseArrow(Resolve(handle), sheet, decoded, headerRow, degreeOfParallelism, out ArrowArray array, out ArrowSchema schema);
                 *outArray = array;
                 *outSchema = schema;
                 return status;
@@ -51,7 +39,7 @@ namespace ExcelReader.Native
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow_stream")]
-        public static int ParseArrowStream(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow,
+        public static int ParseArrowStream(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             long maxRows, ArrowArrayStream* outStream)
         {
             if (outStream is null)
@@ -71,7 +59,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = ArrowApi.OpenArrowStream(Resolve(handle), decoded, headerRow, maxRows,
+                int status = ArrowApi.OpenArrowStream(Resolve(handle), sheet, decoded, headerRow, maxRows,
                     out ArrowArrayStream stream);
                 *outStream = stream;
                 return status;
