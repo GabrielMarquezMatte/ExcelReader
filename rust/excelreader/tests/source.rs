@@ -62,7 +62,13 @@ impl Drop for MemorySource {
     }
 }
 
-struct FailingSource;
+struct FailingSource(Counters);
+
+impl Drop for FailingSource {
+    fn drop(&mut self) {
+        self.0.drops.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 impl Source for FailingSource {
     fn size(&self) -> io::Result<u64> {
@@ -74,7 +80,13 @@ impl Source for FailingSource {
     }
 }
 
-struct PanickingSource;
+struct PanickingSource(Counters);
+
+impl Drop for PanickingSource {
+    fn drop(&mut self) {
+        self.0.drops.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 impl Source for PanickingSource {
     fn size(&self) -> io::Result<u64> {
@@ -86,7 +98,19 @@ impl Source for PanickingSource {
     }
 }
 
-struct OnlyRead(io::Cursor<Vec<u8>>);
+struct OnlyRead(io::Cursor<Vec<u8>>, Counters);
+
+impl OnlyRead {
+    fn new(bytes: Vec<u8>, counters: &Counters) -> Self {
+        OnlyRead(io::Cursor::new(bytes), counters.clone())
+    }
+}
+
+impl Drop for OnlyRead {
+    fn drop(&mut self) {
+        self.1.drops.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 impl Read for OnlyRead {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -131,14 +155,18 @@ fn every_sheet_of_a_source_reads_in_parallel_like_memory() {
 
 #[test]
 fn an_io_error_reaches_the_caller_with_its_message() {
-    let error = Workbook::open_source(FailingSource, XL_FORMAT_XLSX, None).expect_err("must fail");
+    let counters = Counters::default();
+    let error = Workbook::open_source(FailingSource(counters.clone()), XL_FORMAT_XLSX, None).expect_err("must fail");
     assert!(error.message().contains("disk on fire"), "{}", error.message());
+    assert_eq!(counters.drops.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn a_panicking_source_becomes_an_error() {
-    let error = Workbook::open_source(PanickingSource, XL_FORMAT_XLSX, None).expect_err("must fail");
+    let counters = Counters::default();
+    let error = Workbook::open_source(PanickingSource(counters.clone()), XL_FORMAT_XLSX, None).expect_err("must fail");
     assert!(error.message().contains("source panicked"), "{}", error.message());
+    assert_eq!(counters.drops.load(Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -164,13 +192,22 @@ fn the_default_cache_fetches_a_small_workbook_once() {
 
 #[test]
 fn a_reader_serves_a_csv_and_an_xlsx() {
-    let csv = OnlyRead(io::Cursor::new(b"name,qty\nwidget,7\ngadget,9\n".to_vec()));
+    let csv_counters = Counters::default();
+    let csv = OnlyRead::new(b"name,qty
+widget,7
+gadget,9
+".to_vec(), &csv_counters);
     let workbook = Workbook::open_reader(csv, XL_FORMAT_CSV, None).expect("open csv");
     let names = first_column(&mut workbook.sheet(0).expect("sheet").rows().expect("cursor"));
     assert_eq!(names, vec!["name", "widget", "gadget"]);
+    assert_eq!(csv_counters.drops.load(Ordering::SeqCst), 0, "the CSV is read as it arrives");
+    drop(workbook);
+    assert_eq!(csv_counters.drops.load(Ordering::SeqCst), 1);
 
-    let xlsx = OnlyRead(io::Cursor::new(workbook_bytes()));
+    let xlsx_counters = Counters::default();
+    let xlsx = OnlyRead::new(workbook_bytes(), &xlsx_counters);
     let workbook = Workbook::open_reader(xlsx, XL_FORMAT_AUTO, None).expect("open xlsx");
+    assert_eq!(xlsx_counters.drops.load(Ordering::SeqCst), 1, "an XLSX is read whole before open returns");
     let rows = first_column(&mut workbook.sheet(3).expect("sheet").rows().expect("cursor"));
     assert_eq!(rows.len(), ROWS);
     assert_eq!(rows[0], "s3-r0");
