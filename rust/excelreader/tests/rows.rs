@@ -1,5 +1,6 @@
 use excelreader::workbook::Workbook;
-use excelreader::CellType;
+use excelreader::writer_handle::WriterHandle;
+use excelreader::{CellType, XL_FORMAT_AUTO, XL_FORMAT_XLSX};
 
 fn fixture(name: &str) -> String {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -9,10 +10,18 @@ fn fixture(name: &str) -> String {
     root.join(name).to_string_lossy().into_owned()
 }
 
+fn empty_sheet_workbook() -> Workbook {
+    let mut writer = WriterHandle::open_memory(XL_FORMAT_XLSX, None).expect("open writer");
+    writer.start_sheet("Empty").expect("start sheet");
+    writer.end_sheet().expect("end sheet");
+    let bytes = writer.bytes().expect("bytes");
+    Workbook::open_memory(&bytes, XL_FORMAT_AUTO, None).expect("open")
+}
+
 #[test]
 fn cursor_reads_the_header_row() {
-    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-    let mut cursor = workbook.rows();
+    let workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    let mut cursor = workbook.sheet(0).expect("sheet 0").rows().expect("cursor");
 
     let row = cursor.next_row().expect("a first row").expect("no error");
     let names: Vec<String> = row.iter().map(|cell| cell.as_str().unwrap().to_string()).collect();
@@ -23,38 +32,25 @@ fn cursor_reads_the_header_row() {
 
 #[test]
 fn cursor_terminates_cleanly() {
-    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    let workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
     let mut counted = 0usize;
     {
-        let mut cursor = workbook.rows();
+        let mut cursor = workbook.sheet(0).expect("sheet 0").rows().expect("cursor");
         while let Some(row) = cursor.next_row() {
             row.expect("no error mid-sheet");
             counted += 1;
         }
+        assert!(cursor.next_row().is_none());
     }
     assert!(counted > 1, "fixture should have a header plus data rows");
 
-    let mut cursor = workbook.rows();
-    assert!(cursor.next_row().is_none());
-}
-
-#[test]
-fn move_to_sheet_resets_the_cursor() {
-    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-    let first: Vec<String> = {
-        let mut cursor = workbook.rows();
-        let row = cursor.next_row().expect("row").expect("ok");
-        row.iter().map(|c| c.as_str().unwrap().to_string()).collect()
-    };
-
-    workbook.move_to_sheet(0).expect("re-select sheet 0");
-
-    let again: Vec<String> = {
-        let mut cursor = workbook.rows();
-        let row = cursor.next_row().expect("row").expect("ok");
-        row.iter().map(|c| c.as_str().unwrap().to_string()).collect()
-    };
-    assert_eq!(first, again);
+    let mut again = workbook.sheet(0).expect("sheet 0").rows().expect("cursor");
+    let mut second = 0usize;
+    while let Some(row) = again.next_row() {
+        row.expect("no error mid-sheet");
+        second += 1;
+    }
+    assert_eq!(second, counted, "a new cursor starts from the top");
 }
 
 #[test]
@@ -65,9 +61,9 @@ fn grows_its_buffer_for_an_oversized_row() {
     let path = dir.join("wide.csv");
     std::fs::write(&path, format!("a\n{big}\n")).expect("write fixture");
 
-    let mut workbook =
+    let workbook =
         Workbook::open_with(&path.to_string_lossy(), excelreader::XL_FORMAT_CSV, None).expect("open csv");
-    let mut cursor = workbook.rows();
+    let mut cursor = workbook.sheet(0).expect("sheet 0").rows().expect("cursor");
 
     let header = cursor.next_row().expect("header").expect("ok");
     assert_eq!(header.get(0).unwrap().as_str().unwrap(), "a");
@@ -85,8 +81,8 @@ fn grows_its_buffer_for_an_oversized_row() {
 #[test]
 fn decoded_rows_agree_with_the_cursor() {
     let from_cursor: Vec<Vec<String>> = {
-        let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-        let mut cursor = workbook.rows();
+        let workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+        let mut cursor = workbook.sheet(0).expect("sheet 0").rows().expect("cursor");
         let mut all = Vec::new();
         while let Some(row) = cursor.next_row() {
             let row = row.expect("ok");
@@ -95,8 +91,8 @@ fn decoded_rows_agree_with_the_cursor() {
         all
     };
 
-    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-    let decoded = workbook.read_all_decoded().expect("decode");
+    let workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    let decoded = workbook.sheet(0).expect("sheet 0").read_all_decoded().expect("decode");
 
     assert_eq!(decoded.len(), from_cursor.len());
     for (index, expected) in from_cursor.iter().enumerate() {
@@ -107,15 +103,9 @@ fn decoded_rows_agree_with_the_cursor() {
 }
 
 #[test]
-fn decoded_rows_on_an_exhausted_sheet_is_empty_not_an_error() {
-    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-    {
-        let mut cursor = workbook.rows();
-        while let Some(row) = cursor.next_row() {
-            row.expect("ok");
-        }
-    }
-    let decoded = workbook.read_all_decoded().expect("empty remainder is not an error");
+fn decoded_rows_on_an_empty_sheet_is_empty_not_an_error() {
+    let workbook = empty_sheet_workbook();
+    let decoded = workbook.sheet(0).expect("sheet 0").read_all_decoded().expect("an empty sheet is not an error");
     assert_eq!(decoded.len(), 0);
     assert!(decoded.is_empty());
     assert_eq!(decoded.iter().count(), 0);
@@ -124,8 +114,8 @@ fn decoded_rows_on_an_exhausted_sheet_is_empty_not_an_error() {
 #[test]
 fn all_rows_blob_agrees_with_the_cursor() {
     let from_cursor: Vec<Vec<String>> = {
-        let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-        let mut cursor = workbook.rows();
+        let workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+        let mut cursor = workbook.sheet(0).expect("sheet 0").rows().expect("cursor");
         let mut all = Vec::new();
         while let Some(row) = cursor.next_row() {
             let row = row.expect("ok");
@@ -134,8 +124,8 @@ fn all_rows_blob_agrees_with_the_cursor() {
         all
     };
 
-    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-    let all_rows = workbook.read_all_blob().expect("read_all_blob");
+    let workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    let all_rows = workbook.sheet(0).expect("sheet 0").read_all_blob().expect("read_all_blob");
 
     assert_eq!(all_rows.len(), from_cursor.len());
     for (index, expected) in from_cursor.iter().enumerate() {
@@ -146,15 +136,9 @@ fn all_rows_blob_agrees_with_the_cursor() {
 }
 
 #[test]
-fn all_rows_blob_on_an_exhausted_sheet_is_empty_not_an_error() {
-    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
-    {
-        let mut cursor = workbook.rows();
-        while let Some(row) = cursor.next_row() {
-            row.expect("ok");
-        }
-    }
-    let all_rows = workbook.read_all_blob().expect("empty remainder is not an error");
+fn all_rows_blob_on_an_empty_sheet_is_empty_not_an_error() {
+    let workbook = empty_sheet_workbook();
+    let all_rows = workbook.sheet(0).expect("sheet 0").read_all_blob().expect("an empty sheet is not an error");
     assert_eq!(all_rows.len(), 0);
     assert!(all_rows.is_empty());
     assert_eq!(all_rows.iter().count(), 0);
@@ -168,9 +152,9 @@ fn all_rows_blob_grows_its_buffer_past_the_initial_size() {
     let path = dir.join("wide.csv");
     std::fs::write(&path, format!("a\n{big}\n")).expect("write fixture");
 
-    let mut workbook =
+    let workbook =
         Workbook::open_with(&path.to_string_lossy(), excelreader::XL_FORMAT_CSV, None).expect("open csv");
-    let all_rows = workbook.read_all_blob().expect("read_all_blob");
+    let all_rows = workbook.sheet(0).expect("sheet 0").read_all_blob().expect("read_all_blob");
 
     assert_eq!(all_rows.len(), 2);
     assert_eq!(all_rows.get(0).unwrap().get(0).unwrap().as_str().unwrap(), "a");

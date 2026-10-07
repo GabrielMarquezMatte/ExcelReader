@@ -83,9 +83,9 @@ fn bench_excelreader(c: &mut Criterion, group: &str, path: String, format: i32) 
     c.bench_function(group, |b| {
         b.iter_batched(
             || Workbook::open_with(&path, format, None).expect("open must succeed"),
-            |mut workbook| {
+            |workbook| {
                 let table =
-                    parse_sheet::<FullRow>(&mut workbook, 1).expect("parse_sheet must succeed");
+                    parse_sheet::<FullRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
                 let mut acc = 0i64;
                 for row in table.iter() {
                     acc += accumulate_full_row(&row);
@@ -101,9 +101,9 @@ fn bench_excelreader_parse_only(c: &mut Criterion, group: &str, path: String, fo
     c.bench_function(group, |b| {
         b.iter_batched(
             || Workbook::open_with(&path, format, None).expect("open must succeed"),
-            |mut workbook| {
+            |workbook| {
                 let table =
-                    parse_sheet::<FullRow>(&mut workbook, 1).expect("parse_sheet must succeed");
+                    parse_sheet::<FullRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
                 std::hint::black_box(table.len());
                 std::hint::black_box(table);
             },

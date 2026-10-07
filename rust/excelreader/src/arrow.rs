@@ -13,18 +13,14 @@ use arrow::ffi::{from_ffi, FFI_ArrowArray, FFI_ArrowSchema};
 use arrow::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
 use arrow::record_batch::RecordBatchReader;
 
-use crate::workbook::{build_specs, check, ExcelMapper, Workbook};
+use crate::workbook::{build_specs, check, ExcelMapper, Sheet, Workbook};
 use crate::{Error, XL_ERROR};
 
-/// Schema-driven parse of the current sheet into an Arrow [`RecordBatch`], using the same
+/// Schema-driven parse of one sheet into an Arrow [`RecordBatch`], using the same
 /// `#[derive(ExcelMapper)]` mapping as [`crate::workbook::parse_sheet`].
 ///
-/// `header_row` has the same meaning as in `parse_sheet` (0 = no header). Takes `&mut Workbook`
-/// because the parse consumes the workbook's shared row cursor.
-pub fn parse_arrow<T: ExcelMapper>(
-    workbook: &mut Workbook,
-    header_row: i32,
-) -> Result<RecordBatch, Error> {
+/// `header_row` has the same meaning as in `parse_sheet` (0 = no header).
+pub fn parse_arrow<T: ExcelMapper>(sheet: Sheet<'_>, header_row: i32) -> Result<RecordBatch, Error> {
     let arena = build_specs::<T>();
 
     let mut array = FFI_ArrowArray::empty();
@@ -32,10 +28,12 @@ pub fn parse_arrow<T: ExcelMapper>(
 
     check(unsafe {
         crate::xl_parse_arrow(
-            workbook.handle(),
+            sheet.handle(),
+            sheet.index(),
             arena.specs.as_ptr(),
             arena.specs.len() as i32,
             header_row,
+            1,
             &mut array as *mut FFI_ArrowArray as *mut c_void,
             &mut schema as *mut FFI_ArrowSchema as *mut c_void,
         )
@@ -58,7 +56,7 @@ pub fn parse_arrow<T: ExcelMapper>(
 /// not fuse after an error, so break on the first `Err` rather than spinning on the latched one.
 pub struct ArrowChunks<'a> {
     inner: ArrowArrayStreamReader,
-    _workbook: PhantomData<&'a mut Workbook>,
+    _workbook: PhantomData<&'a Workbook>,
 }
 
 impl Iterator for ArrowChunks<'_> {
@@ -76,12 +74,9 @@ impl RecordBatchReader for ArrowChunks<'_> {
 }
 
 /// `parse_arrow` delivered a batch at a time. `batch_size` is rows per batch, 0 unbounded,
-/// negative an error.
-///
-/// `&mut Workbook` because the stream borrows the workbook's single row cursor, and the ABI serves
-/// one chunked read per workbook.
+/// negative an error. Any number of streams may be open on one workbook.
 pub fn parse_arrow_stream<T: ExcelMapper>(
-    workbook: &mut Workbook,
+    sheet: Sheet<'_>,
     header_row: i32,
     batch_size: i64,
 ) -> Result<ArrowChunks<'_>, Error> {
@@ -91,7 +86,8 @@ pub fn parse_arrow_stream<T: ExcelMapper>(
 
     check(unsafe {
         crate::xl_parse_arrow_stream(
-            workbook.handle(),
+            sheet.handle(),
+            sheet.index(),
             arena.specs.as_ptr(),
             arena.specs.len() as i32,
             header_row,

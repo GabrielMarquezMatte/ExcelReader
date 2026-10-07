@@ -59,8 +59,8 @@ impl<'a> CellRef<'a> {
     }
 }
 
-/// Where a `RowRef`'s cells live. Blob rows come from `xl_next_row`, decoded rows from
-/// `xl_read_all_decoded`.
+/// Where a `RowRef`'s cells live. Blob rows come from `xl_rows_next`, decoded rows from
+/// `xl_rows_read_all_decoded`.
 #[derive(Debug, Clone, Copy)]
 enum RowBacking<'a> {
     /// The bytes AFTER the leading `int32 cell_count`.
@@ -76,7 +76,7 @@ pub struct RowRef<'a> {
 }
 
 impl<'a> RowRef<'a> {
-    /// Parses the leading cell count off a `xl_next_row` blob. `None` when the blob is too short to
+    /// Parses the leading cell count off a `xl_rows_next` blob. `None` when the blob is too short to
     /// hold even that count.
     pub(crate) fn from_blob(blob: &'a [u8]) -> Option<RowRef<'a>> {
         let count = read_i32(blob, 0)?;
@@ -93,7 +93,7 @@ impl<'a> RowRef<'a> {
     ///
     /// # Safety
     /// `cells` must point to `count` initialized `XlRowCell` values whose `value` pointers stay
-    /// valid for `'a` — that is, until `xl_free_rows` releases the enclosing `XlRows`.
+    /// valid for `'a` — that is, until `xl_free_rows` releases the enclosing `XlRowsDecoded`.
     pub(crate) unsafe fn from_decoded(cells: *const XlRowCell, count: i32) -> RowRef<'a> {
         let len = if count > 0 { count as usize } else { 0 };
         let slice = if len == 0 || cells.is_null() {
@@ -216,25 +216,36 @@ fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
 /// Rows are usually well under this; it only sets how often the first oversized row costs a retry.
 const INITIAL_ROW_BUFFER: usize = 64 * 1024;
 
-/// A row-at-a-time reader over a workbook's current sheet, holding one reusable buffer.
+/// A row-at-a-time reader over one sheet, holding one reusable buffer and one native cursor,
+/// which it closes on drop.
 ///
 /// Not an `Iterator`: each row borrows the buffer that the next call overwrites, which
 /// `Iterator::next` cannot express. One row is alive at a time, enforced by the borrow checker.
 pub struct RowCursor<'w> {
-    handle: *mut crate::XlWorkbook,
+    rows: *mut crate::XlRows,
     buffer: Vec<u8>,
     written: usize,
-    workbook: std::marker::PhantomData<&'w mut crate::workbook::Workbook>,
+    workbook: std::marker::PhantomData<&'w crate::workbook::Workbook>,
 }
 
+// SAFETY: the cursor owns its native enumerator and ABI v6 lets one thread at a time use it;
+// every method that touches it takes `&mut self`.
+unsafe impl Send for RowCursor<'_> {}
+
 impl<'w> RowCursor<'w> {
-    pub(crate) fn new(handle: *mut crate::XlWorkbook) -> RowCursor<'w> {
-        RowCursor {
-            handle,
+    pub(crate) fn open(handle: *mut crate::XlWorkbook, sheet: i32) -> Result<RowCursor<'w>, Error> {
+        let mut rows: *mut crate::XlRows = std::ptr::null_mut();
+        crate::workbook::check(unsafe { crate::xl_rows_open(handle, sheet, &mut rows) })?;
+        Ok(RowCursor {
+            rows,
             buffer: vec![0; INITIAL_ROW_BUFFER],
             written: 0,
             workbook: std::marker::PhantomData,
-        }
+        })
+    }
+
+    pub(crate) fn raw(&self) -> *mut crate::XlRows {
+        self.rows
     }
 
     /// Advances to the next row. `None` at end of sheet.
@@ -246,7 +257,7 @@ impl<'w> RowCursor<'w> {
             let mut written: i32 = 0;
             let capacity = i32::try_from(self.buffer.len()).unwrap_or(i32::MAX);
             let status = unsafe {
-                crate::xl_next_row(self.handle, self.buffer.as_mut_ptr(), capacity, &mut written)
+                crate::xl_rows_next(self.rows, self.buffer.as_mut_ptr(), capacity, &mut written)
             };
 
             match status {
@@ -276,16 +287,22 @@ impl<'w> RowCursor<'w> {
     }
 }
 
+impl Drop for RowCursor<'_> {
+    fn drop(&mut self) {
+        unsafe { crate::xl_rows_close(self.rows) };
+    }
+}
+
 /// Every remaining row of a sheet, decoded natively in one call.
 ///
 /// Owns the native allocation and releases it on drop. Rows and cells borrow from it, so they
 /// cannot outlive it.
 pub struct DecodedRows {
-    raw: crate::XlRows,
+    raw: crate::XlRowsDecoded,
 }
 
 impl DecodedRows {
-    pub(crate) fn new(raw: crate::XlRows) -> DecodedRows {
+    pub(crate) fn new(raw: crate::XlRowsDecoded) -> DecodedRows {
         DecodedRows { raw }
     }
 
@@ -328,13 +345,13 @@ impl std::fmt::Debug for DecodedRows {
 /// Rows are usually well under this; it only sets how often an oversized sheet costs a retry.
 const INITIAL_ALL_ROWS_BUFFER: usize = 1024 * 1024;
 
-/// Every remaining row of a sheet, read into one flat buffer by a single `xl_read_all_blob` call.
+/// Every remaining row of a sheet, read into one flat buffer by a single `xl_rows_read_all_blob` call.
 ///
-/// Unlike [`DecodedRows`], the native side allocates nothing per row/cell here - `xl_read_all_blob`
+/// Unlike [`DecodedRows`], the native side allocates nothing per row/cell here - `xl_rows_read_all_blob`
 /// writes the same wire format `RowCursor::next_row` decodes, one row after another with a length
 /// prefix, into a buffer this type owns as a plain `Vec<u8>`. That means no `xl_free_*` call on
 /// drop (there is nothing native to release) and one native allocation total instead of one per
-/// row - prefer this over [`Workbook::read_all_decoded`](crate::workbook::Workbook::read_all_decoded)
+/// row - prefer this over [`Sheet::read_all_decoded`](crate::workbook::Sheet::read_all_decoded)
 /// unless something specifically needs the decoded-array shape.
 pub struct AllRows {
     buffer: Vec<u8>,
@@ -344,13 +361,13 @@ pub struct AllRows {
 }
 
 impl AllRows {
-    pub(crate) fn read(handle: *mut crate::XlWorkbook) -> Result<AllRows, Error> {
+    pub(crate) fn read(rows: *mut crate::XlRows) -> Result<AllRows, Error> {
         let mut buffer = vec![0u8; INITIAL_ALL_ROWS_BUFFER];
         loop {
             let mut written: i32 = 0;
             let capacity = i32::try_from(buffer.len()).unwrap_or(i32::MAX);
             let status = unsafe {
-                crate::xl_read_all_blob(handle, buffer.as_mut_ptr(), capacity, &mut written)
+                crate::xl_rows_read_all_blob(rows, buffer.as_mut_ptr(), capacity, &mut written)
             };
 
             match status {
@@ -401,7 +418,7 @@ impl std::fmt::Debug for AllRows {
     }
 }
 
-/// Parses the `xl_read_all_blob` wire format's row_count and per-row length prefixes into byte
+/// Parses the `xl_rows_read_all_blob` wire format's row_count and per-row length prefixes into byte
 /// ranges. Bounds-checked throughout - a malformed buffer (which a correct native library never
 /// produces) is rejected rather than trusted into a panic or an out-of-bounds slice.
 fn parse_row_ranges(buffer: &[u8]) -> Result<Vec<(usize, usize)>, Error> {
@@ -440,7 +457,7 @@ fn malformed_all_rows_blob() -> Error {
 mod tests {
     use super::*;
 
-    /// Builds a row blob in the wire format documented on `xl_next_row`:
+    /// Builds a row blob in the wire format documented on `xl_rows_next`:
     /// `int32 cell_count`, then per cell `int32 column, int32 type, int32 value_len, bytes`.
     fn blob(cells: &[(i32, i32, &str)]) -> Vec<u8> {
         let mut out = Vec::new();
@@ -506,7 +523,7 @@ mod tests {
         assert_eq!(CellType::from_raw(XL_CELL_ERROR), Some(CellType::Error));
     }
 
-    /// Builds an `xl_read_all_blob` buffer: `int32 row_count`, then each row as
+    /// Builds an `xl_rows_read_all_blob` buffer: `int32 row_count`, then each row as
     /// `int32 row_length` followed by that row's `blob()` bytes.
     fn all_rows_blob(rows: &[&[(i32, i32, &str)]]) -> Vec<u8> {
         let mut out = Vec::new();

@@ -19,8 +19,8 @@ fn fixture_path() -> String {
 
 #[test]
 fn parse_arrow_returns_a_record_batch_with_one_column_per_field() {
-    let mut workbook = Workbook::open(&fixture_path()).expect("open must succeed");
-    let batch = parse_arrow::<Record>(&mut workbook, 1).expect("parse_arrow must succeed");
+    let workbook = Workbook::open(&fixture_path()).expect("open must succeed");
+    let batch = parse_arrow::<Record>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_arrow must succeed");
 
     assert_eq!(batch.num_columns(), 2); 
     assert_eq!(batch.num_rows(), 100); 
@@ -34,18 +34,18 @@ fn parse_arrow_returns_a_record_batch_with_one_column_per_field() {
 
 #[test]
 fn parse_arrow_reports_an_error_without_leaving_a_half_built_batch() {
-    let mut workbook = Workbook::open(&fixture_path()).expect("open must succeed");
-    let result = parse_arrow::<Record>(&mut workbook, 1_000_000);
+    let workbook = Workbook::open(&fixture_path()).expect("open must succeed");
+    let result = parse_arrow::<Record>(workbook.sheet(0).expect("sheet 0"), 1_000_000);
     assert!(result.is_err());
 
-    let batch = parse_arrow::<Record>(&mut workbook, 1).expect("parse_arrow must succeed");
+    let batch = parse_arrow::<Record>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_arrow must succeed");
     assert_eq!(batch.num_rows(), 100); 
 }
 
 #[test]
 fn arrow_stream_batches_match_the_whole_sheet() {
-    let mut workbook = Workbook::open(&fixture_path()).expect("open must succeed");
-    let stream = parse_arrow_stream::<Record>(&mut workbook, 1, 8).expect("the stream must open");
+    let workbook = Workbook::open(&fixture_path()).expect("open must succeed");
+    let stream = parse_arrow_stream::<Record>(workbook.sheet(0).expect("sheet 0"), 1, 8).expect("the stream must open");
     let schema = stream.schema();
 
     let mut rows = 0;
@@ -64,15 +64,29 @@ fn arrow_stream_batches_match_the_whole_sheet() {
 
 #[test]
 fn arrow_stream_rejects_a_negative_batch_size() {
-    let mut workbook = Workbook::open(&fixture_path()).expect("open must succeed");
-    assert!(parse_arrow_stream::<Record>(&mut workbook, 1, -1).is_err());
+    let workbook = Workbook::open(&fixture_path()).expect("open must succeed");
+    assert!(parse_arrow_stream::<Record>(workbook.sheet(0).expect("sheet 0"), 1, -1).is_err());
 }
 
 #[test]
 fn arrow_stream_with_batch_size_zero_yields_one_batch() {
-    let mut workbook = Workbook::open(&fixture_path()).expect("open must succeed");
-    let stream = parse_arrow_stream::<Record>(&mut workbook, 1, 0).expect("the stream must open");
+    let workbook = Workbook::open(&fixture_path()).expect("open must succeed");
+    let stream = parse_arrow_stream::<Record>(workbook.sheet(0).expect("sheet 0"), 1, 0).expect("the stream must open");
     let batches: Vec<_> = stream.map(|b| b.expect("a batch must read")).collect();
     assert_eq!(batches.len(), 1, "batch_size 0 is one whole-sheet batch");
     assert_eq!(batches[0].num_rows(), 100);
+}
+
+#[test]
+fn two_arrow_streams_on_one_workbook_each_yield_every_row() {
+    let workbook = Workbook::open(&fixture_path()).expect("open must succeed");
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let one = parse_arrow_stream::<Record>(sheet, 1, 8).expect("the first stream must open");
+    let two = parse_arrow_stream::<Record>(sheet, 1, 8).expect("a second stream must open alongside it");
+
+    let total = |stream: excelreader::arrow::ArrowChunks<'_>| -> usize {
+        stream.map(|batch| batch.expect("a batch must read").num_rows()).sum()
+    };
+    assert_eq!(total(one), 100);
+    assert_eq!(total(two), 100);
 }
