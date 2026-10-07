@@ -44,6 +44,7 @@ excelreader_copy_native_library(excelreader_cpp_write_benchmarks)
 option(EXCELREADER_BUILD_BENCHMARKS_COMPARE "Build the excelreader-vs-xlnt-vs-xlsxio-vs-libxlsxwriter-vs-duckdb comparison benchmark" OFF)
 if(EXCELREADER_BUILD_BENCHMARKS_COMPARE)
     enable_language(C)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5) # xlnt 1.5.0 declares a CMake minimum CMake 4 rejects
     set(STATIC ON CACHE BOOL "" FORCE)
     set(STATIC_CRT OFF CACHE BOOL "" FORCE)
     set(TESTS OFF CACHE BOOL "" FORCE)
@@ -312,6 +313,7 @@ if(EXCELREADER_BUILD_BENCHMARKS_ZSV)
             "extensions MSVC cannot compile. On Windows, configure with MinGW-w64 (e.g. MSYS2 UCRT64).")
     endif()
     enable_language(C)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5) # a zsv dependency declares a CMake minimum CMake 4 rejects
 
     # zsv builds through ./configure + make; its library is the single translation unit src/zsv.c,
     # so it is compiled directly here instead.
