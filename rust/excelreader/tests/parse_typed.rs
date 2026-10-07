@@ -39,8 +39,8 @@ fn open_fixture() -> Workbook {
 
 #[test]
 fn parses_real_excel_fixture() {
-    let mut workbook = open_fixture();
-    let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let workbook = open_fixture();
+    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
     assert_eq!(table.len(), 100);
 
     let first = table.get(0).expect("row 0 is in bounds");
@@ -53,8 +53,8 @@ fn parses_real_excel_fixture() {
 
 #[test]
 fn get_returns_none_outside_the_row_range() {
-    let mut workbook = open_fixture();
-    let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let workbook = open_fixture();
+    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
 
     assert!(
         table.get(table.len() - 1).is_some(),
@@ -67,8 +67,8 @@ fn get_returns_none_outside_the_row_range() {
 
 #[test]
 fn iter_yields_exactly_len_rows_and_reports_it_up_front() {
-    let mut workbook = open_fixture();
-    let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let workbook = open_fixture();
+    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
 
     let iter = table.iter();
     assert_eq!(iter.len(), 100, "ExactSizeIterator must agree with len()");
@@ -77,8 +77,8 @@ fn iter_yields_exactly_len_rows_and_reports_it_up_front() {
 
 #[test]
 fn parses_integer_widths_floats_and_dates() {
-    let mut workbook = open_fixture();
-    let table = parse_sheet::<WideRow>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let workbook = open_fixture();
+    let table = parse_sheet::<WideRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
 
     let first = table.get(0).expect("row 0 is in bounds");
     assert_eq!(first.coluna1, "Valor1");
@@ -89,8 +89,8 @@ fn parses_integer_widths_floats_and_dates() {
 
 #[test]
 fn resolves_the_first_alias_present_in_the_header_row() {
-    let mut workbook = open_fixture();
-    let table = parse_sheet::<AliasRow>(&mut workbook, 1).expect("parse_sheet must succeed via alias");
+    let workbook = open_fixture();
+    let table = parse_sheet::<AliasRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed via alias");
     assert_eq!(table.len(), 100);
     let first = table.get(0).expect("row 0 is in bounds");
     assert_eq!(first.coluna1, "Valor1");
@@ -107,53 +107,29 @@ fn parses_dates_straight_into_chrono() {
         coluna2: NaiveDate,
     }
 
-    let mut workbook = open_fixture();
-    let table = parse_sheet::<ChronoRow>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let workbook = open_fixture();
+    let table = parse_sheet::<ChronoRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
     let first = table.get(0).expect("row 0 is in bounds");
     assert_eq!(first.coluna2, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
 }
 
 #[test]
 fn exposes_sheet_navigation() {
-    let mut workbook = open_fixture();
+    let workbook = open_fixture();
 
     let count = workbook.sheet_count().expect("sheet_count must succeed");
     assert!(count >= 1, "the fixture has at least one sheet");
 
     let names = workbook.sheet_names().expect("sheet_names must succeed");
     assert_eq!(names.len(), count as usize);
-    assert_eq!(
-        workbook.sheet_name().expect("sheet_name must succeed"),
-        names[0],
-        "the first sheet is selected before any move_to_sheet"
-    );
-
-    workbook
-        .move_to_sheet(0)
-        .expect("move_to_sheet must succeed");
-    assert_eq!(workbook.sheet_name().unwrap(), names[0]);
 
     workbook.is_date1904().expect("is_date1904 must succeed");
 }
 
 #[test]
-fn move_to_sheet_rejects_an_index_past_the_end() {
-    let mut workbook = open_fixture();
-    let count = workbook.sheet_count().unwrap();
-    let error = workbook
-        .move_to_sheet(count)
-        .expect_err("an index past the last sheet must fail");
-    assert!(
-        !error.message().is_empty(),
-        "the failure must carry the native detail, got: {error}"
-    );
-}
-
-#[test]
 fn infers_a_schema_from_the_header_row() {
     let workbook = open_fixture();
-    let schema = workbook
-        .infer_schema(1, 100)
+    let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 100)
         .expect("infer_schema must succeed");
 
     assert!(!schema.is_empty(), "the fixture has columns to infer");
@@ -169,33 +145,32 @@ fn infers_a_schema_from_the_header_row() {
 }
 
 #[test]
-fn infer_schema_leaves_the_row_cursor_alone() {
-    let mut workbook = open_fixture();
-    workbook
-        .infer_schema(1, 100)
+fn infer_schema_leaves_the_sheet_readable() {
+    let workbook = open_fixture();
+    workbook.sheet(0).expect("sheet 0").infer_schema(1, 100)
         .expect("infer_schema must succeed");
 
-    let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
     assert_eq!(table.len(), 100);
 }
 
 #[test]
 fn open_with_accepts_an_explicit_format_and_options() {
     let options = OpenOptions::new().prefetch_decompression(true);
-    let mut workbook = Workbook::open_with(&fixture_path(), XL_FORMAT_XLSB, Some(&options))
+    let workbook = Workbook::open_with(&fixture_path(), XL_FORMAT_XLSB, Some(&options))
         .expect("open_with must succeed");
 
-    let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
     assert_eq!(table.len(), 100);
 }
 
 #[test]
 fn open_memory_reads_the_same_bytes() {
     let bytes = std::fs::read(fixture_path()).expect("fixture must be readable");
-    let mut workbook =
+    let workbook =
         Workbook::open_memory(&bytes, XL_FORMAT_XLSB, None).expect("open_memory must succeed");
 
-    let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
     assert_eq!(table.len(), 100);
     assert_eq!(table.get(0).unwrap().coluna1, "Valor1");
 }
@@ -217,8 +192,8 @@ fn parse_sheet_reports_the_native_error_for_an_unknown_column() {
         missing: String,
     }
 
-    let mut workbook = open_fixture();
-    let error = parse_sheet::<Missing>(&mut workbook, 1).expect_err("an unknown column must fail");
+    let workbook = open_fixture();
+    let error = parse_sheet::<Missing>(workbook.sheet(0).expect("sheet 0"), 1).expect_err("an unknown column must fail");
     assert!(
         !error.message().is_empty(),
         "the failure must carry the native detail, got: {error}"

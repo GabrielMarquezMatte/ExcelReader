@@ -18,8 +18,8 @@ fn open() -> Workbook {
 }
 
 fn whole_sheet() -> Vec<(String, i64)> {
-    let mut workbook = open();
-    let table = parse_sheet::<Record>(&mut workbook, 1).expect("parse_sheet must succeed");
+    let workbook = open();
+    let table = parse_sheet::<Record>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
     (0..table.len())
         .map(|i| {
             let row = table.get(i).expect("row must be in range");
@@ -36,9 +36,8 @@ fn batches_equal_the_whole_sheet() {
     assert_eq!(expected.len(), 100, "RealExcel.xlsb has 100 data rows");
 
     for batch_size in [1_i64, 7, 8, 9, 1000, 0, 110] {
-        let mut workbook = open();
-        let chunks = workbook
-            .typed_chunks::<Record>(1, batch_size)
+        let workbook = open();
+        let chunks = workbook.sheet(0).expect("sheet 0").typed_chunks::<Record>(1, batch_size)
             .expect("typed_chunks must open");
 
         let mut actual = Vec::new();
@@ -65,9 +64,8 @@ fn batches_equal_the_whole_sheet() {
 
 #[test]
 fn a_negative_batch_size_is_rejected() {
-    let mut workbook = open();
-    let error = workbook
-        .typed_chunks::<Record>(1, -1)
+    let workbook = open();
+    let error = workbook.sheet(0).expect("sheet 0").typed_chunks::<Record>(1, -1)
         .expect_err("a negative batch size must be rejected");
     assert_eq!(error.code(), XL_INVALID_ARGUMENT);
 }
@@ -76,27 +74,25 @@ fn a_negative_batch_size_is_rejected() {
 /// reopen, repeat the last batch, or spin on a latched error.
 #[test]
 fn the_iterator_stays_exhausted_after_eof() {
-    let mut workbook = open();
-    let mut chunks = workbook.typed_chunks::<Record>(1, 8).expect("typed_chunks must open");
+    let workbook = open();
+    let mut chunks = workbook.sheet(0).expect("sheet 0").typed_chunks::<Record>(1, 8).expect("typed_chunks must open");
     while chunks.next().is_some() {}
     assert!(chunks.next().is_none());
     assert!(chunks.next().is_none());
 }
 
-/// The workbook is usable again once the reader is dropped. A second reader while the first is
-/// alive is not tested here because it does not compile: `typed_chunks` takes `&mut self`, which is
-/// exactly the guarantee this binding buys over C++ and Python.
+/// Readers are independent: any number may be open on one workbook, and dropping one leaves the
+/// others and the workbook usable.
 #[test]
-fn the_workbook_is_reusable_after_the_reader_is_dropped() {
-    let mut workbook = open();
-    {
-        let chunks = workbook.typed_chunks::<Record>(1, 8).expect("first reader must open");
-        drop(chunks);
-    }
-    let rows: i64 = workbook
-        .typed_chunks::<Record>(1, 8)
-        .expect("a second reader must open once the first is dropped")
-        .map(|batch| batch.expect("a batch must read").len())
-        .sum();
-    assert_eq!(rows, 100);
+fn two_readers_on_one_workbook_each_yield_every_row() {
+    let workbook = open();
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let one = sheet.typed_chunks::<Record>(1, 8).expect("first reader must open");
+    let two = sheet.typed_chunks::<Record>(1, 8).expect("a second reader must open alongside it");
+
+    let count = |chunks: excelreader::workbook::TypedChunks<'_, Record>| -> i64 {
+        chunks.map(|batch| batch.expect("a batch must read").len()).sum()
+    };
+    assert_eq!(count(one), 100);
+    assert_eq!(count(two), 100);
 }
