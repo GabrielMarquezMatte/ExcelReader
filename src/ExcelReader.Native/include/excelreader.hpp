@@ -75,6 +75,29 @@ namespace xl
     namespace detail
     {
 
+        // The first calls into the runtime from several threads at once can crash it; finish its
+        // start-up on this thread first (see commit b5f8c5f). Failures are ignored.
+        inline void warm_up() noexcept
+        {
+            static constexpr char csv[] = "a,b\n1,2\n3,4\n";
+            xl_workbook *workbook = nullptr;
+            if (xl_open_memory(reinterpret_cast<const uint8_t *>(csv), static_cast<int32_t>(sizeof(csv) - 1),
+                               XL_FORMAT_CSV, nullptr, &workbook) != XL_OK || workbook == nullptr)
+            {
+                return;
+            }
+            xl_rows *rows = nullptr;
+            if (xl_rows_open(workbook, 0, &rows) == XL_OK && rows != nullptr)
+            {
+                xl_row row{};
+                while (xl_rows_next_view(rows, &row) == XL_OK)
+                {
+                }
+                xl_rows_close(rows);
+            }
+            xl_close(workbook);
+        }
+
         inline const std::expected<void, Error> &check_abi_version()
         {
             static const std::expected<void, Error> result = []() -> std::expected<void, Error>
@@ -82,6 +105,7 @@ namespace xl
                 const int32_t loaded = xl_abi_version();
                 if (loaded == XL_ABI_VERSION)
                 {
+                    warm_up();
                     return {};
                 }
                 return std::unexpected(Error{
@@ -532,61 +556,6 @@ namespace xl
         size_t count_{};
     };
 
-    /// Reads one sheet row by row. Owns a native cursor and closes it on destruction. Use one
-    /// cursor from one thread at a time; any number may be open on one workbook.
-    class RowCursor
-    {
-    public:
-        explicit RowCursor(xl_rows *rows) noexcept : rows_(rows) {}
-
-        RowCursor(const RowCursor &) = delete;
-        RowCursor &operator=(const RowCursor &) = delete;
-
-        RowCursor(RowCursor &&other) noexcept : rows_(std::exchange(other.rows_, nullptr)) {}
-        RowCursor &operator=(RowCursor &&other) noexcept
-        {
-            if (this != &other)
-            {
-                close();
-                rows_ = std::exchange(other.rows_, nullptr);
-            }
-            return *this;
-        }
-
-        ~RowCursor() { close(); }
-
-        /// The returned view points into memory the cursor owns and is valid until the next
-        /// next_row() on this cursor or until the cursor is destroyed.
-        std::expected<RowView, Error> next_row()
-        {
-            xl_row row{};
-            const int32_t status = xl_rows_next_view(rows_, &row);
-            if (status != XL_OK)
-            {
-                return std::unexpected(detail::make_error(status));
-            }
-            if (row.cell_count < 0)
-            {
-                return std::unexpected(detail::make_error(XL_ERROR));
-            }
-            return RowView(row.cells, static_cast<size_t>(row.cell_count));
-        }
-
-        xl_rows *handle() const noexcept { return rows_; }
-
-    private:
-        void close() noexcept
-        {
-            if (rows_ != nullptr)
-            {
-                xl_rows_close(rows_);
-                rows_ = nullptr;
-            }
-        }
-
-        xl_rows *rows_ = nullptr;
-    };
-
     class DecodedRows
     {
     public:
@@ -663,6 +632,73 @@ namespace xl
     };
 
 
+    /// Reads one sheet row by row. Owns a native cursor and closes it on destruction. Use one
+    /// cursor from one thread at a time; any number may be open on one workbook.
+    class RowCursor
+    {
+    public:
+        explicit RowCursor(xl_rows *rows) noexcept : rows_(rows) {}
+
+        RowCursor(const RowCursor &) = delete;
+        RowCursor &operator=(const RowCursor &) = delete;
+
+        RowCursor(RowCursor &&other) noexcept : rows_(std::exchange(other.rows_, nullptr)) {}
+        RowCursor &operator=(RowCursor &&other) noexcept
+        {
+            if (this != &other)
+            {
+                close();
+                rows_ = std::exchange(other.rows_, nullptr);
+            }
+            return *this;
+        }
+
+        ~RowCursor() { close(); }
+
+        /// The returned view points into memory the cursor owns and is valid until the next
+        /// next_row() on this cursor or until the cursor is destroyed.
+        std::expected<RowView, Error> next_row()
+        {
+            xl_row row{};
+            const int32_t status = xl_rows_next_view(rows_, &row);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            if (row.cell_count < 0)
+            {
+                return std::unexpected(detail::make_error(XL_ERROR));
+            }
+            return RowView(row.cells, static_cast<size_t>(row.cell_count));
+        }
+
+        /// Every row this cursor has not yet returned, decoded in one native call.
+        std::expected<DecodedRows, Error> read_all_decoded()
+        {
+            xl_rows_decoded raw{};
+            const int32_t status = xl_rows_read_all_decoded(rows_, &raw);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return DecodedRows(raw);
+        }
+
+        xl_rows *handle() const noexcept { return rows_; }
+
+    private:
+        void close() noexcept
+        {
+            if (rows_ != nullptr)
+            {
+                xl_rows_close(rows_);
+                rows_ = nullptr;
+            }
+        }
+
+        xl_rows *rows_ = nullptr;
+    };
+
     enum class SheetVisibility : int32_t
     {
         Visible = XL_SHEET_VISIBLE,
@@ -672,7 +708,7 @@ namespace xl
 
     /// One sheet of a Workbook: the native workbook handle and an index. Holds no resource of its
     /// own, so it is cheap to copy and may be handed to another thread; each read opens what it
-    /// needs. It must not be used after its workbook is destroyed.
+    /// needs. After its workbook is destroyed, every read on it returns XL_INVALID_HANDLE.
     class Sheet
     {
     public:
@@ -709,6 +745,7 @@ namespace xl
             return RowCursor(rows);
         }
 
+        /// The whole sheet from its first row, decoded in one native call.
         std::expected<DecodedRows, Error> read_all_decoded() const
         {
             auto cursor = rows();
@@ -716,13 +753,7 @@ namespace xl
             {
                 return std::unexpected(cursor.error());
             }
-            xl_rows_decoded raw{};
-            const int32_t status = xl_rows_read_all_decoded(cursor->handle(), &raw);
-            if (status != XL_OK)
-            {
-                return std::unexpected(detail::make_error(status));
-            }
-            return DecodedRows(raw);
+            return cursor->read_all_decoded();
         }
 
         /// flags: 0, or XL_INFER_PARSE_TEXT to also type cells that hold text.

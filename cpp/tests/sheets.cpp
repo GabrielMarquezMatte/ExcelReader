@@ -1,5 +1,6 @@
 #include <xl/excelreader.hpp>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <optional>
@@ -11,7 +12,7 @@
 
 namespace
 {
-    int failures = 0;
+    std::atomic<int> failures = 0;
 
     void check(bool condition, const char *what)
     {
@@ -109,7 +110,14 @@ int main()
             check(!negative.has_value() && negative.error().code == XL_INVALID_ARGUMENT, "a negative sheet index is an invalid argument");
 
             auto decoded = workbook->sheet(1).read_all_decoded();
-            check(decoded.has_value() && decoded->size() == 3, "read_all_decoded reads the named sheet");
+            check(decoded.has_value() && decoded->size() == 3, "read_all_decoded reads the whole named sheet");
+            auto partial = workbook->sheet(1).rows();
+            check(partial.has_value() && partial->next_row().has_value(), "open a cursor and read one row");
+            if (partial.has_value())
+            {
+                auto rest = partial->read_all_decoded();
+                check(rest.has_value() && rest->size() == 2, "the cursor's read_all_decoded returns the rows it has left");
+            }
             auto schema = workbook->sheet(1).infer_schema(0, 10);
             check(schema.has_value() && schema->size() == 1, "infer_schema samples the named sheet");
         }
@@ -147,6 +155,36 @@ int main()
                 check(drain(moved).size() == 3, "the moved-to cursor reads every row");
             }
             check(read_sheet(workbook->sheet(0)).size() == 3, "the workbook still reads after the cursors are gone");
+        }
+    }
+
+    {
+        auto workbook = xl::Workbook::open_memory(two);
+        check(workbook.has_value(), "open for the move-assigned cursor");
+        if (workbook.has_value())
+        {
+            auto a = workbook->sheet(0).rows();
+            auto b = workbook->sheet(1).rows();
+            check(a.has_value() && b.has_value(), "open two cursors to move-assign");
+            if (a.has_value() && b.has_value())
+            {
+                check(a->next_row().has_value(), "the overwritten cursor advances");
+                *a = std::move(*b);
+                check(b->handle() == nullptr, "a move-assigned-from cursor holds nothing");
+                const auto values = drain(*a);
+                check(values.size() == 3 && values.front() == "s1-r0", "the move-assigned cursor reads the other sheet from the top");
+            }
+        }
+    }
+
+    {
+        const std::vector<uint8_t> empty_book = build(1, 0);
+        auto workbook = xl::Workbook::open_memory(empty_book);
+        check(workbook.has_value(), "open the empty workbook");
+        if (workbook.has_value())
+        {
+            auto decoded = workbook->sheet(0).read_all_decoded();
+            check(decoded.has_value() && decoded->empty(), "an empty sheet decodes to no rows");
         }
     }
 
@@ -195,11 +233,15 @@ int main()
 
             std::vector<std::vector<std::string>> parallel(static_cast<size_t>(sheet_count) * 2);
             {
-                std::vector<std::jthread> threads;
+                std::vector<std::thread> threads;
                 for (size_t i = 0; i < parallel.size(); ++i)
                 {
                     threads.emplace_back([&parallel, &workbook, i]
                                          { parallel[i] = read_sheet(workbook->sheet(static_cast<int32_t>(i % sheet_count))); });
+                }
+                for (std::thread &thread : threads)
+                {
+                    thread.join();
                 }
             }
             bool same = true;
@@ -213,7 +255,7 @@ int main()
 
     if (failures != 0)
     {
-        std::fprintf(stderr, "%d check(s) failed\n", failures);
+        std::fprintf(stderr, "%d check(s) failed\n", failures.load());
         return 1;
     }
     std::puts("OK: sheets");

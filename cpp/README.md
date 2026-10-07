@@ -135,10 +135,14 @@ if (auto totals = workbook->sheet_by_name("Totals").value())
 One open workbook can be read from several threads, which loads the shared-string table once:
 
 ```cpp
-std::vector<std::jthread> threads;
+std::vector<std::thread> threads;
 for (xl::Sheet sheet : sheets)
 {
     threads.emplace_back([sheet] { auto table = xl::parse_sheet<Row>(sheet); /* ... */ });
+}
+for (std::thread &thread : threads)
+{
+    thread.join();
 }
 ```
 
@@ -165,8 +169,8 @@ while (auto row = cursor.next_row())
 ```
 
 Each row is invalidated by the next `next_row()`. To hold every row at once, use
-`read_all_decoded()`, which decodes the whole remaining sheet in one native call and owns it until
-destroyed:
+`read_all_decoded()`, which decodes the whole sheet in one native call and owns it until
+destroyed (`RowCursor::read_all_decoded()` does the same for the rows a cursor has left):
 
 ```cpp
 auto rows = workbook.sheet(0).read_all_decoded().value();
@@ -396,7 +400,7 @@ Two workloads:
 - **Typed:** `parse_sheet<FullRow>` against zsv plus the same conversions done by hand (`std::string`
   for text, ISO dates, `std::from_chars` for the integers and doubles), one owned `FullRow` per row.
   All three produce the same checksum.
-- **Cells:** every cell's bytes counted. ExcelReader goes through `RowCursor` (`xl_next_row_view`), zsv
+- **Cells:** every cell's bytes counted. ExcelReader goes through `RowCursor` (`xl_rows_next_view`), zsv
   through its row handler. zsv's checksum is 3 bytes higher because it keeps the BOM in the first
   header cell.
 
@@ -411,8 +415,8 @@ Measured on the same machine as above, GCC 16.2.0 (MSYS2 UCRT64, `-O3 -mavx2` fo
 **zsv is faster on both.** Typed, it is ~1.2x (`compat`) and ~1.3x (`fast`) faster than ExcelReader.
 Counting cells, it is ~2.0x and ~3.4x faster.
 
-The cells gap is the C ABI, not the CSV parser. `xl_next_row_view` copies every cell's value into a
-native row the handle owns, one call per row, and that alone costs ~10.6 ms here (calling it without
+The cells gap is the C ABI, not the CSV parser. `xl_rows_next_view` copies every cell's value into a
+native row the cursor owns, one call per row, and that alone costs ~10.6 ms here (calling it without
 reading any cell, measured separately). The managed reader reads the same file in ~5 ms under
 BenchmarkDotNet (`RealDataReadBenchmark.Csv_ExcelReader`), but that is a different harness and
 runtime, so it is context rather than a like-for-like number.
