@@ -107,7 +107,8 @@ typedef struct xl_source {
     int64_t length;          /* total size in bytes */
     /* Copy up to len bytes starting at offset into buf. Return the bytes copied, or -1 on failure
        after calling xl_set_source_error. Returning 0 before length is a failure ("the source ended
-       early"). Called from any thread, concurrently. */
+       early"). Returning more than len, or a negative other than -1, is a failure. Called from any
+       thread, concurrently. */
     int64_t (*read_at)(void* user_data, int64_t offset, uint8_t* buf, int64_t len);
     /* May be NULL. Called exactly once, when nothing opened from the workbook needs the source. */
     void (*release)(void* user_data);
@@ -126,7 +127,8 @@ typedef struct xl_stream {
     int32_t struct_size;     /* sizeof(xl_stream) */
     void* user_data;
     /* Copy up to len bytes into buf. Return the bytes copied (0 at the end), or -1 on failure after
-       calling xl_set_source_error. Never called concurrently. */
+       calling xl_set_source_error. Returning more than len, or a negative other than -1, is a failure.
+       Never called concurrently. */
     int64_t (*read)(void* user_data, uint8_t* buf, int64_t len);
     /* May be NULL. Called exactly once. */
     void (*release)(void* user_data);

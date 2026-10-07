@@ -18,7 +18,10 @@ class Source(Protocol):
     size: int
 
     def read_at(self, offset: int, buffer: memoryview) -> int:
-        """Fills `buffer` with the bytes starting at `offset` and returns how many it wrote."""
+        """Fills `buffer` with the bytes starting at `offset` and returns how many it wrote.
+
+        `buffer` is valid only during the call; do not retain it.
+        """
         ...
 
 
@@ -26,7 +29,7 @@ _keys = itertools.count(1)
 _live: dict[int, object] = {}
 
 
-def _fail(error: Exception) -> int:
+def _fail(error: BaseException) -> int:
     message = (str(error) or type(error).__name__).encode("utf-8", errors="replace")
     _native.load_library().xl_set_source_error(message, len(message))
     return -1
@@ -40,7 +43,7 @@ def _view(address: int, length: int) -> memoryview:
 def _read_at(key: int, offset: int, buffer: int, length: int) -> int:
     try:
         return operator.index(_live[key].read_at(offset, _view(buffer, length)))
-    except Exception as error:  # noqa: BLE001
+    except BaseException as error:  # noqa: BLE001
         return _fail(error)
 
 
@@ -62,7 +65,7 @@ def _read(key: int, buffer: int, length: int) -> int:
         if count > length:
             raise OSError("the stream returned more bytes than requested")
         return count
-    except Exception as error:  # noqa: BLE001
+    except BaseException as error:  # noqa: BLE001
         return _fail(error)
 
 

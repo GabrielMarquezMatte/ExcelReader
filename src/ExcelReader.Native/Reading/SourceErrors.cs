@@ -22,7 +22,7 @@ namespace ExcelReader.Native.Reading
             _pending = null;
             return got == -1
                 ? new IOException(message ?? $"{where} failed.")
-                : new IOException($"{where} returned {got} for a request of {requested} bytes; expected 0 to {requested}, or -1 on failure.");
+                : new IOException($"{where} returned {got} for a request of {requested} bytes, which is not a valid result.");
         }
     }
 }

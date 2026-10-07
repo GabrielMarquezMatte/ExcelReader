@@ -10,6 +10,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace
@@ -68,20 +69,41 @@ namespace
     class FailingSource final : public xl::Source
     {
     public:
+        explicit FailingSource(Counters &counters) : counters_(counters) {}
+        ~FailingSource() override { counters_.destroyed.fetch_add(1); }
+
         std::uint64_t size() const override { return 1024; }
         std::expected<std::size_t, std::string> read_at(std::uint64_t, std::span<std::byte>) const override
         {
             return std::unexpected(std::string("disk on fire"));
         }
+
+    private:
+        Counters &counters_;
     };
 
     class ThrowingSource final : public xl::Source
     {
     public:
+        explicit ThrowingSource(Counters &counters) : counters_(counters) {}
+        ~ThrowingSource() override { counters_.destroyed.fetch_add(1); }
+
         std::uint64_t size() const override { return 1024; }
         std::expected<std::size_t, std::string> read_at(std::uint64_t, std::span<std::byte>) const override
         {
             throw std::runtime_error("boom");
+        }
+
+    private:
+        Counters &counters_;
+    };
+
+    class ErrorStream final : public xl::InputStream
+    {
+    public:
+        std::expected<std::size_t, std::string> read(std::span<std::byte>) override
+        {
+            return std::unexpected(std::string("pipe broke"));
         }
     };
 
@@ -102,6 +124,50 @@ namespace
         std::vector<std::byte> bytes_;
         std::size_t position_ = 0;
     };
+
+    std::vector<std::byte> build_sheets(int sheet_count, int row_count)
+    {
+        auto writer = xl::WriterHandle::open_memory(XL_FORMAT_XLSX);
+        std::vector<std::byte> bytes;
+        if (!writer.has_value())
+        {
+            return bytes;
+        }
+        for (int s = 0; s < sheet_count; ++s)
+        {
+            (void)writer->start_sheet("sheet" + std::to_string(s));
+            for (int r = 0; r < row_count; ++r)
+            {
+                (void)writer->start_row();
+                (void)writer->write("s" + std::to_string(s) + "-r" + std::to_string(r));
+                (void)writer->end_row();
+            }
+            (void)writer->end_sheet();
+        }
+        auto written = writer->bytes();
+        if (written.has_value())
+        {
+            bytes.resize(written->size());
+            std::memcpy(bytes.data(), written->data(), written->size());
+        }
+        return bytes;
+    }
+
+    std::vector<std::string> first_column(const xl::Workbook &workbook, int32_t sheet)
+    {
+        std::vector<std::string> values;
+        auto cursor = workbook.sheet(sheet).rows();
+        while (cursor.has_value())
+        {
+            auto row = cursor->next_row();
+            if (!row.has_value())
+            {
+                break;
+            }
+            values.emplace_back((*row)[0].value);
+        }
+        return values;
+    }
 
     std::size_t row_count(const xl::Workbook &workbook)
     {
@@ -139,14 +205,55 @@ int main()
     check(uncached.reads.load() > blocks, "without the cache every read reaches read_at");
 
     {
-        auto workbook = xl::Workbook::open_source(std::make_unique<FailingSource>(), XL_FORMAT_XLSX);
+        Counters failing;
+        auto workbook = xl::Workbook::open_source(std::make_unique<FailingSource>(failing), XL_FORMAT_XLSX);
         check(!workbook.has_value() && workbook.error().message.find("disk on fire") != std::string::npos,
               "the source's error message reaches the caller");
+        check(failing.destroyed.load() == 1, "a source whose read failed is destroyed exactly once");
     }
     {
-        auto workbook = xl::Workbook::open_source(std::make_unique<ThrowingSource>(), XL_FORMAT_XLSX);
+        Counters throwing;
+        auto workbook = xl::Workbook::open_source(std::make_unique<ThrowingSource>(throwing), XL_FORMAT_XLSX);
         check(!workbook.has_value() && workbook.error().message.find("boom") != std::string::npos,
               "an exception from the source becomes an error");
+        check(throwing.destroyed.load() == 1, "a source that threw is destroyed exactly once");
+    }
+    {
+        auto workbook = xl::Workbook::open_stream(std::make_unique<ErrorStream>(), XL_FORMAT_XLSX);
+        check(!workbook.has_value() && workbook.error().message.find("pipe broke") != std::string::npos,
+              "the stream's error message reaches the caller");
+    }
+    {
+        constexpr int sheet_count = 4;
+        const std::vector<std::byte> many = build_sheets(sheet_count, 300);
+        check(!many.empty(), "build the multi-sheet workbook");
+        Counters parallel_counters;
+        auto reference_many = xl::Workbook::open_memory(std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(many.data()), many.size()));
+        auto workbook = xl::Workbook::open_source(std::make_unique<MemorySource>(many, parallel_counters), XL_FORMAT_XLSX);
+        check(reference_many.has_value() && workbook.has_value(), "open the multi-sheet workbook both ways");
+        if (reference_many.has_value() && workbook.has_value())
+        {
+            std::vector<std::vector<std::string>> parallel(sheet_count * 2);
+            {
+                std::vector<std::thread> threads;
+                for (std::size_t i = 0; i < parallel.size(); ++i)
+                {
+                    threads.emplace_back([&parallel, &workbook, i]
+                                         { parallel[i] = first_column(*workbook, static_cast<int32_t>(i % sheet_count)); });
+                }
+                for (std::thread &thread : threads)
+                {
+                    thread.join();
+                }
+            }
+            bool same = true;
+            for (std::size_t i = 0; i < parallel.size(); ++i)
+            {
+                const auto expected = first_column(*reference_many, static_cast<int32_t>(i % sheet_count));
+                same = same && expected.size() == 300 && parallel[i] == expected;
+            }
+            check(same, "every sheet of a source read on its own thread matches the in-memory read");
+        }
     }
     {
         const std::string csv = "name,qty\nwidget,7\n";

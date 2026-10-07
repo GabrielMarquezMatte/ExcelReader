@@ -389,6 +389,8 @@ be read on its own thread.
 ```python
 import urllib.request
 
+from excelreader import open_source
+
 class HttpSource:
     def __init__(self, url):
         self.url = url
@@ -410,6 +412,10 @@ with open_source(HttpSource("https://example.com/book.xlsx")) as workbook:
 read as it arrives; an XLSX, XLSB or XLS is read whole first.
 
 ```python
+import sys
+
+from excelreader import open_stream
+
 with open_stream(sys.stdin.buffer, "csv") as workbook:
     ...
 ```
