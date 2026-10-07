@@ -263,6 +263,37 @@ class NativeOpenOptions(ctypes.Structure):
         ("intern_strings", ctypes.c_int32),
         ("password", ctypes.POINTER(ctypes.c_uint8)),
         ("password_len", ctypes.c_int32),
+        ("source_cache_bytes", ctypes.c_int64),
+        ("max_buffered_bytes", ctypes.c_int64),
+        ("source_block_size", ctypes.c_int32),
+    ]
+
+
+SourceReadAt = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p, ctypes.c_int64, ctypes.c_void_p, ctypes.c_int64)
+StreamRead = ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int64)
+SourceRelease = ctypes.CFUNCTYPE(None, ctypes.c_void_p)
+
+
+class NativeSource(ctypes.Structure):
+    """Mirrors xl_source."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_int32),
+        ("user_data", ctypes.c_void_p),
+        ("length", ctypes.c_int64),
+        ("read_at", SourceReadAt),
+        ("release", SourceRelease),
+    ]
+
+
+class NativeStream(ctypes.Structure):
+    """Mirrors xl_stream."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_int32),
+        ("user_data", ctypes.c_void_p),
+        ("read", StreamRead),
+        ("release", SourceRelease),
     ]
 
 
@@ -310,6 +341,9 @@ def to_native_open_options(options: OpenOptions) -> NativeOpenOptions:
     raw.max_cell_bytes = _opt_number(options.max_cell_bytes)
     raw.max_shared_string_bytes = _opt_number(options.max_shared_string_bytes)
     raw.max_zip_entries = _opt_number(options.max_zip_entries)
+    raw.source_cache_bytes = _opt_number(options.source_cache_bytes)
+    raw.max_buffered_bytes = _opt_number(options.max_buffered_bytes)
+    raw.source_block_size = _opt_number(options.source_block_size)
     return raw
 
 
@@ -445,6 +479,12 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_open_file.restype = c_int
     lib.xl_open_memory.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
     lib.xl_open_memory.restype = c_int
+    lib.xl_open_source.argtypes = [ctypes.POINTER(NativeSource), c_int, p_open_options, pp_void]
+    lib.xl_open_source.restype = c_int
+    lib.xl_open_stream.argtypes = [ctypes.POINTER(NativeStream), c_int, p_open_options, pp_void]
+    lib.xl_open_stream.restype = c_int
+    lib.xl_set_source_error.argtypes = [p_bytes, c_int]
+    lib.xl_set_source_error.restype = None
     lib.xl_sheet_visibility_at.argtypes = [p_void, c_int, p_int]
     lib.xl_sheet_visibility_at.restype = c_int
     lib.xl_sheet_index.argtypes = [p_void, p_bytes, c_int, p_int]
