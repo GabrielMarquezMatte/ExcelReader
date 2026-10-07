@@ -90,19 +90,6 @@ namespace ExcelReader.Native
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name")]
-        public static int SheetName(nint handle, byte* buffer, int capacity, int* outLength)
-        {
-            if (!IsValidOutBuffer(buffer, capacity, outLength))
-            {
-                return NativeStatus.InvalidArgument;
-            }
-
-            int status = ReadApi.SheetName(Resolve(handle), new Span<byte>(buffer, capacity), out int length);
-            *outLength = length;
-            return status;
-        }
-
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name_at")]
         public static int SheetNameAt(nint handle, int index, byte* buffer, int capacity, int* outLength)
         {
@@ -114,12 +101,6 @@ namespace ExcelReader.Native
             int status = ReadApi.SheetNameAt(Resolve(handle), index, new Span<byte>(buffer, capacity), out int length);
             *outLength = length;
             return status;
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_move_to_sheet")]
-        public static int MoveToSheet(nint handle, int index)
-        {
-            return ReadApi.MoveToSheet(Resolve(handle), index);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_is_date1904")]
@@ -135,55 +116,114 @@ namespace ExcelReader.Native
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_next_row")]
-        public static int NextRow(nint handle, byte* buffer, int capacity, int* outWritten)
+        [UnmanagedCallersOnly(EntryPoint = "xl_sheet_visibility_at")]
+        public static int SheetVisibilityAt(nint handle, int index, int* outVisibility)
+        {
+            if (outVisibility is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.SheetVisibilityAt(Resolve(handle), index, out int visibility);
+            *outVisibility = visibility;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_sheet_index")]
+        public static int SheetIndex(nint handle, byte* name, int nameLength, int* outIndex)
+        {
+            if (outIndex is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outIndex = -1;
+            if (nameLength < 0 || (name is null && nameLength != 0))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.SheetIndex(Resolve(handle), new ReadOnlySpan<byte>(name, nameLength), out int index);
+            *outIndex = index;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_open")]
+        public static int RowsOpen(nint handle, int sheet, nint* outRows)
+        {
+            if (outRows is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outRows = 0;
+
+            int status = ReadApi.OpenRows(Resolve(handle), sheet, out NativeRowCursor? cursor);
+            if (cursor is not null)
+            {
+                *outRows = NativeHandleTable.Register(cursor);
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_close")]
+        public static int RowsClose(nint rows)
+        {
+            if (!NativeHandleTable.TryUnregister(rows, out NativeRowCursor? cursor))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            return ReadApi.CloseRows(cursor);
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_next")]
+        public static int RowsNext(nint rows, byte* buffer, int capacity, int* outWritten)
         {
             if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.NextRow(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
+            int status = ReadApi.NextRow(ResolveRows(rows), new Span<byte>(buffer, capacity), out int written);
             *outWritten = written;
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_next_row_view")]
-        public static int NextRowView(nint handle, NativeRow* outRow)
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_next_view")]
+        public static int RowsNextView(nint rows, NativeRow* outRow)
         {
             if (outRow is null)
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.NextRowView(Resolve(handle), out NativeRow row);
+            int status = ReadApi.NextRowView(ResolveRows(rows), out NativeRow row);
             *outRow = row;
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_read_all_blob")]
-        public static int ReadAllBlob(nint handle, byte* buffer, int capacity, int* outWritten)
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_read_all_blob")]
+        public static int RowsReadAllBlob(nint rows, byte* buffer, int capacity, int* outWritten)
         {
             if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.ReadAllBlob(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
+            int status = ReadApi.ReadAllBlob(ResolveRows(rows), new Span<byte>(buffer, capacity), out int written);
             *outWritten = written;
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_read_all_decoded")]
-        public static int ReadAllDecoded(nint handle, NativeRows* outRows)
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_read_all_decoded")]
+        public static int RowsReadAllDecoded(nint rows, NativeRows* outRows)
         {
             if (outRows is null)
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.ReadAllDecoded(Resolve(handle), out NativeRows rows);
-            *outRows = rows;
+            int status = ReadApi.ReadAllDecoded(ResolveRows(rows), out NativeRows decoded);
+            *outRows = decoded;
             return status;
         }
 

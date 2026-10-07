@@ -6,14 +6,16 @@ EXPORTS
     xl_open_memory_ex
     xl_close
     xl_sheet_count
-    xl_sheet_name
     xl_sheet_name_at
-    xl_move_to_sheet
     xl_is_date1904
-    xl_next_row
-    xl_next_row_view
-    xl_read_all_decoded
-    xl_read_all_blob
+    xl_sheet_visibility_at
+    xl_sheet_index
+    xl_rows_open
+    xl_rows_close
+    xl_rows_next
+    xl_rows_next_view
+    xl_rows_read_all_decoded
+    xl_rows_read_all_blob
     xl_free_rows
     xl_parse_typed
     xl_free_table

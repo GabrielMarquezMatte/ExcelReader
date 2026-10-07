@@ -23,7 +23,7 @@ namespace ExcelReader.Tests.Reader
         private const string PkgRel = "http://schemas.openxmlformats.org/package/2006/relationships";
 
         /// <summary>Builds an XLSX whose sheets carry the given <c>state</c> attribute text; a null entry omits it.</summary>
-        private static byte[] BuildXlsx(params string?[] states)
+        internal static byte[] BuildXlsx(params string?[] states)
         {
             var sheetXml = new string[states.Length];
             var relXml = new string[states.Length];
