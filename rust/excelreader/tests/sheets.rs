@@ -1,6 +1,6 @@
-use excelreader::workbook::{SheetVisibility, Workbook};
+use excelreader::workbook::{Sheet, SheetVisibility, Workbook};
 use excelreader::writer_handle::WriterHandle;
-use excelreader::{XL_FORMAT_AUTO, XL_FORMAT_XLSX};
+use excelreader::{RowCursor, XL_FORMAT_AUTO, XL_FORMAT_XLSX};
 
 fn two_sheets() -> Workbook {
     let mut writer = WriterHandle::open_memory(XL_FORMAT_XLSX, None).expect("open writer");
@@ -107,4 +107,61 @@ fn infer_schema_samples_the_named_sheet() {
     let columns = workbook.sheet(1).expect("sheet 1").infer_schema(0, 10).expect("schema");
 
     assert_eq!(columns.len(), 1);
+}
+
+const PARALLEL_SHEETS: usize = 6;
+const PARALLEL_ROWS: usize = 500;
+
+fn many_sheets() -> Workbook {
+    let mut writer = WriterHandle::open_memory(XL_FORMAT_XLSX, None).expect("open writer");
+    for sheet in 0..PARALLEL_SHEETS {
+        writer.start_sheet(&format!("sheet{sheet}")).expect("start sheet");
+        for row in 0..PARALLEL_ROWS {
+            writer.start_row().expect("start row");
+            writer.write_str(Some(&format!("s{sheet}-r{row}"))).expect("write");
+            writer.end_row().expect("end row");
+        }
+        writer.end_sheet().expect("end sheet");
+    }
+    let bytes = writer.bytes().expect("bytes");
+    Workbook::open_memory(&bytes, XL_FORMAT_AUTO, None).expect("open")
+}
+
+fn read_sheet(sheet: Sheet<'_>) -> Vec<String> {
+    first_column(&mut sheet.rows().expect("cursor"))
+}
+
+#[test]
+fn workbook_and_sheet_cross_threads_and_cursors_move_between_them() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    fn assert_send<T: Send>() {}
+
+    assert_send_sync::<Workbook>();
+    assert_send_sync::<Sheet<'static>>();
+    assert_send::<RowCursor<'static>>();
+}
+
+#[test]
+fn every_sheet_read_on_its_own_thread_matches_a_sequential_read() {
+    let workbook = many_sheets();
+    let sheets = workbook.sheets().expect("sheets");
+    let sequential: Vec<Vec<String>> = sheets.iter().map(|sheet| read_sheet(*sheet)).collect();
+    assert_eq!(sequential[3][0], "s3-r0");
+    assert_eq!(sequential[3].len(), PARALLEL_ROWS);
+
+    let parallel: Vec<Vec<String>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = sheets
+            .iter()
+            .chain(sheets.iter())
+            .map(|sheet| {
+                let sheet = *sheet;
+                scope.spawn(move || read_sheet(sheet))
+            })
+            .collect();
+        handles.into_iter().map(|handle| handle.join().expect("no panic")).collect()
+    });
+
+    for (index, rows) in parallel.iter().enumerate() {
+        assert_eq!(rows, &sequential[index % PARALLEL_SHEETS]);
+    }
 }
