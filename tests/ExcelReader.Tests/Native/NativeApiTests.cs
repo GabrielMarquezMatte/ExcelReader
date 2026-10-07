@@ -304,7 +304,7 @@ namespace ExcelReader.Tests.Native
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { StructSize = 1 };
 
-            int status = ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Null(handle);
