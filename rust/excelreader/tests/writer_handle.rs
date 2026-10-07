@@ -112,8 +112,8 @@ fn writer_handle_round_trips_through_open_file() {
         write_full_rows(&mut handle);
     }
 
-    let mut workbook = Workbook::open(&target).expect("the file WriterHandle produced must open");
-    let table = parse_sheet::<FullRow>(&mut workbook, 1).expect("the written file must parse back");
+    let workbook = Workbook::open(&target).expect("the file WriterHandle produced must open");
+    let table = parse_sheet::<FullRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
     assert_eq!(table.len(), 2);
 
     let first = table.get(0).expect("row 0 must exist");
@@ -142,13 +142,13 @@ fn writer_handle_to_memory_round_trips() {
     let bytes = handle.bytes().expect("bytes must succeed");
     assert!(!bytes.is_empty());
 
-    let mut workbook =
+    let workbook =
         Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the bytes bytes() returned must open");
     assert_eq!(
-        workbook.sheet_name().expect("name must read back"),
+        workbook.sheet_name_at(0).expect("name must read back"),
         "Planilha1"
     );
-    let table = parse_sheet::<FullRow>(&mut workbook, 1).expect("the returned bytes must parse back");
+    let table = parse_sheet::<FullRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the returned bytes must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0").texto, "uma");
 

@@ -123,10 +123,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void SyncReaderHandlesCorpusFixture(CorpusFixture fixture)
         {
             using MemoryStream ms = WorkbookBuilder.Build(fixture.Rows, fixture.SharedStrings);
-            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
 
             Assert.NotEmpty(fixture.Expected);
-            AssertExpected(reader.GetEnumerator(), fixture.Expected);
+            AssertExpected(reader.FirstSheet.GetEnumerator(), fixture.Expected);
         }
 
         [Theory]
@@ -135,14 +135,14 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using MemoryStream ms = WorkbookBuilder.Build(fixture.Rows, fixture.SharedStrings);
-            await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            await using XlsxReader.Enumerator rows = reader.GetAsyncEnumerator(ct);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
+            await using XlsxWorkbook.Enumerator rows = reader.FirstSheet.GetAsyncEnumerator(ct);
 
             Assert.NotEmpty(fixture.Expected);
             await AssertExpectedAsync(rows, fixture.Expected);
         }
 
-        private static void AssertExpected(XlsxReader.Enumerator rows, ExpectedCell[] expected)
+        private static void AssertExpected(XlsxWorkbook.Enumerator rows, ExpectedCell[] expected)
         {
             int next = 0;
             int rowIndex = 0;
@@ -156,7 +156,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         }
 
         private static async Task AssertExpectedAsync(
-            XlsxReader.Enumerator rows,
+            XlsxWorkbook.Enumerator rows,
             ExpectedCell[] expected)
         {
             int next = 0;

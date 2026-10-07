@@ -8,6 +8,7 @@ from __future__ import annotations
 import ctypes
 import os
 import platform
+import threading
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
@@ -25,7 +26,11 @@ XL_ERROR = -5
 XL_STATUS_PASSWORD_REQUIRED = -6
 XL_STATUS_PASSWORD_INCORRECT = -7
 
-XL_ABI_VERSION = 5
+XL_ABI_VERSION = 6
+
+XL_SHEET_VISIBLE = 0
+XL_SHEET_HIDDEN = 1
+XL_SHEET_VERY_HIDDEN = 2
 
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
@@ -221,6 +226,8 @@ ArrowArrayStream._fields_ = [
 
 
 class NativeRows(ctypes.Structure):
+    """Mirrors xl_rows_decoded."""
+
     _fields_ = [
         ("row_count", ctypes.c_int32),
         ("rows", ctypes.POINTER(NativeRow)),
@@ -370,24 +377,57 @@ def _candidate_paths() -> list[Path]:
     return [Path(__file__).resolve().parent / "_lib" / library_filename()]
 
 
+_load_lock = threading.Lock()
+
+
 @lru_cache(maxsize=1)
 def load_library() -> ctypes.CDLL:
-    for path in _candidate_paths():
-        if not path.exists():
-            continue
-        lib = _bind(ctypes.CDLL(str(path)))
-        version = lib.xl_abi_version()
-        if version != XL_ABI_VERSION:
-            raise RuntimeError(
-                f"{path} is ABI version {version}, but this package expects {XL_ABI_VERSION}. "
-                f"Rebuild the native library with python python/scripts/build_native.py."
-            )
-        return lib
-    raise RuntimeError(
-        f"{library_filename()} not found. Build it with:\n"
-        f"    python python/scripts/build_native.py\n"
-        f"or point EXCELREADER_NATIVE_LIB at an existing binary."
-    )
+    with _load_lock:
+        for path in _candidate_paths():
+            if not path.exists():
+                continue
+            lib = _bind(ctypes.CDLL(str(path)))
+            version = lib.xl_abi_version()
+            if version != XL_ABI_VERSION:
+                raise RuntimeError(
+                    f"{path} is ABI version {version}, but this package expects {XL_ABI_VERSION}. "
+                    f"Rebuild the native library with python python/scripts/build_native.py."
+                )
+            _warm_up(lib)
+            return lib
+        raise RuntimeError(
+            f"{library_filename()} not found. Build it with:\n"
+            f"    python python/scripts/build_native.py\n"
+            f"or point EXCELREADER_NATIVE_LIB at an existing binary."
+        )
+
+
+def _warm_up(lib: ctypes.CDLL) -> None:
+    # Threads whose first native call lands together can crash the NativeAOT runtime's start-up
+    # (see commit b5f8c5f); one small read here finishes it on a single thread. Failures are ignored.
+    data = b"a,b\n1,2\n3,4\n"
+    workbook = ctypes.c_void_p()
+    if lib.xl_open_memory(data, len(data), XL_FORMAT_CSV, None, ctypes.byref(workbook)) != XL_OK:
+        return
+    try:
+        cursor = ctypes.c_void_p()
+        if lib.xl_rows_open(workbook, 0, ctypes.byref(cursor)) != XL_OK:
+            return
+        try:
+            written = ctypes.c_int32()
+            capacity = 16
+            buffer = ctypes.create_string_buffer(capacity)
+            while True:
+                status = lib.xl_rows_next(cursor, buffer, capacity, ctypes.byref(written))
+                if status == XL_BUFFER_TOO_SMALL:
+                    capacity = written.value
+                    buffer = ctypes.create_string_buffer(capacity)
+                elif status != XL_OK:
+                    return
+        finally:
+            lib.xl_rows_close(cursor)
+    finally:
+        lib.xl_close(workbook)
 
 
 def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
@@ -399,67 +439,62 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
 
     p_open_options = ctypes.POINTER(NativeOpenOptions)
 
-    lib.xl_open_file.argtypes = [p_bytes, c_int, c_int, pp_void]
+    p_specs = ctypes.POINTER(NativeColumnSpec)
+
+    lib.xl_open_file.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
     lib.xl_open_file.restype = c_int
-    lib.xl_open_file_ex.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
-    lib.xl_open_file_ex.restype = c_int
-    lib.xl_open_memory.argtypes = [p_bytes, c_int, c_int, pp_void]
+    lib.xl_open_memory.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
     lib.xl_open_memory.restype = c_int
-    lib.xl_open_memory_ex.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
-    lib.xl_open_memory_ex.restype = c_int
+    lib.xl_sheet_visibility_at.argtypes = [p_void, c_int, p_int]
+    lib.xl_sheet_visibility_at.restype = c_int
+    lib.xl_sheet_index.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_sheet_index.restype = c_int
+    lib.xl_rows_open.argtypes = [p_void, c_int, pp_void]
+    lib.xl_rows_open.restype = c_int
+    lib.xl_rows_close.argtypes = [p_void]
+    lib.xl_rows_close.restype = c_int
+    lib.xl_rows_next.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_rows_next.restype = c_int
+    lib.xl_rows_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_rows_read_all_blob.restype = c_int
+    lib.xl_rows_read_all_decoded.argtypes = [p_void, ctypes.POINTER(NativeRows)]
+    lib.xl_rows_read_all_decoded.restype = c_int
+    lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
+    lib.xl_free_rows.restype = None
+    lib.xl_parse_typed.argtypes = [p_void, c_int, p_specs, c_int, c_int, c_int, ctypes.POINTER(NativeTable)]
+    lib.xl_parse_typed.restype = c_int
+    lib.xl_typed_reader_open.argtypes = [p_void, c_int, p_specs, c_int, c_int, ctypes.c_int64, pp_void]
+    lib.xl_typed_reader_open.restype = c_int
+    lib.xl_parse_arrow.argtypes = [
+        p_void, c_int, p_specs, c_int, c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema),
+    ]
+    lib.xl_parse_arrow.restype = c_int
+    lib.xl_parse_arrow_stream.argtypes = [
+        p_void, c_int, p_specs, c_int, c_int, ctypes.c_int64, ctypes.POINTER(ArrowArrayStream),
+    ]
+    lib.xl_parse_arrow_stream.restype = c_int
+    lib.xl_infer_schema.argtypes = [p_void, c_int, c_int, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
+    lib.xl_infer_schema.restype = c_int
     lib.xl_close.argtypes = [p_void]
     lib.xl_close.restype = c_int
     lib.xl_sheet_count.argtypes = [p_void, p_int]
     lib.xl_sheet_count.restype = c_int
-    lib.xl_sheet_name.argtypes = [p_void, p_bytes, c_int, p_int]
-    lib.xl_sheet_name.restype = c_int
     lib.xl_sheet_name_at.argtypes = [p_void, c_int, p_bytes, c_int, p_int]
     lib.xl_sheet_name_at.restype = c_int
-    lib.xl_move_to_sheet.argtypes = [p_void, c_int]
-    lib.xl_move_to_sheet.restype = c_int
     lib.xl_is_date1904.argtypes = [p_void, p_int]
     lib.xl_is_date1904.restype = c_int
-    lib.xl_next_row.argtypes = [p_void, p_bytes, c_int, p_int]
-    lib.xl_next_row.restype = c_int
-    lib.xl_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
-    lib.xl_read_all_blob.restype = c_int
     lib.xl_last_error.argtypes = [p_bytes, c_int, p_int]
     lib.xl_last_error.restype = c_int
     lib.xl_last_error_ptr.argtypes = [p_int]
     lib.xl_last_error_ptr.restype = ctypes.POINTER(ctypes.c_uint8)
-    lib.xl_read_all_decoded.argtypes = [p_void, ctypes.POINTER(NativeRows)]
-    lib.xl_read_all_decoded.restype = c_int
-    lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
-    lib.xl_free_rows.restype = None
-    lib.xl_parse_typed.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(NativeTable)]
-    lib.xl_parse_typed.restype = c_int
     lib.xl_free_table.argtypes = [ctypes.POINTER(NativeTable)]
     lib.xl_free_table.restype = None
-    lib.xl_infer_schema.argtypes = [p_void, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
-    lib.xl_infer_schema.restype = c_int
-    lib.xl_infer_schema_ex.argtypes = [p_void, c_int, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
-    lib.xl_infer_schema_ex.restype = c_int
     lib.xl_free_schema.argtypes = [ctypes.POINTER(NativeInferredSchema)]
     lib.xl_free_schema.restype = None
-    lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
-    lib.xl_parse_arrow.restype = c_int
-    lib.xl_parse_typed_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(NativeTable)]
-    lib.xl_parse_typed_ex.restype = c_int
-    lib.xl_parse_arrow_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
-    lib.xl_parse_arrow_ex.restype = c_int
-    lib.xl_typed_reader_open.argtypes = [
-        p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64, pp_void,
-    ]
-    lib.xl_typed_reader_open.restype = c_int
     lib.xl_typed_reader_next.argtypes = [p_void, ctypes.POINTER(NativeTable)]
     lib.xl_typed_reader_next.restype = c_int
     lib.xl_typed_reader_close.argtypes = [p_void]
     lib.xl_typed_reader_close.restype = None
-    lib.xl_parse_arrow_stream.argtypes = [
-        p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64,
-        ctypes.POINTER(ArrowArrayStream),
-    ]
-    lib.xl_parse_arrow_stream.restype = c_int
     lib.xl_write_typed.argtypes = [
         p_bytes, c_int, c_int,
         ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable), ctypes.POINTER(NativeWriteOptions),

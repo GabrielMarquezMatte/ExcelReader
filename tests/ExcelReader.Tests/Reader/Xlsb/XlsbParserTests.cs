@@ -22,7 +22,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
             using var ms = BuildWorkbook();
             using var reader = Excel.FromXlsb(ms);
 
-            var rows = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).ToList();
 
             Assert.Single(rows);
             Assert.Equal("Alice", rows[0].Name);
@@ -37,7 +37,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
             await using var reader = await Excel.FromXlsbAsync(ms, ct: TestContext.Current.CancellationToken);
             var rows = new List<PersonRow>();
 
-            await foreach (var row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
+            await foreach (var row in ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }

@@ -13,15 +13,15 @@ namespace ExcelReader.Native.Typed
 {
     internal static unsafe partial class TypedApi
     {
-        internal static int ParseTyped(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
+        internal static int ParseTyped(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
-            return ParseTypedTable(handle, specs, headerRow, 1, "xl_parse_typed", out table);
+            return ParseTypedTable(handle, sheet, specs, headerRow, 1, out table);
         }
 
-        private static int ParseSequential(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, string cause, out NativeTable table)
+        private static int ParseSequential(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
             table = default;
-            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, cause, out TypedParseSession? session);
+            int status = TypedParseSession.Open(handle, sheet, specs, headerRow, maxRows: 0, out TypedParseSession? session);
             if (status != NativeStatus.Ok)
             {
                 return status;

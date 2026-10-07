@@ -4,7 +4,7 @@ using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsx
 {
-    public sealed partial class XlsxReader
+    public sealed partial class XlsxWorkbook
     {
         private void ParseSharedFromMemory(ReadOnlyMemory<byte> content, long entryLength)
         {

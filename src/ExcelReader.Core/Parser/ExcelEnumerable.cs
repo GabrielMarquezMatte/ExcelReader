@@ -9,34 +9,34 @@ namespace ExcelReader.Core.Parser
 {
     /// <summary>Lazily projects XLSX rows into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each row to.</typeparam>
-    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator>
+    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxSheet, XlsxWorkbook.Enumerator>
         where T : allows ref struct
     {
-        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
-            : base(reader, config, explicitInfo)
+        internal ExcelEnumerable(XlsxSheet sheet, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+            : base(sheet, config, explicitInfo)
         {
         }
     }
 
     /// <summary>Lazily projects rows read by a given reader/enumerator pair into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each row to.</typeparam>
-    /// <typeparam name="TReader">The concrete row reader type this instance pulls rows from.</typeparam>
-    /// <typeparam name="TEnumerator">The concrete row enumerator type <typeparamref name="TReader"/> produces.</typeparam>
+    /// <typeparam name="TSheet">The sheet type this instance pulls rows from.</typeparam>
+    /// <typeparam name="TEnumerator">The concrete row enumerator type <typeparamref name="TSheet"/> produces.</typeparam>
     [EditorBrowsable(EditorBrowsableState.Never)]
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
-    public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
+    public class ExcelEnumerable<T, TSheet, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
         where T : allows ref struct
-        where TReader : IExcelRowReader<TEnumerator>
+        where TSheet : IExcelSheet<TEnumerator>
         where TEnumerator : class, IExcelRowEnumerator
     {
-        private readonly TReader _reader;
+        private readonly TSheet _sheet;
         private readonly ExcelParserConfig _config;
         private readonly TypeMapInfo<T> _info;
 
-        internal ExcelEnumerable(TReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+        internal ExcelEnumerable(TSheet sheet, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
         {
-            _reader = reader;
+            _sheet = sheet;
             _config = config;
             _info = explicitInfo;
         }
@@ -46,8 +46,8 @@ namespace ExcelReader.Core.Parser
             Justification = "T allows ref struct so a row model can be a class, a struct or a ref struct; constraining it would break that.")]
         public Enumerator GetEnumerator()
         {
-            TEnumerator rows = _reader.GetEnumerator();
-            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture, _config.ThrowOnParseFailure);
+            TEnumerator rows = _sheet.GetEnumerator();
+            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _sheet.IsDate1904, _config.Culture, _config.ThrowOnParseFailure);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -70,7 +70,7 @@ namespace ExcelReader.Core.Parser
             Justification = "T allows ref struct so a row model can be a class, a struct or a ref struct; constraining it would break that.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, cancellationToken);
+            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, cancellationToken);
         }
 
         /// <summary>Enumerates rows synchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
@@ -107,12 +107,12 @@ namespace ExcelReader.Core.Parser
 
         /// <summary>Enumerates rows asynchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public sealed class AsyncEnumerator : AsyncRowEnumerator<T, TReader, TEnumerator>
+        public sealed class AsyncEnumerator : AsyncRowEnumerator<T, TSheet, TEnumerator>
         {
             private RowProjector<T> _projector;
 
             internal AsyncEnumerator(
-                TReader reader,
+                TSheet sheet,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
                 HeaderNormalization normalization,
@@ -120,9 +120,9 @@ namespace ExcelReader.Core.Parser
                 IFormatProvider provider,
                 bool throwOnParseFailure,
                 CancellationToken ct)
-                : base(reader, ct)
+                : base(sheet, ct)
             {
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, reader.IsDate1904, provider, throwOnParseFailure);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, sheet.IsDate1904, provider, throwOnParseFailure);
             }
 
             private protected override ProjectionStep Classify()

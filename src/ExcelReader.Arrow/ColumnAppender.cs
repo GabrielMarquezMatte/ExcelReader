@@ -7,7 +7,7 @@ using ExcelReader.Core.Reader.Schema;
 
 namespace ExcelReader.Arrow
 {
-    /// <summary>Builds one Arrow column from a schema-driven pass over an <see cref="IExcelRowReader"/>'s rows.</summary>
+    /// <summary>Builds one Arrow column from a schema-driven pass over an <see cref="IExcelSheet"/>'s rows.</summary>
     internal abstract class ColumnAppender(ExcelColumnSchema schema)
     {
         protected readonly bool IsNullable = schema.IsNullable;

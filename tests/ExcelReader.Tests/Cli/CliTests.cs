@@ -5,8 +5,33 @@ using ExcelReader.Tests.Crypto;
 
 namespace ExcelReader.Tests.Cli
 {
-    public sealed class CliTests
+    public sealed class CliTests : IDisposable
     {
+        private readonly List<string> _temporaryFiles = [];
+
+        public void Dispose()
+        {
+            foreach (string file in _temporaryFiles)
+            {
+                File.Delete(file);
+            }
+        }
+
+        private string MultiSheetPath()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"cli-multi-sheet-{Guid.NewGuid():N}.xlsx");
+            _temporaryFiles.Add(path);
+            using FileStream file = File.Create(path);
+            using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(file, leaveOpen: true);
+            foreach (string name in (string[])["First", "Second", "Third"])
+            {
+                using XlsxSheetWriter sheet = workbook.AddSheet(name);
+                sheet.End();
+            }
+            workbook.End();
+            return path;
+        }
+
         private static string Fixture(string name)
         {
             return Path.Combine("data", name);
@@ -28,7 +53,7 @@ namespace ExcelReader.Tests.Cli
             Assert.Equal(0, code);
             Assert.Empty(error);
 
-            using IExcelRowReader reader = Excel.Open(Fixture("RealExcel.xlsb"));
+            using IExcelWorkbook reader = Excel.Open(Fixture("RealExcel.xlsb"));
 
             string[] lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             Assert.Equal(reader.SheetCount, lines.Length);
@@ -37,7 +62,7 @@ namespace ExcelReader.Tests.Cli
                 string[] parts = lines[i].TrimEnd('\r').Split('\t');
                 Assert.Equal(2, parts.Length);
                 Assert.Equal(i.ToString(System.Globalization.CultureInfo.InvariantCulture), parts[0]);
-                Assert.Equal(reader.SheetNameAt(i), parts[1]);
+                Assert.Equal(reader.SheetAt(i).Name, parts[1]);
             }
         }
 
@@ -56,11 +81,11 @@ namespace ExcelReader.Tests.Cli
         [Fact]
         public void Should_SelectBySheetName_When_SheetIsNotNumeric()
         {
-            using IExcelRowReader byIndex = CliCommands.Open(Fixture("RealExcel.xlsb"), "0");
-            string firstSheetName = byIndex.SheetName;
+            using IExcelWorkbook byIndex = CliCommands.Open(Fixture("RealExcel.xlsb"), "0", out IExcelSheet byIndexSheet);
+            string firstSheetName = byIndexSheet.Name;
 
-            using IExcelRowReader byName = CliCommands.Open(Fixture("RealExcel.xlsb"), firstSheetName);
-            Assert.Equal(firstSheetName, byName.SheetName);
+            using IExcelWorkbook byName = CliCommands.Open(Fixture("RealExcel.xlsb"), firstSheetName, out IExcelSheet byNameSheet);
+            Assert.Equal(firstSheetName, byNameSheet.Name);
         }
 
         [Fact]
@@ -80,11 +105,11 @@ namespace ExcelReader.Tests.Cli
                     workbook.End();
                 }
 
-                using IExcelRowReader named = CliCommands.Open(path, "0");
-                Assert.Equal("0", named.SheetName);
+                using IExcelWorkbook named = CliCommands.Open(path, "0", out IExcelSheet namedSheet);
+                Assert.Equal("0", namedSheet.Name);
 
-                using IExcelRowReader indexed = CliCommands.Open(path, "1");
-                Assert.Equal("0", indexed.SheetName);
+                using IExcelWorkbook indexed = CliCommands.Open(path, "1", out IExcelSheet indexedSheet);
+                Assert.Equal("0", indexedSheet.Name);
             }
             finally
             {
@@ -96,7 +121,7 @@ namespace ExcelReader.Tests.Cli
         public void Should_Throw_When_TheNamedSheetIsAbsent()
         {
             ArgumentException error = Assert.Throws<ArgumentException>(
-                () => CliCommands.Open(Fixture("RealExcel.xlsb"), "NoSuchSheet"));
+                () => CliCommands.Open(Fixture("RealExcel.xlsb"), "NoSuchSheet", out _));
 
             Assert.Contains("NoSuchSheet", error.Message, StringComparison.Ordinal);
         }
@@ -104,16 +129,38 @@ namespace ExcelReader.Tests.Cli
         [Fact]
         public void Should_DefaultToTheFirstSheet_When_SheetIsNull()
         {
-            using IExcelRowReader reader = CliCommands.Open(Fixture("RealExcel.xlsb"), null);
+            using IExcelWorkbook reader = CliCommands.Open(Fixture("RealExcel.xlsb"), null, out IExcelSheet selected);
 
-            Assert.Equal(reader.SheetNameAt(0), reader.SheetName);
+            Assert.Equal(reader.SheetAt(0).Name, selected.Name);
+        }
+
+        [Fact]
+        public void Should_FailWithAMessage_When_TheSheetIndexIsOutOfRange()
+        {
+            using StringWriter stdout = new();
+            using StringWriter stderr = new();
+            int exit = CliCommands.Schema(MultiSheetPath(), sheet: "7", headerRow: 1, sampleSize: 10, stdout, stderr);
+            Assert.Equal(1, exit);
+            Assert.NotEmpty(stderr.ToString());
+            Assert.Empty(stdout.ToString());
+        }
+
+        [Fact]
+        public void Should_ReturnTheWorkbookAndTheSelectedSheet_When_Opening()
+        {
+            using IExcelWorkbook workbook = CliCommands.Open(MultiSheetPath(), sheet: "1", out IExcelSheet selected);
+            Assert.Equal(1, selected.Index);
+            Assert.Equal(workbook.SheetAt(1).Name, selected.Name);
+
+            using IExcelWorkbook first = CliCommands.Open(MultiSheetPath(), sheet: null, out IExcelSheet defaulted);
+            Assert.Equal(0, defaulted.Index);
         }
 
         [Fact]
         public void Should_OpenAnEncryptedWorkbook_When_PasswordIsGiven()
         {
-            using IExcelRowReader reader = CliCommands.Open(
-                Path.Combine("data", "encrypted", "agile-aes256-sha512.xlsx"), null, EncryptedFixtures.Password);
+            using IExcelWorkbook reader = CliCommands.Open(
+                Path.Combine("data", "encrypted", "agile-aes256-sha512.xlsx"), null, out _, EncryptedFixtures.Password);
 
             Assert.True(reader.SheetCount > 0);
         }
@@ -210,10 +257,10 @@ namespace ExcelReader.Tests.Cli
                 Assert.Empty(error);
                 Assert.Empty(output);
 
-                using IExcelRowReader source = Excel.Open(Fixture("RealExcel.xlsb"));
-                using IExcelRowEnumerator sourceRows = source.GetEnumerator();
-                using IExcelRowReader written = Excel.Open(target);
-                using IExcelRowEnumerator writtenRows = written.GetEnumerator();
+                using IExcelWorkbook source = Excel.Open(Fixture("RealExcel.xlsb"));
+                using IExcelRowEnumerator sourceRows = source.FirstSheet.GetEnumerator();
+                using IExcelWorkbook written = Excel.Open(target);
+                using IExcelRowEnumerator writtenRows = written.FirstSheet.GetEnumerator();
 
                 int rowCount = 0;
                 while (sourceRows.MoveNext())

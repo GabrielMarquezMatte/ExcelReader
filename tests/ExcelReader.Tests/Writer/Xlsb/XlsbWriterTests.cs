@@ -58,7 +58,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.FromXlsb(ms);
-            var rows = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("Alice", rows[0].Name);
             Assert.Equal(42, rows[0].Age);
@@ -80,7 +80,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.Open(ms);
-            Assert.IsType<XlsbReader>(reader);
+            Assert.IsType<XlsbWorkbook>(reader);
         }
 
         [Fact]
@@ -105,7 +105,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.FromXlsb(ms);
-            var rows = ExcelParser.FromAttributes<SparseRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<SparseRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("aaa", rows[0].A);
             Assert.Equal("ccc", rows[0].C);
@@ -127,7 +127,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
 
             await using var reader = Excel.FromXlsb(ms);
             Assert.True(reader.IsDate1904);
-            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime parsed));
             Assert.Equal(date, parsed);
@@ -155,7 +155,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.FromXlsb(ms);
-            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryParse(null, out int intValue));
             Assert.Equal(123, intValue);
@@ -201,7 +201,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.FromXlsb(ms);
-            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Boolean, e.Current[0].Type);
             Assert.Equal(CellType.Empty, e.Current[1].Type);
@@ -236,7 +236,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.FromXlsb(ms);
-            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("ok", e.Current[0].GetString());
             Assert.False(e.MoveNext());
@@ -280,7 +280,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.FromXlsb(ms);
-            var rows = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("Alice", rows[0].Name);
             Assert.Equal(42, rows[0].Age);
@@ -302,7 +302,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             });
 
             await using var reader = Excel.FromXlsb(ms);
-            var rows = ExcelParser.FromAttributes<SparseRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<SparseRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("aaa", rows[0].A);
             Assert.Equal("ccc", rows[0].C);
@@ -322,7 +322,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
 
             await using var reader = Excel.FromXlsb(ms);
             Assert.True(reader.IsDate1904);
-            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime parsed));
             Assert.Equal(date, parsed);
@@ -460,8 +460,8 @@ namespace ExcelReader.Tests.Writer.Xlsb
             (int Id, int PayloadLength)[] cells = ReadNumericCellRecords(ms);
 
             ms.Position = 0;
-            await using XlsbReader reader = Excel.FromXlsb(ms, leaveOpen: true);
-            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            await using XlsbWorkbook reader = Excel.FromXlsb(ms, leaveOpen: true);
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryGetDouble(out double readBack));
             return (cells, readBack);

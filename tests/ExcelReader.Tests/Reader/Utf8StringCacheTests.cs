@@ -81,7 +81,7 @@ namespace ExcelReader.Tests.Reader
         {
             using MemoryStream ms = new(Encoding.UTF8.GetBytes("alpha,1\nalpha,2\n"));
             using CsvReader reader = Excel.FromCsv(ms);
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             string row1 = e.Current[0].GetString();
@@ -98,7 +98,7 @@ namespace ExcelReader.Tests.Reader
             var options = new CsvReaderOptions { InternStrings = true };
             using MemoryStream ms = new(Encoding.UTF8.GetBytes("alpha,1\nalpha,2\nbeta,3\n"));
             using CsvReader reader = Excel.FromCsv(ms, options: options);
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             string row1 = e.Current[0].GetString();
@@ -118,7 +118,7 @@ namespace ExcelReader.Tests.Reader
         {
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["alpha"], ["alpha"], ["beta"]);
             await using var reader = Excel.FromXlsx(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             string row1 = e.Current[0].GetString();
@@ -135,7 +135,7 @@ namespace ExcelReader.Tests.Reader
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["alpha"], ["alpha"], ["beta"]);
             var options = new ExcelReaderOptions { InternStrings = true };
             await using var reader = Excel.FromXlsx(ms, options: options);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             string row1 = e.Current[0].GetString();

@@ -10,6 +10,7 @@ namespace ExcelReader.Native.Reading
             handle = null;
             if (!IsKnownFormat(format))
             {
+                NativeApi.SetLastError($"format must be one of the XL_FORMAT_* values; got {format}.");
                 return NativeStatus.InvalidArgument;
             }
 
@@ -17,8 +18,8 @@ namespace ExcelReader.Native.Reading
             try
             {
                 string path = Encoding.UTF8.GetString(utf8Path);
-                IExcelRowReader reader = OpenReader(path, format, options ?? default);
-                handle = new NativeHandle(reader);
+                IExcelWorkbook workbook = OpenReader(path, format, options ?? default);
+                handle = new NativeHandle(workbook);
                 return NativeStatus.Ok;
             }
             catch (ExcelEncryptionException ex)
@@ -37,6 +38,7 @@ namespace ExcelReader.Native.Reading
             handle = null;
             if (!IsKnownFormat(format))
             {
+                NativeApi.SetLastError($"format must be one of the XL_FORMAT_* values; got {format}.");
                 return NativeStatus.InvalidArgument;
             }
 
@@ -44,8 +46,8 @@ namespace ExcelReader.Native.Reading
             try
             {
                 byte[] copy = data.ToArray();
-                IExcelRowReader reader = OpenReader(copy, format, options ?? default);
-                handle = new NativeHandle(reader);
+                IExcelWorkbook workbook = OpenReader(copy, format, options ?? default);
+                handle = new NativeHandle(workbook);
                 return NativeStatus.Ok;
             }
             catch (ExcelEncryptionException ex)
@@ -90,12 +92,12 @@ namespace ExcelReader.Native.Reading
             }
         }
 
-        private static IExcelRowReader OpenReader(string path, int format, NativeOpenOptions options)
+        private static IExcelWorkbook OpenReader(string path, int format, NativeOpenOptions options)
         {
             return Excel.Open(path, MapFormat(format), options.ToExcelReaderOptions());
         }
 
-        private static IExcelRowReader OpenReader(byte[] data, int format, NativeOpenOptions options)
+        private static IExcelWorkbook OpenReader(byte[] data, int format, NativeOpenOptions options)
         {
             return Excel.Open(data, MapFormat(format), options.ToExcelReaderOptions());
         }
@@ -117,7 +119,7 @@ namespace ExcelReader.Native.Reading
             return format is >= NativeFormat.Auto and <= NativeFormat.Csv;
         }
 
-        internal static int OpenFileEx(ReadOnlySpan<byte> utf8Path, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
+        internal static int OpenFile(ReadOnlySpan<byte> utf8Path, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
         {
             handle = null;
             if (!TryDecodeOpenOptions(rawOptions, out NativeOpenOptions? options, out string? error))
@@ -128,7 +130,7 @@ namespace ExcelReader.Native.Reading
             return OpenFile(utf8Path, format, out handle, options);
         }
 
-        internal static int OpenMemoryEx(ReadOnlySpan<byte> data, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
+        internal static int OpenMemory(ReadOnlySpan<byte> data, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
         {
             handle = null;
             if (!TryDecodeOpenOptions(rawOptions, out NativeOpenOptions? options, out string? error))

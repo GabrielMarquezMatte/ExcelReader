@@ -41,26 +41,26 @@ def _report(name: str, times: list[float], n: int) -> None:
 
 
 def bench_read_all(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        all_rows = workbook.read_all()
+    with excelreader.open_workbook(path) as workbook:
+        all_rows = workbook.sheets[0].read_all()
     row_count = len(all_rows)
     cell_count = sum(len(row) for row in all_rows)
     return row_count, cell_count
 
 
 def bench_rows(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
+    with excelreader.open_workbook(path) as workbook:
         row_count = 0
         cell_count = 0
-        for row in workbook.rows():
+        for row in workbook.sheets[0].rows():
             row_count += 1
             cell_count += len(row)
     return row_count, cell_count
 
 
 def bench_read_all_columnar(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        sheet = workbook.read_all_columnar()
+    with excelreader.open_workbook(path) as workbook:
+        sheet = workbook.sheets[0].read_all_columnar()
     return len(sheet.row_offsets) - 1, len(sheet.columns)
 
 
@@ -87,30 +87,30 @@ _FIXTURE_SCHEMA = [
 
 
 def bench_parse_typed(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        table = workbook.parse_typed(_FIXTURE_SCHEMA)
+    with excelreader.open_workbook(path) as workbook:
+        table = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA)
     return table.row_count, table.row_count * len(table.columns)
 
 
 def bench_to_arrow(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        array = workbook.to_arrow(_FIXTURE_SCHEMA)
+    with excelreader.open_workbook(path) as workbook:
+        array = workbook.sheets[0].to_arrow(_FIXTURE_SCHEMA)
     return len(array), len(array) * array.type.num_fields
 
 
 def bench_iter_parse_typed(path: Path) -> tuple[int, int]:
     """Batched counterpart to bench_parse_typed: one batch resident instead of the whole sheet."""
     rows = 0
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        for table in workbook.iter_parse_typed(_FIXTURE_SCHEMA, batch_size=10000):
+    with excelreader.open_workbook(path) as workbook:
+        for table in workbook.sheets[0].iter_parse_typed(_FIXTURE_SCHEMA, batch_size=10000):
             rows += table.row_count
     return rows, rows * len(_FIXTURE_SCHEMA)
 
 
 def bench_record_batch_reader(path: Path) -> tuple[int, int]:
     rows = 0
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        for batch in workbook.to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
+    with excelreader.open_workbook(path) as workbook:
+        for batch in workbook.sheets[0].to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
             rows += batch.num_rows
     return rows, rows * len(_FIXTURE_SCHEMA)
 
@@ -148,8 +148,8 @@ def _private_bytes() -> int:
 def peak_leg_whole_sheet(path: Path) -> tuple[int, int]:
     """Whole-sheet Arrow read, sampled once while the full table is live. Returns (rows, peak)."""
     base = _private_bytes()
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        batch = workbook.to_record_batch(_FIXTURE_SCHEMA)
+    with excelreader.open_workbook(path) as workbook:
+        batch = workbook.sheets[0].to_record_batch(_FIXTURE_SCHEMA)
         peak = _private_bytes() - base
         rows = batch.num_rows
     return rows, peak
@@ -160,8 +160,8 @@ def peak_leg_streamed(path: Path) -> tuple[int, int]:
     base = _private_bytes()
     rows = 0
     peak = 0
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        for batch in workbook.to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
+    with excelreader.open_workbook(path) as workbook:
+        for batch in workbook.sheets[0].to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
             rows += batch.num_rows
             peak = max(peak, _private_bytes() - base)
             del batch
@@ -196,9 +196,9 @@ def _measure_peaks(path: Path) -> dict[str, int]:
 
 
 def bench_to_polars(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path, format="xlsb") as workbook:
-        schema = workbook.infer_schema(sample_size=10)
-        table = workbook.to_polars(schema)
+    with excelreader.open_workbook(path) as workbook:
+        schema = workbook.sheets[0].infer_schema(sample_size=10)
+        table = workbook.sheets[0].to_polars(schema)
         return table.shape[0], table.shape[0] * table.shape[1]
 
 def bench_polars(path: Path) -> tuple[int, int]:
@@ -213,13 +213,13 @@ _CSV_DATES = ["Order Date", "Ship Date"]
 
 def bench_csv_parse_typed(path: Path, parallelism: int) -> tuple[int, int]:
     with excelreader.open_workbook(path, format="csv") as workbook:
-        table = workbook.parse_typed(_FIXTURE_SCHEMA, parallelism=parallelism)
+        table = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA, parallelism=parallelism)
     return table.row_count, table.row_count * len(table.columns)
 
 
 def bench_csv_to_polars(path: Path, parallelism: int) -> tuple[int, int]:
     with excelreader.open_workbook(path, format="csv") as workbook:
-        df = workbook.to_polars(_FIXTURE_SCHEMA, parallelism=parallelism)
+        df = workbook.sheets[0].to_polars(_FIXTURE_SCHEMA, parallelism=parallelism)
     return df.shape[0], df.shape[0] * df.shape[1]
 
 

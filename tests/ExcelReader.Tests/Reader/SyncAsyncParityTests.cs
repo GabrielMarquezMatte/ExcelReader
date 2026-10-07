@@ -35,11 +35,11 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal(sync, asyncEnum);
         }
 
-        private static List<CellSnapshot> ReadSync(byte[] workbook, Func<Stream, IExcelRowReader> open)
+        private static List<CellSnapshot> ReadSync(byte[] workbook, Func<Stream, IExcelWorkbook> open)
         {
             using MemoryStream stream = new(workbook, writable: false);
-            using IExcelRowReader reader = open(stream);
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelWorkbook reader = open(stream);
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (e.MoveNext())
@@ -51,12 +51,12 @@ namespace ExcelReader.Tests.Reader
 
         private static async Task<List<CellSnapshot>> ReadAsync(
             byte[] workbook,
-            Func<Stream, CancellationToken, ValueTask<IExcelRowReader>> open,
+            Func<Stream, CancellationToken, ValueTask<IExcelWorkbook>> open,
             CancellationToken ct)
         {
             await using MemoryStream stream = new(workbook, writable: false);
-            await using IExcelRowReader reader = await open(stream, ct);
-            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
+            await using IExcelWorkbook reader = await open(stream, ct);
+            await using IExcelRowEnumerator e = reader.FirstSheet.GetAsyncEnumerator(ct);
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
@@ -66,11 +66,11 @@ namespace ExcelReader.Tests.Reader
             return cells;
         }
 
-        private static async Task<List<CellSnapshot>> ReadViaAsyncEnumeratorAsync(byte[] workbook, Func<Stream, IExcelRowReader> open)
+        private static async Task<List<CellSnapshot>> ReadViaAsyncEnumeratorAsync(byte[] workbook, Func<Stream, IExcelWorkbook> open)
         {
             await using MemoryStream stream = new(workbook, writable: false);
-            await using IExcelRowReader reader = open(stream);
-            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator();
+            await using IExcelWorkbook reader = open(stream);
+            await using IExcelRowEnumerator e = reader.FirstSheet.GetAsyncEnumerator();
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
@@ -89,7 +89,7 @@ namespace ExcelReader.Tests.Reader
             byte[] workbook = EncryptedFixtures.Bytes(fixture);
 
             List<CellSnapshot> sync = ReadSync(workbook, stream => Excel.Open(stream, options: options));
-            List<CellSnapshot> asyncCells = await ReadAsync(workbook, (stream, token) => Excel.OpenAsync(stream, options: options, ct: token), ct);
+            List<CellSnapshot> asyncCells = await ReadAsync(workbook, async (stream, token) => await Excel.OpenAsync(stream, options: options, ct: token), ct);
             List<CellSnapshot> asyncEnum = await ReadViaAsyncEnumeratorAsync(workbook, stream => Excel.Open(stream, options: options));
 
             Assert.Equal(sync, asyncCells);
@@ -241,22 +241,22 @@ namespace ExcelReader.Tests.Reader
             return ValueTask.FromResult(System.Text.Encoding.UTF8.GetBytes(csv));
         }
 
-        private static async ValueTask<IExcelRowReader> OpenCsvAsync(Stream stream, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenCsvAsync(Stream stream, CancellationToken ct)
         {
             return await Excel.FromCsvAsync(stream, ct: ct);
         }
 
-        private static async ValueTask<IExcelRowReader> OpenXlsxAsync(Stream stream, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenXlsxAsync(Stream stream, CancellationToken ct)
         {
             return await Excel.FromXlsxAsync(stream, ct: ct);
         }
 
-        private static async ValueTask<IExcelRowReader> OpenXlsAsync(Stream stream, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenXlsAsync(Stream stream, CancellationToken ct)
         {
             return await Excel.FromXlsAsync(stream, ct: ct);
         }
 
-        private static async ValueTask<IExcelRowReader> OpenXlsbAsync(Stream stream, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenXlsbAsync(Stream stream, CancellationToken ct)
         {
             return await Excel.FromXlsbAsync(stream, ct: ct);
         }
@@ -264,8 +264,8 @@ namespace ExcelReader.Tests.Reader
         public sealed record ParityFixture(
             string Name,
             Func<CancellationToken, ValueTask<byte[]>> Build,
-            Func<Stream, IExcelRowReader> OpenSync,
-            Func<Stream, CancellationToken, ValueTask<IExcelRowReader>> OpenAsync)
+            Func<Stream, IExcelWorkbook> OpenSync,
+            Func<Stream, CancellationToken, ValueTask<IExcelWorkbook>> OpenAsync)
         {
             public override string ToString()
             {

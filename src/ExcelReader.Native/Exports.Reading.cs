@@ -6,20 +6,14 @@ namespace ExcelReader.Native
     internal static unsafe partial class Exports
     {
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file")]
-        public static int OpenFile(byte* path, int pathLength, int format, nint* outHandle)
+        public static int OpenFile(byte* path, int pathLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
-            if (!IsValidOpenRequest(path, pathLength, outHandle))
+            NativeApi.ClearLastError();
+            if (outHandle is not null)
             {
-                return NativeStatus.InvalidArgument;
+                *outHandle = 0;
             }
 
-            int status = ReadApi.OpenFile(new ReadOnlySpan<byte>(path, pathLength), format, out NativeHandle? handle);
-            return RegisterOpened(status, handle, outHandle);
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_open_file_ex")]
-        public static int OpenFileEx(byte* path, int pathLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
-        {
             if (!IsValidOpenRequest(path, pathLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
@@ -29,25 +23,19 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = ReadApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_open_memory")]
-        public static int OpenMemory(byte* data, int dataLength, int format, nint* outHandle)
+        public static int OpenMemory(byte* data, int dataLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
-            if (!IsValidOpenRequest(data, dataLength, outHandle))
+            NativeApi.ClearLastError();
+            if (outHandle is not null)
             {
-                return NativeStatus.InvalidArgument;
+                *outHandle = 0;
             }
 
-            int status = ReadApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, out NativeHandle? handle);
-            return RegisterOpened(status, handle, outHandle);
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_open_memory_ex")]
-        public static int OpenMemoryEx(byte* data, int dataLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
-        {
             if (!IsValidOpenRequest(data, dataLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
@@ -57,13 +45,15 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = ReadApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
+            int status = ReadApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_close")]
         public static int Close(nint handle)
         {
+            NativeApi.ClearLastError();
+
             if (handle == 0)
             {
                 return NativeStatus.InvalidHandle;
@@ -80,6 +70,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_count")]
         public static int SheetCount(nint handle, int* outCount)
         {
+            NativeApi.ClearLastError();
+
             if (outCount is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -90,22 +82,11 @@ namespace ExcelReader.Native
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name")]
-        public static int SheetName(nint handle, byte* buffer, int capacity, int* outLength)
-        {
-            if (!IsValidOutBuffer(buffer, capacity, outLength))
-            {
-                return NativeStatus.InvalidArgument;
-            }
-
-            int status = ReadApi.SheetName(Resolve(handle), new Span<byte>(buffer, capacity), out int length);
-            *outLength = length;
-            return status;
-        }
-
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name_at")]
         public static int SheetNameAt(nint handle, int index, byte* buffer, int capacity, int* outLength)
         {
+            NativeApi.ClearLastError();
+
             if (!IsValidOutBuffer(buffer, capacity, outLength))
             {
                 return NativeStatus.InvalidArgument;
@@ -116,15 +97,11 @@ namespace ExcelReader.Native
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_move_to_sheet")]
-        public static int MoveToSheet(nint handle, int index)
-        {
-            return ReadApi.MoveToSheet(Resolve(handle), index);
-        }
-
         [UnmanagedCallersOnly(EntryPoint = "xl_is_date1904")]
         public static int IsDate1904(nint handle, int* outFlag)
         {
+            NativeApi.ClearLastError();
+
             if (outFlag is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -135,55 +112,130 @@ namespace ExcelReader.Native
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_next_row")]
-        public static int NextRow(nint handle, byte* buffer, int capacity, int* outWritten)
+        [UnmanagedCallersOnly(EntryPoint = "xl_sheet_visibility_at")]
+        public static int SheetVisibilityAt(nint handle, int index, int* outVisibility)
         {
+            NativeApi.ClearLastError();
+
+            if (outVisibility is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.SheetVisibilityAt(Resolve(handle), index, out int visibility);
+            *outVisibility = visibility;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_sheet_index")]
+        public static int SheetIndex(nint handle, byte* name, int nameLength, int* outIndex)
+        {
+            NativeApi.ClearLastError();
+
+            if (outIndex is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outIndex = -1;
+            if (nameLength < 0 || (name is null && nameLength != 0))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.SheetIndex(Resolve(handle), new ReadOnlySpan<byte>(name, nameLength), out int index);
+            *outIndex = index;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_open")]
+        public static int RowsOpen(nint handle, int sheet, nint* outRows)
+        {
+            NativeApi.ClearLastError();
+
+            if (outRows is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outRows = 0;
+
+            int status = ReadApi.OpenRows(Resolve(handle), sheet, out NativeRowCursor? cursor);
+            if (cursor is not null)
+            {
+                *outRows = NativeHandleTable.Register(cursor);
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_close")]
+        public static int RowsClose(nint rows)
+        {
+            NativeApi.ClearLastError();
+
+            if (!NativeHandleTable.TryUnregister(rows, out NativeRowCursor? cursor))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            return ReadApi.CloseRows(cursor);
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_next")]
+        public static int RowsNext(nint rows, byte* buffer, int capacity, int* outWritten)
+        {
+            NativeApi.ClearLastError();
+
             if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.NextRow(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
+            int status = ReadApi.NextRow(ResolveRows(rows), new Span<byte>(buffer, capacity), out int written);
             *outWritten = written;
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_next_row_view")]
-        public static int NextRowView(nint handle, NativeRow* outRow)
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_next_view")]
+        public static int RowsNextView(nint rows, NativeRow* outRow)
         {
+            NativeApi.ClearLastError();
+
             if (outRow is null)
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.NextRowView(Resolve(handle), out NativeRow row);
+            int status = ReadApi.NextRowView(ResolveRows(rows), out NativeRow row);
             *outRow = row;
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_read_all_blob")]
-        public static int ReadAllBlob(nint handle, byte* buffer, int capacity, int* outWritten)
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_read_all_blob")]
+        public static int RowsReadAllBlob(nint rows, byte* buffer, int capacity, int* outWritten)
         {
+            NativeApi.ClearLastError();
+
             if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.ReadAllBlob(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
+            int status = ReadApi.ReadAllBlob(ResolveRows(rows), new Span<byte>(buffer, capacity), out int written);
             *outWritten = written;
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_read_all_decoded")]
-        public static int ReadAllDecoded(nint handle, NativeRows* outRows)
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_read_all_decoded")]
+        public static int RowsReadAllDecoded(nint rows, NativeRows* outRows)
         {
+            NativeApi.ClearLastError();
+
             if (outRows is null)
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.ReadAllDecoded(Resolve(handle), out NativeRows rows);
-            *outRows = rows;
+            int status = ReadApi.ReadAllDecoded(ResolveRows(rows), out NativeRows decoded);
+            *outRows = decoded;
             return status;
         }
 
@@ -205,27 +257,16 @@ namespace ExcelReader.Native
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_infer_schema")]
-        public static int InferSchema(nint handle, int headerRow, int sampleSize, NativeInferredSchema* outSchema)
+        public static int InferSchema(nint handle, int sheet, int headerRow, int sampleSize, int flags, NativeInferredSchema* outSchema)
         {
+            NativeApi.ClearLastError();
+
             if (outSchema is null)
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = ReadApi.InferSchema(Resolve(handle), headerRow, sampleSize, out NativeInferredSchema schema);
-            *outSchema = schema;
-            return status;
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_infer_schema_ex")]
-        public static int InferSchemaEx(nint handle, int headerRow, int sampleSize, int flags, NativeInferredSchema* outSchema)
-        {
-            if (outSchema is null)
-            {
-                return NativeStatus.InvalidArgument;
-            }
-
-            int status = ReadApi.InferSchema(Resolve(handle), headerRow, sampleSize, flags, out NativeInferredSchema schema);
+            int status = ReadApi.InferSchema(Resolve(handle), sheet, headerRow, sampleSize, flags, out NativeInferredSchema schema);
             *outSchema = schema;
             return status;
         }

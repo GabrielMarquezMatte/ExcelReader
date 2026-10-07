@@ -13,7 +13,7 @@ namespace ExcelReader.Tests.Parser
             byte[] csv = "plain,\"quoted, \"\"text\"\"\",\n"u8.ToArray();
             using CsvReader reader = Excel.FromCsv(csv);
             var seen = new List<string>();
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 for (int i = 0; i < 3; i++)
                 {

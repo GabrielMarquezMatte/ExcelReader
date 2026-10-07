@@ -1,1 +1,291 @@
 #nullable enable
+*REMOVED*ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>
+*REMOVED*ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>.Current.get -> T
+*REMOVED*ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+*REMOVED*ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>
+*REMOVED*ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator
+*REMOVED*ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Csv.CsvReader! reader) -> ExcelReader.Core.Parser.CsvEnumerable<T>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.IExcelRowReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.IExcelRowReader!, ExcelReader.Core.Reader.IExcelRowEnumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xls.XlsReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.Xls.XlsReader!, ExcelReader.Core.Reader.Xls.XlsReader.Enumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xlsb.XlsbReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.Xlsb.XlsbReader!, ExcelReader.Core.Reader.Xlsb.XlsbReader.Enumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xlsx.XlsxReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T>!
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Csv.CsvReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.GetEnumerator() -> ExcelReader.Core.Reader.Csv.CsvReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.MoveToSheet(int index) -> void
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.SheetName.get -> string!
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.SheetNameAt(int index) -> string!
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.SheetVisibility.get -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.SheetVisibilityAt(int index) -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Csv.CsvReader.TryMoveToSheet(System.ReadOnlySpan<char> name) -> bool
+*REMOVED*ExcelReader.Core.Reader.ExcelDataReader.ExcelDataReader(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1) -> void
+*REMOVED*ExcelReader.Core.Reader.ExcelRowReaderExtensions
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Deconstruct(out int Index, out string! Name) -> void
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Equals(ExcelReader.Core.Reader.ExcelSheet other) -> bool
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.ExcelSheet() -> void
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.ExcelSheet(int Index, string! Name) -> void
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Index.get -> int
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Index.init -> void
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Name.get -> string!
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Name.init -> void
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Visibility.get -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.ExcelSheet.Visibility.init -> void
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader.MoveToSheet(int index) -> void
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader.SheetCount.get -> int
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader.SheetName.get -> string!
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader.SheetNameAt(int index) -> string!
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader.SheetVisibility.get -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader.SheetVisibilityAt(int index) -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader.TryMoveToSheet(System.ReadOnlySpan<char> name) -> bool
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader<TEnumerator>
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader<TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> TEnumerator
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader<TEnumerator>.GetEnumerator() -> TEnumerator
+*REMOVED*ExcelReader.Core.Reader.IExcelRowReader<TEnumerator>.IsDate1904.get -> bool
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.Dispose() -> void
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.Enumerator
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.Enumerator.Current.get -> ExcelReader.Core.Reader.Row
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.Enumerator.Dispose() -> void
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.Enumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.Enumerator.MoveNext() -> bool
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.Enumerator.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Xls.XlsReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.GetEnumerator() -> ExcelReader.Core.Reader.Xls.XlsReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.IsDate1904.get -> bool
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.MoveToSheet(int index) -> void
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.SheetCount.get -> int
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.SheetName.get -> string!
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.SheetNameAt(int index) -> string!
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.SheetVisibility.get -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.SheetVisibilityAt(int index) -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Xls.XlsReader.TryMoveToSheet(System.ReadOnlySpan<char> name) -> bool
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.Dispose() -> void
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.Enumerator
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.Enumerator.Current.get -> ExcelReader.Core.Reader.Row
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.Enumerator.MoveNext() -> bool
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.Enumerator.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Xlsb.XlsbReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.GetEnumerator() -> ExcelReader.Core.Reader.Xlsb.XlsbReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.IsDate1904.get -> bool
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.MoveToSheet(int index) -> void
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.SheetCount.get -> int
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.SheetName.get -> string!
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.SheetNameAt(int index) -> string!
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.SheetVisibility.get -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.SheetVisibilityAt(int index) -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Xlsb.XlsbReader.TryMoveToSheet(System.ReadOnlySpan<char> name) -> bool
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.Dispose() -> void
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.Enumerator
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.Enumerator.Current.get -> ExcelReader.Core.Reader.Row
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.Enumerator.MoveNext() -> bool
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.Enumerator.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Xlsx.XlsxReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.GetEnumerator() -> ExcelReader.Core.Reader.Xlsx.XlsxReader.Enumerator!
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.IsDate1904.get -> bool
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.MoveToSheet(int index) -> void
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.SheetCount.get -> int
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.SheetName.get -> string!
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.SheetNameAt(int index) -> string!
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.SheetVisibility.get -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.SheetVisibilityAt(int index) -> ExcelReader.Core.ExcelSheetVisibility
+*REMOVED*ExcelReader.Core.Reader.Xlsx.XlsxReader.TryMoveToSheet(System.ReadOnlySpan<char> name) -> bool
+*REMOVED*override ExcelReader.Core.Reader.ExcelSheet.GetHashCode() -> int
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXls(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXls(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xls.XlsReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xls.XlsReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsb(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsb.XlsbReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsb(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsb.XlsbReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsbAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsb.XlsbReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsbFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsb.XlsbReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsbFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsb.XlsbReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsx(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsx.XlsxReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsx(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsx.XlsxReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsxAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsx.XlsxReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsxFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsx.XlsxReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.FromXlsxFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsx.XlsxReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1, int sampleSize = 100, bool parseText = false) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
+*REMOVED*static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow, int sampleSize) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
+*REMOVED*static ExcelReader.Core.Reader.Excel.Open(System.IO.Stream! stream, ExcelReader.Core.Reader.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.Open(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.Open(string! path, ExcelReader.Core.Reader.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.Open(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+*REMOVED*static ExcelReader.Core.Reader.Excel.OpenAsync(System.IO.Stream! stream, ExcelReader.Core.Reader.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelRowReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.OpenAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelRowReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.OpenAsync(string! path, ExcelReader.Core.Reader.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelRowReader!>
+*REMOVED*static ExcelReader.Core.Reader.Excel.OpenAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelRowReader!>
+*REMOVED*static ExcelReader.Core.Reader.ExcelRowReaderExtensions.Sheets(this ExcelReader.Core.Reader.IExcelRowReader! reader) -> System.Collections.Generic.IEnumerable<ExcelReader.Core.Reader.ExcelSheet>!
+*REMOVED*static ExcelReader.Core.Reader.ExcelSheet.operator !=(ExcelReader.Core.Reader.ExcelSheet left, ExcelReader.Core.Reader.ExcelSheet right) -> bool
+*REMOVED*static ExcelReader.Core.Reader.ExcelSheet.operator ==(ExcelReader.Core.Reader.ExcelSheet left, ExcelReader.Core.Reader.ExcelSheet right) -> bool
+*REMOVED*virtual ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*~ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator!
+*REMOVED*~ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator!
+*REMOVED*~override ExcelReader.Core.Reader.ExcelSheet.Equals(object obj) -> bool
+*REMOVED*~override ExcelReader.Core.Reader.ExcelSheet.ToString() -> string
+ExcelReader.Core.Parser.AsyncRowEnumerator<T, TSheet, TRows>
+ExcelReader.Core.Parser.AsyncRowEnumerator<T, TSheet, TRows>.Current.get -> T
+ExcelReader.Core.Parser.AsyncRowEnumerator<T, TSheet, TRows>.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>
+ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.AsyncEnumerator
+ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.Enumerator
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Csv.CsvSheet sheet) -> ExcelReader.Core.Parser.CsvEnumerable<T>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.IExcelSheet! sheet) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.IExcelSheet!, ExcelReader.Core.Reader.IExcelRowEnumerator!>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xls.XlsSheet sheet) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.Xls.XlsSheet, ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator!>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xlsb.XlsbSheet sheet) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.Xlsb.XlsbSheet, ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator!>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xlsx.XlsxSheet sheet) -> ExcelReader.Core.Parser.ExcelEnumerable<T>!
+ExcelReader.Core.Reader.Csv.CsvReader.FirstSheet.get -> ExcelReader.Core.Reader.Csv.CsvSheet
+ExcelReader.Core.Reader.Csv.CsvReader.Sheets.get -> ExcelReader.Core.Reader.ExcelSheetList<ExcelReader.Core.Reader.Csv.CsvSheet>!
+ExcelReader.Core.Reader.Csv.CsvReader.TryGetSheet(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.Csv.CsvSheet sheet) -> bool
+ExcelReader.Core.Reader.Csv.CsvSheet
+ExcelReader.Core.Reader.Csv.CsvSheet.CsvSheet() -> void
+ExcelReader.Core.Reader.Csv.CsvSheet.Equals(ExcelReader.Core.Reader.Csv.CsvSheet other) -> bool
+ExcelReader.Core.Reader.Csv.CsvSheet.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Csv.CsvReader.Enumerator!
+ExcelReader.Core.Reader.Csv.CsvSheet.GetEnumerator() -> ExcelReader.Core.Reader.Csv.CsvReader.Enumerator!
+ExcelReader.Core.Reader.Csv.CsvSheet.Index.get -> int
+ExcelReader.Core.Reader.Csv.CsvSheet.IsDate1904.get -> bool
+ExcelReader.Core.Reader.Csv.CsvSheet.Name.get -> string!
+ExcelReader.Core.Reader.Csv.CsvSheet.Visibility.get -> ExcelReader.Core.ExcelSheetVisibility
+ExcelReader.Core.Reader.ExcelDataReader.ExcelDataReader(ExcelReader.Core.Reader.IExcelSheet! sheet, int headerRow = 1) -> void
+ExcelReader.Core.Reader.ExcelSheetList<TSheet>
+ExcelReader.Core.Reader.ExcelSheetList<TSheet>.Count.get -> int
+ExcelReader.Core.Reader.ExcelSheetList<TSheet>.GetEnumerator() -> System.ArraySegment<TSheet>.Enumerator
+ExcelReader.Core.Reader.ExcelSheetList<TSheet>.this[int index].get -> TSheet
+ExcelReader.Core.Reader.IExcelSheet
+ExcelReader.Core.Reader.IExcelSheet.Index.get -> int
+ExcelReader.Core.Reader.IExcelSheet.Name.get -> string!
+ExcelReader.Core.Reader.IExcelSheet.Visibility.get -> ExcelReader.Core.ExcelSheetVisibility
+ExcelReader.Core.Reader.IExcelSheet<TEnumerator>
+ExcelReader.Core.Reader.IExcelSheet<TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> TEnumerator
+ExcelReader.Core.Reader.IExcelSheet<TEnumerator>.GetEnumerator() -> TEnumerator
+ExcelReader.Core.Reader.IExcelSheet<TEnumerator>.IsDate1904.get -> bool
+ExcelReader.Core.Reader.IExcelWorkbook
+ExcelReader.Core.Reader.IExcelWorkbook.FirstSheet.get -> ExcelReader.Core.Reader.IExcelSheet!
+ExcelReader.Core.Reader.IExcelWorkbook.IsDate1904.get -> bool
+ExcelReader.Core.Reader.IExcelWorkbook.SheetAt(int index) -> ExcelReader.Core.Reader.IExcelSheet!
+ExcelReader.Core.Reader.IExcelWorkbook.SheetCount.get -> int
+ExcelReader.Core.Reader.IExcelWorkbook.TryGetSheet(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.IExcelSheet! sheet) -> bool
+ExcelReader.Core.Reader.Xls.XlsSheet
+ExcelReader.Core.Reader.Xls.XlsSheet.Equals(ExcelReader.Core.Reader.Xls.XlsSheet other) -> bool
+ExcelReader.Core.Reader.Xls.XlsSheet.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator!
+ExcelReader.Core.Reader.Xls.XlsSheet.GetEnumerator() -> ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator!
+ExcelReader.Core.Reader.Xls.XlsSheet.Index.get -> int
+ExcelReader.Core.Reader.Xls.XlsSheet.IsDate1904.get -> bool
+ExcelReader.Core.Reader.Xls.XlsSheet.Name.get -> string!
+ExcelReader.Core.Reader.Xls.XlsSheet.Visibility.get -> ExcelReader.Core.ExcelSheetVisibility
+ExcelReader.Core.Reader.Xls.XlsSheet.XlsSheet() -> void
+ExcelReader.Core.Reader.Xls.XlsWorkbook
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Dispose() -> void
+ExcelReader.Core.Reader.Xls.XlsWorkbook.DisposeAsync() -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.Current.get -> ExcelReader.Core.Reader.Row
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.Dispose() -> void
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.MoveNext() -> bool
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+ExcelReader.Core.Reader.Xls.XlsWorkbook.FirstSheet.get -> ExcelReader.Core.Reader.Xls.XlsSheet
+ExcelReader.Core.Reader.Xls.XlsWorkbook.IsDate1904.get -> bool
+ExcelReader.Core.Reader.Xls.XlsWorkbook.SheetCount.get -> int
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Sheets.get -> ExcelReader.Core.Reader.ExcelSheetList<ExcelReader.Core.Reader.Xls.XlsSheet>!
+ExcelReader.Core.Reader.Xls.XlsWorkbook.TryGetSheet(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.Xls.XlsSheet sheet) -> bool
+ExcelReader.Core.Reader.Xlsb.XlsbSheet
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.Equals(ExcelReader.Core.Reader.Xlsb.XlsbSheet other) -> bool
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator!
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.GetEnumerator() -> ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator!
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.Index.get -> int
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.IsDate1904.get -> bool
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.Name.get -> string!
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.Visibility.get -> ExcelReader.Core.ExcelSheetVisibility
+ExcelReader.Core.Reader.Xlsb.XlsbSheet.XlsbSheet() -> void
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Dispose() -> void
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.DisposeAsync() -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.Current.get -> ExcelReader.Core.Reader.Row
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.MoveNext() -> bool
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.FirstSheet.get -> ExcelReader.Core.Reader.Xlsb.XlsbSheet
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.IsDate1904.get -> bool
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.SheetCount.get -> int
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Sheets.get -> ExcelReader.Core.Reader.ExcelSheetList<ExcelReader.Core.Reader.Xlsb.XlsbSheet>!
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.TryGetSheet(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.Xlsb.XlsbSheet sheet) -> bool
+ExcelReader.Core.Reader.Xlsx.XlsxSheet
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.Equals(ExcelReader.Core.Reader.Xlsx.XlsxSheet other) -> bool
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.GetAsyncEnumerator(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator!
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.GetEnumerator() -> ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator!
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.Index.get -> int
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.IsDate1904.get -> bool
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.Name.get -> string!
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.Visibility.get -> ExcelReader.Core.ExcelSheetVisibility
+ExcelReader.Core.Reader.Xlsx.XlsxSheet.XlsxSheet() -> void
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Dispose() -> void
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.DisposeAsync() -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.Current.get -> ExcelReader.Core.Reader.Row
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.MoveNext() -> bool
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.FirstSheet.get -> ExcelReader.Core.Reader.Xlsx.XlsxSheet
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.IsDate1904.get -> bool
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.SheetCount.get -> int
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Sheets.get -> ExcelReader.Core.Reader.ExcelSheetList<ExcelReader.Core.Reader.Xlsx.XlsxSheet>!
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.TryGetSheet(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.Xlsx.XlsxSheet sheet) -> bool
+override ExcelReader.Core.Reader.Csv.CsvSheet.GetHashCode() -> int
+override ExcelReader.Core.Reader.Xls.XlsSheet.GetHashCode() -> int
+override ExcelReader.Core.Reader.Xlsb.XlsbSheet.GetHashCode() -> int
+override ExcelReader.Core.Reader.Xlsx.XlsxSheet.GetHashCode() -> int
+static ExcelReader.Core.Reader.Csv.CsvSheet.operator !=(ExcelReader.Core.Reader.Csv.CsvSheet left, ExcelReader.Core.Reader.Csv.CsvSheet right) -> bool
+static ExcelReader.Core.Reader.Csv.CsvSheet.operator ==(ExcelReader.Core.Reader.Csv.CsvSheet left, ExcelReader.Core.Reader.Csv.CsvSheet right) -> bool
+static ExcelReader.Core.Reader.Excel.FromXls(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXls(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xls.XlsWorkbook!>
+static ExcelReader.Core.Reader.Excel.FromXlsFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xls.XlsWorkbook!>
+static ExcelReader.Core.Reader.Excel.FromXlsb(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsb.XlsbWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsb(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsb.XlsbWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsbAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsb.XlsbWorkbook!>
+static ExcelReader.Core.Reader.Excel.FromXlsbFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsb.XlsbWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsbFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsb.XlsbWorkbook!>
+static ExcelReader.Core.Reader.Excel.FromXlsx(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsx.XlsxWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsx(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsx.XlsxWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsxAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsx.XlsxWorkbook!>
+static ExcelReader.Core.Reader.Excel.FromXlsxFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xlsx.XlsxWorkbook!
+static ExcelReader.Core.Reader.Excel.FromXlsxFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xlsx.XlsxWorkbook!>
+static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet! sheet, int headerRow = 1, int sampleSize = 100, bool parseText = false) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
+static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet! sheet, int headerRow, int sampleSize) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
+static ExcelReader.Core.Reader.Excel.Open(System.IO.Stream! stream, ExcelReader.Core.Reader.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelWorkbook!
+static ExcelReader.Core.Reader.Excel.Open(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelWorkbook!
+static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelWorkbook!
+static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelWorkbook!
+static ExcelReader.Core.Reader.Excel.Open(string! path, ExcelReader.Core.Reader.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelWorkbook!
+static ExcelReader.Core.Reader.Excel.Open(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelWorkbook!
+static ExcelReader.Core.Reader.Excel.OpenAsync(System.IO.Stream! stream, ExcelReader.Core.Reader.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelWorkbook!>
+static ExcelReader.Core.Reader.Excel.OpenAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelWorkbook!>
+static ExcelReader.Core.Reader.Excel.OpenAsync(string! path, ExcelReader.Core.Reader.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelWorkbook!>
+static ExcelReader.Core.Reader.Excel.OpenAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelWorkbook!>
+static ExcelReader.Core.Reader.Xls.XlsSheet.operator !=(ExcelReader.Core.Reader.Xls.XlsSheet left, ExcelReader.Core.Reader.Xls.XlsSheet right) -> bool
+static ExcelReader.Core.Reader.Xls.XlsSheet.operator ==(ExcelReader.Core.Reader.Xls.XlsSheet left, ExcelReader.Core.Reader.Xls.XlsSheet right) -> bool
+static ExcelReader.Core.Reader.Xlsb.XlsbSheet.operator !=(ExcelReader.Core.Reader.Xlsb.XlsbSheet left, ExcelReader.Core.Reader.Xlsb.XlsbSheet right) -> bool
+static ExcelReader.Core.Reader.Xlsb.XlsbSheet.operator ==(ExcelReader.Core.Reader.Xlsb.XlsbSheet left, ExcelReader.Core.Reader.Xlsb.XlsbSheet right) -> bool
+static ExcelReader.Core.Reader.Xlsx.XlsxSheet.operator !=(ExcelReader.Core.Reader.Xlsx.XlsxSheet left, ExcelReader.Core.Reader.Xlsx.XlsxSheet right) -> bool
+static ExcelReader.Core.Reader.Xlsx.XlsxSheet.operator ==(ExcelReader.Core.Reader.Xlsx.XlsxSheet left, ExcelReader.Core.Reader.Xlsx.XlsxSheet right) -> bool
+virtual ExcelReader.Core.Parser.AsyncRowEnumerator<T, TSheet, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
+~ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.AsyncEnumerator!
+~ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.Enumerator!
+~override ExcelReader.Core.Reader.Csv.CsvSheet.Equals(object obj) -> bool
+~override ExcelReader.Core.Reader.Csv.CsvSheet.ToString() -> string
+~override ExcelReader.Core.Reader.Xls.XlsSheet.Equals(object obj) -> bool
+~override ExcelReader.Core.Reader.Xls.XlsSheet.ToString() -> string
+~override ExcelReader.Core.Reader.Xlsb.XlsbSheet.Equals(object obj) -> bool
+~override ExcelReader.Core.Reader.Xlsb.XlsbSheet.ToString() -> string
+~override ExcelReader.Core.Reader.Xlsx.XlsxSheet.Equals(object obj) -> bool
+~override ExcelReader.Core.Reader.Xlsx.XlsxSheet.ToString() -> string

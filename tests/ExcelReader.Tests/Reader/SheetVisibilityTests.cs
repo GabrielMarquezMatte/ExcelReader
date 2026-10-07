@@ -23,7 +23,7 @@ namespace ExcelReader.Tests.Reader
         private const string PkgRel = "http://schemas.openxmlformats.org/package/2006/relationships";
 
         /// <summary>Builds an XLSX whose sheets carry the given <c>state</c> attribute text; a null entry omits it.</summary>
-        private static byte[] BuildXlsx(params string?[] states)
+        internal static byte[] BuildXlsx(params string?[] states)
         {
             var sheetXml = new string[states.Length];
             var relXml = new string[states.Length];
@@ -58,24 +58,23 @@ namespace ExcelReader.Tests.Reader
             byte[] xlsx = BuildXlsx(null, "hidden", "veryHidden");
 
             using var stream = new MemoryStream(xlsx, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(stream);
+            using XlsxWorkbook reader = Excel.FromXlsx(stream);
 
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
-            Assert.Equal(ExcelSheetVisibility.Hidden, reader.SheetVisibilityAt(1));
-            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.SheetVisibilityAt(2));
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.Sheets[0].Visibility);
+            Assert.Equal(ExcelSheetVisibility.Hidden, reader.Sheets[1].Visibility);
+            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.Sheets[2].Visibility);
         }
 
         [Fact]
-        public void Should_FollowTheCurrentSheet_When_MovingBetweenSheets()
+        public void Should_ReportEachSheetsState_When_ReadingThroughTheWorkbookInterface()
         {
             byte[] xlsx = BuildXlsx("visible", "hidden");
 
             using var stream = new MemoryStream(xlsx, writable: false);
-            using IExcelRowReader reader = Excel.Open(stream);
+            using IExcelWorkbook reader = Excel.Open(stream);
 
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibility);
-            reader.MoveToSheet(1);
-            Assert.Equal(ExcelSheetVisibility.Hidden, reader.SheetVisibility);
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.FirstSheet.Visibility);
+            Assert.Equal(ExcelSheetVisibility.Hidden, reader.SheetAt(1).Visibility);
         }
 
         [Fact]
@@ -83,10 +82,10 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] xlsx = BuildXlsx(null, "veryHidden");
 
-            using XlsxReader reader = Excel.FromXlsx(xlsx.AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(xlsx.AsMemory());
 
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
-            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.SheetVisibilityAt(1));
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.Sheets[0].Visibility);
+            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.Sheets[1].Visibility);
         }
 
         [Fact]
@@ -94,11 +93,11 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] xlsx = BuildXlsx("", "somethingElse", "VERYHIDDEN");
 
-            using XlsxReader reader = Excel.FromXlsx(xlsx.AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(xlsx.AsMemory());
 
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(1));
-            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.SheetVisibilityAt(2));
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.Sheets[0].Visibility);
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.Sheets[1].Visibility);
+            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.Sheets[2].Visibility);
         }
 
         [Fact]
@@ -106,8 +105,8 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] xlsx = BuildXlsx(null, "hidden", "veryHidden");
 
-            using IExcelRowReader reader = Excel.Open(xlsx.AsMemory());
-            ExcelSheet[] sheets = [.. reader.Sheets()];
+            using IExcelWorkbook reader = Excel.Open(xlsx.AsMemory());
+            IExcelSheet[] sheets = [.. Enumerable.Range(0, reader.SheetCount).Select(reader.SheetAt)];
 
             Assert.Equal(
                 [ExcelSheetVisibility.Visible, ExcelSheetVisibility.Hidden, ExcelSheetVisibility.VeryHidden],
@@ -131,7 +130,7 @@ namespace ExcelReader.Tests.Reader
             byte[] rels = Encoding.UTF8.GetBytes(
                 """<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.bin"/></Relationships>""");
 
-            var sheets = XlsbWorkbook.ParseSheets(workbook, rels);
+            var sheets = XlsbWorkbookParts.ParseSheets(workbook, rels);
 
             Assert.Equal(expected, Assert.Single(sheets).Visibility);
         }
@@ -143,11 +142,11 @@ namespace ExcelReader.Tests.Reader
                 sheetStates: [0, 1, 2],
                 sheets: [("S1", [["A"]]), ("S2", [["B"]]), ("S3", [["C"]])]);
 
-            using XlsReader reader = Excel.FromXls(xls);
+            using XlsWorkbook reader = Excel.FromXls(xls);
 
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
-            Assert.Equal(ExcelSheetVisibility.Hidden, reader.SheetVisibilityAt(1));
-            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.SheetVisibilityAt(2));
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.Sheets[0].Visibility);
+            Assert.Equal(ExcelSheetVisibility.Hidden, reader.Sheets[1].Visibility);
+            Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.Sheets[2].Visibility);
         }
 
         [Fact]
@@ -155,9 +154,9 @@ namespace ExcelReader.Tests.Reader
         {
             using CsvReader reader = Excel.FromCsv("a,b\n"u8.ToArray().AsMemory());
 
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibility);
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
-            Assert.Throws<ArgumentOutOfRangeException>(() => reader.SheetVisibilityAt(1));
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.FirstSheet.Visibility);
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.Sheets[0].Visibility);
+            Assert.Throws<ArgumentOutOfRangeException>(() => reader.Sheets[1].Visibility);
         }
 
         private static readonly (string Name, ExcelSheetVisibility Visibility)[] _mixedSheets =
@@ -188,13 +187,13 @@ namespace ExcelReader.Tests.Reader
         private static void AssertRoundTrips(MemoryStream written)
         {
             written.Position = 0;
-            using IExcelRowReader reader = Excel.Open(written);
+            using IExcelWorkbook reader = Excel.Open(written);
 
             Assert.Equal(_mixedSheets.Length, reader.SheetCount);
             for (int i = 0; i < _mixedSheets.Length; i++)
             {
-                Assert.Equal(_mixedSheets[i].Name, reader.SheetNameAt(i));
-                Assert.Equal(_mixedSheets[i].Visibility, reader.SheetVisibilityAt(i));
+                Assert.Equal(_mixedSheets[i].Name, reader.SheetAt(i).Name);
+                Assert.Equal(_mixedSheets[i].Visibility, reader.SheetAt(i).Visibility);
             }
         }
 
@@ -244,8 +243,8 @@ namespace ExcelReader.Tests.Reader
             }
 
             ms.Position = 0;
-            using IExcelRowReader reader = Excel.Open(ms);
-            Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibility);
+            using IExcelWorkbook reader = Excel.Open(ms);
+            Assert.Equal(ExcelSheetVisibility.Visible, reader.FirstSheet.Visibility);
             Assert.DoesNotContain("state=", Encoding.UTF8.GetString(WorkbookPart(ms)), StringComparison.Ordinal);
         }
 
@@ -337,10 +336,10 @@ namespace ExcelReader.Tests.Reader
         [Fact]
         public void Should_Reject_When_TheSheetIndexIsOutOfRange()
         {
-            using XlsxReader reader = Excel.FromXlsx(BuildXlsx([null]).AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(BuildXlsx([null]).AsMemory());
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => reader.SheetVisibilityAt(-1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => reader.SheetVisibilityAt(1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => reader.Sheets[-1].Visibility);
+            Assert.Throws<ArgumentOutOfRangeException>(() => reader.Sheets[1].Visibility);
         }
     }
 }

@@ -6,10 +6,57 @@ namespace ExcelReader.Native.Reading
 {
     internal static unsafe partial class ReadApi
     {
-        internal static int NextRowDecoded(NativeHandle? handle, out NativeRow row)
+        internal static int OpenRows(NativeHandle? handle, int sheet, out NativeRowCursor? cursor)
+        {
+            cursor = null;
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            NativeApi.ClearLastError();
+            int status = ResolveSheet(handle, sheet, out IExcelSheet? resolved);
+            if (status != NativeStatus.Ok)
+            {
+                return status;
+            }
+
+            try
+            {
+                cursor = new NativeRowCursor(resolved!.GetEnumerator());
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        internal static int CloseRows(NativeRowCursor? cursor)
+        {
+            if (cursor is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            NativeApi.ClearLastError();
+            try
+            {
+                cursor.Dispose();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        internal static int NextRowDecoded(NativeRowCursor? cursor, out NativeRow row)
         {
             row = default;
-            int status = NextRow(handle, Span<byte>.Empty, out _);
+            int status = NextRow(cursor, Span<byte>.Empty, out _);
             if (status != NativeStatus.BufferTooSmall)
             {
                 return status;
@@ -17,7 +64,7 @@ namespace ExcelReader.Native.Reading
 
             try
             {
-                return DecodePendingRow(handle!, out row);
+                return DecodePendingRow(cursor!, out row);
             }
             catch (Exception exception)
             {
@@ -36,10 +83,10 @@ namespace ExcelReader.Native.Reading
             row = default;
         }
 
-        internal static int NextRow(NativeHandle? handle, Span<byte> buffer, out int written)
+        internal static int NextRow(NativeRowCursor? cursor, Span<byte> buffer, out int written)
         {
             written = 0;
-            if (handle is null)
+            if (cursor is null)
             {
                 return NativeStatus.InvalidHandle;
             }
@@ -47,30 +94,28 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                if (!handle.HasPending)
+                if (!cursor.HasPending)
                 {
-                    handle.FaultLiveSession("xl_next_row");
-                    handle.Rows ??= handle.Reader.GetEnumerator();
-                    if (!handle.Rows.MoveNext())
+                    if (!cursor.Rows.MoveNext())
                     {
                         return NativeStatus.Eof;
                     }
 
-                    Row row = handle.Rows.Current;
-                    byte[] scratch = handle.Scratch;
-                    handle.PendingLength = RowBlob.Serialize(row, ref scratch);
-                    handle.Scratch = scratch;
-                    handle.HasPending = true;
+                    Row row = cursor.Rows.Current;
+                    byte[] scratch = cursor.Scratch;
+                    cursor.PendingLength = RowBlob.Serialize(row, ref scratch);
+                    cursor.Scratch = scratch;
+                    cursor.HasPending = true;
                 }
 
-                written = handle.PendingLength;
-                if (buffer.Length < handle.PendingLength)
+                written = cursor.PendingLength;
+                if (buffer.Length < cursor.PendingLength)
                 {
                     return NativeStatus.BufferTooSmall;
                 }
 
-                handle.Scratch.AsSpan(0, handle.PendingLength).CopyTo(buffer);
-                handle.HasPending = false;
+                cursor.Scratch.AsSpan(0, cursor.PendingLength).CopyTo(buffer);
+                cursor.HasPending = false;
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -80,10 +125,10 @@ namespace ExcelReader.Native.Reading
             }
         }
 
-        internal static int NextRowView(NativeHandle? handle, out NativeRow row)
+        internal static int NextRowView(NativeRowCursor? cursor, out NativeRow row)
         {
             row = default;
-            if (handle is null)
+            if (cursor is null)
             {
                 return NativeStatus.InvalidHandle;
             }
@@ -91,21 +136,19 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                handle.View ??= new RowViewBuffer();
-                if (handle.HasPending)
+                cursor.View ??= new RowViewBuffer();
+                if (cursor.HasPending)
                 {
-                    handle.HasPending = false;
-                    row = handle.View.Fill(handle.Scratch.AsSpan(0, handle.PendingLength));
+                    cursor.HasPending = false;
+                    row = cursor.View.Fill(cursor.Scratch.AsSpan(0, cursor.PendingLength));
                     return NativeStatus.Ok;
                 }
 
-                handle.FaultLiveSession("xl_next_row_view");
-                handle.Rows ??= handle.Reader.GetEnumerator();
-                if (!handle.Rows.MoveNext())
+                if (!cursor.Rows.MoveNext())
                 {
                     return NativeStatus.Eof;
                 }
-                row = handle.View.Fill(handle.Rows.Current);
+                row = cursor.View.Fill(cursor.Rows.Current);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -116,19 +159,19 @@ namespace ExcelReader.Native.Reading
             }
         }
 
-        private static int DecodePendingRow(NativeHandle handle, out NativeRow row)
+        private static int DecodePendingRow(NativeRowCursor cursor, out NativeRow row)
         {
             row = default;
-            ReadOnlySpan<byte> blob = handle.Scratch.AsSpan(0, handle.PendingLength);
+            ReadOnlySpan<byte> blob = cursor.Scratch.AsSpan(0, cursor.PendingLength);
             int cellCount = BinaryPrimitives.ReadInt32LittleEndian(blob);
             if (cellCount == 0)
             {
-                handle.HasPending = false;
+                cursor.HasPending = false;
                 return NativeStatus.Ok;
             }
 
             int cellSize = sizeof(NativeRowCell);
-            int valueBytes = handle.PendingLength - sizeof(int) - checked(cellCount * RowBlob.CellHeaderSize);
+            int valueBytes = cursor.PendingLength - sizeof(int) - checked(cellCount * RowBlob.CellHeaderSize);
             IntPtr block = Marshal.AllocHGlobal(checked((cellCount * cellSize) + valueBytes + cellCount));
 
             NativeRowCell* cells = (NativeRowCell*)block;
@@ -155,7 +198,7 @@ namespace ExcelReader.Native.Reading
                 valueOffset += length + 1;
             }
 
-            handle.HasPending = false;
+            cursor.HasPending = false;
             row = new NativeRow { CellCount = cellCount, Cells = block };
             return NativeStatus.Ok;
         }

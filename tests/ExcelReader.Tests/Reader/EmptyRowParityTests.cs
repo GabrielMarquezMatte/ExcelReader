@@ -51,7 +51,7 @@ namespace ExcelReader.Tests.Reader
             }
 
             using var reader = Excel.FromXlsx(ms.ToArray());
-            Assert.Equal(["a", null, "b", null], FirstCells(reader.GetEnumerator()));
+            Assert.Equal(["a", null, "b", null], FirstCells(reader.FirstSheet.GetEnumerator()));
         }
 
         [Fact]
@@ -64,7 +64,7 @@ namespace ExcelReader.Tests.Reader
             }
 
             using var reader = Excel.FromXlsb(ms.ToArray());
-            Assert.Equal(["a", null, "b", null], FirstCells(reader.GetEnumerator()));
+            Assert.Equal(["a", null, "b", null], FirstCells(reader.FirstSheet.GetEnumerator()));
         }
 
         [Fact]
@@ -77,7 +77,7 @@ namespace ExcelReader.Tests.Reader
             }
 
             using var reader = Excel.FromXls(ms.ToArray());
-            Assert.Equal(["a", null, "b", null], FirstCells(reader.GetEnumerator()));
+            Assert.Equal(["a", null, "b", null], FirstCells(reader.FirstSheet.GetEnumerator()));
         }
 
         [Fact]
@@ -93,7 +93,7 @@ namespace ExcelReader.Tests.Reader
                 (LabelRecord, XlsWorkbookBuilder.RawLabel(2, 0, "b")));
 
             using var reader = Excel.FromXls(ms);
-            Assert.Equal(["a", null, "b", null], FirstCells(reader.GetEnumerator()));
+            Assert.Equal(["a", null, "b", null], FirstCells(reader.FirstSheet.GetEnumerator()));
         }
 
         [Fact]
@@ -107,7 +107,7 @@ namespace ExcelReader.Tests.Reader
                 (RowRecord, XlsWorkbookBuilder.RawRowOnly(1)));
 
             using var reader = Excel.FromXls(ms);
-            Assert.Equal(["a", "b"], FirstCells(reader.GetEnumerator()));
+            Assert.Equal(["a", "b"], FirstCells(reader.FirstSheet.GetEnumerator()));
         }
     }
 }

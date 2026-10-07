@@ -52,10 +52,10 @@ namespace ExcelReader.Tests.Reader
         {
             using MemoryStream built = WorkbookBuilder.Build($"""<row r="1"><c r="{cellRef}"><v>1</v></c></row>""");
 
-            using XlsxReader reader = Excel.FromXlsx(built);
+            using XlsxWorkbook reader = Excel.FromXlsx(built);
             Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
                 Assert.True(e.MoveNext());
             });
         }
@@ -65,8 +65,8 @@ namespace ExcelReader.Tests.Reader
         {
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="XFD1"><v>1</v></c></row>""");
 
-            using XlsxReader reader = Excel.FromXlsx(built);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(built);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(16_384, e.Current.ColumnCount);
         }
@@ -109,7 +109,7 @@ namespace ExcelReader.Tests.Reader
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(forged, options: options);
+                using XlsxWorkbook reader = Excel.FromXlsx(forged, options: options);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
             Assert.Equal(50_000_000, ex.Actual);
@@ -131,10 +131,10 @@ namespace ExcelReader.Tests.Reader
                 MaxSharedStringBytes = 1024,
             };
 
-            using XlsxReader reader = Excel.FromXlsx(forged, options: options);
+            using XlsxWorkbook reader = Excel.FromXlsx(forged, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), ex.LimitName);
             Assert.Equal(50_000_000, ex.Actual);
@@ -158,10 +158,10 @@ namespace ExcelReader.Tests.Reader
             }
             ms.Position = 0;
 
-            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), ex.LimitName);
             Assert.Equal(500_000_000, ex.Actual);
@@ -283,7 +283,7 @@ namespace ExcelReader.Tests.Reader
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(ms, options: options);
+                using XlsxWorkbook reader = Excel.FromXlsx(ms, options: options);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxZipEntries), ex.LimitName);
             Assert.Equal(10, ex.Limit);
@@ -302,10 +302,10 @@ namespace ExcelReader.Tests.Reader
                 MaxTotalDecompressedBytes = 16 * 1024,
             };
 
-            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
                 Assert.True(e.MoveNext());
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
@@ -326,10 +326,10 @@ namespace ExcelReader.Tests.Reader
                 MaxSharedStringBytes = 1024,
             };
 
-            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), ex.LimitName);
         }
@@ -346,8 +346,8 @@ namespace ExcelReader.Tests.Reader
                 MaxTotalDecompressedBytes = 0,
             };
 
-            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(ms, options: options);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(value.Length, e.Current[0].GetString().Length);
         }
@@ -503,7 +503,7 @@ namespace ExcelReader.Tests.Reader
                 MaxPasswordSpinCount = 1,
             };
 
-            using IExcelRowReader reader = Excel.Open(container, options);
+            using IExcelWorkbook reader = Excel.Open(container, options);
 
             Assert.True(reader.SheetCount > 0);
         }
@@ -548,8 +548,8 @@ namespace ExcelReader.Tests.Reader
             {
                 try
                 {
-                    using IExcelRowReader reader = Excel.Open(mutations[i], options);
-                    foreach (Row row in reader)
+                    using IExcelWorkbook reader = Excel.Open(mutations[i], options);
+                    foreach (Row row in reader.FirstSheet)
                     {
                         foreach (RowCell cell in row.Cells)
                         {

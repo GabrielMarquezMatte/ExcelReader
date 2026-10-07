@@ -25,8 +25,8 @@ example) silently drops its profile. That happened after the namespace refactor 
 `<IlcArg Include="--codegenopt:JitStdOutFile=disasm.txt" />` (after deleting `obj/.../native`) and
 look for `; No PGO data` in the listing header.
 
-`tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_next_row` and
-`xl_next_row_view` over the 65K benchmark fixtures in XLSX, XLSB and CSV. Record it and convert the
+`tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_rows_next` and
+`xl_rows_next_view` over the 65K benchmark fixtures in XLSX, XLSB and CSV. Record it and convert the
 trace (needs `dotnet-trace` and `dotnet-pgo`):
 
     dotnet build tests/ExcelReader.NativePgoTrainer -c Release
@@ -46,16 +46,23 @@ may get worse, not only better.
 |---|---|
 | `NativeApi.cs`, `Reading/`, `Typed/`, `Arrow/`, `Csv/`, `Writer/` | Internal span-based implementation (`ReadApi`, `TypedApi`, `ArrowApi`, `CsvAggregateApi`, `WriteApi`). This is what the tests drive. |
 | `Exports*.cs` | `[UnmanagedCallersOnly]` pointer wrappers, one partial per feature. Keep logic out of here — it is untestable from managed code. |
-| `NativeHandleTable.cs` | Maps the opaque handle ids callers see onto `NativeHandle` instances. Ids are never reissued after `xl_close`, so a stale handle stays invalid permanently. |
+| `NativeHandleTable.cs` | Maps the opaque ids callers see onto `NativeHandle` (a workbook), `NativeRowCursor` and typed-reader instances. An id resolves only as its own kind and is never reissued after it is closed, so a stale or mismatched handle stays invalid permanently. |
+| `Reading/NativeRowCursor.cs` | One row enumerator and its buffers, behind `xl_rows_open`. Each cursor is independent, which is what lets several threads read one workbook. |
 | `Reading/RowBlob.cs` | Row serialization. |
-| `Reading/RowViewBuffer.cs` | Handle-owned native row behind `xl_next_row_view`. |
+| `Reading/RowViewBuffer.cs` | Cursor-owned native row behind `xl_rows_next_view`. |
 | `include/excelreader.h` | Hand-written C header; keep in sync with `Exports*.cs`. |
 
-Reading exports: `xl_open_file`, `xl_open_file_ex`, `xl_open_memory`, `xl_open_memory_ex`, `xl_close`,
-`xl_sheet_count`, `xl_sheet_name`, `xl_sheet_name_at`, `xl_move_to_sheet`, `xl_is_date1904`,
-`xl_next_row`, `xl_next_row_view`, `xl_read_all_blob`, `xl_read_all_decoded`, `xl_free_rows`,
-`xl_parse_typed`, `xl_parse_typed_ex`, `xl_free_table`, `xl_infer_schema`, `xl_infer_schema_ex`, `xl_free_schema`,
-`xl_last_error`, `xl_last_error_ptr`, `xl_parse_arrow`, `xl_parse_arrow_ex`.
+Reading exports: `xl_open_file`, `xl_open_memory`, `xl_close`, `xl_sheet_count`, `xl_sheet_name_at`,
+`xl_sheet_visibility_at`, `xl_sheet_index`, `xl_is_date1904`, `xl_rows_open`, `xl_rows_next`,
+`xl_rows_next_view`, `xl_rows_read_all_blob`, `xl_rows_read_all_decoded`, `xl_rows_close`,
+`xl_free_rows`, `xl_parse_typed`, `xl_free_table`, `xl_typed_reader_open`, `xl_typed_reader_next`,
+`xl_typed_reader_close`, `xl_infer_schema`, `xl_free_schema`, `xl_last_error`, `xl_last_error_ptr`,
+`xl_parse_arrow`, `xl_parse_arrow_stream`.
+
+A workbook handle has no current sheet and no cursor. Every read names its sheet by zero-based index
+and opens its own enumerator, so calls on one handle may run on several threads at once. A cursor,
+typed reader or Arrow stream is used by one thread at a time and keeps working after `xl_close` on
+its workbook.
 
 Writing has two layers. The one-shot export, `xl_write_typed` (plus its in-memory twin
 `xl_write_typed_to_memory`), takes a whole `xl_table` and writes it in a single call; it takes an
@@ -105,10 +112,10 @@ new integration at it before assuming your own linking approach is correct.
 
 ## Encrypted workbooks
 
-`xl_open_options` grew a `password`/`password_len` pair (UTF-8 bytes, not NUL-terminated) to open a
-password-protected OOXML workbook (.xlsx/.xlsb/.xlsm) through `xl_open_file_ex`/`xl_open_memory_ex`.
+`xl_open_options` has a `password`/`password_len` pair (UTF-8 bytes, not NUL-terminated) to open a
+password-protected OOXML workbook (.xlsx/.xlsb/.xlsm) through `xl_open_file` or `xl_open_memory`.
 Omitting it for an encrypted file returns `XL_STATUS_PASSWORD_REQUIRED`; a wrong password returns
-`XL_STATUS_PASSWORD_INCORRECT`. Both are new status codes, and `xl_last_error`/`xl_last_error_ptr`
+`XL_STATUS_PASSWORD_INCORRECT`. Both are error codes, and `xl_last_error`/`xl_last_error_ptr`
 carry the human-readable detail either way:
 
 ```c
@@ -118,7 +125,7 @@ options.password = (const uint8_t*)"hunter2";
 options.password_len = 7;
 
 xl_workbook* handle;
-int32_t status = xl_open_file_ex(path, path_len, XL_FORMAT_AUTO, &options, &handle);
+int32_t status = xl_open_file(path, path_len, XL_FORMAT_AUTO, &options, &handle);
 if (status == XL_STATUS_PASSWORD_REQUIRED || status == XL_STATUS_PASSWORD_INCORRECT) {
     /* prompt again */
 }

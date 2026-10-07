@@ -7,10 +7,10 @@ namespace ExcelReader.Tests.Crypto
     {
         private const string Password = "hunter2";
 
-        private static List<string[]> ReadAllRows(IExcelRowReader reader)
+        private static List<string[]> ReadAllRows(IExcelWorkbook reader)
         {
             List<string[]> rows = [];
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             while (e.MoveNext())
             {
                 List<string> cells = [];
@@ -40,13 +40,13 @@ namespace ExcelReader.Tests.Crypto
             byte[] encrypted = Encrypt(plainPath);
 
             List<string[]> expected;
-            using (IExcelRowReader plainReader = Excel.Open(plainPath))
+            using (IExcelWorkbook plainReader = Excel.Open(plainPath))
             {
                 expected = ReadAllRows(plainReader);
             }
 
             ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
-            using IExcelRowReader decrypted = Excel.Open(encrypted, options);
+            using IExcelWorkbook decrypted = Excel.Open(encrypted, options);
             List<string[]> decryptedRows = ReadAllRows(decrypted);
 
             Assert.Equal(expected.Count, decryptedRows.Count);
@@ -100,7 +100,7 @@ namespace ExcelReader.Tests.Crypto
                 await Excel.EncryptPackageAsync(plainPath, outputPath, Password, TestContext.Current.CancellationToken);
 
                 ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
-                using IExcelRowReader reader = Excel.Open(outputPath, options);
+                using IExcelWorkbook reader = Excel.Open(outputPath, options);
                 Assert.NotEmpty(ReadAllRows(reader));
             }
             finally
@@ -121,7 +121,7 @@ namespace ExcelReader.Tests.Crypto
                 Excel.EncryptPackage(plainPath, outputPath, Password);
 
                 ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
-                using IExcelRowReader reader = Excel.Open(outputPath, options);
+                using IExcelWorkbook reader = Excel.Open(outputPath, options);
                 Assert.NotEmpty(ReadAllRows(reader));
             }
             finally
@@ -141,7 +141,7 @@ namespace ExcelReader.Tests.Crypto
             byte[] encryptedBytes = encrypted.ToArray();
 
             ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
-            using IExcelRowReader decrypted = Excel.Open(encryptedBytes, options);
+            using IExcelWorkbook decrypted = Excel.Open(encryptedBytes, options);
             Assert.NotEmpty(ReadAllRows(decrypted));
         }
 

@@ -15,10 +15,10 @@ namespace ExcelReader.Tests.Reader
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = await BuildAsync<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(s => XlsxWorkbookWriter.Create(s, leaveOpen: true));
             await using var stream = new SyncGuardStream(bytes);
-            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, ct: ct);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, ct: ct);
             stream.AllowSyncReads = false;
 
-            Assert.Equal(["a", "b"], await ReadFirstColumnAsync(reader.GetAsyncEnumerator(ct)));
+            Assert.Equal(["a", "b"], await ReadFirstColumnAsync(reader.FirstSheet.GetAsyncEnumerator(ct)));
         }
 
         [Fact]
@@ -27,10 +27,10 @@ namespace ExcelReader.Tests.Reader
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = await BuildAsync<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(s => XlsbWorkbookWriter.Create(s, leaveOpen: true));
             await using var stream = new SyncGuardStream(bytes);
-            await using XlsbReader reader = await Excel.FromXlsbAsync(stream, ct: ct);
+            await using XlsbWorkbook reader = await Excel.FromXlsbAsync(stream, ct: ct);
             stream.AllowSyncReads = false;
 
-            Assert.Equal(["a", "b"], await ReadFirstColumnAsync(reader.GetAsyncEnumerator(ct)));
+            Assert.Equal(["a", "b"], await ReadFirstColumnAsync(reader.FirstSheet.GetAsyncEnumerator(ct)));
         }
 
         private static async Task<List<string>> ReadFirstColumnAsync(IExcelRowEnumerator e)

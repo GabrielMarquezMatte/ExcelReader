@@ -14,8 +14,8 @@ def main() -> int:
     max_rows = int(sys.argv[2]) if len(sys.argv) > 2 else 10
 
     with open_workbook(path) as workbook:
-        print(f"sheets={workbook.sheet_count} current={workbook.sheet_name!r} date1904={workbook.is_date1904}")
-        for index, row in enumerate(workbook.rows()):
+        print(f"sheets={workbook.sheet_names} date1904={workbook.is_date1904}")
+        for index, row in enumerate(workbook.sheets[0].rows()):
             if index >= max_rows:
                 break
             print(index, [(cell.column, cell.type.name, cell.value) for cell in row])

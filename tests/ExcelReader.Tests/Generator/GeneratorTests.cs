@@ -428,9 +428,9 @@ namespace ExcelReader.Tests.Generator
                         }
 
                         writeStream.Position = 0;
-                        await using XlsxReader reader = await Excel.FromXlsxAsync(writeStream);
+                        await using XlsxWorkbook reader = await Excel.FromXlsxAsync(writeStream);
                         var results = new List<Model>();
-                        foreach (Model m in ExcelParser.Generated<Model>().Parse(reader))
+                        foreach (Model m in ExcelParser.Generated<Model>().Parse(reader.FirstSheet))
                         {
                             results.Add(m);
                         }
@@ -452,7 +452,7 @@ namespace ExcelReader.Tests.Generator
             """;
 
         [Fact]
-        public async Task GeneratedMapRoundTripsThroughRealXlsxReaderAndWriter()
+        public async Task GeneratedMapRoundTripsThroughRealXlsxWorkbookAndWriter()
         {
             (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(RoundTripSource);
             Assert.Empty(diagnostics);
@@ -757,11 +757,11 @@ namespace ExcelReader.Tests.Generator
                         where T : IExcelRowMap<T>
                     {
                         using MemoryStream ms = await BuildAsync(header, row);
-                        await using XlsxReader reader = await Excel.FromXlsxAsync(ms);
+                        await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms);
                         try
                         {
                             var results = new List<string>();
-                            foreach (T model in ExcelParser.Generated<T>(config).Parse(reader))
+                            foreach (T model in ExcelParser.Generated<T>(config).Parse(reader.FirstSheet))
                             {
                                 results.Add(describe(model));
                             }

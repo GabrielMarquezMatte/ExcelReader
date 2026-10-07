@@ -44,7 +44,7 @@ namespace ExcelReader.Benchmarks
         public long ParseTyped()
         {
             using NativeHandle handle = Open();
-            int status = TypedApi.ParseTyped(handle, Schema, HeaderRow, out NativeTable table);
+            int status = TypedApi.ParseTyped(handle, 0, Schema, HeaderRow, out NativeTable table);
             try
             {
                 VerifyParsed(status, table);
@@ -60,7 +60,7 @@ namespace ExcelReader.Benchmarks
         public long ParseArrow()
         {
             using NativeHandle handle = Open();
-            int status = ArrowApi.ParseArrow(handle, Schema, HeaderRow, out ArrowArray array, out ArrowSchema schema);
+            int status = ArrowApi.ParseArrow(handle, 0, Schema, HeaderRow, out ArrowArray array, out ArrowSchema schema);
             if (status != NativeStatus.Ok)
             {
                 throw new InvalidOperationException($"xl_parse_arrow failed with status {status}.");

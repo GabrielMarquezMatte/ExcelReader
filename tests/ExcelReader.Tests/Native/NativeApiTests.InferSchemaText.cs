@@ -24,7 +24,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, OpenPath(FixtureCsvPath(), NativeFormat.Csv, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, headerRow: 1, sampleSize: 100, ReadApi.InferParseText, out NativeInferredSchema schema));
+                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, ReadApi.InferParseText, out NativeInferredSchema schema));
                 (string? Name, int Index, int Type, bool Nullable)[] columns;
                 try
                 {
@@ -39,7 +39,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal([s, s, s, s, s, d, i, d, i, f, f, f, f, f], Array.ConvertAll(columns, c => c.Type));
 
                 NativeColumnSpec[] specs = Array.ConvertAll(columns, c => new NativeColumnSpec { Names = [c.Name!], Type = c.Type, Nullable = c.Nullable });
-                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable table));
                 try
                 {
                     Assert.Equal(65_535, table.RowCount);
@@ -56,38 +56,13 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void InferSchema_Should_Match_The_Flagless_Result_When_Flags_Are_Zero()
-        {
-            using MemoryStream ms = BuildInferSchemaFixture();
-            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
-            try
-            {
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, headerRow: 1, sampleSize: 100, out NativeInferredSchema plain));
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, headerRow: 1, sampleSize: 100, 0, out NativeInferredSchema flagged));
-                try
-                {
-                    Assert.Equal(DecodeSchema(plain), DecodeSchema(flagged));
-                }
-                finally
-                {
-                    ReadApi.FreeSchema(ref plain);
-                    ReadApi.FreeSchema(ref flagged);
-                }
-            }
-            finally
-            {
-                ReadApi.Close(handle);
-            }
-        }
-
-        [Fact]
         public void InferSchema_Should_Reject_Unknown_Flags()
         {
             using MemoryStream ms = BuildInferSchemaFixture();
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.InvalidArgument, ReadApi.InferSchema(handle, headerRow: 1, sampleSize: 100, 2, out NativeInferredSchema schema));
+                Assert.Equal(NativeStatus.InvalidArgument, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, 2, out NativeInferredSchema schema));
                 Assert.Equal(IntPtr.Zero, schema.Columns);
                 Assert.Contains("flags", NativeApi.LastErrorText(), StringComparison.Ordinal);
             }

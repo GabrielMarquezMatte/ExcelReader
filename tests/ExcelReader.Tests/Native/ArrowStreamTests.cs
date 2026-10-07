@@ -20,7 +20,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             live = handle!;
             Assert.Equal(NativeStatus.Ok,
-                ArrowApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows, out ArrowArrayStream stream));
+                ArrowApi.OpenArrowStream(live, 0, Specs(), headerRow: 0, maxRows, out ArrowArrayStream stream));
             return stream;
         }
 
@@ -117,7 +117,7 @@ namespace ExcelReader.Tests.Native
                 InvokeRelease(ref stream);
 
                 Assert.Equal(NativeStatus.Ok,
-                    ArrowApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows: 1, out ArrowArrayStream reopened));
+                    ArrowApi.OpenArrowStream(live, 0, Specs(), headerRow: 0, maxRows: 1, out ArrowArrayStream reopened));
                 Assert.Equal(0, InvokeGetNext(ref reopened, out ArrowArray fromReopened));
                 Assert.NotEqual(IntPtr.Zero, fromReopened.Release);
                 ReleaseArray(ref fromReopened);
@@ -157,7 +157,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
             using NativeHandle live = handle!;
             Assert.Equal(NativeStatus.Ok,
-                ArrowApi.OpenArrowStream(live, TallSpecs(), headerRow: 1, maxRows, out ArrowArrayStream stream));
+                ArrowApi.OpenArrowStream(live, 0, TallSpecs(), headerRow: 1, maxRows, out ArrowArrayStream stream));
 
             List<TallRow> rows = [];
             batchCount = 0;
@@ -289,7 +289,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             using NativeHandle live = handle!;
 
-            int status = ArrowApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows: -1, out ArrowArrayStream stream);
+            int status = ArrowApi.OpenArrowStream(live, 0, Specs(), headerRow: 0, maxRows: -1, out ArrowArrayStream stream);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Equal(IntPtr.Zero, stream.Release);
@@ -314,7 +314,7 @@ namespace ExcelReader.Tests.Native
                 using NativeHandle live = handle!;
                 NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
                 Assert.Equal(NativeStatus.Ok,
-                    ArrowApi.OpenArrowStream(live, specs, headerRow: 1, maxRows: 2, out ArrowArrayStream stream));
+                    ArrowApi.OpenArrowStream(live, 0, specs, headerRow: 1, maxRows: 2, out ArrowArrayStream stream));
                 try
                 {
                     Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray good));
@@ -343,7 +343,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void GetNext_Should_Fail_Cleanly_After_The_Workbook_Is_Closed()
+        public void GetNext_Should_Keep_Reading_After_The_Workbook_Is_Closed()
         {
             ArrowArrayStream stream = Open(maxRows: 1, out NativeHandle live);
             try
@@ -354,14 +354,9 @@ namespace ExcelReader.Tests.Native
 
                 live.Dispose();
 
-                Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray after));
-                Assert.Equal(IntPtr.Zero, after.Release);
-                string? latched = Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream));
-                Assert.False(string.IsNullOrEmpty(latched));
-
-                Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray again));
-                Assert.Equal(IntPtr.Zero, again.Release);
-                Assert.Equal(latched, Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream)));
+                Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray after));
+                Assert.NotEqual(IntPtr.Zero, after.Release);
+                ReleaseArray(ref after);
             }
             finally
             {

@@ -59,7 +59,8 @@ namespace xl
     };
 
     template <typename T>
-    std::expected<ArrowTable, Error> parse_arrow(Workbook &workbook, int32_t header_row = 1)
+    std::expected<ArrowTable, Error> parse_arrow(Sheet sheet, int32_t header_row = 1,
+                                                 int32_t degree_of_parallelism = 1)
     {
         static constexpr auto bindings = ExcelMapper<T>::get_bindings();
         static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
@@ -69,9 +70,9 @@ namespace xl
         std::span<const xl_column_spec> specs(specs_array);
 
         ArrowTable result;
-        int32_t status = xl_parse_arrow(workbook.handle(), specs.data(),
+        int32_t status = xl_parse_arrow(sheet.handle(), sheet.index(), specs.data(),
                                         static_cast<int32_t>(specs.size()), header_row,
-                                        &result.array, &result.schema);
+                                        degree_of_parallelism, &result.array, &result.schema);
         if (status != XL_OK)
         {
             return std::unexpected(detail::make_error(status));
@@ -234,7 +235,7 @@ namespace xl
     };
 
     template <typename T>
-    std::expected<ArrowStream, Error> arrow_stream(Workbook &workbook, int32_t header_row = 1,
+    std::expected<ArrowStream, Error> arrow_stream(Sheet sheet, int32_t header_row = 1,
                                                    int64_t batch_size = 10000)
     {
         static constexpr auto bindings = ExcelMapper<T>::get_bindings();
@@ -244,7 +245,7 @@ namespace xl
             detail::build_specs(bindings, std::make_index_sequence<num_fields>{}, name_lens_storage);
 
         ArrowArrayStream stream{};
-        int32_t status = xl_parse_arrow_stream(workbook.handle(), specs_array.data(),
+        int32_t status = xl_parse_arrow_stream(sheet.handle(), sheet.index(), specs_array.data(),
                                                static_cast<int32_t>(specs_array.size()), header_row,
                                                batch_size, &stream);
         if (status != XL_OK)

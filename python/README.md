@@ -20,11 +20,45 @@ elsewhere, set `EXCELREADER_NATIVE_LIB` to its full path.
 from excelreader import open_workbook
 
 with open_workbook("book.xlsx") as workbook:
-    print(workbook.sheet_count, workbook.sheet_name)
-    for row in workbook.rows():
+    print(workbook.sheet_count, workbook.sheets[0].name)
+    for row in workbook.sheets[0].rows():
         for cell in row:
             print(cell.column, cell.type.name, cell.value)
 ```
+
+### Sheets
+
+A workbook hands out sheets. `workbook.sheets` is a sequence: `len()`, iteration, and lookup by
+index (negative allowed), slice or name (names match without regard to case; a miss raises
+`KeyError`). A `Sheet` is the workbook and an index; it holds no native resource, and every read on
+it opens its own cursor.
+
+```python
+import excelreader
+
+with excelreader.open_workbook("report.xlsx") as workbook:
+    for sheet in workbook.sheets:
+        print(sheet.index, sheet.name, sheet.visibility)
+
+    totals = workbook.sheets["Totals"]
+    for row in totals.rows():
+        ...
+```
+
+One open workbook can be read from several threads, which loads the shared-string table once.
+The native calls release the GIL:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+with excelreader.open_workbook("report.xlsx") as workbook, ThreadPoolExecutor() as pool:
+    tables = list(pool.map(lambda sheet: sheet.to_arrow(sheet.infer_schema()), workbook.sheets))
+```
+
+`rows()` and `iter_parse_typed()` are generators: the native cursor opens at the first `next()`. A
+generator that has already started keeps working after `workbook.close()`; one that has not started
+raises at its first `next()`. A `RecordBatchReader` opens its stream at the call, so it works after
+`close()` even if never started.
 
 ### Formats
 
@@ -51,7 +85,7 @@ as_date = cell.as_date(workbook.is_date1904)
 `rows()` iterates row-by-row; `read_all()` materializes the whole sheet in one call:
 
 ```python
-all_rows = workbook.read_all()
+all_rows = workbook.sheets[0].read_all()
 ```
 
 This holds every row in memory at once, so prefer `rows()` for very large sheets.
@@ -63,10 +97,10 @@ large sheet. `read_all_columnar()` decodes the same data into parallel flat arra
 per-cell object construction — and is several times faster on large sheets:
 
 ```python
-sheet = workbook.read_all_columnar()
-# sheet.row_offsets[i]:row_offsets[i+1]  -> cell indices for row i
-# sheet.columns[j] / sheet.types[j]      -> cell j's column index / CellType
-# sheet.value_offsets[j]:[j+1]           -> cell j's byte slice into sheet.values
+columnar = workbook.sheets[0].read_all_columnar()
+# columnar.row_offsets[i]:row_offsets[i+1]  -> cell indices for row i
+# columnar.columns[j] / columnar.types[j]   -> cell j's column index / CellType
+# columnar.value_offsets[j]:[j+1]           -> cell j's byte slice into columnar.values
 ```
 
 Materialize a single cell on demand instead of decoding every value up front:
@@ -74,7 +108,7 @@ Materialize a single cell on demand instead of decoding every value up front:
 ```python
 from excelreader import decode_cell
 
-first_cell = decode_cell(sheet, 0)
+first_cell = decode_cell(columnar, 0)
 ```
 
 Each array is a stdlib `array.array('i')`, or a NumPy `int32` array if NumPy is installed
@@ -92,7 +126,7 @@ natively, straight into typed column buffers. On a 65,536 × 14 sheet it is ~8×
 from excelreader import ColumnSpec, ColumnType
 
 with open_workbook("sales.xlsb") as workbook:
-    table = workbook.parse_typed([
+    table = workbook.sheets[0].parse_typed([
         ColumnSpec(ColumnType.STRING, name="Region"),
         ColumnSpec(ColumnType.DATE, name="Order Date"),
         ColumnSpec(ColumnType.F64, name="Total Revenue", nullable=True),
@@ -114,8 +148,8 @@ header, where every spec must resolve by index.
 A column that fails to convert is an error unless its spec sets `nullable=True`, which records the
 failure in `table.validity` and keeps reading.
 
-Note that `parse_typed()` always reads the whole sheet from its first row, independent of how far
-`rows()` has advanced — and it leaves that cursor alone.
+`parse_typed()` always reads the whole sheet from its first row, independent of any `rows()`
+generator in progress.
 
 #### Reading a sheet a batch at a time
 
@@ -129,19 +163,17 @@ with open_workbook("sales.xlsb") as workbook:
         ColumnSpec(ColumnType.DATE, name="Order Date"),
         ColumnSpec(ColumnType.F64, name="Total Revenue", nullable=True),
     ]
-    for batch in workbook.iter_parse_typed(schema, batch_size=10_000):
+    for batch in workbook.sheets[0].iter_parse_typed(schema, batch_size=10_000):
         region, day, revenue = batch.columns
         ...
 ```
 
 `batch_size` is rows per batch; `0` means one unbounded batch, identical to `parse_typed()`, and a
-negative value is an error. A workbook serves one chunked read at a time — of either kind, typed or
-Arrow (see [Arrow](#arrow) below) — and any other read on the workbook while one is live invalidates
-it: its next call then raises `ExcelReaderError` rather than silently resuming from the moved cursor.
-Finish the batches, or call `.close()` on the generator, before starting another read.
+negative value is an error. Chunked reads are independent: several can be open on one workbook at
+once, typed or Arrow (see [Arrow](#arrow) below), and none disturbs another.
 
 Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
-`batch_size` or a rejected second reader is only raised there, not at the call.
+`batch_size` is only raised there, not at the call.
 
 #### Reading a large CSV on several threads
 
@@ -152,7 +184,7 @@ either way. Every partition's columns are held until they are merged, so the pea
 than a sequential read of the same file. `to_polars()` with `parallelism` other than 1 parses the whole
 file instead of streaming it in batches.
 
-`xl_parse_typed_ex` on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:
+`xl_parse_typed` on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:
 
 | File | `parallelism=1` | `parallelism=0` | Speed-up |
 |---|---:|---:|---:|
@@ -169,8 +201,9 @@ don't, `infer_schema()` samples the sheet and guesses one for you:
 
 ```python
 with open_workbook("sales.xlsb") as workbook:
-    schema = workbook.infer_schema()   # header_row=1, sample_size=100 by default
-    table = workbook.parse_typed(schema)
+    sheet = workbook.sheets[0]
+    schema = sheet.infer_schema()   # header_row=1, sample_size=100 by default
+    table = sheet.parse_typed(schema)
 ```
 
 By default each column's type comes from the `CellType` Excel already stored for its sampled cells,
@@ -185,8 +218,9 @@ still a guess over the sample, so a value further down can fail to convert:
 
 ```python
 with open_workbook("sales.csv") as workbook:
-    schema = workbook.infer_schema(parse_text=True)
-    table = workbook.parse_typed(schema, parallelism=0)
+    sheet = workbook.sheets[0]
+    schema = sheet.infer_schema(parse_text=True)
+    table = sheet.parse_typed(schema, parallelism=0)
 ```
 
 ### Writing
@@ -198,7 +232,8 @@ through the same `xl_write_typed` native export — one-shot, no writer handle b
 from excelreader import ColumnType, write_workbook
 
 with open_workbook("sales.xlsb") as workbook:
-    table = workbook.parse_typed(workbook.infer_schema())
+    sheet = workbook.sheets[0]
+    table = sheet.parse_typed(sheet.infer_schema())
 
 types = [ColumnType.STRING, ColumnType.DATE, ColumnType.F64]  # one per table.columns, in order
 write_workbook("sales_copy.xlsx", table, types)
@@ -292,7 +327,7 @@ over the Arrow C Data Interface:
 import pyarrow as pa
 
 with open_workbook("sales.xlsb") as workbook:
-    array = workbook.to_arrow(schema)
+    array = workbook.sheets[0].to_arrow(schema)
 
 batch = pa.RecordBatch.from_struct_array(array)
 ```
@@ -306,20 +341,20 @@ pyarrow owns the buffers from that point on, so the result stays valid after the
 
 ```python
 with open_workbook("sales.xlsb") as workbook:
-    reader = workbook.to_record_batch_reader(schema, batch_size=10_000)
+    reader = workbook.sheets[0].to_record_batch_reader(schema, batch_size=10_000)
     for batch in reader:
         ...
 ```
 
-Same `batch_size`/one-chunked-read-at-a-time rules as `iter_parse_typed()` above, except
-`to_record_batch_reader()` raises immediately rather than on the first iteration.
+Same `batch_size` rules as `iter_parse_typed()` above, except `to_record_batch_reader()` raises
+immediately rather than on the first iteration. The reader keeps working after the workbook is closed.
 
 `iter_pandas()`/`iter_polars()` build on it, yielding one DataFrame per batch (requires pyarrow, plus
 pandas or polars respectively):
 
 ```python
 with open_workbook("sales.xlsb") as workbook:
-    for frame in workbook.iter_polars(schema, batch_size=10_000):
+    for frame in workbook.sheets[0].iter_polars(schema, batch_size=10_000):
         ...
 ```
 
@@ -356,7 +391,7 @@ from excelreader import OpenOptions, open_workbook
 
 # A semicolon-delimited CSV, which the default comma dialect would read as one column per row.
 with open_workbook("export.csv", format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
-    for row in workbook.rows():
+    for row in workbook.sheets[0].rows():
         ...
 ```
 
@@ -488,6 +523,6 @@ fixed-width records with no compression, so it trades 3.5x the bytes for less wo
 
 ## Notes
 
-- A `Workbook` is **not** thread-safe. Use one per thread.
+- A `Workbook` can be read from several threads at once; see [Sheets](#sheets).
 - Empty cells are skipped, so `cell.column` may skip indices. Do not assume `row[i].column == i`.
 - The ABI is documented in `src/ExcelReader.Native/include/excelreader.h`.

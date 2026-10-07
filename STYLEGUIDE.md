@@ -97,15 +97,15 @@ Every method, property getter/setter, and constructor must use a block body with
 
 ```csharp
 // NOT OK
-public string SheetName => _sheets[_current].Name;
+public int SheetCount => _sheets.Length;
 private static string Foo() => Bar();
 
 // OK
-public string SheetName
+public int SheetCount
 {
     get
     {
-        return _sheets[_current].Name;
+        return _sheets.Length;
     }
 }
 private static string Foo()

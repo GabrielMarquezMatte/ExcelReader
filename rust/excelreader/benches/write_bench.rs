@@ -52,8 +52,8 @@ fn load_rows() -> Vec<Row> {
         "missing benchmark fixture {FIXTURE} - run from rust/excelreader, and check the file is \
          present in the repo"
     );
-    let mut workbook = Workbook::open(FIXTURE).expect("the fixture must open");
-    let table = parse_sheet::<Row>(&mut workbook, 1).expect("the fixture must parse");
+    let workbook = Workbook::open(FIXTURE).expect("the fixture must open");
+    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("the fixture must parse");
     let rows: Vec<Row> = table.iter().collect();
     assert!(!rows.is_empty(), "the fixture parsed to zero rows");
     rows

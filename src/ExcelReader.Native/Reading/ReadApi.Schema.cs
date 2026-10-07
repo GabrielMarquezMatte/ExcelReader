@@ -9,12 +9,7 @@ namespace ExcelReader.Native.Reading
     {
         internal const int InferParseText = 1;
 
-        internal static int InferSchema(NativeHandle? handle, int headerRow, int sampleSize, out NativeInferredSchema schema)
-        {
-            return InferSchema(handle, headerRow, sampleSize, 0, out schema);
-        }
-
-        internal static int InferSchema(NativeHandle? handle, int headerRow, int sampleSize, int flags, out NativeInferredSchema schema)
+        internal static int InferSchema(NativeHandle? handle, int sheet, int headerRow, int sampleSize, int flags, out NativeInferredSchema schema)
         {
             schema = default;
             if (handle is null)
@@ -38,12 +33,17 @@ namespace ExcelReader.Native.Reading
             }
 
             NativeApi.ClearLastError();
+            int status = ResolveSheet(handle, sheet, out IExcelSheet? resolved);
+            if (status != NativeStatus.Ok)
+            {
+                return status;
+            }
+
             IExcelRowEnumerator? rows = null;
             try
             {
-                handle.FaultLiveSession("xl_infer_schema");
-                rows = handle.Reader.GetEnumerator();
-                schema = BuildSchema(SchemaInference.Infer(rows, handle.Reader.IsDate1904, headerRow, sampleSize, (flags & InferParseText) != 0));
+                rows = resolved!.GetEnumerator();
+                schema = BuildSchema(SchemaInference.Infer(rows, handle.Workbook.IsDate1904, headerRow, sampleSize, (flags & InferParseText) != 0));
                 return NativeStatus.Ok;
             }
             catch (ArgumentException exception)

@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native
@@ -154,6 +155,11 @@ namespace ExcelReader.Native
         internal static NativeHandle? Resolve(nint handle)
         {
             return NativeHandleTable.Resolve<NativeHandle>(handle);
+        }
+
+        internal static NativeRowCursor? ResolveRows(nint rows)
+        {
+            return NativeHandleTable.Resolve<NativeRowCursor>(rows);
         }
 
         internal static bool TryFree(nint handle, out NativeHandle? target)

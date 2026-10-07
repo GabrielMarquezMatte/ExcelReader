@@ -48,7 +48,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(csv, NativeFormat.Csv, out NativeHandle? handle, options));
             try
             {
-                int status = TypedApi.ParseTypedTable(handle, specs, headerRow, dop, "test", out NativeTable table, chunkSize);
+                int status = TypedApi.ParseTypedTable(handle, 0, specs, headerRow, dop, out NativeTable table, chunkSize);
                 return (status, table, NativeApi.LastErrorText(), TypedApi.LastParseRanInParallel);
             }
             finally
@@ -170,7 +170,7 @@ namespace ExcelReader.Tests.Native
             TypedApi.FreeOverride = tracker.Free;
             try
             {
-                status = TypedApi.ParseTypedTable(handle, specs, headerRow: 1, 4, "test", out table, SmallChunk);
+                status = TypedApi.ParseTypedTable(handle, 0, specs, headerRow: 1, 4, out table, SmallChunk);
             }
             finally
             {
@@ -284,8 +284,8 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 0, out NativeTable expected));
-                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTypedTable(handle, specs, headerRow: 0, 0, "test", out NativeTable actual));
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 0, out NativeTable expected));
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTypedTable(handle, 0, specs, headerRow: 0, 0, out NativeTable actual));
                 try
                 {
                     Assert.False(TypedApi.LastParseRanInParallel);
@@ -325,13 +325,14 @@ namespace ExcelReader.Tests.Native
             try
             {
                 byte[] blob = new byte[1 << 16];
+                using NativeRowCursor cursor = OpenRows(handle);
                 const int advanced = 5_000;
                 for (int i = 0; i < advanced; i++)
                 {
-                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out _));
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, blob, out _));
                 }
 
-                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTypedTable(handle, MixedSpecs, headerRow: 1, 4, "test", out NativeTable actual, SmallChunk));
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTypedTable(handle, 0, MixedSpecs, headerRow: 1, 4, out NativeTable actual, SmallChunk));
                 try
                 {
                     Assert.True(TypedApi.LastParseRanInParallel);
@@ -342,11 +343,11 @@ namespace ExcelReader.Tests.Native
                     TypedApi.FreeTable(ref actual);
                 }
 
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out int written));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, blob, out int written));
                 Assert.Equal("item4999", DecodeRow(blob.AsSpan(0, written))[0].Value);
                 int remaining = 1;
                 string last = "";
-                while (ReadApi.NextRow(handle, blob, out written) == NativeStatus.Ok)
+                while (ReadApi.NextRow(cursor, blob, out written) == NativeStatus.Ok)
                 {
                     remaining++;
                     last = DecodeRow(blob.AsSpan(0, written))[0].Value;
@@ -363,40 +364,13 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void ParseTypedTable_Should_Fault_A_Live_Chunked_Read_On_The_Same_Handle()
-        {
-            byte[] csv = Encoding.UTF8.GetBytes(MixedCsv(MixedRows));
-            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(csv, NativeFormat.Csv, out NativeHandle? handle));
-            try
-            {
-                Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(handle, MixedSpecs, headerRow: 1, 100, out nint reader));
-                try
-                {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTypedTable(handle, MixedSpecs, headerRow: 1, 4, "test", out NativeTable whole, SmallChunk));
-                    TypedApi.FreeTable(ref whole);
-
-                    Assert.Equal(NativeStatus.Error, TypedApi.NextTypedBatch(reader, out NativeTable after));
-                    Assert.Equal(IntPtr.Zero, after.Columns);
-                }
-                finally
-                {
-                    TypedApi.CloseTypedReader(reader);
-                }
-            }
-            finally
-            {
-                ReadApi.Close(handle);
-            }
-        }
-
-        [Fact]
         public void ParseArrow_Should_Accept_A_Degree_Of_Parallelism()
         {
             byte[] csv = Encoding.UTF8.GetBytes(MixedCsv(MixedRows));
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(csv, NativeFormat.Csv, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, MixedSpecs, headerRow: 1, 0, "test", out ArrowArray array, out ArrowSchema schema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, 0, MixedSpecs, headerRow: 1, 0, out ArrowArray array, out ArrowSchema schema));
                 try
                 {
                     Assert.Equal(MixedRows, array.Length);

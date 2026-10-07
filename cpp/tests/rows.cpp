@@ -37,10 +37,15 @@ namespace
         }
 
         std::vector<std::vector<std::string>> all;
-        auto cursor = workbook->rows();
+        auto cursor = workbook->sheet(0).rows();
+        check(cursor.has_value(), "open a cursor");
+        if (!cursor.has_value())
+        {
+            return {};
+        }
         while (true)
         {
-            auto row = cursor.next_row();
+            auto row = cursor->next_row();
             if (!row.has_value())
             {
                 check(row.error().code == XL_EOF, "the cursor stops on XL_EOF, not a real error");
@@ -85,11 +90,16 @@ int main()
         check(workbook.has_value(), "open the oversized CSV");
         if (workbook.has_value())
         {
-            auto cursor = workbook->rows();
-            auto header = cursor.next_row();
+            auto cursor = workbook->sheet(0).rows();
+            check(cursor.has_value(), "open a cursor on the oversized CSV");
+            if (!cursor.has_value())
+            {
+                return 1;
+            }
+            auto header = cursor->next_row();
             check(header.has_value() && (*header)[0].value == "a", "header survives");
 
-            auto big = cursor.next_row();
+            auto big = cursor->next_row();
             check(big.has_value(), "the oversized row is returned, not lost");
             if (big.has_value())
             {
@@ -106,7 +116,7 @@ int main()
         check(workbook.has_value(), "open for read_all_decoded");
         if (workbook.has_value())
         {
-            auto decoded = workbook->read_all_decoded();
+            auto decoded = workbook->sheet(0).read_all_decoded();
             check(decoded.has_value(), "read_all_decoded succeeds");
             if (decoded.has_value())
             {
@@ -133,13 +143,14 @@ int main()
         auto workbook = xl::Workbook::open(fixture());
         if (workbook.has_value())
         {
-            auto cursor = workbook->rows();
-            while (cursor.next_row().has_value())
+            auto cursor = workbook->sheet(0).rows();
+            check(cursor.has_value(), "open a cursor to drain");
+            while (cursor.has_value() && cursor->next_row().has_value())
             {
             }
-            auto decoded = workbook->read_all_decoded();
-            check(decoded.has_value(), "an empty remainder is not an error");
-            check(decoded.has_value() && decoded->empty(), "and it is empty");
+            auto decoded = workbook->sheet(0).read_all_decoded();
+            check(decoded.has_value(), "a read after another cursor drained is not an error");
+            check(decoded.has_value() && decoded->size() == rows.size(), "and it still reads every row, from the start");
         }
     }
 
@@ -147,7 +158,7 @@ int main()
         auto workbook = xl::Workbook::open(fixture());
         if (workbook.has_value())
         {
-            auto decoded = workbook->read_all_decoded();
+            auto decoded = workbook->sheet(0).read_all_decoded();
             check(decoded.has_value(), "open a set to move");
             if (decoded.has_value())
             {

@@ -113,7 +113,7 @@ def read_excelreader(path: Path) -> pl.DataFrame:
 
     password = PASSWORD if path.stem.startswith("encrypted") else None
     with open_workbook(path, password=password) as workbook:
-        return workbook.to_polars(_excelreader_schema())
+        return workbook.sheets[0].to_polars(_excelreader_schema())
 
 
 def read_calamine(path: Path | io.BytesIO) -> pl.DataFrame:

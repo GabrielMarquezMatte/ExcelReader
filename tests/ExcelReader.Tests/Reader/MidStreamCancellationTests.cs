@@ -19,8 +19,8 @@ namespace ExcelReader.Tests.Reader
             using CancellationTokenSource cts = new();
 
             await using MemoryStream ms = new(bytes, writable: false);
-            await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: outer);
-            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: outer);
+            await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             for (int i = 0; i < 5; i++)
             {
@@ -46,7 +46,7 @@ namespace ExcelReader.Tests.Reader
 
             await using MemoryStream ms = new(bytes, writable: false);
             await using CsvReader reader = await Excel.FromCsvAsync(ms, ct: outer);
-            await using CsvReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using CsvReader.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             for (int i = 0; i < 5; i++)
             {
@@ -70,8 +70,8 @@ namespace ExcelReader.Tests.Reader
             using MemoryStream ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["Row1"], ["Row2"], ["Row3"]])]);
             using CancellationTokenSource cts = new();
 
-            await using XlsReader reader = await Excel.FromXlsAsync(ms, ct: outer);
-            await using XlsReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsWorkbook reader = await Excel.FromXlsAsync(ms, ct: outer);
+            await using XlsWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();
@@ -87,8 +87,8 @@ namespace ExcelReader.Tests.Reader
             using CancellationTokenSource cts = new();
 
             await using MemoryStream ms = new(bytes, writable: false);
-            await using XlsbReader reader = await Excel.FromXlsbAsync(ms, ct: outer);
-            await using XlsbReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsbWorkbook reader = await Excel.FromXlsbAsync(ms, ct: outer);
+            await using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();

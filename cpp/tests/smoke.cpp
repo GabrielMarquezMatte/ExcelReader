@@ -53,7 +53,7 @@ struct xl::ExcelMapper<AliasRow>
 
 static int test_parse(xl::Workbook &workbook)
 {
-    auto table = xl::parse_sheet<Row>(workbook);
+    auto table = xl::parse_sheet<Row>(workbook.sheet(0));
     CHECK(table.has_value(), "xl::parse_sheet<Row> must succeed");
     CHECK(table->size() == 100, "RealExcel.xlsb has 100 data rows");
 
@@ -83,12 +83,9 @@ static int test_sheets(xl::Workbook &workbook)
     CHECK(names.has_value(), "sheet_names must succeed");
     CHECK(names->size() == static_cast<size_t>(*count), "sheet_names must return one name per sheet");
 
-    auto current = workbook.sheet_name();
-    CHECK(current.has_value(), "sheet_name must succeed");
-    CHECK(*current == names->front(), "the first sheet is selected before any move_to_sheet");
-
-    CHECK(workbook.move_to_sheet(0).has_value(), "move_to_sheet(0) must succeed");
-    CHECK(!workbook.move_to_sheet(*count).has_value(), "an index past the last sheet must fail");
+    auto first = workbook.sheet_name_at(0);
+    CHECK(first.has_value(), "sheet_name_at(0) must succeed");
+    CHECK(*first == names->front(), "sheet_name_at(0) must be the first of sheet_names");
 
     CHECK(workbook.is_date1904().has_value(), "is_date1904 must succeed");
     return 0;
@@ -96,7 +93,7 @@ static int test_sheets(xl::Workbook &workbook)
 
 static int test_infer_schema(const xl::Workbook &workbook)
 {
-    auto schema = workbook.infer_schema(1, 100);
+    auto schema = workbook.sheet(0).infer_schema(1, 100);
     CHECK(schema.has_value(), "infer_schema must succeed");
     CHECK(!schema->empty(), "the fixture has columns to infer");
     CHECK(schema->front().name.has_value(), "the first column must carry a header name");
@@ -107,7 +104,7 @@ static int test_infer_schema(const xl::Workbook &workbook)
 
 static int test_parse_with_alias(xl::Workbook &workbook)
 {
-    auto table = xl::parse_sheet<AliasRow>(workbook);
+    auto table = xl::parse_sheet<AliasRow>(workbook.sheet(0));
     CHECK(table.has_value(), "xl::parse_sheet<AliasRow> must succeed by resolving the second candidate name");
     CHECK(table->size() == 100, "RealExcel.xlsb has 100 data rows");
     AliasRow first = *table->begin();

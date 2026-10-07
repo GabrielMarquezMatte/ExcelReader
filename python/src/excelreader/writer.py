@@ -131,7 +131,7 @@ def write_workbook(
 ) -> None:
     """Writes `table` to `path` as a single sheet.
 
-    `table` is what `Workbook.parse_typed()` returns, so reading a sheet and writing it back out is a
+    `table` is what `Sheet.parse_typed()` returns, so reading a sheet and writing it back out is a
     round-trip through the same buffers. `types` gives each column's `ColumnType` and is required
     positionally: a `TypedTable` carries raw buffers (an `array`/`StringColumn`/NumPy array), and
     nothing about a raw buffer's element size alone distinguishes, say, I64 from TIME — both are
