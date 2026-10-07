@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import operator
 import struct
+import threading
 from array import array
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -95,6 +96,7 @@ class Workbook:
     """
 
     def __init__(self, handle: ctypes.c_void_p) -> None:
+        self._close_lock = threading.Lock()
         self._lib = _native.load_library()
         self._handle: ctypes.c_void_p | None = handle
 
@@ -131,9 +133,10 @@ class Workbook:
 
     def close(self) -> None:
         """Closes the workbook. A generator that has already started, and any record-batch reader already opened, keep working."""
-        if self._handle is None:
+        with self._close_lock:
+            handle, self._handle = self._handle, None
+        if handle is None:
             return
-        handle, self._handle = self._handle, None
         _check(self._lib.xl_close(handle))
 
     def __enter__(self) -> Self:
