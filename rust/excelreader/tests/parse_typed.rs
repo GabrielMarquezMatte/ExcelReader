@@ -1,5 +1,5 @@
-use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
-use excelreader::{Date, OpenOptions, XL_FORMAT_XLSB, XL_T_I64, XL_T_STRING};
+use excelreader::workbook::{parse_sheet, parse_sheet_parallel, ExcelMapper, Workbook};
+use excelreader::{Date, OpenOptions, XL_FORMAT_CSV, XL_FORMAT_XLSB, XL_T_DATE, XL_T_I64, XL_T_STRING};
 
 #[derive(Default, ExcelMapper)]
 struct Row {
@@ -207,4 +207,63 @@ fn abi_version_matches_the_loaded_library() {
         excelreader::XL_ABI_VERSION,
         "the linked native library speaks a different ABI revision than this crate"
     );
+}
+
+fn write_csv(tag: &str, text: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("xlpt-{tag}-{}.csv", std::process::id()));
+    std::fs::write(&path, text).expect("the csv must be writable");
+    path
+}
+
+#[test]
+fn infer_schema_parse_text_types_csv_text_fields() {
+    let path = write_csv("infer", "id,day
+1,2024-01-02
+2,2024-03-04
+");
+    let workbook = Workbook::open_with(path.to_str().unwrap(), XL_FORMAT_CSV, None).expect("open must succeed");
+    let sheet = workbook.sheet(0).expect("sheet 0");
+
+    let plain = sheet.infer_schema(1, 100).expect("infer_schema must succeed");
+    assert!(plain.iter().all(|c| c.column_type == XL_T_STRING));
+
+    let typed = sheet.infer_schema_parse_text(1, 100).expect("infer_schema_parse_text must succeed");
+    assert_eq!(typed[0].column_type, XL_T_I64);
+    assert_eq!(typed[1].column_type, XL_T_DATE);
+    drop(workbook);
+    let _ = std::fs::remove_file(path);
+}
+
+#[derive(Default, ExcelMapper)]
+struct CsvRow {
+    #[excel(name = "id")]
+    id: i64,
+    #[excel(name = "name")]
+    name: String,
+}
+
+#[test]
+fn parse_sheet_parallel_matches_the_sequential_parse() {
+    const ROWS: i64 = 200_000;
+    let mut text = String::from("id,name
+");
+    for i in 0..ROWS {
+        text.push_str(&format!("{i},name-{i}
+"));
+    }
+    let path = write_csv("parallel", &text);
+    let workbook = Workbook::open_with(path.to_str().unwrap(), XL_FORMAT_CSV, None).expect("open must succeed");
+
+    let sequential = parse_sheet::<CsvRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("sequential parse");
+    let parallel = parse_sheet_parallel::<CsvRow>(workbook.sheet(0).expect("sheet 0"), 1, 0).expect("parallel parse");
+    assert_eq!(parallel.len(), sequential.len());
+    assert_eq!(parallel.len() as i64, ROWS);
+    for index in [0, parallel.len() - 1] {
+        let (a, b) = (parallel.get(index).unwrap(), sequential.get(index).unwrap());
+        assert_eq!((a.id, a.name), (b.id, b.name));
+    }
+
+    assert!(parse_sheet_parallel::<CsvRow>(workbook.sheet(0).expect("sheet 0"), 1, -1).is_err());
+    drop(workbook);
+    let _ = std::fs::remove_file(path);
 }

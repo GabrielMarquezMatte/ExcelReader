@@ -21,6 +21,16 @@ use crate::{Error, XL_ERROR};
 ///
 /// `header_row` has the same meaning as in `parse_sheet` (0 = no header).
 pub fn parse_arrow<T: ExcelMapper>(sheet: Sheet<'_>, header_row: i32) -> Result<RecordBatch, Error> {
+    parse_arrow_parallel::<T>(sheet, header_row, 1)
+}
+
+/// [`parse_arrow`] with a degree of parallelism: `0` uses every processor, `1` is sequential, `n`
+/// up to `n` threads, negative is an error. Only CSV is split; the batch equals `parse_arrow`'s.
+pub fn parse_arrow_parallel<T: ExcelMapper>(
+    sheet: Sheet<'_>,
+    header_row: i32,
+    degree_of_parallelism: i32,
+) -> Result<RecordBatch, Error> {
     let arena = build_specs::<T>();
 
     let mut array = FFI_ArrowArray::empty();
@@ -33,7 +43,7 @@ pub fn parse_arrow<T: ExcelMapper>(sheet: Sheet<'_>, header_row: i32) -> Result<
             arena.specs.as_ptr(),
             arena.specs.len() as i32,
             header_row,
-            1,
+            degree_of_parallelism,
             &mut array as *mut FFI_ArrowArray as *mut c_void,
             &mut schema as *mut FFI_ArrowSchema as *mut c_void,
         )

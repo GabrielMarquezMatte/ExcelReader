@@ -66,6 +66,11 @@ for column in workbook.sheet(1)?.infer_schema(1, 100)? {
 }
 ```
 
+`infer_schema_parse_text(header_row, sample_size)` also types text cells (every CSV field, or
+numbers stored as text): integers, decimals, `true`/`false` and ISO dates. `parse_sheet_parallel`
+and `arrow::parse_arrow_parallel` take a `degree_of_parallelism` (`0` = every processor, `1` =
+sequential); only CSV is split, and the result equals `parse_sheet`'s.
+
 A workbook hands out sheets. A `Sheet` is the workbook and an index: it holds no native
 resource, it is `Copy`, and every read on it opens its own cursor.
 
