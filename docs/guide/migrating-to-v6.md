@@ -251,6 +251,9 @@ The wrapper follows the library: reads move from `xl::Workbook` to `xl::Sheet`.
 | `workbook.read_all_decoded()`, `workbook.infer_schema(h, n)` | the same methods on a `Sheet` |
 | `xl::parse_sheet<T>(workbook, h)`, `xl::typed_reader<T>(workbook, h, n)` | the same, taking a `Sheet` |
 | `xl::parse_arrow<T>(workbook, h)`, `xl::arrow_stream<T>(workbook, h, n)` | the same, taking a `Sheet` |
+| `rows()` then `next_row()` then `read_all_decoded()` | `auto cursor = sheet.rows(); cursor->next_row(); cursor->read_all_decoded();` |
 
-`xl::RowCursor` now owns a native cursor and is move-only. A header built for ABI 5 refuses a v6
-library with an ABI-version error at the first `Workbook::open`.
+`xl::RowCursor` now owns a native cursor and is move-only. `Sheet::read_all_decoded()` reads the whole
+sheet from its first row; to read what a cursor has left, call `RowCursor::read_all_decoded()`. Code
+built against the v5 header does not link or load against a v6 library, because the v5 exports it
+names are gone.
