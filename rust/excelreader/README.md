@@ -22,12 +22,12 @@ struct Row {
     count: u32,
 }
 
-let mut workbook = Workbook::open("book.xlsx")?;
-let table = parse_sheet::<Row>(&mut workbook, 1)?;
+let workbook = Workbook::open("book.xlsx")?;
+let table = parse_sheet::<Row>(workbook.sheet(0)?, 1)?;
 for row in table.iter() { /* ... */ }
 ```
 
-`parse_sheet` takes `&mut Workbook` because it consumes the workbook's shared row cursor.
+`parse_sheet` takes a `Sheet`, which `Workbook::sheet` hands out (see below).
 
 ### Field types
 
@@ -55,16 +55,47 @@ excelreader = { version = "2.1", features = ["chrono"] }
 ### Sheets and schema inference
 
 ```rust
-let mut workbook = Workbook::open("book.xlsx")?;
+let workbook = Workbook::open("book.xlsx")?;
 for (index, name) in workbook.sheet_names()?.iter().enumerate() {
     println!("{index}: {name}");
 }
-workbook.move_to_sheet(1)?;
 
 // Guess a schema from the header row plus a sample of the data, before committing to one.
-for column in workbook.infer_schema(1, 100)? {
+for column in workbook.sheet(1)?.infer_schema(1, 100)? {
     println!("{:?} -> type {}", column.name, column.column_type);
 }
+```
+
+A workbook hands out sheets. A `Sheet` is the workbook and an index: it holds no native
+resource, it is `Copy`, and every read on it opens its own cursor.
+
+```rust
+let workbook = Workbook::open("report.xlsx")?;
+
+for sheet in workbook.sheets()? {
+    println!("{} {:?}", sheet.name()?, sheet.visibility()?);
+}
+
+let sheet = workbook.sheet_by_name("Totals")?.expect("the workbook has a Totals sheet");
+let mut rows = sheet.rows()?;
+while let Some(row) = rows.next_row() {
+    let row = row?;
+    // ...
+}
+```
+
+`Workbook` is `Send + Sync`, so sheets can be read in parallel over one open workbook, which
+loads the shared-string table once:
+
+```rust
+let tables = std::thread::scope(|scope| {
+    let handles: Vec<_> = workbook
+        .sheets()?
+        .into_iter()
+        .map(|sheet| scope.spawn(move || sheet.read_all_blob()))
+        .collect();
+    handles.into_iter().map(|handle| handle.join().expect("no panic")).collect::<Result<Vec<_>, _>>()
+})?;
 ```
 
 `Workbook::open_with` takes an explicit format and `OpenOptions`; `Workbook::open_memory` reads from
@@ -121,8 +152,8 @@ excelreader = { version = "2.1", features = ["arrow"] }
 use excelreader::arrow::parse_arrow;
 use excelreader::workbook::Workbook;
 
-let mut workbook = Workbook::open("book.xlsx")?;
-let batch = parse_arrow::<Row>(&mut workbook, 1)?;
+let workbook = Workbook::open("book.xlsx")?;
+let batch = parse_arrow::<Row>(workbook.sheet(0)?, 1)?;
 println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
 ```
 
@@ -136,8 +167,8 @@ Batched: `parse_arrow_stream` is `parse_arrow` delivered a batch at a time, retu
 use excelreader::arrow::parse_arrow_stream;
 use excelreader::workbook::Workbook;
 
-let mut workbook = Workbook::open("book.xlsx")?;
-let mut chunks = parse_arrow_stream::<Row>(&mut workbook, 1, 10_000)?;
+let workbook = Workbook::open("book.xlsx")?;
+let mut chunks = parse_arrow_stream::<Row>(workbook.sheet(0)?, 1, 10_000)?;
 while let Some(batch) = chunks.next() {
     let Ok(batch) = batch else { break }; // ArrowChunks does not fuse, unlike TypedChunks
     println!("{} rows", batch.num_rows());
@@ -145,7 +176,7 @@ while let Some(batch) = chunks.next() {
 # Ok::<(), excelreader::Error>(())
 ```
 
-Same `batch_size`/one-chunked-read-at-a-time semantics as `typed_chunks` above. Unlike `TypedChunks`,
+Same `batch_size` semantics as `typed_chunks` below. Unlike `TypedChunks`,
 `ArrowChunks` does not fuse after an error — it follows arrow-rs's own semantics — so break on the
 first `Err` rather than continuing the loop.
 
@@ -221,14 +252,14 @@ on the drop for that.
 
 ## Reading rows one at a time
 
-`Workbook::rows` returns a cursor over the current sheet. Each row borrows a buffer the cursor
+`Sheet::rows` returns a cursor over that sheet. Each row borrows a buffer the cursor
 reuses, so iterating a sheet allocates nothing per row:
 
 ```rust
 use excelreader::workbook::Workbook;
 
-let mut workbook = Workbook::open("book.xlsx")?;
-let mut cursor = workbook.rows();
+let workbook = Workbook::open("book.xlsx")?;
+let mut cursor = workbook.sheet(0)?.rows()?;
 while let Some(row) = cursor.next_row() {
     let row = row?;
     for cell in row.iter() {
@@ -240,12 +271,12 @@ while let Some(row) = cursor.next_row() {
 ```
 
 Because each row borrows the cursor's buffer, only one row is alive at a time — the borrow checker
-enforces it. To hold every row at once, use `read_all_decoded`, which decodes the whole remaining
+enforces it. To hold every row at once, use `read_all_decoded`, which decodes the whole
 sheet in one native call and keeps it alive until dropped:
 
 ```rust
-let mut workbook = Workbook::open("book.xlsx")?;
-let rows = workbook.read_all_decoded()?;
+let workbook = Workbook::open("book.xlsx")?;
+let rows = workbook.sheet(0)?.read_all_decoded()?;
 for row in rows.iter() {
     println!("{} cells", row.len());
 }
@@ -257,14 +288,14 @@ native side and never formats a cell to text.
 
 ### Chunked reads
 
-For a sheet too large to hold in memory at once, `Workbook::typed_chunks` is `parse_sheet` delivered
+For a sheet too large to hold in memory at once, `Sheet::typed_chunks` is `parse_sheet` delivered
 a batch at a time:
 
 ```rust
 use excelreader::workbook::Workbook;
 
-let mut workbook = Workbook::open("book.xlsx")?;
-let chunks = workbook.typed_chunks::<Row>(1, 10_000)?;
+let workbook = Workbook::open("book.xlsx")?;
+let chunks = workbook.sheet(0)?.typed_chunks::<Row>(1, 10_000)?;
 for batch in chunks {
     let batch = batch?;
     for row in batch.iter() { /* ... */ }
@@ -274,16 +305,10 @@ for batch in chunks {
 
 `typed_chunks` returns `TypedChunks<'_, Row>`, an `Iterator<Item = Result<TableView<Row>, Error>>`
 that closes the native reader on drop. `batch_size` is rows per batch — `0` means one unbounded
-batch, identical to `parse_sheet`; negative is an error. A workbook serves one chunked read, of
-either kind (typed or Arrow — see [Arrow export](#arrow-export-arrow-feature) above), at a time; any
-other read on it while one is live invalidates that reader, so its next call reports a latched error
-rather than resuming from the moved cursor. `TypedChunks` itself ends after yielding an `Err`, so a
-`for` loop stops there rather than spinning on it.
-
-Both `typed_chunks` and `arrow::parse_arrow_stream` take `&mut Workbook` — the same borrow
-`parse_sheet` takes — which is why a second chunked read, or a `parse_sheet` call, while one is live
-is a compile error here rather than the runtime error the C++ and Python bindings report for the same
-mistake.
+batch, identical to `parse_sheet`; negative is an error. Chunked reads, of either kind (typed or
+Arrow — see [Arrow export](#arrow-export-arrow-feature) above), are independent: several can be live
+on one workbook, and other reads do not disturb them. `TypedChunks` ends after yielding an `Err`, so
+a `for` loop stops there rather than spinning on it.
 
 ## Bounds and panics
 
