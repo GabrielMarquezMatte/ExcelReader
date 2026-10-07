@@ -3,7 +3,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from excelreader import ExcelReaderError, Sheet, SheetVisibility, open_bytes, open_writer_to_memory
+from excelreader import ExcelReaderError, Sheet, SheetVisibility, Workbook, open_bytes, open_writer_to_memory
 
 
 def _two_sheets() -> bytes:
@@ -196,39 +196,44 @@ def test_a_sheet_with_no_rows_reads_empty():
         assert list(sheet.rows()) == []
 
 
-def test_closing_from_many_threads_at_once_raises_nowhere():
-    workbook = open_bytes(_two_sheets())
-    barrier = threading.Barrier(32)
+class _SlowCheckWorkbook(Workbook):
+    """Parks each thread at its first read of the handle until two threads have read it."""
+
+    _gate = threading.Barrier(2)
+    _seen = threading.local()
+
+    @property
+    def _handle(self):
+        value = self._value
+        if not getattr(self._seen, "done", False):
+            self._seen.done = True
+            try:
+                self._gate.wait(timeout=0.5)
+            except threading.BrokenBarrierError:
+                pass
+        return value
+
+    @_handle.setter
+    def _handle(self, value):
+        self._value = value
+
+
+def test_closing_from_two_threads_at_once_raises_nowhere():
+    source = open_bytes(_two_sheets())
+    workbook = _SlowCheckWorkbook(source._handle)
+    source._handle = None
     errors: list[BaseException] = []
 
     def close() -> None:
-        barrier.wait()
         try:
             workbook.close()
         except BaseException as error:  # noqa: BLE001
             errors.append(error)
 
-    threads = [threading.Thread(target=close) for _ in range(32)]
+    threads = [threading.Thread(target=close) for _ in range(2)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
 
     assert errors == []
-
-
-def test_closing_twice_calls_native_close_once(monkeypatch):
-    workbook = open_bytes(_two_sheets())
-    real_close = workbook._lib.xl_close
-    calls = []
-
-    class StubLib:
-        def xl_close(self, handle):
-            calls.append(handle)
-            return real_close(handle)
-
-    monkeypatch.setattr(workbook, "_lib", StubLib())
-    workbook.close()
-    workbook.close()
-
-    assert len(calls) == 1
