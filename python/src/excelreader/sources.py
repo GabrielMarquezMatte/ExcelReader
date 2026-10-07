@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import itertools
+import operator
 from typing import Protocol
 
 from excelreader import _native
@@ -38,7 +39,7 @@ def _view(address: int, length: int) -> memoryview:
 @_native.SourceReadAt
 def _read_at(key: int, offset: int, buffer: int, length: int) -> int:
     try:
-        return _live[key].read_at(offset, _view(buffer, length))
+        return operator.index(_live[key].read_at(offset, _view(buffer, length)))
     except Exception as error:  # noqa: BLE001
         return _fail(error)
 
@@ -49,12 +50,17 @@ def _read(key: int, buffer: int, length: int) -> int:
         stream = _live[key]
         readinto = getattr(stream, "readinto", None)
         if readinto is None:
-            data = stream.read(length)
+            data = bytes(stream.read(length))
+            if len(data) > length:
+                raise OSError("the stream returned more bytes than requested")
             ctypes.memmove(buffer, data, len(data))
             return len(data)
         count = readinto(_view(buffer, length))
         if count is None:
             raise OSError("the stream has no data ready; open_stream() needs a blocking stream")
+        count = operator.index(count)
+        if count > length:
+            raise OSError("the stream returned more bytes than requested")
         return count
     except Exception as error:  # noqa: BLE001
         return _fail(error)
@@ -73,14 +79,16 @@ def open_source(
     The library keeps a reference to `source` until the workbook and everything read from it are
     closed. `read_at` runs with the GIL held, so a local file is better opened with `open_workbook()`.
     """
-    size = source.size
+    size = operator.index(source.size)
+    if size < 0:
+        raise ValueError("source.size must not be negative")
     lib = _native.load_library()
     resolved = _resolve_format(format, None)
-    key = next(_keys)
-    _live[key] = source
-    raw = _native.NativeSource(ctypes.sizeof(_native.NativeSource), key, size, _read_at, _release)
     raw_options, _raw, _password_buffer = _raw_options(options, password)
+    key = next(_keys)
+    raw = _native.NativeSource(ctypes.sizeof(_native.NativeSource), key, size, _read_at, _release)
     handle = ctypes.c_void_p()
+    _live[key] = source
     _check(lib.xl_open_source(ctypes.byref(raw), resolved, raw_options, ctypes.byref(handle)))
     return Workbook(handle)
 
@@ -97,10 +105,10 @@ def open_stream(
         raise TypeError("open_stream() needs an object with readinto() or read()")
     lib = _native.load_library()
     resolved = _resolve_format(format, None)
-    key = next(_keys)
-    _live[key] = stream
-    raw = _native.NativeStream(ctypes.sizeof(_native.NativeStream), key, _read, _release)
     raw_options, _raw, _password_buffer = _raw_options(options, password)
+    key = next(_keys)
+    raw = _native.NativeStream(ctypes.sizeof(_native.NativeStream), key, _read, _release)
     handle = ctypes.c_void_p()
+    _live[key] = stream
     _check(lib.xl_open_stream(ctypes.byref(raw), resolved, raw_options, ctypes.byref(handle)))
     return Workbook(handle)
