@@ -8,7 +8,7 @@ import struct
 from array import array
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, SupportsIndex, overload
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -130,7 +130,7 @@ class Workbook:
         return flag.value != 0
 
     def close(self) -> None:
-        """Closes the workbook. Row generators and record-batch readers already opened keep working."""
+        """Closes the workbook. A generator that has already started, and any record-batch reader already opened, keep working."""
         if self._handle is None:
             return
         handle, self._handle = self._handle, None
@@ -158,7 +158,11 @@ class Sheets(Sequence["Sheet"]):
     def __len__(self) -> int:
         return self._workbook.sheet_count
 
-    def __getitem__(self, key: int | str | slice) -> Sheet | list[Sheet]:  # type: ignore[override]
+    @overload
+    def __getitem__(self, key: SupportsIndex | str) -> Sheet: ...
+    @overload
+    def __getitem__(self, key: slice) -> list[Sheet]: ...
+    def __getitem__(self, key: SupportsIndex | str | slice) -> Sheet | list[Sheet]:  # type: ignore[override]
         workbook = self._workbook
         if isinstance(key, str):
             encoded = key.encode("utf-8")
@@ -192,6 +196,14 @@ class Sheet:
 
     def __repr__(self) -> str:
         return f"Sheet(index={self._index})"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Sheet):
+            return NotImplemented
+        return self._workbook is other._workbook and self._index == other._index
+
+    def __hash__(self) -> int:
+        return hash((id(self._workbook), self._index))
 
     @property
     def index(self) -> int:
@@ -298,8 +310,8 @@ class Sheet:
         """`parse_typed()` a batch at a time, yielding one `TypedTable` per batch.
 
         `batch_size` is rows per batch; 0 means one unbounded batch, exactly what `parse_typed()`
-        does. The generator owns its position in the sheet and keeps working after the workbook is
-        closed.
+        does. A generator that has already started owns its position in the sheet and keeps working after
+        the workbook is closed.
 
         Being a generator, it opens nothing until the first iteration, so a bad `batch_size` is not
         reported until then; `to_record_batch_reader()` raises immediately instead.
@@ -404,7 +416,7 @@ class Sheet:
                 handle, self._index, specs, len(specs), header_row, batch_size, ctypes.byref(stream)
             )
         )
-        return ArrowStream(stream, self._workbook)
+        return ArrowStream(stream)
 
     def iter_pandas(
         self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000

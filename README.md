@@ -108,7 +108,7 @@ XLSX, XLSB, XLS and CSV without a .NET runtime installed.
 from excelreader import open_workbook
 
 with open_workbook("book.xlsx") as workbook:
-    for row in workbook.rows():
+    for row in workbook.sheets[0].rows():
         print([cell.value for cell in row])
 ```
 
@@ -130,9 +130,9 @@ write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
 auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
 ```
 
-Row-by-row decoded reads are available from all three bindings — Python as `Workbook.rows()`, C++
-as `xl::Workbook::rows()`, Rust as `Workbook::rows()`. Python additionally exposes
-`read_all_columnar()` over `xl_read_all_blob`, which the other two do not wrap.
+Row-by-row decoded reads are available from all three bindings — Python as `Sheet.rows()`, C++
+as `xl::Sheet::rows()`, Rust as `Sheet::rows()`. Python additionally exposes
+`read_all_columnar()` over `xl_rows_read_all_blob`, which the other two do not wrap.
 
 The Arrow export is available from Python
 (`to_arrow`/`to_record_batch`), C++ (`xl::parse_arrow<T>`, in the separate `<xl/excelreader_arrow.hpp>`

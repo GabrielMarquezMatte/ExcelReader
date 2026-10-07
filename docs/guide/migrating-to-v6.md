@@ -239,6 +239,8 @@ The package follows the library: reads move from `Workbook` to `Sheet`.
 `workbook.sheets["Name"]` finds a sheet by name and raises `KeyError` when there is none. A package
 built for ABI 5 refuses a v6 library when it loads it.
 
+Each `rows()` call starts at the sheet's first row, and `read_all()` / `read_all_columnar()` read the whole sheet; none of them continues an earlier read. A `rows()` generator that has started keeps working after `workbook.close()`, where v5 raised.
+
 ### C++
 
 The wrapper follows the library: reads move from `xl::Workbook` to `xl::Sheet`.
