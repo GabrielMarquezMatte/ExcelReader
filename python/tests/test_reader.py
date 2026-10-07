@@ -16,6 +16,7 @@ from excelreader import (
     open_bytes,
     open_workbook,
 )
+from excelreader import arrow_stream as arrow_stream_module
 from excelreader import reader as reader_module
 
 ENCRYPTED = Path(__file__).resolve().parents[2] / "tests" / "ExcelReader.Tests" / "data" / "encrypted"
@@ -329,10 +330,13 @@ def test_parse_typed_rejects_an_empty_schema(typed_csv):
 
 def test_parse_typed_reads_the_whole_sheet_regardless_of_the_row_cursor(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        next(workbook.sheets[0].rows())
+        rows = workbook.sheets[0].rows()
+        next(rows)
         table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        rest = list(rows)
 
     assert table.row_count == 2
+    assert len(rest) == 2
 
 
 def test_to_arrow_returns_a_struct_array_matching_parse_typed(typed_csv):
@@ -545,14 +549,24 @@ def test_a_whole_sheet_read_leaves_an_open_reader_alone(batched_csv):
         assert sum(batch.row_count for batch in batches) == 46
 
 
-def test_abandoning_the_generator_closes_the_reader(batched_csv):
+def _spy_on_native_close(monkeypatch, lib, name):
+    closed = []
+    real = getattr(lib, name)
+    monkeypatch.setattr(lib, name, lambda handle: closed.append(handle.value) or real(handle))
+    return closed
+
+
+def test_abandoning_the_generator_closes_the_reader(batched_csv, monkeypatch):
     with open_workbook(batched_csv) as workbook:
+        closed = _spy_on_native_close(monkeypatch, workbook._lib, "xl_typed_reader_close")
         batches = workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         next(batches)
-        batches.close()  
-        again = workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        assert next(again).row_count == 4
-        again.close()
+        assert closed == []
+
+        batches.close()
+
+        assert len(closed) == 1
+        assert closed[0]
 
 
 
@@ -596,18 +610,43 @@ def test_arrow_stream_is_single_use(batched_csv):
             stream.__arrow_c_stream__()
 
 
-def test_an_unconsumed_arrow_stream_releases_the_read(batched_csv):
-    with open_workbook(batched_csv) as workbook:
-        workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=4)
-        gc.collect()
-        assert next(workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=4)).row_count == 4
+def _spy_on_stream_release(monkeypatch):
+    released = []
+    real = arrow_stream_module._release
+
+    def spy(stream):
+        released.append(bool(stream.release))
+        real(stream)
+
+    monkeypatch.setattr(arrow_stream_module, "_release", spy)
+    return released
 
 
-def test_a_dropped_capsule_releases_the_read(batched_csv):
+def test_an_unconsumed_arrow_stream_releases_the_read(batched_csv, monkeypatch):
     with open_workbook(batched_csv) as workbook:
-        workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=4).__arrow_c_stream__()
+        released = _spy_on_stream_release(monkeypatch)
+        stream = workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=4)
+        assert released == []
+
+        del stream
         gc.collect()
-        assert next(workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=4)).row_count == 4
+
+        assert released == [True]
+
+
+def test_a_dropped_capsule_releases_the_read(batched_csv, monkeypatch):
+    with open_workbook(batched_csv) as workbook:
+        released = _spy_on_stream_release(monkeypatch)
+        stream = workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=4)
+        capsule = stream.__arrow_c_stream__()
+        del stream
+        gc.collect()
+        assert released == []
+
+        del capsule
+        gc.collect()
+
+        assert released == [True]
 
 
 def test_arrow_stream_rejects_a_negative_batch_size(batched_csv):
