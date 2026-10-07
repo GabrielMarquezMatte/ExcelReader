@@ -25,8 +25,8 @@ namespace ExcelReader.Tests.Reader
             NonSeekableStream,
         }
 
-        private const int Sheets = 6;
-        private const int Rows = 3000;
+        internal const int Sheets = 6;
+        internal const int Rows = 3000;
 
         private readonly List<string> _paths = [];
 
@@ -74,7 +74,7 @@ namespace ExcelReader.Tests.Reader
             workbook.End();
         }
 
-        private static byte[] Build(Format format)
+        internal static byte[] Build(Format format)
         {
             using MemoryStream buffer = new();
             switch (format)

@@ -1,6 +1,9 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Native;
 using ExcelReader.Native.Reading;
+using ExcelReader.Native.Typed;
+using ExcelReader.Tests.Reader;
 
 namespace ExcelReader.Tests.Native
 {
@@ -62,6 +65,96 @@ namespace ExcelReader.Tests.Native
             }));
 
             return Task.WhenAll(tasks);
+        }
+
+        private static List<string> ReadSheet(NativeHandle handle, int sheet)
+        {
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenRows(handle, sheet, out NativeRowCursor? opened));
+            using NativeRowCursor cursor = opened!;
+            List<string> lines = [];
+            while (true)
+            {
+                int status = ReadApi.NextRowView(cursor, out NativeRow row);
+                if (status == NativeStatus.Eof)
+                {
+                    return lines;
+                }
+                Assert.Equal(NativeStatus.Ok, status);
+                StringBuilder line = new();
+                int cellSize = Marshal.SizeOf<NativeRowCell>();
+                for (int i = 0; i < row.CellCount; i++)
+                {
+                    NativeRowCell cell = Marshal.PtrToStructure<NativeRowCell>(IntPtr.Add(row.Cells, i * cellSize));
+                    line.Append(Marshal.PtrToStringUTF8(cell.Value, cell.ValueLength)).Append('|');
+                }
+                lines.Add(line.ToString());
+            }
+        }
+
+        [Theory]
+        [InlineData(ConcurrentSheetTests.Format.Xlsx, NativeFormat.Xlsx)]
+        [InlineData(ConcurrentSheetTests.Format.Xlsb, NativeFormat.Xlsb)]
+        [InlineData(ConcurrentSheetTests.Format.Xls, NativeFormat.Xls)]
+        public void CursorsOverEverySheetOfOneWorkbookReadTheSameRowsInParallelAsInSequence(ConcurrentSheetTests.Format format, int nativeFormat)
+        {
+            byte[] bytes = ConcurrentSheetTests.Build(format);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(bytes, nativeFormat, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            List<string>[] sequential = new List<string>[ConcurrentSheetTests.Sheets];
+            for (int s = 0; s < sequential.Length; s++)
+            {
+                sequential[s] = ReadSheet(live, s);
+                Assert.Equal(ConcurrentSheetTests.Rows, sequential[s].Count);
+            }
+
+            List<string>[] parallel = new List<string>[ConcurrentSheetTests.Sheets * 2];
+            Parallel.For(0, parallel.Length, i => parallel[i] = ReadSheet(live, i % ConcurrentSheetTests.Sheets));
+
+            for (int i = 0; i < parallel.Length; i++)
+            {
+                Assert.Equal(sequential[i % ConcurrentSheetTests.Sheets], parallel[i]);
+            }
+        }
+
+        [Fact]
+        public void TypedParsesOfEverySheetOfOneWorkbookRunInParallel()
+        {
+            byte[] bytes = ConcurrentSheetTests.Build(ConcurrentSheetTests.Format.Xlsx);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(bytes, NativeFormat.Xlsx, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            long[] rowCounts = new long[ConcurrentSheetTests.Sheets];
+
+            Parallel.For(0, rowCounts.Length, s =>
+            {
+                NativeColumnSpec[] specs = [new() { Index = 1, Type = NativeColumnType.Int64 }];
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, s, specs, headerRow: 0, out NativeTable table));
+                rowCounts[s] = table.RowCount;
+                TypedApi.FreeTable(ref table);
+            });
+
+            Assert.All(rowCounts, count => Assert.Equal(ConcurrentSheetTests.Rows, count));
+        }
+
+        [Fact]
+        public void AClosedWorkbookIdStaysInvalidWhileItsCursorReadsToTheEnd()
+        {
+            byte[] bytes = ConcurrentSheetTests.Build(ConcurrentSheetTests.Format.Xlsb);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(bytes, NativeFormat.Xlsb, out NativeHandle? handle));
+            nint id = NativeHandleTable.Register(handle!);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenRows(Exports.Resolve(id), 3, out NativeRowCursor? opened));
+            using NativeRowCursor cursor = opened!;
+
+            Assert.True(Exports.TryFree(id, out NativeHandle? freed));
+            Assert.Equal(NativeStatus.Ok, ReadApi.Close(freed));
+
+            Assert.Null(Exports.Resolve(id));
+            Assert.Equal(NativeStatus.InvalidHandle, ReadApi.OpenRows(Exports.Resolve(id), 0, out _));
+            int rows = 0;
+            while (ReadApi.NextRowView(cursor, out _) == NativeStatus.Ok)
+            {
+                rows++;
+            }
+            Assert.Equal(ConcurrentSheetTests.Rows, rows);
         }
     }
 }
