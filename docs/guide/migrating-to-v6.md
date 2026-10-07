@@ -175,4 +175,32 @@ The contract:
 
 ## Native bindings
 
-The C ABI and the Python, Rust and C++ packages are unchanged in v6.0.
+The C ABI changes with the library: `XL_ABI_VERSION` is 6. A workbook handle no longer has a current
+sheet. Every read takes a zero-based sheet index, and rows are read through a cursor opened per
+sheet, so one handle serves several threads.
+
+| v5 | v6 |
+|---|---|
+| `xl_open_file(path, len, format, &wb)` | `xl_open_file(path, len, format, NULL, &wb)` |
+| `xl_open_file_ex`, `xl_open_memory_ex` | `xl_open_file`, `xl_open_memory` with the options pointer |
+| `xl_move_to_sheet(wb, i)` | pass `i` to the read function |
+| `xl_sheet_name(wb, ...)` | `xl_sheet_name_at(wb, i, ...)` |
+| none | `xl_sheet_visibility_at(wb, i, &v)`, `xl_sheet_index(wb, name, len, &i)` |
+| `xl_next_row(wb, ...)` | `xl_rows_open(wb, i, &rows)`, `xl_rows_next(rows, ...)`, `xl_rows_close(rows)` |
+| `xl_next_row_view(wb, &row)` | `xl_rows_next_view(rows, &row)` |
+| `xl_read_all_blob(wb, ...)`, `xl_read_all_decoded(wb, &out)` | `xl_rows_read_all_blob(rows, ...)`, `xl_rows_read_all_decoded(rows, &out)` |
+| `xl_rows` (the decoded result struct) | `xl_rows_decoded`; `xl_rows` is now the cursor handle |
+| `xl_parse_typed(wb, specs, n, header, &t)` | `xl_parse_typed(wb, i, specs, n, header, 1, &t)` |
+| `xl_parse_typed_ex(wb, specs, n, header, dop, &t)` | `xl_parse_typed(wb, i, specs, n, header, dop, &t)` |
+| `xl_parse_arrow`, `xl_parse_arrow_ex` | `xl_parse_arrow(wb, i, specs, n, header, dop, &array, &schema)` |
+| `xl_parse_arrow_stream(wb, ...)`, `xl_typed_reader_open(wb, ...)` | the same, with `i` after `wb` |
+| `xl_infer_schema(wb, header, sample, &s)` | `xl_infer_schema(wb, i, header, sample, 0, &s)` |
+| `xl_infer_schema_ex(wb, header, sample, flags, &s)` | `xl_infer_schema(wb, i, header, sample, flags, &s)` |
+
+Behavior changes:
+
+- `xl_parse_typed` and `xl_parse_arrow` used to read sequentially; pass `1` as
+  `degree_of_parallelism` to keep that. `0` uses every processor on a CSV.
+- Opening a second typed reader or Arrow stream on a workbook used to fail, and reading the workbook
+  another way used to invalidate an open one. Both now work: each read is independent.
+- A cursor, typed reader or Arrow stream keeps working after `xl_close` on its workbook.
