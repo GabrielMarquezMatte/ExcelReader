@@ -51,8 +51,8 @@ pub fn parse_arrow<T: ExcelMapper>(sheet: Sheet<'_>, header_row: i32) -> Result<
 
 /// Batched counterpart to [`parse_arrow`], one [`RecordBatch`] at a time.
 ///
-/// Wraps arrow-rs's `'static` reader only to carry the `'a` borrow, which is what proves the
-/// workbook is untouched while the stream lives. Unlike [`crate::workbook::TypedChunks`] it does
+/// Wraps arrow-rs's `'static` reader only to carry the `'a` borrow, which keeps the
+/// workbook alive for at least as long as the stream. Unlike [`crate::workbook::TypedChunks`] it does
 /// not fuse after an error, so break on the first `Err` rather than spinning on the latched one.
 pub struct ArrowChunks<'a> {
     inner: ArrowArrayStreamReader,
