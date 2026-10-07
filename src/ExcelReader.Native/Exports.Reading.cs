@@ -295,19 +295,17 @@ namespace ExcelReader.Native
 
         private static bool TryReadOpenOptions(NativeOpenOptionsRaw* options, out NativeOpenOptionsRaw? rawOptions)
         {
+            rawOptions = null;
             if (options is null)
             {
-                rawOptions = null;
                 return true;
             }
-            int expectedSize = sizeof(NativeOpenOptionsRaw);
-            if (options->StructSize != expectedSize)
+            if (!NativeOpenOptionsRaw.TryRead(options, out NativeOpenOptionsRaw raw, out string? error))
             {
-                NativeApi.SetLastError($"xl_open_options.struct_size is {options->StructSize}, but this library expects {expectedSize}.");
-                rawOptions = null;
+                NativeApi.SetLastError(error);
                 return false;
             }
-            rawOptions = *options;
+            rawOptions = raw;
             return true;
         }
 
