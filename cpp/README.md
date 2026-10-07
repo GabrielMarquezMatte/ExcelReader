@@ -124,8 +124,8 @@ for (xl::Sheet sheet : sheets)
 
 if (auto totals = workbook->sheet_by_name("Totals").value())
 {
-    auto cursor = totals->rows();
-    while (auto row = cursor->next_row())
+    auto cursor = totals->rows().value();
+    while (auto row = cursor.next_row())
     {
         // ...
     }
