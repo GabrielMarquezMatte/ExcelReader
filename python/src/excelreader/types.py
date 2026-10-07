@@ -17,6 +17,18 @@ class CellType(IntEnum):
     ERROR = 6
 
 
+class SheetVisibility(IntEnum):
+    """How a sheet is shown in the application's tab bar.
+
+    Mirrors XL_SHEET_* in src/ExcelReader.Native/include/excelreader.h — the values are ABI, do not
+    renumber them.
+    """
+
+    VISIBLE = 0
+    HIDDEN = 1
+    VERY_HIDDEN = 2
+
+
 class Cell(NamedTuple):
     """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers."""
 

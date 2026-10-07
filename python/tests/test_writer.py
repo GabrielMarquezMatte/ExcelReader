@@ -36,13 +36,13 @@ def source_csv(tmp_path):
 @pytest.mark.parametrize("extension", ["xlsx", "xlsb", "xls", "csv"])
 def test_write_workbook_round_trips_every_format(source_csv, tmp_path, extension):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     out = tmp_path / f"out.{extension}"
     write_workbook(out, table, _TYPES)
 
     with open_workbook(out) as workbook:
-        result = workbook.parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse_typed(_SCHEMA)
 
     assert result.row_count == 2
     assert list(result.columns[0]) == ["widget", "gadget"]
@@ -55,13 +55,13 @@ def test_write_workbook_round_trips_a_nullable_column(tmp_path):
     schema = [ColumnSpec(ColumnType.I64, name="qty", nullable=True)]
 
     with open_workbook(source) as workbook:
-        table = workbook.parse_typed(schema)
+        table = workbook.sheets[0].parse_typed(schema)
 
     out = tmp_path / "out.xlsx"
     write_workbook(out, table, [spec.type for spec in schema])
 
     with open_workbook(out) as workbook:
-        result = workbook.parse_typed(schema)
+        result = workbook.sheets[0].parse_typed(schema)
 
     assert result.row_count == 3
     assert result.validity[0][0] & 0b111 == 0b101
@@ -69,7 +69,7 @@ def test_write_workbook_round_trips_a_nullable_column(tmp_path):
 
 def test_write_workbook_applies_the_sheet_name(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     out = tmp_path / "named.xlsx"
     write_workbook(out, table, _TYPES, options=WriteOptions(sheet_name="Vendas"))
@@ -80,7 +80,7 @@ def test_write_workbook_applies_the_sheet_name(source_csv, tmp_path):
 
 def test_write_workbook_rejects_an_unknown_extension(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     with pytest.raises(ValueError, match="format"):
         write_workbook(tmp_path / "out.parquet", table, _TYPES)
@@ -88,7 +88,7 @@ def test_write_workbook_rejects_an_unknown_extension(source_csv, tmp_path):
 
 def test_write_workbook_reports_a_native_rejection(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     with pytest.raises(ExcelReaderError):
         write_workbook(tmp_path / "out.xlsx", table, _TYPES, options=WriteOptions(sheet_name="has/slash"))
@@ -102,7 +102,7 @@ def test_write_arrow_round_trips(tmp_path):
     write_arrow(out, batch)
 
     with open_workbook(out) as workbook:
-        result = workbook.parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse_typed(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -116,7 +116,7 @@ def test_write_pandas_round_trips(tmp_path):
     write_pandas(out, pd.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
 
     with open_workbook(out) as workbook:
-        result = workbook.parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse_typed(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -139,7 +139,7 @@ def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
     write_pandas(out, frame)
 
     with open_workbook(out) as workbook:
-        result = workbook.parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse_typed(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -156,7 +156,7 @@ def test_write_pandas_writes_a_header_only_sheet_for_an_empty_frame(tmp_path):
     )
 
     with open_workbook(out) as workbook:
-        rows = workbook.read_all()
+        rows = workbook.sheets[0].read_all()
 
     assert [cell.value for cell in rows[0]] == ["name", "qty"]
     assert len(rows) == 1
@@ -170,7 +170,7 @@ def test_write_polars_round_trips(tmp_path):
     write_polars(out, pl.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
 
     with open_workbook(out) as workbook:
-        result = workbook.parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse_typed(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -187,7 +187,7 @@ def test_write_arrow_rejects_an_unsupported_arrow_type(tmp_path):
 
 def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     plain = tmp_path / "plain.xlsx"
     write_workbook(plain, table, _TYPES)
@@ -196,7 +196,7 @@ def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path)
     encrypt_package(plain, encrypted, "hunter2")
 
     with open_workbook(encrypted, password="hunter2") as workbook:
-        result = workbook.parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse_typed(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -204,7 +204,7 @@ def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path)
 
 def test_encrypt_package_rejects_the_wrong_password_on_open(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     plain = tmp_path / "plain.xlsx"
     write_workbook(plain, table, _TYPES)
@@ -218,7 +218,7 @@ def test_encrypt_package_rejects_the_wrong_password_on_open(source_csv, tmp_path
 
 def test_encrypt_package_rejects_an_empty_password(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     plain = tmp_path / "plain.xlsx"
     write_workbook(plain, table, _TYPES)
@@ -229,7 +229,7 @@ def test_encrypt_package_rejects_an_empty_password(source_csv, tmp_path):
 
 def _parse_bytes(payload, format, password=None):
     with open_bytes(payload, format=format, password=password) as workbook:
-        return workbook.parse_typed(_SCHEMA)
+        return workbook.sheets[0].parse_typed(_SCHEMA)
 
 
 @pytest.mark.parametrize(
@@ -252,7 +252,7 @@ def test_frame_writers_to_bytes_round_trip(writer, frame_module):
 
 def test_encrypt_package_bytes_round_trips_without_touching_disk(source_csv):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     encrypted = encrypt_package_bytes(write_workbook_to_bytes(table, _TYPES, format="xlsx"), "hunter2")
     result = _parse_bytes(encrypted, "xlsx", password="hunter2")
@@ -270,7 +270,7 @@ def test_encrypt_package_bytes_rejects_bytes_that_are_not_a_package():
 
 def test_encrypt_package_bytes_rejects_an_empty_password(source_csv):
     with open_workbook(source_csv) as workbook:
-        table = workbook.parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     with pytest.raises(ExcelReaderError):
         encrypt_package_bytes(write_workbook_to_bytes(table, _TYPES, format="xlsx"), "")

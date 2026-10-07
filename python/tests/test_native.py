@@ -21,20 +21,21 @@ def test_exported_functions_are_present():
     lib = _native.load_library()
     for name in (
         "xl_open_file",
-        "xl_open_file_ex",
         "xl_open_memory",
-        "xl_open_memory_ex",
         "xl_close",
         "xl_sheet_count",
-        "xl_sheet_name",
         "xl_sheet_name_at",
-        "xl_move_to_sheet",
+        "xl_sheet_visibility_at",
+        "xl_sheet_index",
         "xl_is_date1904",
-        "xl_next_row",
-        "xl_read_all_blob",
-        "xl_read_all_decoded",
+        "xl_rows_open",
+        "xl_rows_close",
+        "xl_rows_next",
+        "xl_rows_read_all_blob",
+        "xl_rows_read_all_decoded",
         "xl_free_rows",
         "xl_parse_typed",
+        "xl_infer_schema",
         "xl_free_table",
         "xl_parse_arrow",
         "xl_typed_reader_open",
@@ -58,7 +59,7 @@ def test_last_error_two_call_form_still_works():
     lib = _native.load_library()
     path = str(REPO_ROOT / "nonexistent-workbook-for-error-test.xlsx").encode("utf-8")
     handle = ctypes.c_void_p()
-    status = lib.xl_open_file(path, len(path), _native.XL_FORMAT_XLSX, ctypes.byref(handle))
+    status = lib.xl_open_file(path, len(path), _native.XL_FORMAT_XLSX, None, ctypes.byref(handle))
     assert status == _native.XL_ERROR
 
     length = ctypes.c_int32()
@@ -71,31 +72,31 @@ def test_last_error_two_call_form_still_works():
     assert buffer.raw[: length.value]
 
 
-def test_open_file_ex_with_default_options_opens_like_open_file(xlsx_path):
+def test_open_file_with_default_options_opens(xlsx_path):
     lib = _native.load_library()
     path = str(xlsx_path).encode("utf-8")
     options = _native.default_open_options()
     handle = ctypes.c_void_p()
 
-    status = lib.xl_open_file_ex(path, len(path), _native.XL_FORMAT_XLSX, ctypes.byref(options), ctypes.byref(handle))
+    status = lib.xl_open_file(path, len(path), _native.XL_FORMAT_XLSX, ctypes.byref(options), ctypes.byref(handle))
 
     assert status == _native.XL_OK
     assert handle.value
     assert lib.xl_close(handle) == _native.XL_OK
 
 
-def test_open_file_ex_with_null_options_pointer_behaves_like_open_file(xlsx_path):
+def test_open_file_with_a_null_options_pointer_opens(xlsx_path):
     lib = _native.load_library()
     path = str(xlsx_path).encode("utf-8")
     handle = ctypes.c_void_p()
 
-    status = lib.xl_open_file_ex(path, len(path), _native.XL_FORMAT_XLSX, None, ctypes.byref(handle))
+    status = lib.xl_open_file(path, len(path), _native.XL_FORMAT_XLSX, None, ctypes.byref(handle))
 
     assert status == _native.XL_OK
     assert lib.xl_close(handle) == _native.XL_OK
 
 
-def test_open_file_ex_applies_a_csv_delimiter_override(tmp_path):
+def test_open_file_applies_a_csv_delimiter_override(tmp_path):
     lib = _native.load_library()
     csv_file = tmp_path / "semicolons.csv"
     csv_file.write_text("name;qty\nwidget;7\n", encoding="utf-8")
@@ -104,24 +105,27 @@ def test_open_file_ex_applies_a_csv_delimiter_override(tmp_path):
     options = _native.default_open_options()
     options.csv_delimiter = ord(";")
     handle = ctypes.c_void_p()
-    assert lib.xl_open_file_ex(path, len(path), _native.XL_FORMAT_CSV, ctypes.byref(options), ctypes.byref(handle)) == _native.XL_OK
+    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, ctypes.byref(options), ctypes.byref(handle)) == _native.XL_OK
 
+    cursor = ctypes.c_void_p()
+    assert lib.xl_rows_open(handle, 0, ctypes.byref(cursor)) == _native.XL_OK
     buffer = ctypes.create_string_buffer(4096)
     written = ctypes.c_int32()
-    assert lib.xl_next_row(handle, buffer, len(buffer), ctypes.byref(written)) == _native.XL_OK
+    assert lib.xl_rows_next(cursor, buffer, len(buffer), ctypes.byref(written)) == _native.XL_OK
     assert b"name" in buffer.raw[: written.value]
     assert b"qty" in buffer.raw[: written.value]
+    lib.xl_rows_close(cursor)
     lib.xl_close(handle)
 
 
-def test_open_file_ex_rejects_an_unrecognized_struct_size(xlsx_path):
+def test_open_file_rejects_an_unrecognized_struct_size(xlsx_path):
     lib = _native.load_library()
     path = str(xlsx_path).encode("utf-8")
     options = _native.default_open_options()
     options.struct_size = 1
     handle = ctypes.c_void_p()
 
-    status = lib.xl_open_file_ex(path, len(path), _native.XL_FORMAT_XLSX, ctypes.byref(options), ctypes.byref(handle))
+    status = lib.xl_open_file(path, len(path), _native.XL_FORMAT_XLSX, ctypes.byref(options), ctypes.byref(handle))
 
     assert status == _native.XL_INVALID_ARGUMENT
 
@@ -132,14 +136,14 @@ def test_parse_typed_returns_typed_columns_by_name(tmp_path):
     csv_file.write_text("name,qty\nwidget,3\ngadget,7\n", encoding="utf-8")
     path = str(csv_file).encode("utf-8")
     handle = ctypes.c_void_p()
-    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, ctypes.byref(handle)) == _native.XL_OK
+    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, None, ctypes.byref(handle)) == _native.XL_OK
 
     specs = (_native.NativeColumnSpec * 2)(
         _native.column_spec_by_name("name", _native.XL_T_STRING),
         _native.column_spec_by_name("qty", _native.XL_T_I64),
     )
     table = _native.NativeTable()
-    status = lib.xl_parse_typed(handle, specs, len(specs), 1, ctypes.byref(table))
+    status = lib.xl_parse_typed(handle, 0, specs, len(specs), 1, 1, ctypes.byref(table))
     assert status == _native.XL_OK
     assert table.row_count == 2
     assert table.column_count == 2
@@ -163,14 +167,14 @@ def test_parse_typed_resolves_the_first_alias_present_in_the_header_row(tmp_path
     csv_file.write_text("name,qty\nwidget,3\ngadget,7\n", encoding="utf-8")
     path = str(csv_file).encode("utf-8")
     handle = ctypes.c_void_p()
-    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, ctypes.byref(handle)) == _native.XL_OK
+    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, None, ctypes.byref(handle)) == _native.XL_OK
 
     specs = (_native.NativeColumnSpec * 2)(
         _native.column_spec_by_names(["does-not-exist", "name"], _native.XL_T_STRING),
         _native.column_spec_by_name("qty", _native.XL_T_I64),
     )
     table = _native.NativeTable()
-    status = lib.xl_parse_typed(handle, specs, len(specs), 1, ctypes.byref(table))
+    status = lib.xl_parse_typed(handle, 0, specs, len(specs), 1, 1, ctypes.byref(table))
     assert status == _native.XL_OK
     assert table.row_count == 2
 
@@ -184,7 +188,7 @@ def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
     csv_file.write_text("name,qty\nwidget,3\ngadget,7\n", encoding="utf-8")
     path = str(csv_file).encode("utf-8")
     handle = ctypes.c_void_p()
-    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, ctypes.byref(handle)) == _native.XL_OK
+    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, None, ctypes.byref(handle)) == _native.XL_OK
 
     specs = (_native.NativeColumnSpec * 2)(
         _native.column_spec_by_name("name", _native.XL_T_STRING),
@@ -192,7 +196,7 @@ def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
     )
     array = _native.ArrowArray()
     schema = _native.ArrowSchema()
-    status = lib.xl_parse_arrow(handle, specs, len(specs), 1, ctypes.byref(array), ctypes.byref(schema))
+    status = lib.xl_parse_arrow(handle, 0, specs, len(specs), 1, 1, ctypes.byref(array), ctypes.byref(schema))
     assert status == _native.XL_OK
 
     assert schema.format == b"+s"

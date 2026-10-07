@@ -22,7 +22,7 @@ def test_round_trips_typed_cells(tmp_path):
         writer.end_sheet()
 
     with open_workbook(path) as workbook:
-        rows = [[cell.value for cell in row] for row in workbook.rows()]
+        rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert rows[0] == ["name", "qty"]
     assert rows[1][0] == "widget"
@@ -55,7 +55,7 @@ def test_writes_every_scalar_type(tmp_path):
         writer.end_sheet()
 
     with open_workbook(path) as workbook:
-        rows = [[cell.value for cell in row] for row in workbook.rows()]
+        rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert rows[0][0] == "s"
     assert rows[0][1] == "1"
@@ -73,7 +73,7 @@ def test_write_str_none_is_a_blank_cell(tmp_path):
         writer.end_sheet()
 
     with open_workbook(path) as workbook:
-        rows = [[cell.value for cell in row] for row in workbook.rows()]
+        rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert rows[0][-1] == "after"
 
@@ -122,7 +122,7 @@ def test_write_row_infers_every_supported_type(tmp_path):
         writer.end_sheet()
 
     with open_workbook(path) as workbook:
-        rows = [[(cell.type, cell.value) for cell in row] for row in workbook.rows()]
+        rows = [[(cell.type, cell.value) for cell in row] for row in workbook.sheets[0].rows()]
 
     types = [cell_type for cell_type, _ in rows[0]]
     values = [value for _, value in rows[0]]
@@ -163,7 +163,7 @@ def test_write_row_matches_explicit_calls(tmp_path):
 
     def read(path):
         with open_workbook(path) as workbook:
-            return [[(cell.type, cell.value) for cell in row] for row in workbook.rows()]
+            return [[(cell.type, cell.value) for cell in row] for row in workbook.sheets[0].rows()]
 
     assert read(sugar) == read(explicit)
 
@@ -182,7 +182,7 @@ def test_in_memory_writer_round_trips():
     assert len(payload) > 0
 
     with open_bytes(payload, format="xlsx") as workbook:
-        rows = [[cell.value for cell in row] for row in workbook.rows()]
+        rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert rows[0] == ["name", "qty"]
     assert rows[1][0] == "widget"
@@ -204,8 +204,8 @@ def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
     from excelreader import open_bytes, write_workbook, write_workbook_to_bytes
 
     with open_workbook(xlsx_path) as workbook:
-        schema = workbook.infer_schema()
-        table = workbook.parse_typed(schema)
+        schema = workbook.sheets[0].infer_schema()
+        table = workbook.sheets[0].parse_typed(schema)
 
     types = [spec.type for spec in schema]
 
@@ -214,8 +214,8 @@ def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
     payload = write_workbook_to_bytes(table, types, format="xlsx")
 
     with open_workbook(path) as workbook:
-        from_file = [[cell.value for cell in row] for row in workbook.rows()]
+        from_file = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
     with open_bytes(payload, format="xlsx") as workbook:
-        from_memory = [[cell.value for cell in row] for row in workbook.rows()]
+        from_memory = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert from_file == from_memory
