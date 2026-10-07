@@ -2,8 +2,9 @@
 
 use arrow::array::{Array, Int64Array, StringArray};
 use arrow::record_batch::RecordBatchReader;
-use excelreader::arrow::{parse_arrow, parse_arrow_stream};
+use excelreader::arrow::{parse_arrow, parse_arrow_parallel, parse_arrow_stream};
 use excelreader::workbook::{ExcelMapper, Workbook};
+use excelreader::XL_FORMAT_CSV;
 
 #[derive(Default, ExcelMapper)]
 struct Record {
@@ -89,4 +90,32 @@ fn two_arrow_streams_on_one_workbook_each_yield_every_row() {
     };
     assert_eq!(total(one), 100);
     assert_eq!(total(two), 100);
+}
+
+#[derive(Default, ExcelMapper)]
+struct CsvRecord {
+    #[excel(name = "id")]
+    id: i64,
+    #[excel(name = "name")]
+    name: String,
+}
+
+#[test]
+fn parse_arrow_parallel_matches_the_sequential_row_count() {
+    let mut text = String::from("id,name
+");
+    for i in 0..200_000 {
+        text.push_str(&format!("{i},name-{i}
+"));
+    }
+    let path = std::env::temp_dir().join(format!("xlpa-parallel-{}.csv", std::process::id()));
+    std::fs::write(&path, text).expect("the csv must be writable");
+    let workbook = Workbook::open_with(path.to_str().unwrap(), XL_FORMAT_CSV, None).expect("open must succeed");
+
+    let sequential = parse_arrow::<CsvRecord>(workbook.sheet(0).expect("sheet 0"), 1).expect("sequential parse");
+    let parallel = parse_arrow_parallel::<CsvRecord>(workbook.sheet(0).expect("sheet 0"), 1, 0).expect("parallel parse");
+    assert_eq!(parallel.num_rows(), sequential.num_rows());
+    assert_eq!(parallel.num_rows(), 200_000);
+    drop(workbook);
+    let _ = std::fs::remove_file(path);
 }

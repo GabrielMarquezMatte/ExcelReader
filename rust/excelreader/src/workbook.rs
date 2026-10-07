@@ -400,6 +400,26 @@ impl<'w> Sheet<'w> {
         header_row: i32,
         sample_size: i32,
     ) -> Result<Vec<InferredColumn>, Error> {
+        self.infer_schema_flags(header_row, sample_size, 0)
+    }
+
+    /// [`infer_schema`](Self::infer_schema), also typing cells that hold text — every CSV field,
+    /// or numbers stored as text: integers, decimals, `true`/`false` and ISO dates or date-times,
+    /// when the text has exactly that shape. Leading-zero codes such as `00123` stay text.
+    pub fn infer_schema_parse_text(
+        &self,
+        header_row: i32,
+        sample_size: i32,
+    ) -> Result<Vec<InferredColumn>, Error> {
+        self.infer_schema_flags(header_row, sample_size, crate::XL_INFER_PARSE_TEXT)
+    }
+
+    fn infer_schema_flags(
+        &self,
+        header_row: i32,
+        sample_size: i32,
+        flags: i32,
+    ) -> Result<Vec<InferredColumn>, Error> {
         let mut schema = XlInferredSchema {
             columns: std::ptr::null_mut(),
             column_count: 0,
@@ -410,7 +430,7 @@ impl<'w> Sheet<'w> {
                 self.index,
                 header_row,
                 sample_size,
-                0,
+                flags,
                 &mut schema,
             )
         })?;
@@ -836,6 +856,17 @@ pub fn parse_sheet<T: ExcelMapper>(
     sheet: Sheet<'_>,
     header_row: i32,
 ) -> Result<TableView<T>, Error> {
+    parse_sheet_parallel(sheet, header_row, 1)
+}
+
+/// [`parse_sheet`] with a degree of parallelism: `0` uses every processor, `1` is sequential, `n`
+/// up to `n` threads, negative is an error. Only CSV is split; other formats read sequentially.
+/// The table equals `parse_sheet`'s.
+pub fn parse_sheet_parallel<T: ExcelMapper>(
+    sheet: Sheet<'_>,
+    header_row: i32,
+    degree_of_parallelism: i32,
+) -> Result<TableView<T>, Error> {
     let arena = build_specs::<T>();
     let bindings = arena.bindings;
     let mut table = XlTable {
@@ -850,7 +881,7 @@ pub fn parse_sheet<T: ExcelMapper>(
             arena.specs.as_ptr(),
             arena.specs.len() as i32,
             header_row,
-            1,
+            degree_of_parallelism,
             &mut table,
         );
         if status != XL_OK {
