@@ -43,6 +43,7 @@ excelreader_copy_native_library(excelreader_cpp_write_benchmarks)
 # heavier FetchContent builds (their own zip/xml stacks) than the suite above.
 option(EXCELREADER_BUILD_BENCHMARKS_COMPARE "Build the excelreader-vs-xlnt-vs-xlsxio-vs-libxlsxwriter-vs-duckdb comparison benchmark" OFF)
 if(EXCELREADER_BUILD_BENCHMARKS_COMPARE)
+    enable_language(C)
     set(STATIC ON CACHE BOOL "" FORCE)
     set(STATIC_CRT OFF CACHE BOOL "" FORCE)
     set(TESTS OFF CACHE BOOL "" FORCE)
