@@ -8,6 +8,7 @@ from __future__ import annotations
 import ctypes
 import os
 import platform
+import threading
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
@@ -376,24 +377,57 @@ def _candidate_paths() -> list[Path]:
     return [Path(__file__).resolve().parent / "_lib" / library_filename()]
 
 
+_load_lock = threading.Lock()
+
+
 @lru_cache(maxsize=1)
 def load_library() -> ctypes.CDLL:
-    for path in _candidate_paths():
-        if not path.exists():
-            continue
-        lib = _bind(ctypes.CDLL(str(path)))
-        version = lib.xl_abi_version()
-        if version != XL_ABI_VERSION:
-            raise RuntimeError(
-                f"{path} is ABI version {version}, but this package expects {XL_ABI_VERSION}. "
-                f"Rebuild the native library with python python/scripts/build_native.py."
-            )
-        return lib
-    raise RuntimeError(
-        f"{library_filename()} not found. Build it with:\n"
-        f"    python python/scripts/build_native.py\n"
-        f"or point EXCELREADER_NATIVE_LIB at an existing binary."
-    )
+    with _load_lock:
+        for path in _candidate_paths():
+            if not path.exists():
+                continue
+            lib = _bind(ctypes.CDLL(str(path)))
+            version = lib.xl_abi_version()
+            if version != XL_ABI_VERSION:
+                raise RuntimeError(
+                    f"{path} is ABI version {version}, but this package expects {XL_ABI_VERSION}. "
+                    f"Rebuild the native library with python python/scripts/build_native.py."
+                )
+            _warm_up(lib)
+            return lib
+        raise RuntimeError(
+            f"{library_filename()} not found. Build it with:\n"
+            f"    python python/scripts/build_native.py\n"
+            f"or point EXCELREADER_NATIVE_LIB at an existing binary."
+        )
+
+
+def _warm_up(lib: ctypes.CDLL) -> None:
+    # Threads whose first native call lands together can crash the NativeAOT runtime's start-up
+    # (see commit b5f8c5f); one small read here finishes it on a single thread. Failures are ignored.
+    data = b"a,b\n1,2\n3,4\n"
+    workbook = ctypes.c_void_p()
+    if lib.xl_open_memory(data, len(data), XL_FORMAT_CSV, None, ctypes.byref(workbook)) != XL_OK:
+        return
+    try:
+        cursor = ctypes.c_void_p()
+        if lib.xl_rows_open(workbook, 0, ctypes.byref(cursor)) != XL_OK:
+            return
+        try:
+            written = ctypes.c_int32()
+            capacity = 16
+            buffer = ctypes.create_string_buffer(capacity)
+            while True:
+                status = lib.xl_rows_next(cursor, buffer, capacity, ctypes.byref(written))
+                if status == XL_BUFFER_TOO_SMALL:
+                    capacity = written.value
+                    buffer = ctypes.create_string_buffer(capacity)
+                elif status != XL_OK:
+                    return
+        finally:
+            lib.xl_rows_close(cursor)
+    finally:
+        lib.xl_close(workbook)
 
 
 def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:

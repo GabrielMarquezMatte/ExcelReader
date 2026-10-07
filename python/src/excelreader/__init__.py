@@ -1,7 +1,7 @@
 """Python bindings for ExcelReader."""
 
 from excelreader.arrow_stream import ArrowStream
-from excelreader.reader import Sheet, Workbook, decode_cell, open_bytes, open_workbook
+from excelreader.reader import Sheet, Sheets, Workbook, decode_cell, open_bytes, open_workbook
 from excelreader.types import (
     Cell,
     CellType,
@@ -45,6 +45,7 @@ __all__ = [
     "Sheet",
     "SheetVisibility",
     "SheetWriter",
+    "Sheets",
     "StringColumn",
     "TypedTable",
     "Workbook",

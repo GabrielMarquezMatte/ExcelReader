@@ -6,6 +6,8 @@ import datetime
 from enum import IntEnum
 from typing import Any, NamedTuple
 
+from excelreader import _native
+
 
 class CellType(IntEnum):
     EMPTY = 0
@@ -24,9 +26,9 @@ class SheetVisibility(IntEnum):
     renumber them.
     """
 
-    VISIBLE = 0
-    HIDDEN = 1
-    VERY_HIDDEN = 2
+    VISIBLE = _native.XL_SHEET_VISIBLE
+    HIDDEN = _native.XL_SHEET_HIDDEN
+    VERY_HIDDEN = _native.XL_SHEET_VERY_HIDDEN
 
 
 class Cell(NamedTuple):
@@ -48,9 +50,9 @@ class Cell(NamedTuple):
 
 
 class ColumnarSheet(NamedTuple):
-    """Every cell of a sheet as parallel flat arrays, produced by `Workbook.read_all_columnar()`.
+    """Every cell of a sheet as parallel flat arrays, produced by `Sheet.read_all_columnar()`.
 
-    The fast path for large sheets: unlike `Workbook.read_all()`, decoding never constructs one
+    The fast path for large sheets: unlike `Sheet.read_all()`, decoding never constructs one
     `Cell`/`str` object per cell — only `int` values fill the index arrays below, and `values` holds
     every cell's raw UTF-8 bytes concatenated. Use `decode_cell()` to materialize a single `Cell` on
     demand, or slice `values` directly for bulk work.
@@ -73,7 +75,7 @@ class ColumnarSheet(NamedTuple):
 
 
 class ColumnType(IntEnum):
-    """A column's requested type in a `Workbook.parse_typed()`/`to_arrow()` schema.
+    """A column's requested type in a `Sheet.parse_typed()`/`to_arrow()` schema.
 
     Mirrors XL_T_* in src/ExcelReader.Native/include/excelreader.h — the values are ABI, do not
     renumber them. The buffer layout each one produces is documented on `TypedTable.columns`.
@@ -197,7 +199,7 @@ class StringColumn:
 
 
 class TypedTable(NamedTuple):
-    """The result of `Workbook.parse_typed()`: one flat buffer per column, already type-converted.
+    """The result of `Sheet.parse_typed()`: one flat buffer per column, already type-converted.
 
     - `names[i]` is column `i`'s name as requested, or its index as a string when the spec resolved
       by index.

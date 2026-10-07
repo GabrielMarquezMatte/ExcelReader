@@ -52,12 +52,13 @@ The native calls release the GIL:
 from concurrent.futures import ThreadPoolExecutor
 
 with excelreader.open_workbook("report.xlsx") as workbook, ThreadPoolExecutor() as pool:
-    tables = list(pool.map(lambda sheet: sheet.to_arrow(schema), workbook.sheets))
+    tables = list(pool.map(lambda sheet: sheet.to_arrow(sheet.infer_schema()), workbook.sheets))
 ```
 
 `rows()` and `iter_parse_typed()` are generators: the native cursor opens at the first `next()`. A
-generator or a `RecordBatchReader` that has already started keeps working after `workbook.close()`;
-a generator that has not started raises at its first `next()`.
+generator that has already started keeps working after `workbook.close()`; one that has not started
+raises at its first `next()`. A `RecordBatchReader` opens its stream at the call, so it works after
+`close()` even if never started.
 
 ### Formats
 

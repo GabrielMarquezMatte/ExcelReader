@@ -166,3 +166,30 @@ def test_a_record_batch_reader_outlives_its_workbook():
     assert isinstance(table, pyarrow.Table)
     assert table.num_rows == _PARALLEL_ROWS
     assert table.column(0)[0].as_py() == 2_000_000
+
+
+def test_sheets_compare_by_workbook_and_index():
+    data = _two_sheets()
+    with open_bytes(data) as workbook, open_bytes(data) as other:
+        sheets = workbook.sheets
+        assert sheets.index(sheets[1]) == 1
+        assert sheets[0] in sheets
+        assert sheets[0] == sheets[0]
+        assert sheets[0] != sheets[1]
+        assert sheets[0] != other.sheets[0]
+        assert len({sheets[0], sheets[0], sheets[1]}) == 2
+
+
+def test_a_sheet_with_no_rows_reads_empty():
+    with open_writer_to_memory("xlsx") as writer:
+        writer.start_sheet("Empty")
+        writer.end_sheet()
+        data = writer.bytes()
+
+    with open_bytes(data) as workbook:
+        sheet = workbook.sheets[0]
+        assert sheet.read_all() == []
+        columnar = sheet.read_all_columnar()
+        assert list(columnar.row_offsets) == [0]
+        assert columnar.values == b""
+        assert list(sheet.rows()) == []
