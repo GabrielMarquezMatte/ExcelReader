@@ -8,6 +8,7 @@
 #include <concepts>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <expected>
 #include <iterator>
 #include <limits>
@@ -946,9 +947,14 @@ namespace xl
             {
                 return std::unexpected(Error{XL_INVALID_ARGUMENT, "source is null"});
             }
+            const std::uint64_t size = source->size();
+            if (size > static_cast<std::uint64_t>(std::numeric_limits<int64_t>::max()))
+            {
+                return std::unexpected(Error{XL_INVALID_ARGUMENT, "source size exceeds INT64_MAX"});
+            }
             xl_source raw{};
             raw.struct_size = sizeof(xl_source);
-            raw.length = static_cast<int64_t>(source->size());
+            raw.length = static_cast<int64_t>(size);
             raw.read_at = &detail::source_read_at;
             raw.release = &detail::source_release;
             raw.user_data = source.release();

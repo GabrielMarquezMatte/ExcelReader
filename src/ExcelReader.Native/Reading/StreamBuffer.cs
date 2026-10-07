@@ -7,6 +7,7 @@ namespace ExcelReader.Native.Reading
     {
         internal static ReadOnlyMemory<byte> ReadAll(Stream stream, long limit)
         {
+            limit = Math.Min(limit, Array.MaxLength);
             MemoryStream buffer = new();
             byte[] chunk = ArrayPool<byte>.Shared.Rent(81_920);
             try

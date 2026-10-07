@@ -176,6 +176,17 @@ def test_open_stream_fails_when_read_returns_more_than_asked():
     assert set(sources_module._live) == before
 
 
+def test_open_stream_fails_when_read_raises_keyboard_interrupt_and_releases_it():
+    class Interrupted:
+        def read(self, size: int) -> bytes:
+            raise KeyboardInterrupt
+
+    before = set(sources_module._live)
+    with pytest.raises(ExcelReaderError), open_stream(Interrupted(), "csv") as workbook:
+        _first_column(workbook.sheets[0])
+    assert set(sources_module._live) == before
+
+
 def test_a_read_at_that_returns_none_reaches_the_caller_as_an_error():
     class Bad:
         size = 1024

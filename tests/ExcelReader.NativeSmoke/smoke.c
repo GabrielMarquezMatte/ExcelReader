@@ -522,6 +522,14 @@ static int test_open_file_options(const api_t* api, const char* fixture)
     int32_t status = api->open_file((const uint8_t*)fixture, (int32_t)path_len, XL_FORMAT_XLSB, &bad_options, &handle);
     CHECK(status == XL_INVALID_ARGUMENT, "a wrong xl_open_options.struct_size must be XL_INVALID_ARGUMENT");
     CHECK(handle == NULL, "a rejected xl_open_file must not hand back a handle");
+
+    xl_open_options v6_options;
+    memset(&v6_options, 0, sizeof(v6_options));
+    v6_options.struct_size = 88;
+    handle = NULL;
+    status = api->open_file((const uint8_t*)fixture, (int32_t)path_len, XL_FORMAT_XLSB, &v6_options, &handle);
+    CHECK(status == XL_OK, "the 88-byte 6.0 xl_open_options must still be accepted");
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
     return 0;
 }
 

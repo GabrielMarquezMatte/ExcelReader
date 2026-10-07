@@ -39,7 +39,8 @@ add_test(NAME excelreader_cpp_rows COMMAND excelreader_cpp_rows)
 excelreader_copy_native_library(excelreader_cpp_rows)
 
 add_executable(excelreader_cpp_sources sources.cpp)
-target_link_libraries(excelreader_cpp_sources PRIVATE xl::excelreader)
+find_package(Threads REQUIRED)
+target_link_libraries(excelreader_cpp_sources PRIVATE xl::excelreader Threads::Threads)
 target_compile_definitions(excelreader_cpp_sources PRIVATE
     EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
 
