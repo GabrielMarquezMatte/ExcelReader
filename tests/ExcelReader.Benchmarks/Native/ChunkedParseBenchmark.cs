@@ -50,7 +50,7 @@ namespace ExcelReader.Benchmarks
         public long WholeSheet()
         {
             using NativeHandle handle = OpenWorkbook();
-            int status = TypedApi.ParseTyped(handle, Specs(), headerRow: 1, out NativeTable table);
+            int status = TypedApi.ParseTyped(handle, 0, Specs(), headerRow: 1, out NativeTable table);
             if (status != NativeStatus.Ok)
             {
                 throw new InvalidOperationException($"parse failed with status {status}");
@@ -68,7 +68,7 @@ namespace ExcelReader.Benchmarks
         private long Drain(long maxRows)
         {
             using NativeHandle handle = OpenWorkbook();
-            int status = TypedApi.OpenTypedReader(handle, Specs(), headerRow: 1, maxRows, out nint reader);
+            int status = TypedApi.OpenTypedReader(handle, 0, Specs(), headerRow: 1, maxRows, out nint reader);
             if (status != NativeStatus.Ok)
             {
                 throw new InvalidOperationException($"open reader failed with status {status}");

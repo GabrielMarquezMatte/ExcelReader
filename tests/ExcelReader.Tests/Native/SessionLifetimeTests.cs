@@ -9,21 +9,14 @@ using ExcelReader.Native.Typed;
 namespace ExcelReader.Tests.Native
 {
     /// <summary>
-    /// The one-live-session rule, from the outside. A <c>xl_typed_reader</c>/Arrow stream is the only
-    /// thing in this ABI that holds an <c>IExcelRowEnumerator</c> open ACROSS calls, and
-    /// the native handle serves one row cursor at a time — so every
-    /// other read on the same workbook either has to be refused up front or has to invalidate the
-    /// live session loudly. These tests pin both halves; without the interlock they fail by returning
-    /// XL_OK/XL_EOF with silently truncated data.
+    /// A typed reader and an Arrow stream each own their enumerator, so reads on one workbook do not
+    /// disturb one another and outlive the workbook handle.
     /// </summary>
     public sealed class SessionLifetimeTests
     {
         private static readonly string XlsxFixture = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
 
         private const int SmallRowCount = 500;
-
-        private const int InterleaveRowCount = 200_000;
-        private const long InterleaveBatchSize = 1000;
 
         private static NativeColumnSpec[] IdSpecs()
         {
@@ -60,83 +53,78 @@ namespace ExcelReader.Tests.Native
         }
 
 
-        [Fact]
-        public void OpenTypedReader_Should_Refuse_A_Second_Live_Reader_On_The_Same_Workbook()
+        private static long Drain(nint reader)
         {
-            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
-            using NativeHandle live = handle!;
-            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint first));
-
-            int status = TypedApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint second);
-
-            Assert.Equal(NativeStatus.Error, status);
-            Assert.Equal(0, second);
-            Assert.NotEmpty(NativeApi.LastErrorText());
-
-            TypedApi.CloseTypedReader(first);
-            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint third));
-            TypedApi.CloseTypedReader(third);
+            long total = 0;
+            while (true)
+            {
+                int status = TypedApi.NextTypedBatch(reader, out NativeTable batch);
+                if (status == NativeStatus.Eof)
+                {
+                    return total;
+                }
+                Assert.Equal(NativeStatus.Ok, status);
+                total += batch.RowCount;
+                TypedApi.FreeTable(ref batch);
+            }
         }
 
         [Fact]
-        public void OpenArrowStream_Should_Refuse_A_Stream_While_A_Typed_Reader_Is_Open()
+        public void Two_Typed_Readers_On_One_Workbook_Should_Both_Read_Every_Row()
         {
-            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
-            using NativeHandle live = handle!;
-            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint reader));
-
-            int status = ArrowApi.OpenArrowStream(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out ArrowArrayStream stream);
-
-            Assert.Equal(NativeStatus.Error, status);
-            Assert.Equal(IntPtr.Zero, stream.Release);
-            Assert.NotEmpty(NativeApi.LastErrorText());
-            TypedApi.CloseTypedReader(reader);
-        }
-
-        [Fact]
-        public void OpenTypedReader_Should_Refuse_A_Reader_While_An_Arrow_Stream_Is_Open()
-        {
-            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
-            using NativeHandle live = handle!;
-            Assert.Equal(NativeStatus.Ok,
-                ArrowApi.OpenArrowStream(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out ArrowArrayStream stream));
-
-            int status = TypedApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint reader);
-
-            Assert.Equal(NativeStatus.Error, status);
-            Assert.Equal(0, reader);
-
-            ReleaseStream(ref stream);
-            Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint after));
-            TypedApi.CloseTypedReader(after);
-        }
-
-
-        [Fact]
-        public void ParseTyped_Should_Fault_A_Live_Reader_Instead_Of_Truncating_It()
-        {
-            string path = WriteCsv(InterleaveRowCount);
+            string path = WriteCsv(SmallRowCount);
             try
             {
                 Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 using NativeHandle live = handle!;
-                Assert.Equal(NativeStatus.Ok,
-                    TypedApi.OpenTypedReader(live, IdSpecs(), headerRow: 1, InterleaveBatchSize, out nint reader));
+                Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, 0, IdSpecs(), headerRow: 1, maxRows: 10, out nint first));
+                Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, 0, IdSpecs(), headerRow: 1, maxRows: 7, out nint second));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(reader, out NativeTable batch));
-                    long fromReader = RowsIn(batch);
-                    TypedApi.FreeTable(ref batch);
-                    Assert.Equal(InterleaveBatchSize, fromReader);
+                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(first, out NativeTable a));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(second, out NativeTable b));
+                    long fromFirst = a.RowCount;
+                    long fromSecond = b.RowCount;
+                    TypedApi.FreeTable(ref a);
+                    TypedApi.FreeTable(ref b);
 
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, IdSpecs(), headerRow: 1, out NativeTable whole));
-                    long interleaved = RowsIn(whole);
+                    Assert.Equal(SmallRowCount, fromFirst + Drain(first));
+                    Assert.Equal(SmallRowCount, fromSecond + Drain(second));
+                }
+                finally
+                {
+                    TypedApi.CloseTypedReader(first);
+                    TypedApi.CloseTypedReader(second);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_And_An_Arrow_Stream_Should_Leave_A_Live_Reader_Untouched()
+        {
+            string path = WriteCsv(SmallRowCount);
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                using NativeHandle live = handle!;
+                Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(live, 0, IdSpecs(), headerRow: 1, maxRows: 10, out nint reader));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(reader, out NativeTable first));
+                    long taken = first.RowCount;
+                    TypedApi.FreeTable(ref first);
+
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, 0, IdSpecs(), headerRow: 1, out NativeTable whole));
+                    Assert.Equal(SmallRowCount, whole.RowCount);
                     TypedApi.FreeTable(ref whole);
-                    Assert.Equal(InterleaveRowCount, interleaved);
+                    Assert.Equal(NativeStatus.Ok, ArrowApi.OpenArrowStream(live, 0, IdSpecs(), headerRow: 1, maxRows: 10, out ArrowArrayStream stream));
+                    ReleaseStream(ref stream);
 
-                    Assert.Equal(NativeStatus.Error, TypedApi.NextTypedBatch(reader, out NativeTable after));
-                    Assert.Equal(IntPtr.Zero, after.Columns);
-                    Assert.NotEmpty(NativeApi.LastErrorText());
+                    Assert.Equal(SmallRowCount, taken + Drain(reader));
                 }
                 finally
                 {
@@ -149,31 +137,24 @@ namespace ExcelReader.Tests.Native
             }
         }
 
-
-        private static void AssertFaultsTheLiveReader(Action<NativeHandle> interleaved)
+        [Theory]
+        [InlineData(NativeFormat.Csv)]
+        [InlineData(NativeFormat.Xlsx)]
+        public void A_Typed_Reader_Opened_But_Not_Yet_Read_Should_Read_Every_Row_After_Its_Workbook_Is_Closed(int format)
         {
-            string path = WriteCsv(SmallRowCount);
+            string path = format == NativeFormat.Csv ? WriteCsv(SmallRowCount) : XlsxFixture;
+            NativeColumnSpec[] specs = format == NativeFormat.Csv ? IdSpecs() : FirstColumnSpecs();
+            int headerRow = format == NativeFormat.Csv ? 1 : 0;
+            long expected = format == NativeFormat.Csv ? SmallRowCount : 3;
             try
             {
-                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                using NativeHandle live = handle!;
-                Assert.Equal(NativeStatus.Ok,
-                    TypedApi.OpenTypedReader(live, IdSpecs(), headerRow: 1, maxRows: 10, out nint reader));
+                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, format, out NativeHandle? handle));
+                Assert.Equal(NativeStatus.Ok, TypedApi.OpenTypedReader(handle, 0, specs, headerRow, maxRows: 2, out nint reader));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(reader, out NativeTable first));
-                    TypedApi.FreeTable(ref first);
+                    Assert.Equal(NativeStatus.Ok, ReadApi.Close(handle));
 
-                    interleaved(live);
-
-                    Assert.Equal(NativeStatus.Error, TypedApi.NextTypedBatch(reader, out NativeTable after));
-                    Assert.Equal(IntPtr.Zero, after.Columns);
-                    string latched = NativeApi.LastErrorText();
-                    Assert.NotEmpty(latched);
-
-                    Assert.Equal(NativeStatus.Error, TypedApi.NextTypedBatch(reader, out NativeTable again));
-                    Assert.Equal(IntPtr.Zero, again.Columns);
-                    Assert.Equal(latched, NativeApi.LastErrorText());
+                    Assert.Equal(expected, Drain(reader));
                 }
                 finally
                 {
@@ -182,138 +163,12 @@ namespace ExcelReader.Tests.Native
             }
             finally
             {
-                File.Delete(path);
-            }
-        }
-
-        [Fact]
-        public void ParseArrow_Should_Fault_A_Live_Reader()
-        {
-            AssertFaultsTheLiveReader(static live =>
-            {
-                Assert.Equal(NativeStatus.Ok,
-                    ArrowApi.ParseArrow(live, IdSpecs(), headerRow: 1, out ArrowArray array, out ArrowSchema schema));
-                ReleaseArray(ref array);
-                ReleaseSchema(ref schema);
-            });
-        }
-
-        [Fact]
-        public void NextRow_Should_Fault_A_Live_Reader()
-        {
-            AssertFaultsTheLiveReader(static live =>
-                Assert.Equal(NativeStatus.BufferTooSmall, ReadApi.NextRow(live, Span<byte>.Empty, out _)));
-        }
-
-        [Fact]
-        public void ReadAllBlob_Should_Fault_A_Live_Reader()
-        {
-            AssertFaultsTheLiveReader(static live =>
-                Assert.Equal(NativeStatus.BufferTooSmall, ReadApi.ReadAllBlob(live, Span<byte>.Empty, out _)));
-        }
-
-        [Fact]
-        public void ReadAllDecoded_Should_Fault_A_Live_Reader()
-        {
-            AssertFaultsTheLiveReader(static live =>
-            {
-                Assert.Equal(NativeStatus.Ok, ReadApi.ReadAllDecoded(live, out NativeRows rows));
-                ReadApi.FreeRows(ref rows);
-            });
-        }
-
-        [Fact]
-        public void InferSchema_Should_Fault_A_Live_Reader()
-        {
-            AssertFaultsTheLiveReader(static live =>
-            {
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(live, headerRow: 1, sampleSize: 8, out NativeInferredSchema schema));
-                ReadApi.FreeSchema(ref schema);
-            });
-        }
-
-        [Fact]
-        public void MoveToSheet_Should_Fault_A_Live_Reader()
-        {
-            AssertFaultsTheLiveReader(static live => Assert.Equal(NativeStatus.Ok, ReadApi.MoveToSheet(live, 0)));
-        }
-
-
-        [Fact]
-        public void Dispose_Should_Fault_A_Live_Reader_And_Latch()
-        {
-            string path = WriteCsv(SmallRowCount);
-            try
-            {
-                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeHandle live = handle!;
-                Assert.Equal(NativeStatus.Ok,
-                    TypedApi.OpenTypedReader(live, IdSpecs(), headerRow: 1, maxRows: 10, out nint reader));
-                try
+                if (format == NativeFormat.Csv)
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(reader, out NativeTable first));
-                    TypedApi.FreeTable(ref first);
-
-                    live.Dispose();
-
-                    Assert.Equal(NativeStatus.Error, TypedApi.NextTypedBatch(reader, out NativeTable after));
-                    Assert.Equal(IntPtr.Zero, after.Columns);
-                    string latched = NativeApi.LastErrorText();
-                    Assert.NotEmpty(latched);
-
-                    Assert.Equal(NativeStatus.Error, TypedApi.NextTypedBatch(reader, out _));
-                    Assert.Equal(latched, NativeApi.LastErrorText());
-                }
-                finally
-                {
-                    TypedApi.CloseTypedReader(reader);
+                    File.Delete(path);
                 }
             }
-            finally
-            {
-                File.Delete(path);
-            }
         }
-
-
-        [Fact]
-        public void ParseTyped_Should_Not_Fault_A_Live_Reader_When_Argument_Validation_Fails()
-        {
-            string path = WriteCsv(SmallRowCount);
-            try
-            {
-                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                using NativeHandle live = handle!;
-                Assert.Equal(NativeStatus.Ok,
-                    TypedApi.OpenTypedReader(live, IdSpecs(), headerRow: 1, maxRows: 10, out nint reader));
-                try
-                {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(reader, out NativeTable first));
-                    TypedApi.FreeTable(ref first);
-
-                    NativeColumnSpec[] blankNameSpec = [new() { Names = [" "], Type = NativeColumnType.Int64 }];
-                    int status = TypedApi.ParseTyped(live, blankNameSpec, headerRow: 1, out NativeTable invalid);
-
-                    Assert.Equal(NativeStatus.InvalidArgument, status);
-                    Assert.Equal(IntPtr.Zero, invalid.Columns);
-                    Assert.NotEmpty(NativeApi.LastErrorText());
-
-                    Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(reader, out NativeTable after));
-                    long rowsAfter = RowsIn(after);
-                    TypedApi.FreeTable(ref after);
-                    Assert.True(rowsAfter > 0);
-                }
-                finally
-                {
-                    TypedApi.CloseTypedReader(reader);
-                }
-            }
-            finally
-            {
-                File.Delete(path);
-            }
-        }
-
 
         [Fact]
         public void NextTypedBatch_Should_Latch_A_Conversion_Failure()
@@ -324,7 +179,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 using NativeHandle live = handle!;
                 Assert.Equal(NativeStatus.Ok,
-                    TypedApi.OpenTypedReader(live, IdSpecs(), headerRow: 1, maxRows: 2, out nint reader));
+                    TypedApi.OpenTypedReader(live, 0, IdSpecs(), headerRow: 1, maxRows: 2, out nint reader));
                 try
                 {
                     Assert.Equal(NativeStatus.Ok, TypedApi.NextTypedBatch(reader, out NativeTable good));
@@ -361,10 +216,10 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 using NativeHandle live = handle!;
 
-                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, IdSpecs(), headerRow: 1, out NativeTable first));
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, 0, IdSpecs(), headerRow: 1, out NativeTable first));
                 long firstRows = RowsIn(first);
                 TypedApi.FreeTable(ref first);
-                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, IdSpecs(), headerRow: 1, out NativeTable second));
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, 0, IdSpecs(), headerRow: 1, out NativeTable second));
                 long secondRows = RowsIn(second);
                 TypedApi.FreeTable(ref second);
 
@@ -378,22 +233,10 @@ namespace ExcelReader.Tests.Native
         }
 
         private delegate void ReleaseStreamFn(ref ArrowArrayStream stream);
-        private delegate void ReleaseArrayFn(ref ArrowArray array);
-        private delegate void ReleaseSchemaFn(ref ArrowSchema schema);
 
         private static void ReleaseStream(ref ArrowArrayStream stream)
         {
             Marshal.GetDelegateForFunctionPointer<ReleaseStreamFn>(stream.Release)(ref stream);
-        }
-
-        private static void ReleaseArray(ref ArrowArray array)
-        {
-            Marshal.GetDelegateForFunctionPointer<ReleaseArrayFn>(array.Release)(ref array);
-        }
-
-        private static void ReleaseSchema(ref ArrowSchema schema)
-        {
-            Marshal.GetDelegateForFunctionPointer<ReleaseSchemaFn>(schema.Release)(ref schema);
         }
     }
 }

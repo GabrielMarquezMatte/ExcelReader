@@ -1,6 +1,5 @@
 using ExcelReader.Core.Reader;
 using ExcelReader.Native.Reading;
-using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native
 {
@@ -29,7 +28,6 @@ namespace ExcelReader.Native
             _ = Workbook.SheetAt(index);
             CurrentSheet = index;
             ResetRows();
-            FaultLiveSession("xl_move_to_sheet");
         }
 
         internal IExcelRowEnumerator? Rows { get; set; }
@@ -50,23 +48,6 @@ namespace ExcelReader.Native
 
         internal bool AllRowsPending { get; set; }
 
-        internal TypedApi.TypedParseSession? LiveSession { get; set; }
-
-        internal void FaultLiveSession(string cause)
-        {
-            LiveSession?.Fault($"this chunked read was invalidated by {cause} on the same workbook: a " +
-                "workbook serves one row cursor at a time, so this read's position is no longer defined. " +
-                "Finish or close the read before using the workbook for anything else.");
-        }
-
-        internal void ReleaseLiveSession(TypedApi.TypedParseSession session)
-        {
-            if (ReferenceEquals(LiveSession, session))
-            {
-                LiveSession = null;
-            }
-        }
-
         internal void ResetRows()
         {
             Rows?.Dispose();
@@ -81,7 +62,6 @@ namespace ExcelReader.Native
 
         public void Dispose()
         {
-            FaultLiveSession("xl_close");
             ResetRows();
             View?.Dispose();
             Workbook.Dispose();

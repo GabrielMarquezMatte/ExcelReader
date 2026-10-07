@@ -49,7 +49,6 @@ namespace ExcelReader.Native.Reading
             {
                 if (!handle.HasPending)
                 {
-                    handle.FaultLiveSession("xl_next_row");
                     handle.Rows ??= handle.Sheet.GetEnumerator();
                     if (!handle.Rows.MoveNext())
                     {
@@ -99,7 +98,6 @@ namespace ExcelReader.Native.Reading
                     return NativeStatus.Ok;
                 }
 
-                handle.FaultLiveSession("xl_next_row_view");
                 handle.Rows ??= handle.Sheet.GetEnumerator();
                 if (!handle.Rows.MoveNext())
                 {

@@ -1263,7 +1263,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, headerRow: 1, sampleSize: 100, out NativeInferredSchema schema));
+                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, 0, out NativeInferredSchema schema));
                 try
                 {
                     Assert.Equal(6, schema.ColumnCount);
@@ -1295,7 +1295,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, headerRow: 0, sampleSize: 100, out NativeInferredSchema schema));
+                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, 0, headerRow: 0, sampleSize: 100, 0, out NativeInferredSchema schema));
                 try
                 {
                     foreach ((string? name, _, _, _) in DecodeSchema(schema))
@@ -1321,7 +1321,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.InvalidArgument, ReadApi.InferSchema(handle, headerRow: -1, sampleSize: 100, out NativeInferredSchema schema));
+                Assert.Equal(NativeStatus.InvalidArgument, ReadApi.InferSchema(handle, 0, headerRow: -1, sampleSize: 100, 0, out NativeInferredSchema schema));
                 Assert.Equal(IntPtr.Zero, schema.Columns);
             }
             finally
@@ -1339,7 +1339,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.InvalidArgument, ReadApi.InferSchema(handle, headerRow: 1, sampleSize, out NativeInferredSchema schema));
+                Assert.Equal(NativeStatus.InvalidArgument, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize, 0, out NativeInferredSchema schema));
                 Assert.Equal(IntPtr.Zero, schema.Columns);
             }
             finally
@@ -1351,7 +1351,7 @@ namespace ExcelReader.Tests.Native
         [Fact]
         public void InferSchema_Should_Reject_A_Null_Handle()
         {
-            Assert.Equal(NativeStatus.InvalidHandle, ReadApi.InferSchema(null, headerRow: 1, sampleSize: 100, out _));
+            Assert.Equal(NativeStatus.InvalidHandle, ReadApi.InferSchema(null, 0, headerRow: 1, sampleSize: 100, 0, out _));
         }
 
         [Fact]
@@ -1361,7 +1361,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
             try
             {
-                int status = ReadApi.InferSchema(handle, headerRow: 5, sampleSize: 100, out NativeInferredSchema schema);
+                int status = ReadApi.InferSchema(handle, 0, headerRow: 5, sampleSize: 100, 0, out NativeInferredSchema schema);
 
                 Assert.Equal(NativeStatus.InvalidArgument, status);
                 Assert.Equal(IntPtr.Zero, schema.Columns);
@@ -1384,7 +1384,7 @@ namespace ExcelReader.Tests.Native
             {
                 Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, new byte[4096], out _));
 
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, headerRow: 1, sampleSize: 100, out NativeInferredSchema schema));
+                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, 0, out NativeInferredSchema schema));
                 ReadApi.FreeSchema(ref schema);
 
                 byte[] buffer = new byte[4096];

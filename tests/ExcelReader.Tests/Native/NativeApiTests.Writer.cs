@@ -538,7 +538,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, format, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         Assert.Equal(2, read.RowCount);
@@ -583,7 +583,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(bytes, format, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         Assert.Equal(2, read.RowCount);
@@ -666,7 +666,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, format, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         Assert.Equal(3, read.RowCount);
@@ -710,7 +710,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, format, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         Assert.Equal(2, read.RowCount);
@@ -755,7 +755,7 @@ namespace ExcelReader.Tests.Native
                 try
                 {
                     NativeColumnSpec[] readSpecs = [new() { Names = ["name"], Type = NativeColumnType.String, Nullable = true }];
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, readSpecs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, readSpecs, headerRow: 1, out NativeTable read));
                     try
                     {
                         Assert.Equal(4, read.RowCount);
@@ -793,7 +793,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         Assert.Equal(3, read.RowCount);
@@ -834,7 +834,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         Assert.Equal(2, read.RowCount);
@@ -881,7 +881,7 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         int[] days = new int[1];
@@ -936,7 +936,7 @@ namespace ExcelReader.Tests.Native
                     Assert.Equal(NativeStatus.Ok, ReadApi.IsDate1904(handle, out int flag));
                     Assert.Equal(1, flag);
 
-                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable read));
                     try
                     {
                         int[] days = new int[1];

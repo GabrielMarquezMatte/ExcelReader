@@ -16,7 +16,7 @@ extern "C" {
 #define XL_STATUS_PASSWORD_REQUIRED  (-6) /* the workbook is encrypted and no password was supplied */
 #define XL_STATUS_PASSWORD_INCORRECT (-7) /* the supplied password did not match the workbook's verifier */
 
-#define XL_ABI_VERSION 5
+#define XL_ABI_VERSION 6
 
 #define XL_FORMAT_AUTO  0  /* sniffs XLS/XLSX/XLSB; does NOT detect CSV */
 #define XL_FORMAT_XLS   1
@@ -147,20 +147,19 @@ typedef struct xl_table {
     xl_column* columns;
 } xl_table;
 
-int32_t xl_parse_typed(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
-                       int32_t header_row, xl_table* out_table);
-
-/* xl_parse_typed with a thread count. degree_of_parallelism: 0 = processor count, 1 = sequential,
-   n = up to n threads; negative is XL_INVALID_ARGUMENT. Only a CSV handle is read in parallel. Any
-   other format, a CSV too small to split, or a CSV opened with a non-UTF-8 encoding is read
-   sequentially. The table equals xl_parse_typed's in every case. */
-int32_t xl_parse_typed_ex(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
-                          int32_t header_row, int32_t degree_of_parallelism, xl_table* out_table);
+/* sheet is a zero-based index: negative is XL_INVALID_ARGUMENT, at or past xl_sheet_count is XL_ERROR.
+   degree_of_parallelism: 0 = processor count, 1 = sequential, n = up to n threads; negative is
+   XL_INVALID_ARGUMENT. Only a CSV handle is read in parallel. Any other format, a CSV too small to
+   split, or a CSV opened with a non-UTF-8 encoding is read sequentially; the table is the same either
+   way. Calls on one handle may run on several threads at once. */
+int32_t xl_parse_typed(xl_workbook* handle, int32_t sheet, const xl_column_spec* specs, int32_t spec_count,
+                       int32_t header_row, int32_t degree_of_parallelism, xl_table* out_table);
 
 void xl_free_table(xl_table* table);
 
-
-int32_t xl_typed_reader_open(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
+/* The reader owns its position in the sheet. It keeps working after xl_close on its workbook, and any
+   number of readers may be open on one workbook. Use one reader from one thread at a time. */
+int32_t xl_typed_reader_open(xl_workbook* handle, int32_t sheet, const xl_column_spec* specs, int32_t spec_count,
                              int32_t header_row, int64_t max_rows, xl_typed_reader** out_reader);
 
 int32_t xl_typed_reader_next(xl_typed_reader* reader, xl_table* out_table);
@@ -215,16 +214,14 @@ typedef struct xl_inferred_schema {
     int32_t column_count;
 } xl_inferred_schema;
 
-int32_t xl_infer_schema(xl_workbook* handle, int32_t header_row, int32_t sample_size, xl_inferred_schema* out_schema);
-
 #define XL_INFER_PARSE_TEXT 1
 
-/* xl_infer_schema with flags. XL_INFER_PARSE_TEXT also types cells that hold text (a CSV's fields,
-   numbers stored as text): integers, decimals, true/false and ISO dates or date-times, when the text
-   has exactly that shape. Leading-zero codes such as 00123 and scientific notation such as 12E4 stay text. flags == 0 behaves exactly like
-   xl_infer_schema. Any unknown bit is XL_INVALID_ARGUMENT. Free the result with xl_free_schema. */
-int32_t xl_infer_schema_ex(xl_workbook* handle, int32_t header_row, int32_t sample_size,
-                           int32_t flags, xl_inferred_schema* out_schema);
+/* flags: 0, or XL_INFER_PARSE_TEXT to also type cells that hold text (a CSV's fields, numbers stored
+   as text): integers, decimals, true/false and ISO dates or date-times, when the text has exactly that
+   shape. Leading-zero codes such as 00123 and scientific notation such as 12E4 stay text. Any unknown
+   bit is XL_INVALID_ARGUMENT. Free the result with xl_free_schema. */
+int32_t xl_infer_schema(xl_workbook* handle, int32_t sheet, int32_t header_row, int32_t sample_size,
+                        int32_t flags, xl_inferred_schema* out_schema);
 
 void xl_free_schema(xl_inferred_schema* schema);
 

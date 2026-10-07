@@ -41,11 +41,11 @@ namespace ExcelReader.Native.Arrow
             }
         }
 
-        internal static int OpenArrowStream(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
+        internal static int OpenArrowStream(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow,
             long maxRows, out ArrowArrayStream stream)
         {
             stream = default;
-            int status = TypedApi.TypedParseSession.Open(handle, specs, headerRow, maxRows, out TypedApi.TypedParseSession? session);
+            int status = TypedApi.TypedParseSession.Open(handle, sheet, specs, headerRow, maxRows, out TypedApi.TypedParseSession? session);
             if (status != NativeStatus.Ok)
             {
                 return status;

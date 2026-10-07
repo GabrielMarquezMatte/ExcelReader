@@ -8,17 +8,17 @@ namespace ExcelReader.Native.Arrow
 {
     internal static unsafe partial class ArrowApi
     {
-        internal static int ParseArrow(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out ArrowArray array, out ArrowSchema schema)
+        internal static int ParseArrow(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, out ArrowArray array, out ArrowSchema schema)
         {
-            return ParseArrow(handle, specs, headerRow, 1, "xl_parse_arrow", out array, out schema);
+            return ParseArrow(handle, sheet, specs, headerRow, 1, out array, out schema);
         }
 
-        internal static int ParseArrow(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, int degreeOfParallelism,
-            string cause, out ArrowArray array, out ArrowSchema schema)
+        internal static int ParseArrow(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, int degreeOfParallelism,
+            out ArrowArray array, out ArrowSchema schema)
         {
             array = default;
             schema = default;
-            int status = TypedApi.ParseTypedTable(handle, specs, headerRow, degreeOfParallelism, cause, out NativeTable table);
+            int status = TypedApi.ParseTypedTable(handle, sheet, specs, headerRow, degreeOfParallelism, out NativeTable table);
             if (status != NativeStatus.Ok)
             {
                 return status;
