@@ -5,7 +5,7 @@ using ExcelReader.Native.Typed;
 namespace ExcelReader.NativePgoTrainer
 {
     /// <summary>
-    /// Runs the managed implementations of xl_parse_typed, xl_next_row and xl_next_row_view over the 65K
+    /// Runs the managed implementations of xl_parse_typed, xl_rows_next and xl_rows_next_view over the 65K
     /// benchmark fixtures, so a dotnet-trace of this process yields the static PGO profile NativeAOT compiles
     /// ExcelReader.Native with. See "Static PGO profile" in src/ExcelReader.Native/README.md.
     /// </summary>

@@ -56,31 +56,6 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void InferSchema_Should_Match_The_Flagless_Result_When_Flags_Are_Zero()
-        {
-            using MemoryStream ms = BuildInferSchemaFixture();
-            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
-            try
-            {
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, 0, out NativeInferredSchema plain));
-                Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, 0, out NativeInferredSchema flagged));
-                try
-                {
-                    Assert.Equal(DecodeSchema(plain), DecodeSchema(flagged));
-                }
-                finally
-                {
-                    ReadApi.FreeSchema(ref plain);
-                    ReadApi.FreeSchema(ref flagged);
-                }
-            }
-            finally
-            {
-                ReadApi.Close(handle);
-            }
-        }
-
-        [Fact]
         public void InferSchema_Should_Reject_Unknown_Flags()
         {
             using MemoryStream ms = BuildInferSchemaFixture();

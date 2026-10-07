@@ -46,12 +46,20 @@ namespace ExcelReader.Tests.Native
         {
             using NativeHandle handle = await OpenTwoSheetsAsync();
 
+            NativeApi.ClearLastError();
             Assert.Equal(expected, TypedApi.ParseTyped(handle, sheet, FirstColumnAsText(), headerRow: 0, out _));
             Assert.NotEmpty(NativeApi.LastErrorText());
+            NativeApi.ClearLastError();
             Assert.Equal(expected, TypedApi.OpenTypedReader(handle, sheet, FirstColumnAsText(), headerRow: 0, maxRows: 0, out nint reader));
             Assert.Equal(0, reader);
+            Assert.NotEmpty(NativeApi.LastErrorText());
+            NativeApi.ClearLastError();
             Assert.Equal(expected, ArrowApi.OpenArrowStream(handle, sheet, FirstColumnAsText(), headerRow: 0, maxRows: 0, out _));
+            Assert.NotEmpty(NativeApi.LastErrorText());
+            NativeApi.ClearLastError();
             Assert.Equal(expected, ArrowApi.ParseArrow(handle, sheet, FirstColumnAsText(), headerRow: 0, out _, out _));
+            Assert.NotEmpty(NativeApi.LastErrorText());
+            NativeApi.ClearLastError();
             Assert.Equal(expected, ReadApi.InferSchema(handle, sheet, headerRow: 0, sampleSize: 10, flags: 0, out _));
             Assert.NotEmpty(NativeApi.LastErrorText());
         }
@@ -125,6 +133,10 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(expected, ReadApi.OpenRows(handle, sheet, out NativeRowCursor? cursor));
             Assert.Null(cursor);
             Assert.Equal(expected, ReadApi.SheetVisibilityAt(handle, sheet, out _));
+            Assert.NotEmpty(NativeApi.LastErrorText());
+            NativeApi.ClearLastError();
+            Assert.Equal(expected, ReadApi.SheetNameAt(handle, sheet, new byte[64], out _));
+            Assert.NotEmpty(NativeApi.LastErrorText());
         }
 
         [Fact]

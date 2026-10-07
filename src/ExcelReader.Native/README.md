@@ -29,14 +29,14 @@ look for `; No PGO data` in the listing header.
 `xl_rows_next_view` over the 65K benchmark fixtures in XLSX, XLSB and CSV. Record it and convert the
 trace (needs `dotnet-trace` and `dotnet-pgo`):
 
-The checked-in profile predates the v6 row cursor: `ReadApi.NextRow` and `ReadApi.NextRowView` changed
-signature, so they compile without profile data until the profile is regenerated and re-measured.
-
     dotnet build tests/ExcelReader.NativePgoTrainer -c Release
     DOTNET_TieredPGO=1 DOTNET_ReadyToRun=0 DOTNET_TC_QuickJitForLoops=1 \
       dotnet-trace collect --providers Microsoft-Windows-DotNETRuntime:0x1F000080018:5 -o pgo.nettrace \
       -- "$PWD/tests/ExcelReader.NativePgoTrainer/bin/Release/net10.0/ExcelReader.NativePgoTrainer"
     dotnet-pgo create-mibc -t pgo.nettrace --exclude-methods 'Xlsb|Biff12' -o src/ExcelReader.Native/pgo/excelreader.mibc
+
+The checked-in profile predates the v6 row cursor: `ReadApi.NextRow` and `ReadApi.NextRowView` changed
+signature, so they compile without profile data until the profile is regenerated and re-measured.
 
 The XLSB methods are excluded on purpose: with their profile the XLSB parse got 3% slower, and
 without it 1.12x faster. Re-measured with the regenerated profile: including them makes XLSB typed

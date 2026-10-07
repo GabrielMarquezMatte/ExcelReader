@@ -10,6 +10,8 @@ namespace ExcelReader.Native
         public static int ParseArrow(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             int degreeOfParallelism, ArrowArray* outArray, ArrowSchema* outSchema)
         {
+            NativeApi.ClearLastError();
+
             if (specs is null || outArray is null || outSchema is null || !TypedApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
@@ -42,6 +44,8 @@ namespace ExcelReader.Native
         public static int ParseArrowStream(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             long maxRows, ArrowArrayStream* outStream)
         {
+            NativeApi.ClearLastError();
+
             if (outStream is null)
             {
                 return NativeStatus.InvalidArgument;

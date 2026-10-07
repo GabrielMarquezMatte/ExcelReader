@@ -33,6 +33,19 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void AReadingExportRejectingAnUnknownHandleDoesNotLeaveAnEarlierCallsError()
+        {
+            NativeApi.SetLastError("stale");
+            byte* buffer = stackalloc byte[1];
+            int written = Sentinel;
+
+            int status = ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.RowsNext)(0, buffer, 1, &written);
+
+            Assert.Equal(NativeStatus.InvalidHandle, status);
+            Assert.Empty(NativeApi.LastErrorText());
+        }
+
+        [Fact]
         public void SheetNameAtRejectingItsArgumentsStillZeroesTheLengthOutParam()
         {
             int outValue = Sentinel;

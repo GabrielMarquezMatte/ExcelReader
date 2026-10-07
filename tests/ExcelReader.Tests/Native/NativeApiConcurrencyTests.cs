@@ -123,16 +123,26 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(bytes, NativeFormat.Xlsx, out NativeHandle? handle));
             using NativeHandle live = handle!;
             long[] rowCounts = new long[ConcurrentSheetTests.Sheets];
+            long[] firstValues = new long[ConcurrentSheetTests.Sheets];
 
             Parallel.For(0, rowCounts.Length, s =>
             {
                 NativeColumnSpec[] specs = [new() { Index = 1, Type = NativeColumnType.Int64 }];
                 Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(live, s, specs, headerRow: 0, out NativeTable table));
-                rowCounts[s] = table.RowCount;
-                TypedApi.FreeTable(ref table);
+                try
+                {
+                    rowCounts[s] = table.RowCount;
+                    NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
+                    firstValues[s] = Marshal.ReadInt64(column.Values);
+                }
+                finally
+                {
+                    TypedApi.FreeTable(ref table);
+                }
             });
 
             Assert.All(rowCounts, count => Assert.Equal(ConcurrentSheetTests.Rows, count));
+            Assert.Equal(Enumerable.Range(0, firstValues.Length).Select(s => s * 1_000_000L), firstValues);
         }
 
         [Fact]
@@ -150,8 +160,13 @@ namespace ExcelReader.Tests.Native
             Assert.Null(Exports.Resolve(id));
             Assert.Equal(NativeStatus.InvalidHandle, ReadApi.OpenRows(Exports.Resolve(id), 0, out _));
             int rows = 0;
-            while (ReadApi.NextRowView(cursor, out _) == NativeStatus.Ok)
+            while (ReadApi.NextRowView(cursor, out NativeRow row) == NativeStatus.Ok)
             {
+                if (rows == 0)
+                {
+                    NativeRowCell first = Marshal.PtrToStructure<NativeRowCell>(row.Cells);
+                    Assert.StartsWith("s3-name-", Marshal.PtrToStringUTF8(first.Value, first.ValueLength), StringComparison.Ordinal);
+                }
                 rows++;
             }
             Assert.Equal(ConcurrentSheetTests.Rows, rows);

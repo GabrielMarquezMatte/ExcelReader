@@ -116,15 +116,20 @@ int32_t xl_is_date1904(xl_workbook* handle, int32_t* out_flag);
    working after xl_close on its workbook. Release it with xl_rows_close. */
 int32_t xl_rows_open(xl_workbook* handle, int32_t sheet, xl_rows** out_rows);
 
+/* A NULL or unknown cursor is XL_INVALID_HANDLE and nothing is released. */
 int32_t xl_rows_close(xl_rows* rows);
 
+/* XL_BUFFER_TOO_SMALL writes the needed size to out_written; call xl_rows_next again with a larger
+   buffer before any other read on that cursor, and the same row is returned. */
 int32_t xl_rows_next(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
 /* out_row points into memory the cursor owns: overwritten by the next xl_rows_next_view on that
    cursor, released by xl_rows_close. Values are NUL-terminated. Do not pass it to xl_free_rows. */
 int32_t xl_rows_next_view(xl_rows* rows, xl_row* out_row);
 
-/* Reads the rows the cursor has not yet returned. */
+/* Reads the rows the cursor has not yet returned. XL_BUFFER_TOO_SMALL writes the needed size to
+   out_written; call xl_rows_read_all_blob again with a larger buffer before any other read on that
+   cursor. */
 int32_t xl_rows_read_all_blob(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
 typedef struct xl_rows_decoded {
@@ -186,6 +191,7 @@ int32_t xl_typed_reader_open(xl_workbook* handle, int32_t sheet, const xl_column
 
 int32_t xl_typed_reader_next(xl_typed_reader* reader, xl_table* out_table);
 
+/* A NULL or unknown reader is ignored. */
 void xl_typed_reader_close(xl_typed_reader* reader);
 
 
@@ -308,6 +314,11 @@ int32_t xl_csv_aggregate_memory(const uint8_t* data, int32_t data_len,
                                 const xl_csv_parallel_options* options,
                                 void** out_state);
 
+/* The message for the calling thread's most recent failure. After any non-OK status from a
+   function that opens, reads or inspects a workbook (xl_open_*, xl_close, xl_sheet_*, xl_is_date1904,
+   xl_rows_*, xl_parse_*, xl_typed_reader_*, xl_infer_schema), it is that call's message, or empty
+   when the status alone says it all (a NULL out-pointer, an unknown handle): never a message left by
+   an earlier call. The writer, CSV-aggregation and encryption functions set it on XL_ERROR. */
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
 const uint8_t* xl_last_error_ptr(int32_t* out_len);

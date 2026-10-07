@@ -300,7 +300,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_With_An_Unrecognized_Struct_Size_Is_Invalid_Argument()
+        public void OpenFile_With_An_Unrecognized_Struct_Size_Is_Invalid_Argument()
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { StructSize = 1 };
 

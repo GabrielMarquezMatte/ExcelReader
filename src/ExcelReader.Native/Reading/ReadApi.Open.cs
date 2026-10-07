@@ -10,6 +10,7 @@ namespace ExcelReader.Native.Reading
             handle = null;
             if (!IsKnownFormat(format))
             {
+                NativeApi.SetLastError($"format must be one of the XL_FORMAT_* values; got {format}.");
                 return NativeStatus.InvalidArgument;
             }
 
@@ -37,6 +38,7 @@ namespace ExcelReader.Native.Reading
             handle = null;
             if (!IsKnownFormat(format))
             {
+                NativeApi.SetLastError($"format must be one of the XL_FORMAT_* values; got {format}.");
                 return NativeStatus.InvalidArgument;
             }
 

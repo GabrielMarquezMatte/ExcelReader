@@ -54,21 +54,14 @@ namespace ExcelReader.Native.Reading
             {
                 return NativeStatus.InvalidHandle;
             }
-            if (index < 0)
+            NativeApi.ClearLastError();
+            int status = ResolveSheet(handle, index, out IExcelSheet? sheet);
+            if (status != NativeStatus.Ok)
             {
-                return NativeStatus.InvalidArgument;
+                return status;
             }
 
-            NativeApi.ClearLastError();
-            try
-            {
-                return CopyUtf8(handle.Workbook.SheetAt(index).Name, buffer, out length);
-            }
-            catch (Exception exception)
-            {
-                NativeApi.SetLastError(exception.Message);
-                return NativeStatus.Error;
-            }
+            return CopyUtf8(sheet!.Name, buffer, out length);
         }
 
         private static int CopyUtf8(string value, Span<byte> buffer, out int length)
