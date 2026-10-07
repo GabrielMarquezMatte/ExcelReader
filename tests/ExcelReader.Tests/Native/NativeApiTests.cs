@@ -19,6 +19,12 @@ namespace ExcelReader.Tests.Native
             return ReadApi.OpenFile(Encoding.UTF8.GetBytes(path), format, out handle);
         }
 
+        internal static NativeRowCursor OpenRows(NativeHandle? handle, int sheet = 0)
+        {
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenRows(handle, sheet, out NativeRowCursor? cursor));
+            return cursor!;
+        }
+
         private static NativeOpenOptionsRaw DefaultRawOptions()
         {
             return new NativeOpenOptionsRaw { StructSize = Marshal.SizeOf<NativeOpenOptionsRaw>() };

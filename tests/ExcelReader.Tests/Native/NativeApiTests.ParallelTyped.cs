@@ -325,10 +325,11 @@ namespace ExcelReader.Tests.Native
             try
             {
                 byte[] blob = new byte[1 << 16];
+                using NativeRowCursor cursor = OpenRows(handle);
                 const int advanced = 5_000;
                 for (int i = 0; i < advanced; i++)
                 {
-                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out _));
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, blob, out _));
                 }
 
                 Assert.Equal(NativeStatus.Ok, TypedApi.ParseTypedTable(handle, 0, MixedSpecs, headerRow: 1, 4, out NativeTable actual, SmallChunk));
@@ -342,11 +343,11 @@ namespace ExcelReader.Tests.Native
                     TypedApi.FreeTable(ref actual);
                 }
 
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out int written));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, blob, out int written));
                 Assert.Equal("item4999", DecodeRow(blob.AsSpan(0, written))[0].Value);
                 int remaining = 1;
                 string last = "";
-                while (ReadApi.NextRow(handle, blob, out written) == NativeStatus.Ok)
+                while (ReadApi.NextRow(cursor, blob, out written) == NativeStatus.Ok)
                 {
                     remaining++;
                     last = DecodeRow(blob.AsSpan(0, written))[0].Value;

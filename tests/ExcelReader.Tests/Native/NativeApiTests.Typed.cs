@@ -472,14 +472,15 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 try
                 {
-                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, new byte[4096], out _));
+                    using NativeRowCursor cursor = OpenRows(handle);
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, new byte[4096], out _));
 
                     NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
                     Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable table));
                     TypedApi.FreeTable(ref table);
 
                     byte[] buffer = new byte[4096];
-                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, buffer, out int written));
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, buffer, out int written));
                     Assert.Equal("first", DecodeRow(buffer.AsSpan(0, written))[0].Value);
                 }
                 finally

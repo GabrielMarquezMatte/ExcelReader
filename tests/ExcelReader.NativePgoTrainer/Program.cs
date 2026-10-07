@@ -55,14 +55,18 @@ namespace ExcelReader.NativePgoTrainer
                     }
                     if (status == NativeStatus.Ok && (status = ReadApi.OpenMemory(bytes, format, out handle)) == NativeStatus.Ok)
                     {
-                        while ((status = ReadApi.NextRow(handle, rowBuffer, out _)) == NativeStatus.Ok)
+                        ReadApi.OpenRows(handle, 0, out NativeRowCursor? rows);
+                        using NativeRowCursor cursor = rows!;
+                        while ((status = ReadApi.NextRow(cursor, rowBuffer, out _)) == NativeStatus.Ok)
                         {
                         }
                         ReadApi.Close(handle);
                     }
                     if (status == NativeStatus.Eof && (status = ReadApi.OpenMemory(bytes, format, out handle)) == NativeStatus.Ok)
                     {
-                        while ((status = ReadApi.NextRowView(handle, out _)) == NativeStatus.Ok)
+                        ReadApi.OpenRows(handle, 0, out NativeRowCursor? viewRows);
+                        using NativeRowCursor viewCursor = viewRows!;
+                        while ((status = ReadApi.NextRowView(viewCursor, out _)) == NativeStatus.Ok)
                         {
                         }
                         ReadApi.Close(handle);

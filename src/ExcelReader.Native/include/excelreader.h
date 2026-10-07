@@ -38,6 +38,11 @@ extern "C" {
 typedef struct xl_workbook xl_workbook;
 
 typedef struct xl_typed_reader xl_typed_reader;
+typedef struct xl_rows xl_rows;
+
+#define XL_SHEET_VISIBLE     0
+#define XL_SHEET_HIDDEN      1
+#define XL_SHEET_VERY_HIDDEN 2
 
 typedef struct xl_row_cell {
     int32_t column;
@@ -88,32 +93,47 @@ int32_t xl_open_memory_ex(const uint8_t* data, int32_t data_len, int32_t format,
 
 int32_t xl_close(xl_workbook* handle);
 
+/* A workbook handle may be used from several threads at once. index and sheet are zero-based:
+   negative is XL_INVALID_ARGUMENT, at or past xl_sheet_count is XL_ERROR. */
 int32_t xl_sheet_count(xl_workbook* handle, int32_t* out_count);
-
-int32_t xl_sheet_name(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
 int32_t xl_sheet_name_at(xl_workbook* handle, int32_t index, uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
-int32_t xl_move_to_sheet(xl_workbook* handle, int32_t index);
+/* Writes XL_SHEET_VISIBLE, XL_SHEET_HIDDEN or XL_SHEET_VERY_HIDDEN. */
+int32_t xl_sheet_visibility_at(xl_workbook* handle, int32_t index, int32_t* out_visibility);
+
+/* Finds a sheet by name, ignoring case. A name that matches no sheet is not an error: the function
+   returns XL_OK and writes -1. */
+int32_t xl_sheet_index(xl_workbook* handle, const uint8_t* name, int32_t name_len, int32_t* out_index);
 
 int32_t xl_is_date1904(xl_workbook* handle, int32_t* out_flag);
 
-int32_t xl_next_row(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
+/* Opens a cursor over one sheet. A cursor reads its sheet once, front to back; open another to read
+   it again. Any number of cursors may be open on one workbook, on the same sheet or on different
+   ones, and each may run on its own thread. Use one cursor from one thread at a time. A cursor keeps
+   working after xl_close on its workbook. Release it with xl_rows_close. */
+int32_t xl_rows_open(xl_workbook* handle, int32_t sheet, xl_rows** out_rows);
 
-/* out_row points into memory the handle owns: overwritten by the next xl_next_row_view, released by
-   xl_close. Values are NUL-terminated. Do not pass it to xl_free_rows. */
-int32_t xl_next_row_view(xl_workbook* handle, xl_row* out_row);
+int32_t xl_rows_close(xl_rows* rows);
 
-int32_t xl_read_all_blob(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
+int32_t xl_rows_next(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
-typedef struct xl_rows {
+/* out_row points into memory the cursor owns: overwritten by the next xl_rows_next_view on that
+   cursor, released by xl_rows_close. Values are NUL-terminated. Do not pass it to xl_free_rows. */
+int32_t xl_rows_next_view(xl_rows* rows, xl_row* out_row);
+
+/* Reads the rows the cursor has not yet returned. */
+int32_t xl_rows_read_all_blob(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* out_written);
+
+typedef struct xl_rows_decoded {
     int32_t row_count;
     xl_row* rows;
-} xl_rows;
+} xl_rows_decoded;
 
-int32_t xl_read_all_decoded(xl_workbook* handle, xl_rows* out_rows);
+/* Reads the rows the cursor has not yet returned. Release out_rows with xl_free_rows. */
+int32_t xl_rows_read_all_decoded(xl_rows* rows, xl_rows_decoded* out_rows);
 
-void xl_free_rows(xl_rows* rows);
+void xl_free_rows(xl_rows_decoded* rows);
 
 #define XL_T_STRING    0
 #define XL_T_I64       1

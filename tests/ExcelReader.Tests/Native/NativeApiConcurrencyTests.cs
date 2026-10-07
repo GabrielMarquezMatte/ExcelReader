@@ -16,9 +16,10 @@ namespace ExcelReader.Tests.Native
             {
                 Assert.Equal(NativeStatus.Ok, ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, out NativeHandle? handle));
                 Assert.NotNull(handle);
+                using NativeRowCursor cursor = NativeApiTests.OpenRows(handle);
 
                 int rowCount = 0;
-                while (ReadApi.NextRow(handle, new byte[64 * 1024], out _) != NativeStatus.Eof)
+                while (ReadApi.NextRow(cursor, new byte[64 * 1024], out _) != NativeStatus.Eof)
                 {
                     rowCount++;
                 }

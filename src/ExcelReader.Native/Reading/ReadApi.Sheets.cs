@@ -47,26 +47,6 @@ namespace ExcelReader.Native.Reading
             }
         }
 
-        internal static int SheetName(NativeHandle? handle, Span<byte> buffer, out int length)
-        {
-            length = 0;
-            if (handle is null)
-            {
-                return NativeStatus.InvalidHandle;
-            }
-
-            NativeApi.ClearLastError();
-            try
-            {
-                return CopyUtf8(handle.Sheet.Name, buffer, out length);
-            }
-            catch (Exception exception)
-            {
-                NativeApi.SetLastError(exception.Message);
-                return NativeStatus.Error;
-            }
-        }
-
         internal static int SheetNameAt(NativeHandle? handle, int index, Span<byte> buffer, out int length)
         {
             length = 0;
@@ -104,8 +84,26 @@ namespace ExcelReader.Native.Reading
             return NativeStatus.Ok;
         }
 
-        internal static int MoveToSheet(NativeHandle? handle, int index)
+        internal static int SheetVisibilityAt(NativeHandle? handle, int index, out int visibility)
         {
+            visibility = 0;
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            NativeApi.ClearLastError();
+            int status = ResolveSheet(handle, index, out IExcelSheet? sheet);
+            if (status == NativeStatus.Ok)
+            {
+                visibility = (int)sheet!.Visibility;
+            }
+            return status;
+        }
+
+        internal static int SheetIndex(NativeHandle? handle, ReadOnlySpan<byte> utf8Name, out int index)
+        {
+            index = -1;
             if (handle is null)
             {
                 return NativeStatus.InvalidHandle;
@@ -114,7 +112,10 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                handle.MoveToSheet(index);
+                if (handle.Workbook.TryGetSheet(Encoding.UTF8.GetString(utf8Name), out IExcelSheet? sheet))
+                {
+                    index = sheet!.Index;
+                }
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
