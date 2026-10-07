@@ -79,10 +79,20 @@ typedef struct xl_open_options {
 
     const uint8_t* password;
     int32_t password_len;
+
+    /* xl_open_source only: bytes of blocks kept in memory. 0 is the default, 64 MiB. */
+    int64_t source_cache_bytes;
+    /* xl_open_stream with XLSX, XLSB or XLS only: the most bytes the stream may hold. 0 is the
+       default, the .NET array limit (about 2 GB). */
+    int64_t max_buffered_bytes;
+    /* xl_open_source only: bytes fetched per read_at call. 0 is the default, 4 MiB; negative turns
+       the cache off, so every read the library makes reaches read_at. */
+    int32_t source_block_size;
 } xl_open_options;
 
 /* options may be NULL for the defaults. When it is not NULL, set options->struct_size to
-   sizeof(xl_open_options) first. xl_open_memory copies data, so the buffer may be released as soon
+   sizeof(xl_open_options) first. The 6.0 layout, which ends at password_len, is still accepted.
+   xl_open_memory copies data, so the buffer may be released as soon
    as the call returns. */
 int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format,
                      const xl_open_options* options, xl_workbook** out_handle);
