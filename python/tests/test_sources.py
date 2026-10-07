@@ -130,6 +130,17 @@ def test_open_stream_reads_a_csv_from_a_pipe():
     assert names[-1] == "row999"
 
 
+def test_a_csv_stream_serves_a_schema_inference_and_then_every_row():
+    data = b"name,qty\n" + b"".join(f"row{i},{i}\n".encode() for i in range(5000))
+    with open_stream(OnlyRead(data), "csv") as workbook:
+        sheet = workbook.sheets[0]
+        schema = sheet.infer_schema(parse_text=True)
+        names = _first_column(sheet)
+    assert len(schema) == 2
+    assert len(names) == 5001
+    assert names[-1] == "row4999"
+
+
 def test_open_stream_reads_an_xlsx_from_an_object_with_only_read():
     with open_stream(OnlyRead(_workbook_bytes())) as workbook:
         rows = _first_column(workbook.sheets[3])

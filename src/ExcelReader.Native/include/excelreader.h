@@ -134,9 +134,11 @@ typedef struct xl_stream {
     void (*release)(void* user_data);
 } xl_stream;
 
-/* Opens a workbook over a stream that cannot seek. A CSV is read as it arrives, by one cursor:
-   a second cursor, typed reader or Arrow stream on it fails with XL_ERROR, csv_sniff_dialect is
-   refused, and the stream is released when the workbook and its cursor are closed. An XLSX, XLSB
+/* Opens a workbook over a stream that cannot seek. A CSV is read as it arrives, by one cursor
+   at a time. Its first 16 MiB are kept, so a later cursor, typed reader or Arrow stream starts over
+   (xl_infer_schema, then a read) until one has read past them; after that, or while one is still
+   open, another fails with XL_ERROR. csv_sniff_dialect is refused, and the stream is released when
+   the workbook and its cursors are closed. An XLSX, XLSB
    or XLS needs random access, so the stream is read whole (up to max_buffered_bytes) and released
    before this returns. Ownership rules are those of xl_open_source. */
 int32_t xl_open_stream(const xl_stream* stream, int32_t format,

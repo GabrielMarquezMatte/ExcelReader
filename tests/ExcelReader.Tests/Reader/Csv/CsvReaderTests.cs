@@ -392,7 +392,7 @@ namespace ExcelReader.Tests.Reader.Csv
         }
 
         [Fact]
-        public void NonSeekableStreamThrowsOnSecondEnumeration()
+        public void NonSeekableStreamIsReplayedOnSecondEnumeration()
         {
             byte[] bytes = Encoding.UTF8.GetBytes("a,b\n1,2\n");
             using NonSeekableStream stream = new(bytes);
@@ -401,7 +401,7 @@ namespace ExcelReader.Tests.Reader.Csv
             var first = ReadAll(reader);
             Assert.Equal(2, first.Count);
 
-            Assert.Throws<InvalidOperationException>(reader.FirstSheet.GetEnumerator);
+            Assert.Equal(first, ReadAll(reader));
         }
 
 
