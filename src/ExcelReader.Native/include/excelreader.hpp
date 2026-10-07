@@ -532,22 +532,35 @@ namespace xl
         size_t count_{};
     };
 
+    /// Reads one sheet row by row. Owns a native cursor and closes it on destruction. Use one
+    /// cursor from one thread at a time; any number may be open on one workbook.
     class RowCursor
     {
     public:
-        explicit RowCursor(xl_workbook *handle) : handle_(handle) {}
+        explicit RowCursor(xl_rows *rows) noexcept : rows_(rows) {}
 
         RowCursor(const RowCursor &) = delete;
         RowCursor &operator=(const RowCursor &) = delete;
-        RowCursor(RowCursor &&) noexcept = default;
-        RowCursor &operator=(RowCursor &&) noexcept = default;
 
-        /// The returned view points into memory the workbook owns and is valid until the next
-        /// next_row() on this workbook or until the workbook closes.
+        RowCursor(RowCursor &&other) noexcept : rows_(std::exchange(other.rows_, nullptr)) {}
+        RowCursor &operator=(RowCursor &&other) noexcept
+        {
+            if (this != &other)
+            {
+                close();
+                rows_ = std::exchange(other.rows_, nullptr);
+            }
+            return *this;
+        }
+
+        ~RowCursor() { close(); }
+
+        /// The returned view points into memory the cursor owns and is valid until the next
+        /// next_row() on this cursor or until the cursor is destroyed.
         std::expected<RowView, Error> next_row()
         {
             xl_row row{};
-            const int32_t status = xl_next_row_view(handle_, &row);
+            const int32_t status = xl_rows_next_view(rows_, &row);
             if (status != XL_OK)
             {
                 return std::unexpected(detail::make_error(status));
@@ -559,25 +572,36 @@ namespace xl
             return RowView(row.cells, static_cast<size_t>(row.cell_count));
         }
 
+        xl_rows *handle() const noexcept { return rows_; }
+
     private:
-        xl_workbook *handle_{};
+        void close() noexcept
+        {
+            if (rows_ != nullptr)
+            {
+                xl_rows_close(rows_);
+                rows_ = nullptr;
+            }
+        }
+
+        xl_rows *rows_ = nullptr;
     };
 
     class DecodedRows
     {
     public:
-        explicit DecodedRows(xl_rows raw) : raw_(raw) {}
+        explicit DecodedRows(xl_rows_decoded raw) : raw_(raw) {}
 
         DecodedRows(const DecodedRows &) = delete;
         DecodedRows &operator=(const DecodedRows &) = delete;
 
-        DecodedRows(DecodedRows &&other) noexcept : raw_(std::exchange(other.raw_, xl_rows{})) {}
+        DecodedRows(DecodedRows &&other) noexcept : raw_(std::exchange(other.raw_, xl_rows_decoded{})) {}
         DecodedRows &operator=(DecodedRows &&other) noexcept
         {
             if (this != &other)
             {
                 release();
-                raw_ = std::exchange(other.raw_, xl_rows{});
+                raw_ = std::exchange(other.raw_, xl_rows_decoded{});
             }
             return *this;
         }
@@ -632,13 +656,120 @@ namespace xl
             {
                 xl_free_rows(&raw_);
             }
-            raw_ = xl_rows{};
+            raw_ = xl_rows_decoded{};
         }
 
-        xl_rows raw_{};
+        xl_rows_decoded raw_{};
     };
 
 
+    enum class SheetVisibility : int32_t
+    {
+        Visible = XL_SHEET_VISIBLE,
+        Hidden = XL_SHEET_HIDDEN,
+        VeryHidden = XL_SHEET_VERY_HIDDEN,
+    };
+
+    /// One sheet of a Workbook: the native workbook handle and an index. Holds no resource of its
+    /// own, so it is cheap to copy and may be handed to another thread; each read opens what it
+    /// needs. It must not be used after its workbook is destroyed.
+    class Sheet
+    {
+    public:
+        Sheet(xl_workbook *handle, int32_t index) noexcept : handle_(handle), index_(index) {}
+
+        int32_t index() const noexcept { return index_; }
+
+        std::expected<std::string, Error> name() const
+        {
+            return detail::fill_string([this](uint8_t *buffer, int32_t capacity, int32_t *out_len)
+                                       { return xl_sheet_name_at(handle_, index_, buffer, capacity, out_len); });
+        }
+
+        std::expected<SheetVisibility, Error> visibility() const
+        {
+            int32_t raw = 0;
+            int32_t status = xl_sheet_visibility_at(handle_, index_, &raw);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return static_cast<SheetVisibility>(raw);
+        }
+
+        /// A cursor over this sheet, from its first row. Each call opens an independent cursor.
+        std::expected<RowCursor, Error> rows() const
+        {
+            xl_rows *rows = nullptr;
+            int32_t status = xl_rows_open(handle_, index_, &rows);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return RowCursor(rows);
+        }
+
+        std::expected<DecodedRows, Error> read_all_decoded() const
+        {
+            auto cursor = rows();
+            if (!cursor.has_value())
+            {
+                return std::unexpected(cursor.error());
+            }
+            xl_rows_decoded raw{};
+            const int32_t status = xl_rows_read_all_decoded(cursor->handle(), &raw);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return DecodedRows(raw);
+        }
+
+        /// flags: 0, or XL_INFER_PARSE_TEXT to also type cells that hold text.
+        std::expected<std::vector<InferredColumn>, Error> infer_schema(int32_t header_row = 1,
+                                                                       int32_t sample_size = 100,
+                                                                       int32_t flags = 0) const
+        {
+            xl_inferred_schema schema{};
+            int32_t status = xl_infer_schema(handle_, index_, header_row, sample_size, flags, &schema);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+
+            struct SchemaGuard
+            {
+                xl_inferred_schema *schema;
+                ~SchemaGuard() { xl_free_schema(schema); }
+            } guard{&schema};
+
+            std::vector<InferredColumn> columns;
+            columns.reserve(static_cast<size_t>(schema.column_count > 0 ? schema.column_count : 0));
+            for (int32_t i = 0; i < schema.column_count; ++i)
+            {
+                const xl_column_spec &spec = schema.columns[i];
+                InferredColumn column{};
+                if (spec.name_count > 0 && spec.names[0] != nullptr && spec.name_lens[0] > 0)
+                {
+                    column.name = std::string(reinterpret_cast<const char *>(spec.names[0]),
+                                              static_cast<size_t>(spec.name_lens[0]));
+                }
+                column.index = spec.index;
+                column.type = spec.type;
+                column.nullable = spec.nullable != 0;
+                columns.push_back(std::move(column));
+            }
+            return columns;
+        }
+
+        xl_workbook *handle() const noexcept { return handle_; }
+
+    private:
+        xl_workbook *handle_ = nullptr;
+        int32_t index_ = 0;
+    };
+
+    /// An open workbook. Safe to use from several threads at once: every read goes through a Sheet and opens its own cursor.
     class Workbook
     {
     public:
@@ -668,9 +799,9 @@ namespace xl
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
             const xl_open_options *c_options_ptr = detail::lower_options(options, c_options);
-            int32_t status = xl_open_file_ex(reinterpret_cast<const uint8_t *>(path.data()),
-                                             static_cast<int32_t>(path.size()), format,
-                                             c_options_ptr, &handle);
+            int32_t status = xl_open_file(reinterpret_cast<const uint8_t *>(path.data()),
+                                          static_cast<int32_t>(path.size()), format,
+                                          c_options_ptr, &handle);
             if (status != XL_OK)
             {
                 return std::unexpected(detail::make_error(status));
@@ -688,8 +819,8 @@ namespace xl
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
             const xl_open_options *c_options_ptr = detail::lower_options(options, c_options);
-            int32_t status = xl_open_memory_ex(data.data(), static_cast<int32_t>(data.size()), format,
-                                               c_options_ptr, &handle);
+            int32_t status = xl_open_memory(data.data(), static_cast<int32_t>(data.size()), format,
+                                            c_options_ptr, &handle);
             if (status != XL_OK)
             {
                 return std::unexpected(detail::make_error(status));
@@ -707,12 +838,6 @@ namespace xl
                 return std::unexpected(detail::make_error(status));
             }
             return count;
-        }
-
-        std::expected<std::string, Error> sheet_name() const
-        {
-            return detail::fill_string([this](uint8_t *buffer, int32_t capacity, int32_t *out_len)
-                                       { return xl_sheet_name(handle_, buffer, capacity, out_len); });
         }
 
         std::expected<std::string, Error> sheet_name_at(int32_t index) const
@@ -742,14 +867,42 @@ namespace xl
             return names;
         }
 
-        std::expected<void, Error> move_to_sheet(int32_t index)
+        /// The sheet at `index`. Makes no native call: an index outside the workbook is reported
+        /// by the first read on the returned sheet.
+        Sheet sheet(int32_t index) const noexcept { return Sheet(handle_, index); }
+
+        /// Every sheet, in workbook order. Opens nothing.
+        std::expected<std::vector<Sheet>, Error> sheets() const
         {
-            int32_t status = xl_move_to_sheet(handle_, index);
+            auto count = sheet_count();
+            if (!count.has_value())
+            {
+                return std::unexpected(count.error());
+            }
+            std::vector<Sheet> result;
+            result.reserve(static_cast<size_t>(*count > 0 ? *count : 0));
+            for (int32_t i = 0; i < *count; ++i)
+            {
+                result.emplace_back(handle_, i);
+            }
+            return result;
+        }
+
+        /// The sheet called `name`, compared without regard to case; empty when no sheet matches.
+        std::expected<std::optional<Sheet>, Error> sheet_by_name(std::string_view name) const
+        {
+            int32_t index = -1;
+            int32_t status = xl_sheet_index(handle_, reinterpret_cast<const uint8_t *>(name.data()),
+                                            static_cast<int32_t>(name.size()), &index);
             if (status != XL_OK)
             {
                 return std::unexpected(detail::make_error(status));
             }
-            return {};
+            if (index < 0)
+            {
+                return std::optional<Sheet>{};
+            }
+            return std::optional<Sheet>{Sheet(handle_, index)};
         }
 
         std::expected<bool, Error> is_date1904() const
@@ -761,55 +914,6 @@ namespace xl
                 return std::unexpected(detail::make_error(status));
             }
             return flag != 0;
-        }
-
-        RowCursor rows() { return RowCursor(handle_); }
-
-        std::expected<DecodedRows, Error> read_all_decoded()
-        {
-            xl_rows raw{};
-            const int32_t status = xl_read_all_decoded(handle_, &raw);
-            if (status != XL_OK)
-            {
-                return std::unexpected(detail::make_error(status));
-            }
-            return DecodedRows(raw);
-        }
-
-
-        std::expected<std::vector<InferredColumn>, Error> infer_schema(int32_t header_row = 1,
-                                                                       int32_t sample_size = 100) const
-        {
-            xl_inferred_schema schema{};
-            int32_t status = xl_infer_schema(handle_, header_row, sample_size, &schema);
-            if (status != XL_OK)
-            {
-                return std::unexpected(detail::make_error(status));
-            }
-
-            struct SchemaGuard
-            {
-                xl_inferred_schema *schema;
-                ~SchemaGuard() { xl_free_schema(schema); }
-            } guard{&schema};
-
-            std::vector<InferredColumn> columns;
-            columns.reserve(static_cast<size_t>(schema.column_count > 0 ? schema.column_count : 0));
-            for (int32_t i = 0; i < schema.column_count; ++i)
-            {
-                const xl_column_spec &spec = schema.columns[i];
-                InferredColumn column{};
-                if (spec.name_count > 0 && spec.names[0] != nullptr && spec.name_lens[0] > 0)
-                {
-                    column.name = std::string(reinterpret_cast<const char *>(spec.names[0]),
-                                              static_cast<size_t>(spec.name_lens[0]));
-                }
-                column.index = spec.index;
-                column.type = spec.type;
-                column.nullable = spec.nullable != 0;
-                columns.push_back(std::move(column));
-            }
-            return columns;
         }
 
         xl_workbook *handle() const noexcept { return handle_; }
@@ -1224,7 +1328,8 @@ namespace xl
 
 
     template <typename T>
-    std::expected<TableView<T>, Error> parse_sheet(Workbook &workbook, int32_t header_row = 1)
+    std::expected<TableView<T>, Error> parse_sheet(Sheet sheet, int32_t header_row = 1,
+                                                   int32_t degree_of_parallelism = 1)
     {
         static constexpr auto bindings = ExcelMapper<T>::get_bindings();
         static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
@@ -1234,7 +1339,9 @@ namespace xl
         std::span<const xl_column_spec> specs(specs_array);
 
         xl_table table{};
-        int32_t status = xl_parse_typed(workbook.handle(), specs.data(), static_cast<int32_t>(specs.size()), header_row, &table);
+        int32_t status = xl_parse_typed(sheet.handle(), sheet.index(), specs.data(),
+                                        static_cast<int32_t>(specs.size()), header_row,
+                                        degree_of_parallelism, &table);
         if (status != XL_OK)
         {
             return std::unexpected(detail::make_error(status));
@@ -1349,7 +1456,7 @@ namespace xl
     };
 
     template <typename T>
-    std::expected<TypedReader<T>, Error> typed_reader(Workbook &workbook, int32_t header_row = 1,
+    std::expected<TypedReader<T>, Error> typed_reader(Sheet sheet, int32_t header_row = 1,
                                                       int64_t batch_size = 10000)
     {
         static constexpr auto bindings = ExcelMapper<T>::get_bindings();
@@ -1359,7 +1466,7 @@ namespace xl
             detail::build_specs(bindings, std::make_index_sequence<num_fields>{}, name_lens_storage);
 
         xl_typed_reader *reader = nullptr;
-        int32_t status = xl_typed_reader_open(workbook.handle(), specs_array.data(),
+        int32_t status = xl_typed_reader_open(sheet.handle(), sheet.index(), specs_array.data(),
                                               static_cast<int32_t>(specs_array.size()), header_row,
                                               batch_size, &reader);
         if (status != XL_OK)

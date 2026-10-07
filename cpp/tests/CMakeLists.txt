@@ -38,6 +38,13 @@ target_compile_definitions(excelreader_cpp_rows PRIVATE
 add_test(NAME excelreader_cpp_rows COMMAND excelreader_cpp_rows)
 excelreader_copy_native_library(excelreader_cpp_rows)
 
+add_executable(excelreader_cpp_sheets sheets.cpp)
+find_package(Threads REQUIRED)
+target_link_libraries(excelreader_cpp_sheets PRIVATE xl::excelreader Threads::Threads)
+
+add_test(NAME excelreader_cpp_sheets COMMAND excelreader_cpp_sheets)
+excelreader_copy_native_library(excelreader_cpp_sheets)
+
 add_executable(excelreader_cpp_batch batch.cpp)
 target_link_libraries(excelreader_cpp_batch PRIVATE xl::excelreader)
 

@@ -47,7 +47,7 @@ namespace
         {
             return {};
         }
-        auto table = xl::parse_sheet<Row>(*workbook);
+        auto table = xl::parse_sheet<Row>(workbook->sheet(0));
         check(table.has_value(), "parse_sheet succeeds");
         if (!table.has_value())
         {
@@ -74,7 +74,7 @@ namespace
             {
                 return;
             }
-            auto reader = xl::typed_reader<Row>(*workbook, 1, batch_size);
+            auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, batch_size);
             check(reader.has_value(), "typed_reader opens");
             if (!reader.has_value())
             {
@@ -117,7 +117,7 @@ namespace
         {
             return;
         }
-        auto reader = xl::typed_reader<Row>(*workbook, 1, 8);
+        auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, 8);
         check(reader.has_value(), "typed_reader opens for the range-for read");
         if (!reader.has_value())
         {
@@ -137,7 +137,7 @@ namespace
         check(seen == static_cast<int64_t>(expected.size()), "range-for sees every row");
     }
 
-    void test_second_reader_is_rejected()
+    void test_second_reader_is_allowed()
     {
         auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
         check(workbook.has_value(), "open the fixture for the second-reader test");
@@ -145,15 +145,10 @@ namespace
         {
             return;
         }
-        auto first = xl::typed_reader<Row>(*workbook, 1, 8);
+        auto first = xl::typed_reader<Row>(workbook->sheet(0), 1, 8);
         check(first.has_value(), "the first reader opens");
-        auto second = xl::typed_reader<Row>(*workbook, 1, 8);
-        check(!second.has_value(), "a second reader on the same workbook is rejected");
-        if (!second.has_value())
-        {
-            check(second.error().code == XL_ERROR, "the rejection is XL_ERROR");
-            check(!second.error().message.empty(), "the rejection carries a message");
-        }
+        auto second = xl::typed_reader<Row>(workbook->sheet(0), 1, 8);
+        check(second.has_value(), "a second reader on the same workbook opens");
     }
 
     void test_negative_batch_size_is_rejected()
@@ -164,7 +159,7 @@ namespace
         {
             return;
         }
-        auto reader = xl::typed_reader<Row>(*workbook, 1, -1);
+        auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, -1);
         check(!reader.has_value(), "a negative batch size is rejected");
         if (!reader.has_value())
         {
@@ -172,15 +167,15 @@ namespace
         }
     }
 
-    void test_foreign_read_latches_the_error()
+    void test_foreign_read_leaves_the_reader_alone()
     {
         auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
-        check(workbook.has_value(), "open the fixture for the invalidation test");
+        check(workbook.has_value(), "open the fixture for the foreign-read test");
         if (!workbook.has_value())
         {
             return;
         }
-        auto reader = xl::typed_reader<Row>(*workbook, 1, 4);
+        auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, 4);
         check(reader.has_value(), "the reader opens before the foreign read");
         if (!reader.has_value())
         {
@@ -189,17 +184,11 @@ namespace
         auto first = reader->next();
         check(first.has_value() && first->has_value(), "the first batch reads before the foreign read");
 
-        auto stolen = xl::parse_sheet<Row>(*workbook);
+        auto stolen = xl::parse_sheet<Row>(workbook->sheet(0));
         check(stolen.has_value(), "the foreign whole-sheet read succeeds");
 
         auto after = reader->next();
-        check(!after.has_value(), "the invalidated reader fails");
-        auto again = reader->next();
-        check(!again.has_value(), "the failure latches on every later call");
-        if (!after.has_value() && !again.has_value())
-        {
-            check(after.error().message == again.error().message, "the latched message is stable");
-        }
+        check(after.has_value() && after->has_value(), "the reader keeps reading after a whole-sheet read");
     }
 }
 
@@ -209,9 +198,9 @@ int main()
     check(expected.size() == 100, "RealExcel.xlsb has 100 data rows");
     test_batches_equal_whole_sheet(expected);
     test_range_for_matches_next(expected);
-    test_second_reader_is_rejected();
+    test_second_reader_is_allowed();
     test_negative_batch_size_is_rejected();
-    test_foreign_read_latches_the_error();
+    test_foreign_read_leaves_the_reader_alone();
 
     if (failures != 0)
     {

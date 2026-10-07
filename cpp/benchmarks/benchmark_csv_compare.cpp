@@ -214,7 +214,7 @@ static void BM_ExcelReader_Csv_Full(benchmark::State &state)
             state.SkipWithError(workbook.error().message);
             return;
         }
-        auto table = xl::parse_sheet<FullRow>(*workbook);
+        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
         if (!table.has_value())
         {
             state.SkipWithError(table.error().message);
@@ -265,7 +265,13 @@ static void BM_ExcelReader_Csv_Cells(benchmark::State &state)
             state.SkipWithError(workbook.error().message);
             return;
         }
-        xl::RowCursor cursor = workbook->rows();
+        auto opened = workbook->sheet(0).rows();
+        if (!opened.has_value())
+        {
+            state.SkipWithError(opened.error().message);
+            return;
+        }
+        xl::RowCursor &cursor = *opened;
         int64_t acc = 0;
         while (true)
         {
