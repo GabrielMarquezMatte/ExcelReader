@@ -385,4 +385,15 @@ mod tests {
     fn write_options_match_the_c_struct_size() {
         assert_eq!(std::mem::size_of::<crate::XlWriteOptions>(), 32);
     }
+
+    #[test]
+    fn source_layouts_match_the_c_structs() {
+        use crate::{XlOpenOptions, XlSource, XlStream};
+        assert_eq!(std::mem::size_of::<XlOpenOptions>(), 112);
+        assert_eq!(std::mem::offset_of!(XlOpenOptions, source_cache_bytes), 88);
+        assert_eq!(std::mem::offset_of!(XlOpenOptions, max_buffered_bytes), 96);
+        assert_eq!(std::mem::offset_of!(XlOpenOptions, source_block_size), 104);
+        assert_eq!(std::mem::size_of::<XlSource>(), 40);
+        assert_eq!(std::mem::size_of::<XlStream>(), 32);
+    }
 }
