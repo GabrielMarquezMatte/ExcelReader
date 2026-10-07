@@ -223,6 +223,21 @@ The crate follows the library: reads move from `Workbook` to `Sheet`.
 the top; call `rows()` again for another pass. A crate built for ABI 5 refuses a v6 library with an
 ABI-version error at the first `Workbook::open`.
 
+### Python
+
+The package follows the library: reads move from `Workbook` to `Sheet`.
+
+| v5 | v6 |
+|---|---|
+| `workbook.move_to_sheet(i)` then a read | read from `workbook.sheets[i]` |
+| `workbook.sheet_name` | `workbook.sheets[i].name` |
+| `for index, name in workbook.sheets():` | `for sheet in workbook.sheets:` |
+| `workbook.rows()`, `read_all()`, `read_all_columnar()` | the same methods on `workbook.sheets[i]` |
+| `workbook.parse_typed(...)`, `to_arrow(...)`, `to_polars(...)`, `infer_schema(...)` and the other read methods | the same methods on `workbook.sheets[i]`, same arguments |
+
+`workbook.sheets["Name"]` finds a sheet by name and raises `KeyError` when there is none. A package
+built for ABI 5 refuses a v6 library when it loads it.
+
 ### C++
 
 The wrapper follows the library: reads move from `xl::Workbook` to `xl::Sheet`.
