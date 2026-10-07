@@ -229,13 +229,8 @@ impl Workbook {
 
     /// The sheet at `index`. An index outside the workbook is an error here, not at the first read.
     pub fn sheet(&self, index: i32) -> Result<Sheet<'_>, Error> {
-        let count = self.sheet_count()?;
-        if index < 0 || index >= count {
-            return Err(Error::from_status(
-                XL_ERROR,
-                format!("sheet index {index} is out of range; the workbook has {count} sheets"),
-            ));
-        }
+        let mut visibility: i32 = 0;
+        check(unsafe { crate::xl_sheet_visibility_at(self.handle, index, &mut visibility) })?;
         Ok(Sheet { workbook: self, index })
     }
 
@@ -322,10 +317,13 @@ impl<'w> Sheet<'w> {
         self.index
     }
 
+    /// The sheet's name.
     pub fn name(&self) -> Result<String, Error> {
         self.workbook.sheet_name_at(self.index)
     }
 
+    /// Whether the sheet is visible, hidden or very hidden. An error if the native side reports a
+    /// value this crate does not know.
     pub fn visibility(&self) -> Result<SheetVisibility, Error> {
         let mut raw: i32 = 0;
         check(unsafe {
@@ -675,6 +673,11 @@ impl<T: ExcelMapper> Drop for TableView<T> {
         }
     }
 }
+
+// SAFETY: plain native allocations, read only through &self, released by xl_free_table, which any
+// thread may call. T appears only as fn pointers, never as a stored value.
+unsafe impl<T: ExcelMapper> Send for TableView<T> {}
+unsafe impl<T: ExcelMapper> Sync for TableView<T> {}
 
 /// Shape only. Rendering the rows would mean materializing every `T`, which is the one thing this
 /// type exists to avoid.

@@ -1,6 +1,12 @@
-use excelreader::workbook::{Sheet, SheetVisibility, Workbook};
+use excelreader::workbook::{ExcelMapper, Sheet, SheetVisibility, Workbook};
 use excelreader::writer_handle::WriterHandle;
-use excelreader::{RowCursor, XL_FORMAT_AUTO, XL_FORMAT_XLSX};
+use excelreader::{RowCursor, XL_ERROR, XL_FORMAT_AUTO, XL_FORMAT_XLSX, XL_INVALID_ARGUMENT};
+
+#[derive(Default, ExcelMapper)]
+struct R {
+    #[excel(name = "a")]
+    a: String,
+}
 
 fn two_sheets() -> Workbook {
     let mut writer = WriterHandle::open_memory(XL_FORMAT_XLSX, None).expect("open writer");
@@ -66,8 +72,10 @@ fn a_cursor_dropped_midway_leaves_the_workbook_usable() {
 fn sheet_rejects_an_index_out_of_range_at_the_call() {
     let workbook = two_sheets();
 
-    assert!(workbook.sheet(2).is_err());
-    assert!(workbook.sheet(-1).is_err());
+    let past_end = workbook.sheet(2).expect_err("past the end");
+    assert_eq!(past_end.code(), XL_ERROR);
+    assert!(!past_end.message().is_empty());
+    assert_eq!(workbook.sheet(-1).expect_err("negative").code(), XL_INVALID_ARGUMENT);
 }
 
 #[test]
@@ -139,6 +147,31 @@ fn workbook_and_sheet_cross_threads_and_cursors_move_between_them() {
     assert_send_sync::<Workbook>();
     assert_send_sync::<Sheet<'static>>();
     assert_send::<RowCursor<'static>>();
+    assert_send_sync::<excelreader::DecodedRows>();
+    assert_send_sync::<excelreader::workbook::TableView<R>>();
+    assert_send::<excelreader::workbook::TypedChunks<'static, R>>();
+    #[cfg(feature = "arrow")]
+    assert_send::<excelreader::arrow::ArrowChunks<'static>>();
+}
+
+#[test]
+fn decoded_rows_come_back_from_scoped_threads() {
+    let workbook = many_sheets();
+    let sheets = workbook.sheets().expect("sheets");
+    let counts: Vec<usize> = std::thread::scope(|scope| {
+        let handles: Vec<_> = sheets
+            .iter()
+            .map(|sheet| {
+                let sheet = *sheet;
+                scope.spawn(move || sheet.read_all_decoded())
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("no panic").expect("read").len())
+            .collect()
+    });
+    assert_eq!(counts, vec![PARALLEL_ROWS; PARALLEL_SHEETS]);
 }
 
 #[test]

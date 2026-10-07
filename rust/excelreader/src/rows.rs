@@ -293,7 +293,7 @@ impl Drop for RowCursor<'_> {
     }
 }
 
-/// Every remaining row of a sheet, decoded natively in one call.
+/// Every row of a sheet, decoded natively in one call.
 ///
 /// Owns the native allocation and releases it on drop. Rows and cells borrow from it, so they
 /// cannot outlive it.
@@ -336,6 +336,11 @@ impl Drop for DecodedRows {
     }
 }
 
+// SAFETY: plain native allocations, read only through &self, released by xl_free_rows, which any
+// thread may call.
+unsafe impl Send for DecodedRows {}
+unsafe impl Sync for DecodedRows {}
+
 impl std::fmt::Debug for DecodedRows {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DecodedRows").field("len", &self.len()).finish()
@@ -345,7 +350,7 @@ impl std::fmt::Debug for DecodedRows {
 /// Rows are usually well under this; it only sets how often an oversized sheet costs a retry.
 const INITIAL_ALL_ROWS_BUFFER: usize = 1024 * 1024;
 
-/// Every remaining row of a sheet, read into one flat buffer by a single `xl_rows_read_all_blob` call.
+/// Every row of a sheet, read into one flat buffer by a single `xl_rows_read_all_blob` call.
 ///
 /// Unlike [`DecodedRows`], the native side allocates nothing per row/cell here - `xl_rows_read_all_blob`
 /// writes the same wire format `RowCursor::next_row` decodes, one row after another with a length

@@ -220,7 +220,8 @@ The crate follows the library: reads move from `Workbook` to `Sheet`.
 | `parse_arrow::<T>(&mut workbook, h)?`, `parse_arrow_stream` | the same, taking a `Sheet` |
 
 `Workbook` no longer needs to be `mut`, and it is `Send + Sync`. A cursor reads its sheet once from
-the top; call `rows()` again for another pass. A crate built for ABI 5 refuses a v6 library with an
+the top; call `rows()` again for another pass. `Sheet::read_all_blob()` and `read_all_decoded()`
+read the whole sheet from its first row; they no longer continue a cursor. A crate built for ABI 5 refuses a v6 library with an
 ABI-version error at the first `Workbook::open`.
 
 ### Python
