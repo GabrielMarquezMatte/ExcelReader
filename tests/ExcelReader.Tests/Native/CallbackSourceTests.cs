@@ -74,7 +74,6 @@ namespace ExcelReader.Tests.Native
 
         private static NativeOpenOptionsRaw Options() => new() { StructSize = sizeof(NativeOpenOptionsRaw) };
 
-        // Prefetch only engages on sheets of 256 KiB or more uncompressed; the ConcurrentSheetTests sheets are smaller.
         private static byte[] BuildPrefetchedXlsx()
         {
             using MemoryStream buffer = new();

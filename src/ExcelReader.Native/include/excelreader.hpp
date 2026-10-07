@@ -76,8 +76,6 @@ namespace xl
     namespace detail
     {
 
-        // The first calls into the runtime from several threads at once can crash it; finish its
-        // start-up on this thread first (see commit b5f8c5f). Failures are ignored.
         inline void warm_up() noexcept
         {
             static constexpr char csv[] = "a,b\n1,2\n3,4\n";
@@ -528,7 +526,6 @@ namespace xl
                     current_ = (*row_)[index_];
                     return;
                 }
-                // Blob cell: int32 column, int32 type, int32 length, then the value bytes.
                 const uint8_t *end = row_->payload_.data() + row_->payload_.size();
                 int32_t header[3];
                 if (static_cast<size_t>(end - next_) < sizeof(header))

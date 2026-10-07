@@ -51,7 +51,6 @@ namespace ExcelReader.Core.Parser.Internal
             return ProjectionStep.Skip;
         }
 
-        // Kept out of line so the caller's foreach tier-1 compile can't inline the whole projection and spill its hot loop.
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal readonly T Project(Row row)
         {

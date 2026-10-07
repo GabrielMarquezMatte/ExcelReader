@@ -92,9 +92,7 @@ namespace ExcelReader.Core.Reader.Csv
             return false;
         }
 
-        // A synchronous Windows handle serializes every read on its file object; parallel chunks need an overlapped one.
         // ponytail: reopens by path, safe because Excel's file opens deny write/delete sharing; switch to
-        // ReOpenFile if a caller-supplied FileStream that allows delete ever reaches this.
         private SafeFileHandle ChunkHandle(FileStream file)
         {
             if (!OperatingSystem.IsWindows())

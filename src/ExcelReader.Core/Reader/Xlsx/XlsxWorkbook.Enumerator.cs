@@ -562,8 +562,6 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return true;
             }
 
-            // Accepts only ` r="A1"`, ` s="12"`, ` t="s"` (any order, one space, double quotes); anything else goes generic.
-            // Inlined so col/style/kind/gt stay in registers instead of five out-params through the stack per cell.
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static bool TryScanCanonicalCellTag(byte[] buf, int len, int i, out int gt, out int col, out int style, out Kind kind)
             {

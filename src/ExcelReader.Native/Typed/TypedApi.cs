@@ -98,7 +98,6 @@ namespace ExcelReader.Native.Typed
             FreeBlock(column.Data);
         }
 
-        // AsyncLocal, not ThreadStatic: a test's hooks must follow a parallel build onto pool threads.
         private static readonly AsyncLocal<Func<int, IntPtr>?> AllocOverrideLocal = new();
         private static readonly AsyncLocal<Action<IntPtr>?> FreeOverrideLocal = new();
 
@@ -419,8 +418,6 @@ namespace ExcelReader.Native.Typed
                 return true;
             }
 
-            // Each numeric type gets its own method so AppendFrom stays a small dispatcher: with the
-            // inlined double parser in it, every cell of every type paid its prologue.
             [MethodImpl(MethodImplOptions.NoInlining)]
             private bool AppendInt64(in Cell cell, bool isDate1904)
             {

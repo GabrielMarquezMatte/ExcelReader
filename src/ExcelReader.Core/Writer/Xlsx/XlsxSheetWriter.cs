@@ -265,8 +265,6 @@ namespace ExcelReader.Core.Writer.Xlsx
             Release(faulted: false);
         }
 
-        // Ended is only ever set by Release, after cleanup, so an already-ended sheet has nothing left
-        // to release: a fault raised inside a nested step (start, flush) is handled exactly once.
         private void Fault()
         {
             if (_state == WriterState.Ended)

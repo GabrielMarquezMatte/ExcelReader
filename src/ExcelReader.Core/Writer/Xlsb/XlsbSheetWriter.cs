@@ -265,8 +265,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             Release(faulted: false);
         }
 
-        // Ended is only ever set by Release, after cleanup, so an already-ended sheet has nothing left
-        // to release: a fault raised inside a nested step (flush) is handled exactly once.
         private void Fault()
         {
             if (_state == WriterState.Ended)
@@ -653,7 +651,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return false;
             }
-            // Excel writes an integer as the float form whenever it is exact; calamine ignores a date style on the int form.
             ulong bits = BitConverter.DoubleToUInt64Bits(value);
             rk = (bits & 0x3_FFFF_FFFFUL) == 0 ? (uint)(bits >> 32) : ((uint)(int)value << 2) | 0x02;
             return true;

@@ -6,7 +6,6 @@ namespace ExcelReader.Tests.Parser
 {
     public partial class HeaderCollisionTests
     {
-        // EXR006 fires for these two, so their Generated path is covered by GeneratorTests' in-memory compilation instead.
         private sealed class CaseModel
         {
             [ExcelColumn("Name")]

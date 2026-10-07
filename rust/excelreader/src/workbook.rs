@@ -135,7 +135,6 @@ pub struct Workbook {
 }
 
 // SAFETY: ABI v6 documents the workbook handle as usable from several threads at once. The only
-// state behind it is immutable after open; each read owns its enumerator.
 unsafe impl Send for Workbook {}
 unsafe impl Sync for Workbook {}
 
@@ -699,7 +698,6 @@ impl<T: ExcelMapper> Drop for TableView<T> {
 }
 
 // SAFETY: plain native allocations, read only through &self, released by xl_free_table, which any
-// thread may call. T appears only as fn pointers, never as a stored value.
 unsafe impl<T: ExcelMapper> Send for TableView<T> {}
 unsafe impl<T: ExcelMapper> Sync for TableView<T> {}
 
@@ -723,7 +721,6 @@ pub struct TypedChunks<'a, T: ExcelMapper> {
 }
 
 // SAFETY: a typed reader owns its native enumerator; ABI v6 lets it be used from any one thread
-// at a time, which `&mut self` on `next` already guarantees.
 unsafe impl<T: ExcelMapper> Send for TypedChunks<'_, T> {}
 
 impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {

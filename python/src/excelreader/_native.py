@@ -437,8 +437,6 @@ def load_library() -> ctypes.CDLL:
 
 
 def _warm_up(lib: ctypes.CDLL) -> None:
-    # Threads whose first native call lands together can crash the NativeAOT runtime's start-up
-    # (see commit b5f8c5f); one small read here finishes it on a single thread. Failures are ignored.
     data = b"a,b\n1,2\n3,4\n"
     workbook = ctypes.c_void_p()
     if lib.xl_open_memory(data, len(data), XL_FORMAT_CSV, None, ctypes.byref(workbook)) != XL_OK:
