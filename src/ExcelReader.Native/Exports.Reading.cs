@@ -72,6 +72,28 @@ namespace ExcelReader.Native
             return RegisterOpened(status, handle, outHandle);
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_stream")]
+        public static int OpenStream(NativeStreamRaw* stream, int format, NativeOpenOptionsRaw* options, nint* outHandle)
+        {
+            NativeApi.ClearLastError();
+            if (outHandle is not null)
+            {
+                *outHandle = 0;
+            }
+            if (!CallbackReadStream.TryCreate(stream, outHandle is not null, out CallbackReadStream? callback, out string? error))
+            {
+                NativeApi.SetLastError(error);
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryReadOpenOptions(options, out NativeOpenOptionsRaw? rawOptions))
+            {
+                callback.Dispose();
+                return NativeStatus.InvalidArgument;
+            }
+            int status = ReadApi.OpenStream(callback, format, rawOptions, out NativeHandle? handle);
+            return RegisterOpened(status, handle, outHandle);
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_set_source_error")]
         public static void SetSourceError(byte* message, int length)
         {

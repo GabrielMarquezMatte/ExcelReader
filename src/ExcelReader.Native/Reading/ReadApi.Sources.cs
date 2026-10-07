@@ -51,5 +51,56 @@ namespace ExcelReader.Native.Reading
                 }
             }
         }
+
+        internal static int OpenStream(CallbackReadStream stream, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
+        {
+            handle = null;
+            bool opened = false;
+            try
+            {
+                if (!TryDecodeOpenOptions(rawOptions, out NativeOpenOptions? decoded, out string? error))
+                {
+                    NativeApi.SetLastError(error!);
+                    return NativeStatus.InvalidArgument;
+                }
+                if (!IsKnownFormat(format))
+                {
+                    NativeApi.SetLastError($"format must be one of the XL_FORMAT_* values; got {format}.");
+                    return NativeStatus.InvalidArgument;
+                }
+                NativeOpenOptions options = decoded ?? default;
+                ExcelReaderOptions readerOptions = options.ToExcelReaderOptions();
+                IExcelWorkbook workbook;
+                if (format == NativeFormat.Csv)
+                {
+                    workbook = Excel.FromCsv(stream, leaveOpen: false, readerOptions.Csv);
+                }
+                else
+                {
+                    ReadOnlyMemory<byte> data = StreamBuffer.ReadAll(stream, options.MaxBufferedBytes ?? Array.MaxLength);
+                    stream.Dispose();
+                    workbook = Excel.Open(data, MapFormat(format), readerOptions);
+                }
+                handle = new NativeHandle(workbook);
+                opened = true;
+                return NativeStatus.Ok;
+            }
+            catch (ExcelEncryptionException ex)
+            {
+                return MapEncryptionException(ex);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+            finally
+            {
+                if (!opened)
+                {
+                    stream.Dispose();
+                }
+            }
+        }
     }
 }

@@ -121,6 +121,25 @@ typedef struct xl_source {
 int32_t xl_open_source(const xl_source* source, int32_t format,
                        const xl_open_options* options, xl_workbook** out_handle);
 
+/* Sequential bytes for xl_open_stream. */
+typedef struct xl_stream {
+    int32_t struct_size;     /* sizeof(xl_stream) */
+    void* user_data;
+    /* Copy up to len bytes into buf. Return the bytes copied (0 at the end), or -1 on failure after
+       calling xl_set_source_error. Never called concurrently. */
+    int64_t (*read)(void* user_data, uint8_t* buf, int64_t len);
+    /* May be NULL. Called exactly once. */
+    void (*release)(void* user_data);
+} xl_stream;
+
+/* Opens a workbook over a stream that cannot seek. A CSV is read as it arrives, by one cursor:
+   a second cursor, typed reader or Arrow stream on it fails with XL_ERROR, csv_sniff_dialect is
+   refused, and the stream is released when the workbook and its cursor are closed. An XLSX, XLSB
+   or XLS needs random access, so the stream is read whole (up to max_buffered_bytes) and released
+   before this returns. Ownership rules are those of xl_open_source. */
+int32_t xl_open_stream(const xl_stream* stream, int32_t format,
+                       const xl_open_options* options, xl_workbook** out_handle);
+
 /* Callable only from inside read_at or read: the message xl_last_error reports when the callback
    then returns -1. Inside a callback, no other xl_ function may be called. */
 void xl_set_source_error(const uint8_t* message, int32_t len);
