@@ -125,7 +125,7 @@ static void BM_ParseSheet(benchmark::State &state)
         }
         state.ResumeTiming();
 
-        auto table = xl::parse_sheet<Row>(*workbook);
+        auto table = xl::parse_sheet<Row>(workbook->sheet(0));
         benchmark::DoNotOptimize(table);
         if (!table.has_value())
         {
@@ -155,7 +155,7 @@ static void BM_InferSchema(benchmark::State &state)
         }
         state.ResumeTiming();
 
-        auto schema = workbook->infer_schema(1, 100);
+        auto schema = workbook->sheet(0).infer_schema(1, 100);
         benchmark::DoNotOptimize(schema);
         if (!schema.has_value())
         {
@@ -207,7 +207,7 @@ static void BM_ParseSheet_Large(benchmark::State &state)
         }
         state.ResumeTiming();
 
-        auto table = xl::parse_sheet<LargeRow>(*workbook);
+        auto table = xl::parse_sheet<LargeRow>(workbook->sheet(0));
         benchmark::DoNotOptimize(table);
         if (!table.has_value())
         {
@@ -237,7 +237,7 @@ static void BM_TypedReaderBatched_Large(benchmark::State &state)
         }
         state.ResumeTiming();
 
-        auto reader = xl::typed_reader<LargeRow>(*workbook, 1, state.range(0));
+        auto reader = xl::typed_reader<LargeRow>(workbook->sheet(0), 1, state.range(0));
         if (!reader.has_value())
         {
             state.SkipWithError(reader.error().message.c_str());
@@ -277,7 +277,7 @@ static void BM_InferSchema_Large(benchmark::State &state)
         }
         state.ResumeTiming();
 
-        auto schema = workbook->infer_schema(1, 1000);
+        auto schema = workbook->sheet(0).infer_schema(1, 1000);
         benchmark::DoNotOptimize(schema);
         if (!schema.has_value())
         {
