@@ -169,15 +169,12 @@ namespace ExcelReader.Core.Reader.Schema
                 }
             }
 
-            // Stricter than the typed converters on purpose: their fallbacks (DateTime.TryParse,
-            // long.TryParse with whitespace) would type ID and ratio columns as dates or numbers.
             private bool ObserveText(in Cell cell, bool isDate1904)
             {
                 ReadOnlySpan<byte> text = cell.Value;
                 bool canonical = HasCanonicalIntegerPart(text, out bool allDigits);
                 if (canonical && allDigits)
                 {
-                    // An integer past long stays text: as a double it would silently lose digits.
                     if (!ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out _))
                     {
                         return false;
@@ -186,7 +183,6 @@ namespace ExcelReader.Core.Reader.Schema
                     SawNonBinaryNumber |= !IsBinaryDigit(text);
                     return true;
                 }
-                // Scientific notation stays text: part codes like 12E4 would silently become 120000.
                 if (canonical && !text.ContainsAny((byte)'e', (byte)'E') && FastDouble.TryParse(text, out _))
                 {
                     SawNumber = true;

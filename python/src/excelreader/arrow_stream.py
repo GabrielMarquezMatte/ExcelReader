@@ -37,8 +37,6 @@ def _address_of(function: object) -> int:
     return ctypes.cast(function, ctypes.c_void_p).value
 
 
-# A consumer may move the proxy out of the capsule, so callbacks find the native stream through
-# private_data, which travels with the move, never through the address they are called with.
 _streams: dict[int, _Target] = {}
 _proxies: dict[int, _native.ArrowArrayStream] = {}
 

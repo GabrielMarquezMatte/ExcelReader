@@ -68,7 +68,6 @@ unsafe extern "C" fn read_at<S: Source>(user_data: *mut c_void, offset: i64, buf
     report(catch_unwind(AssertUnwindSafe(|| source.read_at(offset as u64, buf))))
 }
 
-// The ABI never calls read concurrently, so the reader can be borrowed mutably.
 unsafe extern "C" fn read<R: Read>(user_data: *mut c_void, buf: *mut u8, len: i64) -> i64 {
     let reader = &mut *user_data.cast::<R>();
     let buf = std::slice::from_raw_parts_mut(buf, len as usize);

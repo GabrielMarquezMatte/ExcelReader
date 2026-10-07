@@ -8,8 +8,6 @@ using static ExcelReader.Benchmarks.BenchmarkAccumulators;
 
 namespace ExcelReader.Benchmarks
 {
-    // Sheet stage = full read minus the shared-string prologue; the Stored_* pair repeats both with
-    // the sheet re-zipped uncompressed, so their difference is sheet parse with no inflate floor.
     [MemoryDiagnoser]
     public partial class XlsxSharedStringHotPathBenchmark
     {

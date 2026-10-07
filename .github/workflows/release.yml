@@ -312,8 +312,6 @@ jobs:
             grep -q 'already exists' <<<"$out" || exit 1
           fi
 
-      # The workspace config points EXCELREADER_NATIVE_LIB_DIR at a local build that this job never makes;
-      # without it the package verification downloads the native library from the release, as users do.
       - name: Publish excelreader to crates.io
         working-directory: rust/excelreader
         env:

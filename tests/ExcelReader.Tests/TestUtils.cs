@@ -257,7 +257,6 @@ namespace ExcelReader.Tests
             };
         }
 
-        // Every span/async write on a derived MemoryStream funnels into this overload.
         public override void Write(byte[] buffer, int offset, int count)
         {
             OnWrite?.Invoke();

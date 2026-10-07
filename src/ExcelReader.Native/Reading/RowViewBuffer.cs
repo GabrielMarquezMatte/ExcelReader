@@ -65,7 +65,6 @@ namespace ExcelReader.Native.Reading
             {
                 GrowCells();
             }
-            // Offsets until the row is complete: growing _values moves it, so pointers are fixed up in Finish.
             _cells[count++] = new NativeRowCell { Column = column, Type = type, ValueLength = length, Value = valueOffset };
         }
 
@@ -86,7 +85,6 @@ namespace ExcelReader.Native.Reading
             }
         }
 
-        // Out of line: without PGO the JIT/ILC inlines the Realloc P/Invoke and pays its frame setup on every row.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void GrowValues(int required)
         {

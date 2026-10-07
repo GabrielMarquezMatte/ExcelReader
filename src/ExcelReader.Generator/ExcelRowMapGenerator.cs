@@ -366,7 +366,6 @@ namespace ExcelReader.Generator
             {
                 return ($"m.{member} = v", null);
             }
-            // Init accessors can't be called outside an object initializer; UnsafeAccessor binds the same setter reflection's GetSetMethod() does.
             string accessor = $"__ExcelInit_{property.Name}";
             string byRef = init.ContainingType.IsValueType ? "ref " : "";
             string target = init.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);

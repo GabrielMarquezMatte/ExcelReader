@@ -80,114 +80,60 @@ typedef struct xl_open_options {
     const uint8_t* password;
     int32_t password_len;
 
-    /* xl_open_source only: bytes of blocks kept in memory. 0 is the default, 64 MiB. */
     int64_t source_cache_bytes;
-    /* xl_open_stream with XLSX, XLSB or XLS only: the most bytes the stream may hold. 0 is the
-       default, the .NET array limit (about 2 GB). */
     int64_t max_buffered_bytes;
-    /* xl_open_source only: bytes fetched per read_at call. 0 is the default, 4 MiB; negative turns
-       the cache off, so every read the library makes reaches read_at. */
     int32_t source_block_size;
 } xl_open_options;
 
-/* options may be NULL for the defaults. When it is not NULL, set options->struct_size to
-   sizeof(xl_open_options) first. The 6.0 layout, which ends at password_len, is still accepted.
-   xl_open_memory copies data, so the buffer may be released as soon
-   as the call returns. */
 int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format,
                      const xl_open_options* options, xl_workbook** out_handle);
 
 int32_t xl_open_memory(const uint8_t* data, int32_t data_len, int32_t format,
                        const xl_open_options* options, xl_workbook** out_handle);
 
-/* Random-access bytes for xl_open_source. */
 typedef struct xl_source {
-    int32_t struct_size;     /* sizeof(xl_source) */
+    int32_t struct_size;     
     void* user_data;
-    int64_t length;          /* total size in bytes */
-    /* Copy up to len bytes starting at offset into buf. Return the bytes copied, or -1 on failure
-       after calling xl_set_source_error. Returning 0 before length is a failure ("the source ended
-       early"). Returning more than len, or a negative other than -1, is a failure. Called from any
-       thread, concurrently. */
+    int64_t length;          
     int64_t (*read_at)(void* user_data, int64_t offset, uint8_t* buf, int64_t len);
-    /* May be NULL. Called exactly once, when nothing opened from the workbook needs the source. */
     void (*release)(void* user_data);
 } xl_source;
 
-/* Opens a workbook over a source the caller serves. Every sheet can be read in parallel. A valid
-   source is released exactly once, whether the open succeeds or fails; a NULL source, a wrong
-   struct_size, a NULL read_at, a negative length or a NULL out_handle returns XL_INVALID_ARGUMENT
-   and the source is not released. With the default options, reads reach read_at in 4 MiB blocks
-   kept in a 64 MiB cache. */
 int32_t xl_open_source(const xl_source* source, int32_t format,
                        const xl_open_options* options, xl_workbook** out_handle);
 
-/* Sequential bytes for xl_open_stream. */
 typedef struct xl_stream {
-    int32_t struct_size;     /* sizeof(xl_stream) */
+    int32_t struct_size;     
     void* user_data;
-    /* Copy up to len bytes into buf. Return the bytes copied (0 at the end), or -1 on failure after
-       calling xl_set_source_error. Returning more than len, or a negative other than -1, is a failure.
-       Never called concurrently. */
     int64_t (*read)(void* user_data, uint8_t* buf, int64_t len);
-    /* May be NULL. Called exactly once. */
     void (*release)(void* user_data);
 } xl_stream;
 
-/* Opens a workbook over a stream that cannot seek. A CSV is read as it arrives, by one cursor
-   at a time. Its first 16 MiB are kept, so a later cursor, typed reader or Arrow stream starts over
-   (xl_infer_schema, then a read) until one has read past them; after that, or while one is still
-   open, another fails with XL_ERROR. csv_sniff_dialect is refused, and the stream is released when
-   the workbook and its cursors are closed. An XLSX, XLSB
-   or XLS needs random access, so the stream is read whole (up to max_buffered_bytes) and released
-   before this returns. Ownership rules are those of xl_open_source. */
 int32_t xl_open_stream(const xl_stream* stream, int32_t format,
                        const xl_open_options* options, xl_workbook** out_handle);
 
-/* Callable only from inside read_at or read: the message xl_last_error reports when the callback
-   then returns -1. Inside a callback, no other xl_ function may be called. */
 void xl_set_source_error(const uint8_t* message, int32_t len);
 
-/* Cursors, typed readers and Arrow streams opened from this handle keep working after xl_close; the
-   workbook's resources are released when the last of them is closed. Any later call that takes this
-   handle returns XL_INVALID_HANDLE. */
 int32_t xl_close(xl_workbook* handle);
 
-/* A workbook handle may be used from several threads at once. index and sheet are zero-based:
-   negative is XL_INVALID_ARGUMENT, at or past xl_sheet_count is XL_ERROR. */
 int32_t xl_sheet_count(xl_workbook* handle, int32_t* out_count);
 
 int32_t xl_sheet_name_at(xl_workbook* handle, int32_t index, uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
-/* Writes XL_SHEET_VISIBLE, XL_SHEET_HIDDEN or XL_SHEET_VERY_HIDDEN. */
 int32_t xl_sheet_visibility_at(xl_workbook* handle, int32_t index, int32_t* out_visibility);
 
-/* Finds a sheet by name, ignoring case. A name that matches no sheet is not an error: the function
-   returns XL_OK and writes -1. */
 int32_t xl_sheet_index(xl_workbook* handle, const uint8_t* name, int32_t name_len, int32_t* out_index);
 
 int32_t xl_is_date1904(xl_workbook* handle, int32_t* out_flag);
 
-/* Opens a cursor over one sheet. A cursor reads its sheet once, front to back; open another to read
-   it again. Any number of cursors may be open on one workbook, on the same sheet or on different
-   ones, and each may run on its own thread. Use one cursor from one thread at a time. A cursor keeps
-   working after xl_close on its workbook. Release it with xl_rows_close. */
 int32_t xl_rows_open(xl_workbook* handle, int32_t sheet, xl_rows** out_rows);
 
-/* A NULL or unknown cursor is XL_INVALID_HANDLE and nothing is released. */
 int32_t xl_rows_close(xl_rows* rows);
 
-/* XL_BUFFER_TOO_SMALL writes the needed size to out_written; call xl_rows_next again with a larger
-   buffer before any other read on that cursor, and the same row is returned. */
 int32_t xl_rows_next(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
-/* out_row points into memory the cursor owns: overwritten by the next xl_rows_next_view on that
-   cursor, released by xl_rows_close. Values are NUL-terminated. Do not pass it to xl_free_rows. */
 int32_t xl_rows_next_view(xl_rows* rows, xl_row* out_row);
 
-/* Reads the rows the cursor has not yet returned. XL_BUFFER_TOO_SMALL writes the needed size to
-   out_written; call xl_rows_read_all_blob again with a larger buffer before any other read on that
-   cursor. */
 int32_t xl_rows_read_all_blob(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
 typedef struct xl_rows_decoded {
@@ -195,7 +141,6 @@ typedef struct xl_rows_decoded {
     xl_row* rows;
 } xl_rows_decoded;
 
-/* Reads the rows the cursor has not yet returned. Release out_rows with xl_free_rows. */
 int32_t xl_rows_read_all_decoded(xl_rows* rows, xl_rows_decoded* out_rows);
 
 void xl_free_rows(xl_rows_decoded* rows);
@@ -232,24 +177,16 @@ typedef struct xl_table {
     xl_column* columns;
 } xl_table;
 
-/* sheet is a zero-based index: negative is XL_INVALID_ARGUMENT, at or past xl_sheet_count is XL_ERROR.
-   degree_of_parallelism: 0 = processor count, 1 = sequential, n = up to n threads; negative is
-   XL_INVALID_ARGUMENT. Only a CSV handle is read in parallel. Any other format, a CSV too small to
-   split, or a CSV opened with a non-UTF-8 encoding is read sequentially; the table is the same either
-   way. Calls on one handle may run on several threads at once. */
 int32_t xl_parse_typed(xl_workbook* handle, int32_t sheet, const xl_column_spec* specs, int32_t spec_count,
                        int32_t header_row, int32_t degree_of_parallelism, xl_table* out_table);
 
 void xl_free_table(xl_table* table);
 
-/* The reader owns its position in the sheet. It keeps working after xl_close on its workbook, and any
-   number of readers may be open on one workbook. Use one reader from one thread at a time. */
 int32_t xl_typed_reader_open(xl_workbook* handle, int32_t sheet, const xl_column_spec* specs, int32_t spec_count,
                              int32_t header_row, int64_t max_rows, xl_typed_reader** out_reader);
 
 int32_t xl_typed_reader_next(xl_typed_reader* reader, xl_table* out_table);
 
-/* A NULL or unknown reader is ignored. */
 void xl_typed_reader_close(xl_typed_reader* reader);
 
 
@@ -289,8 +226,6 @@ int32_t xl_encrypt_package(const uint8_t* package_path, int32_t package_path_len
                            const uint8_t* destination_path, int32_t destination_path_len,
                            const uint8_t* password, int32_t password_len);
 
-/* xl_encrypt_package over bytes: the plaintext package never touches disk. Release out_buffer with
-   xl_free_buffer. */
 int32_t xl_encrypt_package_to_memory(const uint8_t* package, int32_t package_len,
                                      const uint8_t* password, int32_t password_len,
                                      xl_buffer* out_buffer);
@@ -302,10 +237,6 @@ typedef struct xl_inferred_schema {
 
 #define XL_INFER_PARSE_TEXT 1
 
-/* flags: 0, or XL_INFER_PARSE_TEXT to also type cells that hold text (a CSV's fields, numbers stored
-   as text): integers, decimals, true/false and ISO dates or date-times, when the text has exactly that
-   shape. Leading-zero codes such as 00123 and scientific notation such as 12E4 stay text. Any unknown
-   bit is XL_INVALID_ARGUMENT. Free the result with xl_free_schema. */
 int32_t xl_infer_schema(xl_workbook* handle, int32_t sheet, int32_t header_row, int32_t sample_size,
                         int32_t flags, xl_inferred_schema* out_schema);
 
@@ -372,11 +303,6 @@ int32_t xl_csv_aggregate_memory(const uint8_t* data, int32_t data_len,
                                 const xl_csv_parallel_options* options,
                                 void** out_state);
 
-/* The message for the calling thread's most recent failure. After any non-OK status from a
-   function that opens, reads or inspects a workbook (xl_open_*, xl_close, xl_sheet_*, xl_is_date1904,
-   xl_rows_*, xl_parse_*, xl_typed_reader_*, xl_infer_schema), it is that call's message, or empty
-   when the status alone says it all (a NULL out-pointer, an unknown handle): never a message left by
-   an earlier call. The writer, CSV-aggregation and encryption functions set it on XL_ERROR. */
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
 const uint8_t* xl_last_error_ptr(int32_t* out_len);
