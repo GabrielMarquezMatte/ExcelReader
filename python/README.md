@@ -409,7 +409,8 @@ with open_source(HttpSource("https://example.com/book.xlsx")) as workbook:
 ```
 
 `open_stream()` reads anything with `readinto()` or `read()`, such as `sys.stdin.buffer`. A CSV is
-read as it arrives; an XLSX, XLSB or XLS is read whole first.
+read as it arrives, and its first 16 MiB are kept so that `infer_schema()` followed by a read works;
+an XLSX, XLSB or XLS is read whole first.
 
 ```python
 import sys

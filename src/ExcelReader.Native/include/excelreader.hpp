@@ -968,7 +968,8 @@ namespace xl
             return Workbook(handle);
         }
 
-        /// Opens a workbook over a stream that cannot seek: a CSV is read as it arrives, once; an XLSX, XLSB or XLS is read whole first.
+        /// Opens a workbook over a stream that cannot seek: a CSV is read as it arrives, and again from the start
+        /// until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole first.
         static std::expected<Workbook, Error> open_stream(std::unique_ptr<InputStream> stream, int32_t format = XL_FORMAT_AUTO,
                                                           const OpenOptions *options = nullptr)
         {

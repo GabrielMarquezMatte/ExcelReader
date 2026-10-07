@@ -81,15 +81,23 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void A_Csv_Streams_Once_And_Is_Released_When_Its_Cursor_Closes()
+        public void A_Csv_Streams_Through_One_Cursor_At_A_Time_And_Is_Released_On_Close()
         {
             TestStream test = new(Encoding.UTF8.GetBytes("a,b\n1,2\n3,4\n"));
             using Pinned pinned = new(test);
             Assert.Equal(NativeStatus.Ok, Open(pinned, NativeFormat.Csv, out NativeHandle? handle));
+
+            Assert.Equal(NativeStatus.Ok, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, flags: 0, out NativeInferredSchema schema));
+            Assert.Equal(2, schema.ColumnCount);
+            ReadApi.FreeSchema(ref schema);
             Assert.Equal(3, CountRows(handle!, 0));
 
-            Assert.Equal(NativeStatus.Error, ReadApi.OpenRows(handle, 0, out _));
-            Assert.Contains("only be enumerated once", NativeApi.LastErrorText(), StringComparison.Ordinal);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenRows(handle, 0, out NativeRowCursor? open));
+            using (open)
+            {
+                Assert.Equal(NativeStatus.Error, ReadApi.OpenRows(handle, 0, out _));
+                Assert.Contains("cannot be enumerated again", NativeApi.LastErrorText(), StringComparison.Ordinal);
+            }
 
             Assert.Equal(0, test.Releases);
             Assert.Equal(NativeStatus.Ok, ReadApi.Close(handle));

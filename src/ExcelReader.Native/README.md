@@ -153,7 +153,8 @@ in parallel. By default the library asks for 4 MiB blocks and keeps 64 MiB of th
 (`source_block_size`, `source_cache_bytes` in `xl_open_options`).
 
 `xl_open_stream` reads through a callback that copies the next bytes. A CSV is read as it arrives,
-by one cursor; an XLSX, XLSB or XLS is read whole first (`max_buffered_bytes` caps it), because
+by one cursor at a time, and its first 16 MiB are kept so that `xl_infer_schema` followed by a read
+works; an XLSX, XLSB or XLS is read whole first (`max_buffered_bytes` caps it), because
 those formats need random access.
 
 Both take ownership: `release` runs exactly once, when nothing needs the bytes any more. A failing

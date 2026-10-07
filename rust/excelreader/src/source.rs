@@ -42,8 +42,8 @@ impl Workbook {
         Ok(Workbook::from_handle(handle))
     }
 
-    /// Opens a workbook over `reader`, which cannot seek. A CSV is read as it arrives, once; an
-    /// XLSX, XLSB or XLS is read whole first. The library owns `reader` from here on.
+    /// Opens a workbook over `reader`, which cannot seek. A CSV is read as it arrives, and
+    /// again from the start until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole first. The library owns `reader` from here on.
     pub fn open_reader<R: Read + Send + 'static>(reader: R, format: i32, options: Option<&OpenOptions>) -> Result<Workbook, Error> {
         check_abi_version()?;
         let raw = XlStream {
