@@ -147,6 +147,43 @@ encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")?;
 Encryption parameters are fixed at Excel's own defaults - there are no options - and only XLSX/XLSB
 packages can be encrypted, matching what `Workbook::open_with`/`open_memory` can decrypt.
 
+### Reading from your own bytes
+
+Implement [`Source`] to read from anything you can read at an offset. The library calls `read_at`
+from several threads, fetching 4 MiB blocks it caches; every sheet can still be read in parallel.
+
+```rust
+struct HttpSource { client: reqwest::blocking::Client, url: String, size: u64 }
+
+impl excelreader::Source for HttpSource {
+    fn size(&self) -> std::io::Result<u64> {
+        Ok(self.size)
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> std::io::Result<usize> {
+        let range = format!("bytes={}-{}", offset, offset + buf.len() as u64 - 1);
+        let bytes = self.client.get(&self.url).header("Range", range).send()
+            .and_then(|r| r.error_for_status())
+            .and_then(|r| r.bytes())
+            .map_err(std::io::Error::other)?;
+        buf[..bytes.len()].copy_from_slice(&bytes);
+        Ok(bytes.len())
+    }
+}
+
+let workbook = Workbook::open_source(source, XL_FORMAT_AUTO, None)?;
+```
+
+Anything that implements `Read` works through `open_reader`. A CSV is read as it arrives; an XLSX,
+XLSB or XLS is read whole first.
+
+```rust
+let workbook = Workbook::open_reader(std::io::stdin(), XL_FORMAT_CSV, None)?;
+```
+
+An `io::Error` from your source, or a panic in it, comes back as the `Error` of the call that
+needed the bytes.
+
 ### Arrow export (`arrow` feature)
 
 ```toml
