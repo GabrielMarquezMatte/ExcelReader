@@ -204,3 +204,19 @@ Behavior changes:
 - Opening a second typed reader or Arrow stream on a workbook used to fail, and reading the workbook
   another way used to invalidate an open one. Both now work: each read is independent.
 - A cursor, typed reader or Arrow stream keeps working after `xl_close` on its workbook.
+
+### C++
+
+The wrapper follows the library: reads move from `xl::Workbook` to `xl::Sheet`.
+
+| v5 | v6 |
+|---|---|
+| `workbook.move_to_sheet(i)` then a read | read from `workbook.sheet(i)` |
+| `workbook.sheet_name()` | `workbook.sheet(i).name()` or `workbook.sheet_name_at(i)` |
+| `workbook.rows()` | `workbook.sheet(0).rows()`, which returns `std::expected<RowCursor, Error>` |
+| `workbook.read_all_decoded()`, `workbook.infer_schema(h, n)` | the same methods on a `Sheet` |
+| `xl::parse_sheet<T>(workbook, h)`, `xl::typed_reader<T>(workbook, h, n)` | the same, taking a `Sheet` |
+| `xl::parse_arrow<T>(workbook, h)`, `xl::arrow_stream<T>(workbook, h, n)` | the same, taking a `Sheet` |
+
+`xl::RowCursor` now owns a native cursor and is move-only. A header built for ABI 5 refuses a v6
+library with an ABI-version error at the first `Workbook::open`.
