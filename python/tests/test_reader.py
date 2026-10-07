@@ -1,5 +1,8 @@
+import ctypes
 import gc
 import shutil
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -16,6 +19,7 @@ from excelreader import (
     open_bytes,
     open_workbook,
 )
+from excelreader import _native
 from excelreader import arrow_stream as arrow_stream_module
 from excelreader import reader as reader_module
 
@@ -647,6 +651,48 @@ def test_a_dropped_capsule_releases_the_read(batched_csv, monkeypatch):
         gc.collect()
 
         assert released == [True]
+
+
+def test_a_consumer_holding_the_gil_does_not_block_other_threads_while_a_batch_parses(tmp_path):
+    path = tmp_path / "large.csv"
+    rows = 1_000_000
+    path.write_text("name,qty\n" + "".join(f"row{i},{i}\n" for i in range(rows)), encoding="utf-8")
+    ticks = []
+    stop = threading.Event()
+
+    def tick():
+        while not stop.is_set():
+            ticks.append(time.perf_counter())
+
+    with open_workbook(path) as workbook:
+        capsule = workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=rows).__arrow_c_stream__()
+        capsule_pointer = ctypes.PYFUNCTYPE(ctypes.c_void_p, ctypes.py_object, ctypes.c_char_p)(
+            ("PyCapsule_GetPointer", ctypes.pythonapi)
+        )
+        address = capsule_pointer(capsule, b"arrow_array_stream")
+        stream = _native.ArrowArrayStream.from_address(address)
+        holding_gil = ctypes.PYFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
+        get_next = holding_gil(ctypes.cast(stream.get_next, ctypes.c_void_p).value)
+        batch = _native.ArrowArray()
+        ticker = threading.Thread(target=tick)
+        ticker.start()
+        try:
+            start = time.perf_counter()
+            status = get_next(address, ctypes.addressof(batch))
+            end = time.perf_counter()
+        finally:
+            stop.set()
+            ticker.join()
+        release_batch = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(batch.release)
+        release_batch(ctypes.addressof(batch))
+        del capsule
+
+    assert status == 0
+    assert batch.length == rows
+    inside = [start] + [t for t in ticks if start < t < end] + [end]
+    longest_gap = max(b - a for a, b in zip(inside, inside[1:]))
+    assert end - start > 0.05, "the batch must parse long enough for the gap to mean something"
+    assert longest_gap < (end - start) / 2
 
 
 def test_arrow_stream_rejects_a_negative_batch_size(batched_csv):
