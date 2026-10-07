@@ -22,6 +22,9 @@ def test_exported_functions_are_present():
     for name in (
         "xl_open_file",
         "xl_open_memory",
+        "xl_open_source",
+        "xl_open_stream",
+        "xl_set_source_error",
         "xl_close",
         "xl_sheet_count",
         "xl_sheet_name_at",
