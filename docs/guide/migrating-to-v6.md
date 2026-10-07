@@ -205,6 +205,24 @@ Behavior changes:
   another way used to invalidate an open one. Both now work: each read is independent.
 - A cursor, typed reader or Arrow stream keeps working after `xl_close` on its workbook.
 
+### Rust
+
+The crate follows the library: reads move from `Workbook` to `Sheet`.
+
+| v5 | v6 |
+|---|---|
+| `workbook.move_to_sheet(i)?` then a read | `workbook.sheet(i)?` and read from it |
+| `workbook.sheet_name()?` | `workbook.sheet(i)?.name()?` or `workbook.sheet_name_at(i)?` |
+| `workbook.rows()` | `workbook.sheet(0)?.rows()?` |
+| `workbook.read_all_blob()?`, `read_all_decoded()?` | the same methods on a `Sheet` |
+| `workbook.typed_chunks::<T>(h, n)?`, `workbook.infer_schema(h, n)?` | the same methods on a `Sheet` |
+| `parse_sheet::<T>(&mut workbook, h)?` | `parse_sheet::<T>(workbook.sheet(0)?, h)?` |
+| `parse_arrow::<T>(&mut workbook, h)?`, `parse_arrow_stream` | the same, taking a `Sheet` |
+
+`Workbook` no longer needs to be `mut`, and it is `Send + Sync`. A cursor reads its sheet once from
+the top; call `rows()` again for another pass. A crate built for ABI 5 refuses a v6 library with an
+ABI-version error at the first `Workbook::open`.
+
 ### C++
 
 The wrapper follows the library: reads move from `xl::Workbook` to `xl::Sheet`.
