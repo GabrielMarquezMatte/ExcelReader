@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using ExcelReader.Native.Reading;
 
 namespace ExcelReader.Native
@@ -47,6 +48,34 @@ namespace ExcelReader.Native
             }
             int status = ReadApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_source")]
+        public static int OpenSource(NativeSourceRaw* source, int format, NativeOpenOptionsRaw* options, nint* outHandle)
+        {
+            NativeApi.ClearLastError();
+            if (outHandle is not null)
+            {
+                *outHandle = 0;
+            }
+            if (!CallbackByteSource.TryCreate(source, outHandle is not null, out CallbackByteSource? callback, out string? error))
+            {
+                NativeApi.SetLastError(error);
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryReadOpenOptions(options, out NativeOpenOptionsRaw? rawOptions))
+            {
+                callback.Dispose();
+                return NativeStatus.InvalidArgument;
+            }
+            int status = ReadApi.OpenSource(callback, format, rawOptions, out NativeHandle? handle);
+            return RegisterOpened(status, handle, outHandle);
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_set_source_error")]
+        public static void SetSourceError(byte* message, int length)
+        {
+            SourceErrors.Set(message is null || length <= 0 ? null : Encoding.UTF8.GetString(message, length));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_close")]
