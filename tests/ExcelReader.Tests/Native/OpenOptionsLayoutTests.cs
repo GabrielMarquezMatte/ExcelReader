@@ -8,6 +8,7 @@ namespace ExcelReader.Tests.Native
         public void The_6_0_Layout_Ends_Where_The_New_Fields_Begin()
         {
             Assert.Equal(88, NativeOpenOptionsRaw.V6Size);
+            Assert.Equal(NativeOpenOptionsRaw.V6Size, (int)System.Runtime.InteropServices.Marshal.OffsetOf<NativeOpenOptionsRaw>(nameof(NativeOpenOptionsRaw.SourceCacheBytes)));
             Assert.Equal(112, sizeof(NativeOpenOptionsRaw));
         }
 
