@@ -133,8 +133,9 @@ if (status == XL_STATUS_PASSWORD_REQUIRED || status == XL_STATUS_PASSWORD_INCORR
 
 This is why `XL_ABI_VERSION` moved from 3 to 4: `password`/`password_len` are new fields at the end
 of `xl_open_options`, so a caller built against the old, smaller struct passes the old, smaller
-`sizeof(xl_open_options)` as `struct_size` — the mismatch is rejected outright with
-`XL_INVALID_ARGUMENT` instead of the library reading two garbage fields past the end of the caller's
+`sizeof(xl_open_options)` as `struct_size` — any size other than the current one is rejected outright with
+`XL_INVALID_ARGUMENT` (the 6.0 size, 88 bytes, is the one exception: it is also accepted, read as a prefix
+with the newer fields defaulted) instead of the library reading two garbage fields past the end of the caller's
 allocation. Check `xl_abi_version()` against `XL_ABI_VERSION` (see above) and rebuild against the
 current header rather than only relying on the `struct_size` check to catch it.
 

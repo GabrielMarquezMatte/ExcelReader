@@ -75,7 +75,7 @@ namespace ExcelReader.Native
         public long MaxBufferedBytes;
         public int SourceBlockSize;
 
-        internal static readonly int V6Size = (int)Marshal.OffsetOf<NativeOpenOptionsRaw>(nameof(SourceCacheBytes));
+        internal const int V6Size = 88;
 
         internal static unsafe bool TryRead(NativeOpenOptionsRaw* options, out NativeOpenOptionsRaw raw, [NotNullWhen(false)] out string? error)
         {
