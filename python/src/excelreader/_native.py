@@ -25,7 +25,11 @@ XL_ERROR = -5
 XL_STATUS_PASSWORD_REQUIRED = -6
 XL_STATUS_PASSWORD_INCORRECT = -7
 
-XL_ABI_VERSION = 5
+XL_ABI_VERSION = 6
+
+XL_SHEET_VISIBLE = 0
+XL_SHEET_HIDDEN = 1
+XL_SHEET_VERY_HIDDEN = 2
 
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
@@ -221,6 +225,8 @@ ArrowArrayStream._fields_ = [
 
 
 class NativeRows(ctypes.Structure):
+    """Mirrors xl_rows_decoded."""
+
     _fields_ = [
         ("row_count", ctypes.c_int32),
         ("rows", ctypes.POINTER(NativeRow)),
@@ -399,67 +405,62 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
 
     p_open_options = ctypes.POINTER(NativeOpenOptions)
 
-    lib.xl_open_file.argtypes = [p_bytes, c_int, c_int, pp_void]
+    p_specs = ctypes.POINTER(NativeColumnSpec)
+
+    lib.xl_open_file.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
     lib.xl_open_file.restype = c_int
-    lib.xl_open_file_ex.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
-    lib.xl_open_file_ex.restype = c_int
-    lib.xl_open_memory.argtypes = [p_bytes, c_int, c_int, pp_void]
+    lib.xl_open_memory.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
     lib.xl_open_memory.restype = c_int
-    lib.xl_open_memory_ex.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
-    lib.xl_open_memory_ex.restype = c_int
+    lib.xl_sheet_visibility_at.argtypes = [p_void, c_int, p_int]
+    lib.xl_sheet_visibility_at.restype = c_int
+    lib.xl_sheet_index.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_sheet_index.restype = c_int
+    lib.xl_rows_open.argtypes = [p_void, c_int, pp_void]
+    lib.xl_rows_open.restype = c_int
+    lib.xl_rows_close.argtypes = [p_void]
+    lib.xl_rows_close.restype = c_int
+    lib.xl_rows_next.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_rows_next.restype = c_int
+    lib.xl_rows_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_rows_read_all_blob.restype = c_int
+    lib.xl_rows_read_all_decoded.argtypes = [p_void, ctypes.POINTER(NativeRows)]
+    lib.xl_rows_read_all_decoded.restype = c_int
+    lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
+    lib.xl_free_rows.restype = None
+    lib.xl_parse_typed.argtypes = [p_void, c_int, p_specs, c_int, c_int, c_int, ctypes.POINTER(NativeTable)]
+    lib.xl_parse_typed.restype = c_int
+    lib.xl_typed_reader_open.argtypes = [p_void, c_int, p_specs, c_int, c_int, ctypes.c_int64, pp_void]
+    lib.xl_typed_reader_open.restype = c_int
+    lib.xl_parse_arrow.argtypes = [
+        p_void, c_int, p_specs, c_int, c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema),
+    ]
+    lib.xl_parse_arrow.restype = c_int
+    lib.xl_parse_arrow_stream.argtypes = [
+        p_void, c_int, p_specs, c_int, c_int, ctypes.c_int64, ctypes.POINTER(ArrowArrayStream),
+    ]
+    lib.xl_parse_arrow_stream.restype = c_int
+    lib.xl_infer_schema.argtypes = [p_void, c_int, c_int, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
+    lib.xl_infer_schema.restype = c_int
     lib.xl_close.argtypes = [p_void]
     lib.xl_close.restype = c_int
     lib.xl_sheet_count.argtypes = [p_void, p_int]
     lib.xl_sheet_count.restype = c_int
-    lib.xl_sheet_name.argtypes = [p_void, p_bytes, c_int, p_int]
-    lib.xl_sheet_name.restype = c_int
     lib.xl_sheet_name_at.argtypes = [p_void, c_int, p_bytes, c_int, p_int]
     lib.xl_sheet_name_at.restype = c_int
-    lib.xl_move_to_sheet.argtypes = [p_void, c_int]
-    lib.xl_move_to_sheet.restype = c_int
     lib.xl_is_date1904.argtypes = [p_void, p_int]
     lib.xl_is_date1904.restype = c_int
-    lib.xl_next_row.argtypes = [p_void, p_bytes, c_int, p_int]
-    lib.xl_next_row.restype = c_int
-    lib.xl_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
-    lib.xl_read_all_blob.restype = c_int
     lib.xl_last_error.argtypes = [p_bytes, c_int, p_int]
     lib.xl_last_error.restype = c_int
     lib.xl_last_error_ptr.argtypes = [p_int]
     lib.xl_last_error_ptr.restype = ctypes.POINTER(ctypes.c_uint8)
-    lib.xl_read_all_decoded.argtypes = [p_void, ctypes.POINTER(NativeRows)]
-    lib.xl_read_all_decoded.restype = c_int
-    lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
-    lib.xl_free_rows.restype = None
-    lib.xl_parse_typed.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(NativeTable)]
-    lib.xl_parse_typed.restype = c_int
     lib.xl_free_table.argtypes = [ctypes.POINTER(NativeTable)]
     lib.xl_free_table.restype = None
-    lib.xl_infer_schema.argtypes = [p_void, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
-    lib.xl_infer_schema.restype = c_int
-    lib.xl_infer_schema_ex.argtypes = [p_void, c_int, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
-    lib.xl_infer_schema_ex.restype = c_int
     lib.xl_free_schema.argtypes = [ctypes.POINTER(NativeInferredSchema)]
     lib.xl_free_schema.restype = None
-    lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
-    lib.xl_parse_arrow.restype = c_int
-    lib.xl_parse_typed_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(NativeTable)]
-    lib.xl_parse_typed_ex.restype = c_int
-    lib.xl_parse_arrow_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
-    lib.xl_parse_arrow_ex.restype = c_int
-    lib.xl_typed_reader_open.argtypes = [
-        p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64, pp_void,
-    ]
-    lib.xl_typed_reader_open.restype = c_int
     lib.xl_typed_reader_next.argtypes = [p_void, ctypes.POINTER(NativeTable)]
     lib.xl_typed_reader_next.restype = c_int
     lib.xl_typed_reader_close.argtypes = [p_void]
     lib.xl_typed_reader_close.restype = None
-    lib.xl_parse_arrow_stream.argtypes = [
-        p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64,
-        ctypes.POINTER(ArrowArrayStream),
-    ]
-    lib.xl_parse_arrow_stream.restype = c_int
     lib.xl_write_typed.argtypes = [
         p_bytes, c_int, c_int,
         ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable), ctypes.POINTER(NativeWriteOptions),
