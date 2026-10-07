@@ -10,6 +10,7 @@ pub mod workbook;
 pub mod writer;
 pub mod writer_handle;
 pub mod rows;
+pub mod source;
 
 #[cfg(feature = "arrow")]
 pub mod arrow;
@@ -17,6 +18,7 @@ pub mod arrow;
 pub use aggregate::{aggregate_csv_file, aggregate_csv_memory, CsvAccumulator, CsvParallelOptions};
 pub use error::Error;
 pub use rows::{AllRows, CellIter, CellRef, CellType, DecodedRows, RowCursor, RowRef};
+pub use source::Source;
 pub use options::{OpenOptions, OpenOptionsRaw, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
 
@@ -118,6 +120,26 @@ pub struct XlOpenOptions {
     /// remain valid for the duration of the call - see [`OpenOptionsRaw`](crate::options::OpenOptionsRaw).
     pub password: *const u8,
     pub password_len: i32,
+    pub source_cache_bytes: i64,
+    pub max_buffered_bytes: i64,
+    pub source_block_size: i32,
+}
+
+#[repr(C)]
+pub struct XlSource {
+    pub struct_size: i32,
+    pub user_data: *mut c_void,
+    pub length: i64,
+    pub read_at: Option<unsafe extern "C" fn(*mut c_void, i64, *mut u8, i64) -> i64>,
+    pub release: Option<unsafe extern "C" fn(*mut c_void)>,
+}
+
+#[repr(C)]
+pub struct XlStream {
+    pub struct_size: i32,
+    pub user_data: *mut c_void,
+    pub read: Option<unsafe extern "C" fn(*mut c_void, *mut u8, i64) -> i64>,
+    pub release: Option<unsafe extern "C" fn(*mut c_void)>,
 }
 
 /// Mirrors `xl_write_options`. Field ORDER is the C struct's, not a tidied-up version of it: with
@@ -256,6 +278,22 @@ extern "C" {
         options: *const XlOpenOptions,
         out_handle: *mut *mut XlWorkbook,
     ) -> c_int;
+
+    pub fn xl_open_source(
+        source: *const XlSource,
+        format: i32,
+        options: *const XlOpenOptions,
+        out_handle: *mut *mut XlWorkbook,
+    ) -> c_int;
+
+    pub fn xl_open_stream(
+        stream: *const XlStream,
+        format: i32,
+        options: *const XlOpenOptions,
+        out_handle: *mut *mut XlWorkbook,
+    ) -> c_int;
+
+    pub fn xl_set_source_error(message: *const u8, len: i32);
 
     pub fn xl_close(handle: *mut XlWorkbook) -> c_int;
 

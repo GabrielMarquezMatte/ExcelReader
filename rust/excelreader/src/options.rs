@@ -38,6 +38,14 @@ pub struct OpenOptions {
     pub prefetch_decompression: Option<bool>,
     pub intern_strings: Option<bool>,
 
+    /// `open_source` only: bytes fetched per `read_at` call. `None` is 4 MiB; a negative value turns
+    /// the cache off.
+    pub source_block_size: Option<i32>,
+    /// `open_source` only: bytes of blocks kept in memory. `None` is 64 MiB.
+    pub source_cache_bytes: Option<i64>,
+    /// `open_reader` with XLSX, XLSB or XLS only: the most bytes the reader may hold.
+    pub max_buffered_bytes: Option<i64>,
+
     /// Password for an encrypted OOXML workbook. `None` means "not encrypted, or fail with
     /// `Error::PasswordRequired`".
     pub password: Option<String>,
@@ -90,6 +98,13 @@ impl OpenOptions {
         prefetch_decompression: bool,
         /// XLS/XLSX/XLSB only. Library default is `false`.
         intern_strings: bool,
+        /// `open_source` only: bytes fetched per `read_at` call. Library default is 4 MiB; a negative
+        /// value turns the cache off.
+        source_block_size: i32,
+        /// `open_source` only: bytes of blocks kept in memory. Library default is 64 MiB.
+        source_cache_bytes: i64,
+        /// `open_reader` with XLSX, XLSB or XLS only: the most bytes the reader may hold.
+        max_buffered_bytes: i64,
     }
 
     /// Password for an encrypted OOXML workbook. Stored owned, since the C ABI receives a pointer
@@ -130,6 +145,9 @@ impl OpenOptions {
             intern_strings: opt_state(self.intern_strings),
             password: std::ptr::null(),
             password_len: 0,
+            source_cache_bytes: opt_number(self.source_cache_bytes),
+            max_buffered_bytes: opt_number(self.max_buffered_bytes),
+            source_block_size: opt_number(self.source_block_size),
         };
         if let Some(bytes) = password {
             raw.password = bytes.as_ptr();

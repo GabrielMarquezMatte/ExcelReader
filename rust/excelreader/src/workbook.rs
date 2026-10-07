@@ -140,6 +140,10 @@ unsafe impl Send for Workbook {}
 unsafe impl Sync for Workbook {}
 
 impl Workbook {
+    pub(crate) fn from_handle(handle: *mut XlWorkbook) -> Workbook {
+        Workbook { handle }
+    }
+
     /// Opens `path`, sniffing the format and using every library default.
     ///
     /// Sniffing does NOT detect CSV - open one with [`open_with`](Self::open_with) and
