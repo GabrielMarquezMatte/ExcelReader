@@ -2,6 +2,8 @@ EXPORTS
     xl_abi_version
     xl_open_file
     xl_open_memory
+    xl_open_source
+    xl_set_source_error
     xl_close
     xl_sheet_count
     xl_sheet_name_at

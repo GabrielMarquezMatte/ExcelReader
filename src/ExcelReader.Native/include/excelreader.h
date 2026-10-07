@@ -100,6 +100,31 @@ int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format,
 int32_t xl_open_memory(const uint8_t* data, int32_t data_len, int32_t format,
                        const xl_open_options* options, xl_workbook** out_handle);
 
+/* Random-access bytes for xl_open_source. */
+typedef struct xl_source {
+    int32_t struct_size;     /* sizeof(xl_source) */
+    void* user_data;
+    int64_t length;          /* total size in bytes */
+    /* Copy up to len bytes starting at offset into buf. Return the bytes copied, or -1 on failure
+       after calling xl_set_source_error. Returning 0 before length is a failure ("the source ended
+       early"). Called from any thread, concurrently. */
+    int64_t (*read_at)(void* user_data, int64_t offset, uint8_t* buf, int64_t len);
+    /* May be NULL. Called exactly once, when nothing opened from the workbook needs the source. */
+    void (*release)(void* user_data);
+} xl_source;
+
+/* Opens a workbook over a source the caller serves. Every sheet can be read in parallel. A valid
+   source is released exactly once, whether the open succeeds or fails; a NULL source, a wrong
+   struct_size, a NULL read_at, a negative length or a NULL out_handle returns XL_INVALID_ARGUMENT
+   and the source is not released. With the default options, reads reach read_at in 4 MiB blocks
+   kept in a 64 MiB cache. */
+int32_t xl_open_source(const xl_source* source, int32_t format,
+                       const xl_open_options* options, xl_workbook** out_handle);
+
+/* Callable only from inside read_at or read: the message xl_last_error reports when the callback
+   then returns -1. Inside a callback, no other xl_ function may be called. */
+void xl_set_source_error(const uint8_t* message, int32_t len);
+
 /* Cursors, typed readers and Arrow streams opened from this handle keep working after xl_close; the
    workbook's resources are released when the last of them is closed. Any later call that takes this
    handle returns XL_INVALID_HANDLE. */
