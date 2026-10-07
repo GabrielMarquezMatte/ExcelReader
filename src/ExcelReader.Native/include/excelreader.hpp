@@ -144,6 +144,9 @@ namespace xl
         int32_t max_zip_entries = 0;
         int32_t prefetch_decompression = XL_OPT_DEFAULT;
         int32_t intern_strings = XL_OPT_DEFAULT;
+        int64_t source_cache_bytes = 0;
+        int64_t max_buffered_bytes = 0;
+        int32_t source_block_size = 0;
 
         std::string password_{};
 
@@ -169,6 +172,9 @@ namespace xl
             opts.max_zip_entries = max_zip_entries;
             opts.prefetch_decompression = prefetch_decompression;
             opts.intern_strings = intern_strings;
+            opts.source_cache_bytes = source_cache_bytes;
+            opts.max_buffered_bytes = max_buffered_bytes;
+            opts.source_block_size = source_block_size;
             opts.password = password_.empty() ? nullptr : reinterpret_cast<const uint8_t *>(password_.data());
             opts.password_len = static_cast<int32_t>(password_.size());
             return opts;
@@ -800,6 +806,75 @@ namespace xl
         int32_t index_ = 0;
     };
 
+    /// Random-access bytes for Workbook::open_source. read_at is called from several threads at once.
+    class Source
+    {
+    public:
+        virtual ~Source() = default;
+        virtual std::uint64_t size() const = 0;
+        virtual std::expected<std::size_t, std::string> read_at(std::uint64_t offset, std::span<std::byte> buffer) const = 0;
+    };
+
+    /// Sequential bytes for Workbook::open_stream. read is never called concurrently.
+    class InputStream
+    {
+    public:
+        virtual ~InputStream() = default;
+        virtual std::expected<std::size_t, std::string> read(std::span<std::byte> buffer) = 0;
+    };
+
+    namespace detail
+    {
+        inline int64_t report_source_error(std::string_view message) noexcept
+        {
+            xl_set_source_error(reinterpret_cast<const uint8_t *>(message.data()), static_cast<int32_t>(message.size()));
+            return -1;
+        }
+
+        template <typename Call>
+        inline int64_t guarded_read(Call &&call) noexcept
+        {
+            try
+            {
+                auto result = call();
+                return result.has_value() ? static_cast<int64_t>(*result) : report_source_error(result.error());
+            }
+            catch (const std::exception &e)
+            {
+                return report_source_error(e.what());
+            }
+            catch (...)
+            {
+                return report_source_error("the source threw an exception");
+            }
+        }
+
+        inline int64_t source_read_at(void *user_data, int64_t offset, uint8_t *buffer, int64_t length) noexcept
+        {
+            return guarded_read([&]
+                                { return static_cast<const Source *>(user_data)->read_at(
+                                      static_cast<std::uint64_t>(offset),
+                                      std::span<std::byte>(reinterpret_cast<std::byte *>(buffer), static_cast<std::size_t>(length))); });
+        }
+
+        inline int64_t stream_read(void *user_data, uint8_t *buffer, int64_t length) noexcept
+        {
+            return guarded_read([&]
+                                { return static_cast<InputStream *>(user_data)->read(
+                                      std::span<std::byte>(reinterpret_cast<std::byte *>(buffer), static_cast<std::size_t>(length))); });
+        }
+
+        inline void source_release(void *user_data) noexcept
+        {
+            delete static_cast<Source *>(user_data);
+        }
+
+        inline void stream_release(void *user_data) noexcept
+        {
+            delete static_cast<InputStream *>(user_data);
+        }
+    }
+
     /// An open workbook. Safe to use from several threads at once: every read goes through a Sheet and opens its own cursor.
     class Workbook
     {
@@ -852,6 +927,61 @@ namespace xl
             const xl_open_options *c_options_ptr = detail::lower_options(options, c_options);
             int32_t status = xl_open_memory(data.data(), static_cast<int32_t>(data.size()), format,
                                             c_options_ptr, &handle);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return Workbook(handle);
+        }
+
+        /// Opens a workbook over a source the library owns from here on; every sheet can be read in parallel.
+        static std::expected<Workbook, Error> open_source(std::unique_ptr<Source> source, int32_t format = XL_FORMAT_AUTO,
+                                                          const OpenOptions *options = nullptr)
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            if (source == nullptr)
+            {
+                return std::unexpected(Error{XL_INVALID_ARGUMENT, "source is null"});
+            }
+            xl_source raw{};
+            raw.struct_size = sizeof(xl_source);
+            raw.length = static_cast<int64_t>(source->size());
+            raw.read_at = &detail::source_read_at;
+            raw.release = &detail::source_release;
+            raw.user_data = source.release();
+            xl_workbook *handle = nullptr;
+            xl_open_options c_options{};
+            int32_t status = xl_open_source(&raw, format, detail::lower_options(options, c_options), &handle);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return Workbook(handle);
+        }
+
+        /// Opens a workbook over a stream that cannot seek: a CSV is read as it arrives, once; an XLSX, XLSB or XLS is read whole first.
+        static std::expected<Workbook, Error> open_stream(std::unique_ptr<InputStream> stream, int32_t format = XL_FORMAT_AUTO,
+                                                          const OpenOptions *options = nullptr)
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            if (stream == nullptr)
+            {
+                return std::unexpected(Error{XL_INVALID_ARGUMENT, "stream is null"});
+            }
+            xl_stream raw{};
+            raw.struct_size = sizeof(xl_stream);
+            raw.read = &detail::stream_read;
+            raw.release = &detail::stream_release;
+            raw.user_data = stream.release();
+            xl_workbook *handle = nullptr;
+            xl_open_options c_options{};
+            int32_t status = xl_open_stream(&raw, format, detail::lower_options(options, c_options), &handle);
             if (status != XL_OK)
             {
                 return std::unexpected(detail::make_error(status));
