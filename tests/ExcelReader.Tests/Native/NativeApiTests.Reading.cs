@@ -227,7 +227,7 @@ namespace ExcelReader.Tests.Native
         [Fact]
         public void OpenFileEx_With_Null_Options_Behaves_Like_OpenFile()
         {
-            int status = ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, null, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, null, out NativeHandle? handle);
 
             Assert.Equal(NativeStatus.Ok, status);
             Assert.NotNull(handle);
@@ -239,7 +239,7 @@ namespace ExcelReader.Tests.Native
         {
             byte[] bytes = File.ReadAllBytes(XlsxFixture);
 
-            int status = ReadApi.OpenMemoryEx(bytes, NativeFormat.Auto, null, out NativeHandle? handle);
+            int status = ReadApi.OpenMemory(bytes, NativeFormat.Auto, null, out NativeHandle? handle);
 
             Assert.Equal(NativeStatus.Ok, status);
             Assert.NotNull(handle);
@@ -253,7 +253,7 @@ namespace ExcelReader.Tests.Native
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvDelimiter = delimiter };
 
-            int status = ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Null(handle);
@@ -264,7 +264,7 @@ namespace ExcelReader.Tests.Native
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxZipEntries = -5 };
 
-            int status = ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Null(handle);
@@ -275,7 +275,7 @@ namespace ExcelReader.Tests.Native
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvSniffDialect = 99 };
 
-            int status = ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Null(handle);
@@ -289,7 +289,7 @@ namespace ExcelReader.Tests.Native
             try
             {
                 NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvDelimiter = (byte)';' };
-                Assert.Equal(NativeStatus.Ok, ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                Assert.Equal(NativeStatus.Ok, ReadApi.OpenFile(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
                 try
                 {
                     using NativeRowCursor cursor = OpenRows(handle);
@@ -319,7 +319,7 @@ namespace ExcelReader.Tests.Native
             try
             {
                 NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvSniffDialect = NativeOptionState.True };
-                Assert.Equal(NativeStatus.Ok, ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                Assert.Equal(NativeStatus.Ok, ReadApi.OpenFile(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
                 try
                 {
                     using NativeRowCursor cursor = OpenRows(handle);
@@ -346,7 +346,7 @@ namespace ExcelReader.Tests.Native
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxTotalDecompressedBytes = 1 };
 
-            int status = ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Xlsx, options, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Xlsx, options, out NativeHandle? handle);
 
             Assert.Equal(NativeStatus.Error, status);
             Assert.Null(handle);
@@ -360,7 +360,7 @@ namespace ExcelReader.Tests.Native
             try
             {
                 NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvMaxCellBytes = 4 };
-                Assert.Equal(NativeStatus.Ok, ReadApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                Assert.Equal(NativeStatus.Ok, ReadApi.OpenFile(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
                 try
                 {
                     using NativeRowCursor cursor = OpenRows(handle);
@@ -387,7 +387,7 @@ namespace ExcelReader.Tests.Native
             {
                 Marshal.Copy(pw, 0, pointer, pw.Length);
                 NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = pointer, PasswordLen = pw.Length };
-                int status = ReadApi.OpenFileEx(
+                int status = ReadApi.OpenFile(
                     Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
                     NativeFormat.Auto, options, out NativeHandle? handle);
 
@@ -405,7 +405,7 @@ namespace ExcelReader.Tests.Native
         public void Should_Return_PasswordRequired_When_No_Password_Across_Abi()
         {
             NativeOpenOptionsRaw options = DefaultRawOptions();
-            int status = ReadApi.OpenFileEx(
+            int status = ReadApi.OpenFile(
                 Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
                 NativeFormat.Auto, options, out NativeHandle? handle);
 
@@ -422,7 +422,7 @@ namespace ExcelReader.Tests.Native
             {
                 Marshal.Copy(pw, 0, pointer, pw.Length);
                 NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = pointer, PasswordLen = pw.Length };
-                int status = ReadApi.OpenFileEx(
+                int status = ReadApi.OpenFile(
                     Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
                     NativeFormat.Auto, options, out NativeHandle? handle);
 
@@ -439,7 +439,7 @@ namespace ExcelReader.Tests.Native
         public void Should_Reject_When_Password_Len_Is_Negative()
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = 1, PasswordLen = -1 };
-            int status = ReadApi.OpenFileEx(
+            int status = ReadApi.OpenFile(
                 Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
                 NativeFormat.Auto, options, out NativeHandle? handle);
 
@@ -451,7 +451,7 @@ namespace ExcelReader.Tests.Native
         public void Should_Reject_When_Struct_Size_Is_Stale()
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { StructSize = Marshal.SizeOf<NativeOpenOptionsRaw>() - 8 };
-            int status = ReadApi.OpenFileEx(
+            int status = ReadApi.OpenFile(
                 Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
                 NativeFormat.Auto, options, out NativeHandle? handle);
 

@@ -117,7 +117,7 @@ namespace ExcelReader.Native.Reading
             return format is >= NativeFormat.Auto and <= NativeFormat.Csv;
         }
 
-        internal static int OpenFileEx(ReadOnlySpan<byte> utf8Path, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
+        internal static int OpenFile(ReadOnlySpan<byte> utf8Path, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
         {
             handle = null;
             if (!TryDecodeOpenOptions(rawOptions, out NativeOpenOptions? options, out string? error))
@@ -128,7 +128,7 @@ namespace ExcelReader.Native.Reading
             return OpenFile(utf8Path, format, out handle, options);
         }
 
-        internal static int OpenMemoryEx(ReadOnlySpan<byte> data, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
+        internal static int OpenMemory(ReadOnlySpan<byte> data, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
         {
             handle = null;
             if (!TryDecodeOpenOptions(rawOptions, out NativeOpenOptions? options, out string? error))

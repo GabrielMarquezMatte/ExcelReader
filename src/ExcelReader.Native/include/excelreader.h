@@ -56,10 +56,6 @@ typedef struct xl_row {
     xl_row_cell* cells;
 } xl_row;
 
-int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format, xl_workbook** out_handle);
-
-int32_t xl_open_memory(const uint8_t* data, int32_t data_len, int32_t format, xl_workbook** out_handle);
-
 #define XL_OPT_DEFAULT 0
 #define XL_OPT_FALSE   1
 #define XL_OPT_TRUE    2
@@ -67,30 +63,36 @@ int32_t xl_open_memory(const uint8_t* data, int32_t data_len, int32_t format, xl
 typedef struct xl_open_options {
     int32_t struct_size;
 
-    int32_t csv_sniff_dialect;        
-    int32_t csv_delimiter;            
-    int32_t csv_quote;                
-    int32_t csv_detect_bom;           
-    int32_t csv_max_cell_bytes;       
-    int32_t csv_intern_strings;       
+    int32_t csv_sniff_dialect;
+    int32_t csv_delimiter;
+    int32_t csv_quote;
+    int32_t csv_detect_bom;
+    int32_t csv_max_cell_bytes;
+    int32_t csv_intern_strings;
 
-    int64_t max_total_decompressed_bytes; 
-    int32_t max_cell_bytes;               
-    int64_t max_shared_string_bytes;      
-    int32_t max_zip_entries;              
-    int32_t prefetch_decompression;       
-    int32_t intern_strings;               
+    int64_t max_total_decompressed_bytes;
+    int32_t max_cell_bytes;
+    int64_t max_shared_string_bytes;
+    int32_t max_zip_entries;
+    int32_t prefetch_decompression;
+    int32_t intern_strings;
 
     const uint8_t* password;
     int32_t password_len;
 } xl_open_options;
 
-int32_t xl_open_file_ex(const uint8_t* path, int32_t path_len, int32_t format,
-                        const xl_open_options* options, xl_workbook** out_handle);
+/* options may be NULL for the defaults. When it is not NULL, set options->struct_size to
+   sizeof(xl_open_options) first. xl_open_memory copies data, so the buffer may be released as soon
+   as the call returns. */
+int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format,
+                     const xl_open_options* options, xl_workbook** out_handle);
 
-int32_t xl_open_memory_ex(const uint8_t* data, int32_t data_len, int32_t format,
-                          const xl_open_options* options, xl_workbook** out_handle);
+int32_t xl_open_memory(const uint8_t* data, int32_t data_len, int32_t format,
+                       const xl_open_options* options, xl_workbook** out_handle);
 
+/* Cursors, typed readers and Arrow streams opened from this handle keep working after xl_close; the
+   workbook's resources are released when the last of them is closed. Any later call that takes this
+   handle returns XL_INVALID_HANDLE. */
 int32_t xl_close(xl_workbook* handle);
 
 /* A workbook handle may be used from several threads at once. index and sheet are zero-based:

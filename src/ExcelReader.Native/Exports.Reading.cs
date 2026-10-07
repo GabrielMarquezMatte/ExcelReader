@@ -6,19 +6,7 @@ namespace ExcelReader.Native
     internal static unsafe partial class Exports
     {
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file")]
-        public static int OpenFile(byte* path, int pathLength, int format, nint* outHandle)
-        {
-            if (!IsValidOpenRequest(path, pathLength, outHandle))
-            {
-                return NativeStatus.InvalidArgument;
-            }
-
-            int status = ReadApi.OpenFile(new ReadOnlySpan<byte>(path, pathLength), format, out NativeHandle? handle);
-            return RegisterOpened(status, handle, outHandle);
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_open_file_ex")]
-        public static int OpenFileEx(byte* path, int pathLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
+        public static int OpenFile(byte* path, int pathLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
             if (!IsValidOpenRequest(path, pathLength, outHandle))
             {
@@ -29,24 +17,12 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = ReadApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_open_memory")]
-        public static int OpenMemory(byte* data, int dataLength, int format, nint* outHandle)
-        {
-            if (!IsValidOpenRequest(data, dataLength, outHandle))
-            {
-                return NativeStatus.InvalidArgument;
-            }
-
-            int status = ReadApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, out NativeHandle? handle);
-            return RegisterOpened(status, handle, outHandle);
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_open_memory_ex")]
-        public static int OpenMemoryEx(byte* data, int dataLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
+        public static int OpenMemory(byte* data, int dataLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
             if (!IsValidOpenRequest(data, dataLength, outHandle))
             {
@@ -57,7 +33,7 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = ReadApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
+            int status = ReadApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
