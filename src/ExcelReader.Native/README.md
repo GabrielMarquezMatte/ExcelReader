@@ -35,9 +35,6 @@ trace (needs `dotnet-trace` and `dotnet-pgo`):
       -- "$PWD/tests/ExcelReader.NativePgoTrainer/bin/Release/net10.0/ExcelReader.NativePgoTrainer"
     dotnet-pgo create-mibc -t pgo.nettrace --exclude-methods 'Xlsb|Biff12' -o src/ExcelReader.Native/pgo/excelreader.mibc
 
-The checked-in profile predates the v6 row cursor: `ReadApi.NextRow` and `ReadApi.NextRowView` changed
-signature, so they compile without profile data until the profile is regenerated and re-measured.
-
 The XLSB methods are excluded on purpose: with their profile the XLSB parse got 3% slower, and
 without it 1.12x faster. Re-measured with the regenerated profile: including them makes XLSB typed
 parsing ~16% slower. Measure every format before and after replacing the profile. Some formats
