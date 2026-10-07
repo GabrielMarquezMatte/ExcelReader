@@ -111,8 +111,8 @@ fn main() {
         "parse_sheet",
         ITERATIONS,
         || Workbook::open(&small_path).expect("open must succeed"),
-        |mut workbook| {
-            let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
+        |workbook| {
+            let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
             std::hint::black_box(table);
         },
     );
@@ -122,7 +122,7 @@ fn main() {
         ITERATIONS,
         || Workbook::open(&small_path).expect("open must succeed"),
         |workbook| {
-            let schema = workbook.infer_schema(1, 100).expect("infer_schema must succeed");
+            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 100).expect("infer_schema must succeed");
             std::hint::black_box(schema);
         },
     );
@@ -141,8 +141,8 @@ fn main() {
         "parse_sheet_large",
         ITERATIONS_LARGE,
         || Workbook::open(&large_path).expect("open must succeed"),
-        |mut workbook| {
-            let table = parse_sheet::<LargeRow>(&mut workbook, 1).expect("parse_sheet must succeed");
+        |workbook| {
+            let table = parse_sheet::<LargeRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
             std::hint::black_box(table);
         },
     );
@@ -152,7 +152,7 @@ fn main() {
         ITERATIONS_LARGE,
         || Workbook::open(&large_path).expect("open must succeed"),
         |workbook| {
-            let schema = workbook.infer_schema(1, 1000).expect("infer_schema must succeed");
+            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 1000).expect("infer_schema must succeed");
             std::hint::black_box(schema);
         },
     );

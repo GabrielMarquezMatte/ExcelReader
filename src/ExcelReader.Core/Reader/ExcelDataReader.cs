@@ -9,7 +9,7 @@ using ExcelReader.Core.Reader.Schema;
 namespace ExcelReader.Core.Reader
 {
     /// <summary>
-    /// Adapts the current sheet of an <see cref="IExcelRowReader"/> to <see cref="IDataReader"/>, so it
+    /// Adapts one <see cref="IExcelSheet"/> to <see cref="IDataReader"/>, so it
     /// can feed <c>SqlBulkCopy</c>, <c>DataTable.Load</c>, Dapper, or any other ADO.NET consumer directly.
     /// </summary>
     /// <remarks>
@@ -19,13 +19,12 @@ namespace ExcelReader.Core.Reader
     /// <em>current</em> row's own cell type; a consumer that builds a schema from the first
     /// <see cref="Read"/> (e.g. <c>DataTable.Load</c>) locks in that row's types for the whole load.
     /// <para>
-    /// Exposes a single result set: <see cref="NextResult"/> always returns <see langword="false"/>. Use
-    /// <see cref="ExcelRowReaderExtensions.Sheets"/> to walk every sheet and construct one
-    /// <see cref="ExcelDataReader"/> per sheet instead.
+    /// One <see cref="ExcelDataReader"/> reads one sheet: <see cref="NextResult"/> always returns
+    /// <see langword="false"/>. To read every sheet, construct one per <see cref="IExcelWorkbook.SheetAt"/>.
     /// </para>
     /// <para>
-    /// Disposing this reader disposes the row enumerator it created, not the <see cref="IExcelRowReader"/>
-    /// passed to the constructor — the caller still owns that.
+    /// Disposing this reader disposes the row enumerator it created, not the workbook the sheet came
+    /// from — the caller still owns that.
     /// </para>
     /// </remarks>
     public sealed class ExcelDataReader : IDataReader
@@ -41,22 +40,22 @@ namespace ExcelReader.Core.Reader
         private bool _disposed;
 
         /// <summary>
-        /// Wraps <paramref name="reader"/>'s current sheet.
+        /// Wraps <paramref name="sheet"/>.
         /// </summary>
-        /// <param name="reader">The sheet to expose. Not disposed by this reader.</param>
+        /// <param name="sheet">The sheet to read. Its workbook stays owned by the caller.</param>
         /// <param name="headerRow">
         /// The 1-based row holding column names. Pass 0 for a header-less sheet, whose columns come back
         /// named <c>"Column0"</c>, <c>"Column1"</c>, ... and whose count is taken from the first data row.
         /// </param>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative.</exception>
-        public ExcelDataReader(IExcelRowReader reader, int headerRow = 1)
+        public ExcelDataReader(IExcelSheet sheet, int headerRow = 1)
         {
-            ArgumentNullException.ThrowIfNull(reader);
+            ArgumentNullException.ThrowIfNull(sheet);
             ArgumentOutOfRangeException.ThrowIfNegative(headerRow);
-            _isDate1904 = reader.IsDate1904;
-            _sheetName = reader.SheetName;
-            _rows = reader.GetEnumerator();
+            _isDate1904 = sheet.IsDate1904;
+            _sheetName = sheet.Name;
+            _rows = sheet.GetEnumerator();
             _pendingConsumed = true;
             try
             {

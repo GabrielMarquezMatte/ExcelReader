@@ -1,12 +1,14 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Internal;
 using static ExcelReader.Core.Reader.Xlsb.Biff12;
 
 namespace ExcelReader.Core.Reader.Xls
 {
-    /// <summary>Reads rows from a legacy BIFF8 (.xls) workbook, exposing each worksheet through synchronous and asynchronous enumeration.</summary>
-    public sealed partial class XlsReader : IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
+    /// <summary>An open legacy BIFF8 (.xls) workbook. Its sheets are read independently, each through synchronous and asynchronous enumeration.</summary>
+    /// <remarks>See <see cref="IExcelWorkbook"/> for the threading and lifetime contract.</remarks>
+    public sealed partial class XlsWorkbook : IExcelWorkbook
     {
         private readonly WorkbookStream _workbook;
         private readonly ExcelReaderOptions _options;
@@ -16,21 +18,21 @@ namespace ExcelReader.Core.Reader.Xls
         private byte[] _sharedFlat;
         private int[] _sharedOffsets;
         private string?[]? _sharedStringCache;
-        private int _current;
+        private readonly ExcelSheetList<XlsSheet> _sheetList;
 
         internal ReaderLifetime Lifetime { get; }
 
-        internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
+        internal XlsWorkbook(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen, options), options)
         {
         }
 
-        internal XlsReader(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        internal XlsWorkbook(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
             : this(XlsCompoundFile.OpenWorkbook(data, options), options)
         {
         }
 
-        private XlsReader(WorkbookStream workbook, ExcelReaderOptions? options = null)
+        private XlsWorkbook(WorkbookStream workbook, ExcelReaderOptions? options = null)
         {
             Lifetime = new ReaderLifetime(ReleaseResources);
             _workbook = workbook;
@@ -44,12 +46,13 @@ namespace ExcelReader.Core.Reader.Xls
                 workbook.Dispose();
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
+            _sheetList = CreateSheetList();
         }
 
-        internal static async ValueTask<XlsReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        internal static async ValueTask<XlsWorkbook> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             WorkbookStream workbook = await XlsCompoundFile.OpenWorkbookAsync(stream, leaveOpen, options, ct).ConfigureAwait(false);
-            return new XlsReader(workbook, options);
+            return new XlsWorkbook(workbook, options);
         }
 
         internal BiffCursor OpenCursor(int offset)
@@ -60,27 +63,7 @@ namespace ExcelReader.Core.Reader.Xls
         }
 
         /// <inheritdoc/>
-        public string SheetName => _sheets[_current].Name;
-
-        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
-
-        /// <inheritdoc/>
-        public string SheetNameAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Name;
-        }
-
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibility => _sheets[_current].Visibility;
-
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibilityAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Visibility;
-        }
 
         /// <inheritdoc/>
         public bool IsDate1904 => _date1904;
@@ -105,31 +88,62 @@ namespace ExcelReader.Core.Reader.Xls
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
-        /// <inheritdoc/>
-        public bool TryMoveToSheet(ReadOnlySpan<char> name)
+        private ExcelSheetList<XlsSheet> CreateSheetList()
         {
-            if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
+            XlsSheet[] sheets = new XlsSheet[_sheets.Length];
+            for (int i = 0; i < sheets.Length; i++)
             {
-                return false;
+                sheets[i] = new XlsSheet(this, i, _sheets[i].Name, _sheets[i].Visibility);
             }
-            _current = index;
-            return true;
+            return new ExcelSheetList<XlsSheet>(sheets);
         }
 
-        /// <inheritdoc/>
-        public void MoveToSheet(int index)
+        /// <summary>Gets the workbook's sheets, in workbook order. Reading the list opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public ExcelSheetList<XlsSheet> Sheets
         {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            _current = index;
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return _sheetList;
+            }
         }
 
-        /// <inheritdoc/>
-        public Enumerator GetEnumerator()
+        /// <summary>Finds a sheet by name, ignoring case. Opens nothing.</summary>
+        /// <param name="name">The sheet name to look for.</param>
+        /// <param name="sheet">The matching sheet, when one is found.</param>
+        /// <returns><see langword="true"/> if a sheet with that name exists; otherwise <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public bool TryGetSheet(ReadOnlySpan<char> name, out XlsSheet sheet)
+        {
+            Lifetime.ThrowIfClosed(this);
+            if (WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
+            {
+                sheet = _sheetList[index];
+                return true;
+            }
+            sheet = default;
+            return false;
+        }
+
+        IExcelSheet IExcelWorkbook.SheetAt(int index)
+        {
+            return Sheets[index];
+        }
+
+        bool IExcelWorkbook.TryGetSheet(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out IExcelSheet sheet)
+        {
+            bool found = TryGetSheet(name, out XlsSheet typed);
+            sheet = found ? typed : null;
+            return found;
+        }
+
+        internal Enumerator OpenSheet(int index)
         {
             Lifetime.Acquire(this);
             try
             {
-                return new Enumerator(this, _sheets[_current].Offset);
+                return new Enumerator(this, _sheets[index].Offset);
             }
             catch
             {
@@ -138,20 +152,13 @@ namespace ExcelReader.Core.Reader.Xls
             }
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        /// <inheritdoc/>
-        /// <remarks>XlsReader is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
-        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
+        internal Enumerator OpenSheetAsync(int index, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             Lifetime.Acquire(this);
             try
             {
-                return new Enumerator(this, _sheets[_current].Offset, ct);
+                return new Enumerator(this, _sheets[index].Offset, ct);
             }
             catch
             {
@@ -160,9 +167,22 @@ namespace ExcelReader.Core.Reader.Xls
             }
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
+        /// <summary>Gets the workbook's first sheet: the same sheet as <c>Sheets[0]</c>. Opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public XlsSheet FirstSheet
         {
-            return GetAsyncEnumerator(ct);
+            get
+            {
+                return Sheets[0];
+            }
+        }
+
+        IExcelSheet IExcelWorkbook.FirstSheet
+        {
+            get
+            {
+                return FirstSheet;
+            }
         }
 
         /// <inheritdoc/>

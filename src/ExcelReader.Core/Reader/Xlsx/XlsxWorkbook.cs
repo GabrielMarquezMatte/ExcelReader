@@ -6,15 +6,16 @@ using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsx
 {
-    /// <summary>Reads rows from an Office Open XML (.xlsx) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
-    public sealed partial class XlsxReader : IExcelRowReader, IExcelRowReader<XlsxReader.Enumerator>
+    /// <summary>An open Office Open XML (.xlsx) workbook. Its sheets are read independently, each streaming its cells without loading the whole file into memory.</summary>
+    /// <remarks>See <see cref="IExcelWorkbook"/> for the threading and lifetime contract.</remarks>
+    public sealed partial class XlsxWorkbook : IExcelWorkbook
     {
         private readonly ZipIndex _zip;
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[] _sheets;
         private readonly bool[] _styleIsDate;
-        private int _current;
+        private readonly ExcelSheetList<XlsxSheet> _sheetList;
 
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
         private readonly OnceGate _sharedGate = new();
@@ -24,12 +25,12 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         internal ReaderLifetime Lifetime { get; }
 
-        internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
+        internal XlsxWorkbook(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(ZipIndex.Create(ByteSource.FromStream(stream, leaveOpen), options ?? ExcelReaderOptions.Default), options ?? ExcelReaderOptions.Default)
         {
         }
 
-        private XlsxReader(ZipIndex zip, ExcelReaderOptions options)
+        private XlsxWorkbook(ZipIndex zip, ExcelReaderOptions options)
         {
             Lifetime = new ReaderLifetime(ReleaseResources);
             _zip = zip;
@@ -47,6 +48,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 using ZipPart stylesPart = zip.OpenPartOrDefault("xl/styles.xml"u8, _decompressedBytes);
                 _styleIsDate = ParseStyleDateFlags(stylesPart.Memory.Span);
                 IsDate1904 = ParseDate1904(wbPart.Memory.Span);
+                _sheetList = CreateSheetList();
             }
             catch
             {
@@ -55,7 +57,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
         }
 
-        private XlsxReader(ZipIndex zip,
+        private XlsxWorkbook(ZipIndex zip,
             (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
@@ -66,20 +68,21 @@ namespace ExcelReader.Core.Reader.Xlsx
             _sheets = sheets;
             _styleIsDate = styleIsDate;
             IsDate1904 = date1904;
+            _sheetList = CreateSheetList();
         }
 
-        internal static XlsxReader CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        internal static XlsxWorkbook CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
-            return new XlsxReader(ZipIndex.Create(data, effectiveOptions), effectiveOptions);
+            return new XlsxWorkbook(ZipIndex.Create(data, effectiveOptions), effectiveOptions);
         }
 
-        internal static XlsxReader CreateFromIndex(ZipIndex zip, ExcelReaderOptions options)
+        internal static XlsxWorkbook CreateFromIndex(ZipIndex zip, ExcelReaderOptions options)
         {
-            return new XlsxReader(zip, options);
+            return new XlsxWorkbook(zip, options);
         }
 
-        internal static async ValueTask<XlsxReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        internal static async ValueTask<XlsxWorkbook> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             ByteSource source = await ByteSource.FromStreamAsync(stream, leaveOpen, ct).ConfigureAwait(false);
@@ -87,7 +90,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             return await CreateFromIndexAsync(zip, effectiveOptions, ct).ConfigureAwait(false);
         }
 
-        internal static async ValueTask<XlsxReader> CreateFromIndexAsync(ZipIndex zip, ExcelReaderOptions options, CancellationToken ct)
+        internal static async ValueTask<XlsxWorkbook> CreateFromIndexAsync(ZipIndex zip, ExcelReaderOptions options, CancellationToken ct)
         {
             try
             {
@@ -102,7 +105,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 using ZipPart stylesPart = await zip.OpenPartOrDefaultAsync("xl/styles.xml"u8, decompressedBytes, ct).ConfigureAwait(false);
                 bool[] styleIsDate = ParseStyleDateFlags(stylesPart.Memory.Span);
                 bool date1904 = ParseDate1904(wbPart.Memory.Span);
-                return new XlsxReader(zip, sheets, styleIsDate, date1904, options, decompressedBytes);
+                return new XlsxWorkbook(zip, sheets, styleIsDate, date1904, options, decompressedBytes);
             }
             catch
             {
@@ -112,23 +115,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         }
 
         /// <inheritdoc/>
-        public string SheetName => _sheets[_current].Name;
-        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
-        /// <inheritdoc/>
-        public string SheetNameAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Name;
-        }
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibility => _sheets[_current].Visibility;
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibilityAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Visibility;
-        }
         /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
@@ -137,32 +124,63 @@ namespace ExcelReader.Core.Reader.Xlsx
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
         }
 
-        /// <inheritdoc/>
-        public bool TryMoveToSheet(ReadOnlySpan<char> name)
+        private ExcelSheetList<XlsxSheet> CreateSheetList()
         {
-            if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
+            XlsxSheet[] sheets = new XlsxSheet[_sheets.Length];
+            for (int i = 0; i < sheets.Length; i++)
             {
-                return false;
+                sheets[i] = new XlsxSheet(this, i, _sheets[i].Name, _sheets[i].Visibility);
             }
-            _current = index;
-            return true;
+            return new ExcelSheetList<XlsxSheet>(sheets);
         }
 
-        /// <inheritdoc/>
-        public void MoveToSheet(int index)
+        /// <summary>Gets the workbook's sheets, in workbook order. Reading the list opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public ExcelSheetList<XlsxSheet> Sheets
         {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            _current = index;
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return _sheetList;
+            }
         }
 
-        /// <inheritdoc/>
-        public Enumerator GetEnumerator()
+        /// <summary>Finds a sheet by name, ignoring case. Opens nothing.</summary>
+        /// <param name="name">The sheet name to look for.</param>
+        /// <param name="sheet">The matching sheet, when one is found.</param>
+        /// <returns><see langword="true"/> if a sheet with that name exists; otherwise <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public bool TryGetSheet(ReadOnlySpan<char> name, out XlsxSheet sheet)
+        {
+            Lifetime.ThrowIfClosed(this);
+            if (WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
+            {
+                sheet = _sheetList[index];
+                return true;
+            }
+            sheet = default;
+            return false;
+        }
+
+        IExcelSheet IExcelWorkbook.SheetAt(int index)
+        {
+            return Sheets[index];
+        }
+
+        bool IExcelWorkbook.TryGetSheet(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out IExcelSheet sheet)
+        {
+            bool found = TryGetSheet(name, out XlsxSheet typed);
+            sheet = found ? typed : null;
+            return found;
+        }
+
+        internal Enumerator OpenSheet(int index)
         {
             Lifetime.Acquire(this);
             try
             {
                 EnsureSharedLoaded();
-                ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets[_current].Path);
+                ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets[index].Path);
                 return new Enumerator(this, _zip.OpenEntryStream(entry, _decompressedBytes, _options), entry.UncompressedSize);
             }
             catch
@@ -172,22 +190,16 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        /// <inheritdoc/>
-        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
+        internal Enumerator OpenSheetAsync(int index, CancellationToken ct)
         {
             if (_zip.HasMemory)
             {
-                return GetEnumerator();
+                return OpenSheet(index);
             }
             Lifetime.Acquire(this);
             try
             {
-                return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip, _sheets[_current].Path), ct);
+                return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip, _sheets[index].Path), ct);
             }
             catch
             {
@@ -196,9 +208,22 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
+        /// <summary>Gets the workbook's first sheet: the same sheet as <c>Sheets[0]</c>. Opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public XlsxSheet FirstSheet
         {
-            return GetAsyncEnumerator(ct);
+            get
+            {
+                return Sheets[0];
+            }
+        }
+
+        IExcelSheet IExcelWorkbook.FirstSheet
+        {
+            get
+            {
+                return FirstSheet;
+            }
         }
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;

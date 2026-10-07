@@ -7,13 +7,13 @@ namespace ExcelReader.Tests.Reader.Xlsb
 {
     public class XlsbEnumeratorTests
     {
-        private static XlsbReader BlankReader()
+        private static XlsbWorkbook BlankReader()
         {
             return new(sharedFlat: [], sharedOffsets: [0], styleIsDate: [], date1904: false);
         }
 
 
-        private static XlsbReader ReaderWithShared(params string[] strings)
+        private static XlsbWorkbook ReaderWithShared(params string[] strings)
         {
             byte[] flat = Encoding.UTF8.GetBytes(string.Concat(strings));
             int[] offsets = new int[strings.Length + 1];
@@ -24,10 +24,10 @@ namespace ExcelReader.Tests.Reader.Xlsb
                 pos += Encoding.UTF8.GetByteCount(strings[i]);
             }
             offsets[strings.Length] = pos;
-            return new XlsbReader(flat, offsets, styleIsDate: [], date1904: false);
+            return new XlsbWorkbook(flat, offsets, styleIsDate: [], date1904: false);
         }
 
-        private static XlsbReader.Enumerator Open(XlsbReader reader, byte[] sheetBin, long entryLength = 0, CancellationToken? ct = null)
+        private static XlsbWorkbook.Enumerator Open(XlsbWorkbook reader, byte[] sheetBin, long entryLength = 0, CancellationToken? ct = null)
         {
             return new(reader, new MemoryStream(sheetBin), entryLength, ct ?? TestContext.Current.CancellationToken);
         }
@@ -203,7 +203,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
         [Fact]
         public void DateStyleMapsRealToDateType()
         {
-            var reader = new XlsbReader([], [0], styleIsDate: [false, true], date1904: false);
+            var reader = new XlsbWorkbook([], [0], styleIsDate: [false, true], date1904: false);
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),

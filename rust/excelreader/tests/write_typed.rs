@@ -97,9 +97,9 @@ fn write_columns_round_trips_every_column_type() {
     excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &columns, None)
         .expect("write_columns must succeed");
 
-    let mut workbook = Workbook::open(target).expect("the written file must open");
+    let workbook = Workbook::open(target).expect("the written file must open");
     let table =
-        parse_sheet::<WrittenRow>(&mut workbook, 1).expect("the written file must parse back");
+        parse_sheet::<WrittenRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
     assert_eq!(table.len(), 2);
 
     let first = table.get(0).expect("row 0 must exist");
@@ -145,7 +145,7 @@ fn write_columns_to_memory_round_trips_every_column_type() {
         .expect("write_columns_to_memory must succeed");
     assert!(!bytes.is_empty());
 
-    let mut workbook =
+    let workbook =
         Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the returned bytes must open");
     #[derive(Default, Debug, ExcelMapper)]
     struct TwoColumnRow {
@@ -154,7 +154,7 @@ fn write_columns_to_memory_round_trips_every_column_type() {
         #[excel(name = "inteiro")]
         inteiro: i64,
     }
-    let table = parse_sheet::<TwoColumnRow>(&mut workbook, 1)
+    let table = parse_sheet::<TwoColumnRow>(workbook.sheet(0).expect("sheet 0"), 1)
         .expect("the returned bytes must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0").texto, "uma");
@@ -182,9 +182,9 @@ fn write_columns_writes_nulls_from_the_validity_bitmap() {
     excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &columns, None)
         .expect("write_columns must succeed");
 
-    let mut workbook = Workbook::open(target).expect("the written file must open");
+    let workbook = Workbook::open(target).expect("the written file must open");
     let table =
-        parse_sheet::<NullableRow>(&mut workbook, 1).expect("the written file must parse back");
+        parse_sheet::<NullableRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
     assert_eq!(table.get(0).unwrap().quantidade, Some(10));
     assert_eq!(table.get(1).unwrap().quantidade, None);
     assert_eq!(table.get(2).unwrap().quantidade, Some(30));
@@ -269,7 +269,7 @@ fn write_columns_honors_the_sheet_name_and_csv_format() {
         .expect("write must succeed");
 
     let workbook = Workbook::open(target).expect("the written file must open");
-    assert_eq!(workbook.sheet_name().expect("name must read back"), "Dados");
+    assert_eq!(workbook.sheet_name_at(0).expect("name must read back"), "Dados");
     drop(workbook);
     std::fs::remove_file(&path).ok();
 
@@ -365,9 +365,9 @@ fn write_sheet_round_trips_a_hand_written_excel_writer() {
     excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
         .expect("write_sheet must succeed");
 
-    let mut workbook = Workbook::open(target).expect("the written file must open");
+    let workbook = Workbook::open(target).expect("the written file must open");
     let table =
-        parse_sheet::<ManualRowRead>(&mut workbook, 1).expect("the written file must parse back");
+        parse_sheet::<ManualRowRead>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
     assert_eq!(table.len(), 2);
 
     let first = table.get(0).expect("row 0 must exist");
@@ -433,9 +433,9 @@ fn the_derive_round_trips_every_supported_field_type() {
     excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
         .expect("write_sheet must succeed");
 
-    let mut workbook = Workbook::open(target).expect("the written file must open");
+    let workbook = Workbook::open(target).expect("the written file must open");
     let table =
-        parse_sheet::<DerivedRow>(&mut workbook, 1).expect("the written file must parse back");
+        parse_sheet::<DerivedRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0"), rows[0]);
     assert_eq!(table.get(1).expect("row 1"), rows[1]);
@@ -472,10 +472,10 @@ fn write_sheet_to_memory_round_trips_the_derive() {
     let bytes = excelreader::writer::write_sheet_to_memory(XL_FORMAT_XLSX, &rows, None)
         .expect("write_sheet_to_memory must succeed");
 
-    let mut workbook =
+    let workbook =
         Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the returned bytes must open");
     let table =
-        parse_sheet::<DerivedRow>(&mut workbook, 1).expect("the returned bytes must parse back");
+        parse_sheet::<DerivedRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the returned bytes must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0"), rows[0]);
     assert_eq!(table.get(1).expect("row 1"), rows[1]);
@@ -498,8 +498,8 @@ fn the_derive_writes_only_the_primary_column_name() {
     excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
         .expect("write_sheet must succeed");
 
-    let mut workbook = Workbook::open(target).expect("the written file must open");
-    parse_sheet::<AliasedRead>(&mut workbook, 1)
+    let workbook = Workbook::open(target).expect("the written file must open");
+    parse_sheet::<AliasedRead>(workbook.sheet(0).expect("sheet 0"), 1)
         .expect("the header must carry the primary name, not the alias");
 
     std::fs::remove_file(&path).ok();

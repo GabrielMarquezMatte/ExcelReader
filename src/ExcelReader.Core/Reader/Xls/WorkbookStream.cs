@@ -5,7 +5,7 @@ using ExcelReader.Core.Reader.Sources;
 
 namespace ExcelReader.Core.Reader.Xls
 {
-    [ExcludeFromCodeCoverage(Justification = "Exercised through XlsReader integration tests; guard-rail branches are corrupt-OLE only.")]
+    [ExcludeFromCodeCoverage(Justification = "Exercised through XlsWorkbook integration tests; guard-rail branches are corrupt-OLE only.")]
     internal sealed class WorkbookStream : IDisposable
     {
         private const int HeaderSize = 512;

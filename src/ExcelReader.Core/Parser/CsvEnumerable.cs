@@ -21,24 +21,24 @@ namespace ExcelReader.Core.Parser
     public sealed class CsvEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T>
         where T : allows ref struct
     {
-        private readonly CsvReader _reader;
+        private readonly CsvSheet _sheet;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
         private readonly TypeMapInfo<T> _info;
-        private readonly bool _ownsReader;
+        private readonly CsvReader? _ownedReader;
 
-        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> info, bool ownsReader, CancellationToken ct)
+        internal CsvEnumerable(CsvSheet sheet, ExcelParserConfig config, TypeMapInfo<T> info, CsvReader? ownedReader, CancellationToken ct)
         {
-            _reader = reader;
+            _sheet = sheet;
             _config = config;
             _info = info;
             _ct = ct;
-            _ownsReader = ownsReader;
+            _ownedReader = ownedReader;
         }
 
-        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+        internal CsvEnumerable(CsvSheet sheet, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
         {
-            _reader = reader;
+            _sheet = sheet;
             _config = config;
             _info = explicitInfo;
         }
@@ -46,7 +46,7 @@ namespace ExcelReader.Core.Parser
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
         public Enumerator GetEnumerator()
         {
-            CsvReader.Enumerator rows = _reader.GetEnumerator();
+            CsvReader.Enumerator rows = _sheet.GetEnumerator();
             return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure);
         }
 
@@ -69,7 +69,7 @@ namespace ExcelReader.Core.Parser
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _ownsReader, effective);
+            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _ownedReader, effective);
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
@@ -104,25 +104,25 @@ namespace ExcelReader.Core.Parser
 
         /// <summary>Enumerates CSV rows asynchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvReader, CsvReader.Enumerator>
+        public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvSheet, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;
             private readonly CsvReader? _ownedReader;
 
             internal AsyncEnumerator(
-                CsvReader reader,
+                CsvSheet sheet,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
                 HeaderNormalization normalization,
                 int headerRow,
                 IFormatProvider provider,
                 bool throwOnParseFailure,
-                bool ownsReader,
+                CsvReader? ownedReader,
                 CancellationToken ct)
-                : base(reader, ct)
+                : base(sheet, ct)
             {
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
-                _ownedReader = ownsReader ? reader : null;
+                _ownedReader = ownedReader;
             }
 
             /// <inheritdoc/>

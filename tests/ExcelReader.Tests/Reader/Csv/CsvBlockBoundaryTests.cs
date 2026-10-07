@@ -19,7 +19,7 @@ namespace ExcelReader.Tests.Reader.Csv
         private static List<string[]> ReadAll(CsvReader reader)
         {
             var rows = new List<string[]>();
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
             while (e.MoveNext())
             {
                 var row = e.Current;
@@ -82,7 +82,7 @@ namespace ExcelReader.Tests.Reader.Csv
         public void EscapedFieldIsReportedAsMaterializedString()
         {
             using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("\"a\"\"b\",\"\""));
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.ExcelString, e.Current[0].Type);

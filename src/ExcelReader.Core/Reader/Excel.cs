@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Reader
     /// <summary>
     /// Entry point for opening Excel and CSV workbooks. <see cref="Open(string,ExcelReaderOptions?)"/>/
     /// <see cref="Open(Stream,bool,ExcelReaderOptions?)"/> and their async counterparts auto-detect XLSX/XLSB/XLS
-    /// from the file's signature and return a format-agnostic <see cref="IExcelRowReader"/>; the
+    /// from the file's signature and return a format-agnostic <see cref="IExcelWorkbook"/>; the
     /// <c>From*</c>/<c>FromXls*</c>/<c>FromXlsb*</c>/<c>FromCsv*</c> methods open a specific, known format directly.
     /// </summary>
     public static partial class Excel
@@ -24,113 +24,113 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSX file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromXlsxFile(string path, ExcelReaderOptions? options = null)
+        public static XlsxWorkbook FromXlsxFile(string path, ExcelReaderOptions? options = null)
         {
             return FromXlsx(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static XlsxWorkbook FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return new XlsxReader(decrypted, leaveOpen: false, options);
+                return new XlsxWorkbook(decrypted, leaveOpen: false, options);
             }
-            return new XlsxReader(stream, leaveOpen, options);
+            return new XlsxWorkbook(stream, leaveOpen, options);
         }
 
         /// <summary>
         /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <c>ZipArchive</c>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// reader never suspends, even under <c>await foreach</c>.
+        /// workbook never suspends, even under <c>await foreach</c>.
         /// </summary>
-        /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole XLSX file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
-        public static XlsxReader FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static XlsxWorkbook FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
             {
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
-                return XlsxReader.CreateFromMemory(plain, effective);
+                return XlsxWorkbook.CreateFromMemory(plain, effective);
             }
-            return XlsxReader.CreateFromMemory(data, effective);
+            return XlsxWorkbook.CreateFromMemory(data, effective);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLS file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsReader FromXlsFile(string path, ExcelReaderOptions? options = null)
+        public static XlsWorkbook FromXlsFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(File.OpenRead(path), leaveOpen: false, options);
+            return new XlsWorkbook(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLS data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsReader FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static XlsWorkbook FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(stream, leaveOpen, options);
+            return new XlsWorkbook(stream, leaveOpen, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook directly from an in-memory buffer.</summary>
-        /// <param name="data">The whole XLS file's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="data">The whole XLS file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsReader FromXls(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static XlsWorkbook FromXls(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(data, options);
+            return new XlsWorkbook(data, options);
         }
 
         /// <summary>Opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSB file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsbReader FromXlsbFile(string path, ExcelReaderOptions? options = null)
+        public static XlsbWorkbook FromXlsbFile(string path, ExcelReaderOptions? options = null)
         {
             return FromXlsb(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens an XLSB (Excel binary) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSB data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static XlsbWorkbook FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return new XlsbReader(decrypted, leaveOpen: false, options);
+                return new XlsbWorkbook(decrypted, leaveOpen: false, options);
             }
-            return new XlsbReader(stream, leaveOpen, options);
+            return new XlsbWorkbook(stream, leaveOpen, options);
         }
 
         /// <summary>
         /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <c>ZipArchive</c>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// reader never suspends, even under <c>await foreach</c>.
+        /// workbook never suspends, even under <c>await foreach</c>.
         /// </summary>
-        /// <param name="data">The whole XLSB file's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole XLSB file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
-        public static XlsbReader FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static XlsbWorkbook FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
             {
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
-                return XlsbReader.CreateFromMemory(plain, effective);
+                return XlsbWorkbook.CreateFromMemory(plain, effective);
             }
-            return XlsbReader.CreateFromMemory(data, effective);
+            return XlsbWorkbook.CreateFromMemory(data, effective);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSX file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsxWorkbook> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return FromXlsxAsync(stream, leaveOpen: false, options, ct);
@@ -138,43 +138,43 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsxWorkbook> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return XlsxReader.CreateAsync(decrypted, leaveOpen: false, options, ct);
+                return XlsxWorkbook.CreateAsync(decrypted, leaveOpen: false, options, ct);
             }
-            return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
+            return XlsxWorkbook.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLS file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsReader> FromXlsFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsWorkbook> FromXlsFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
-            return XlsReader.CreateAsync(stream, leaveOpen: false, options, ct);
+            return XlsWorkbook.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLS data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsReader> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsWorkbook> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
-            return XlsReader.CreateAsync(stream, leaveOpen, options, ct);
+            return XlsWorkbook.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSB file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsbWorkbook> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return FromXlsbAsync(stream, leaveOpen: false, options, ct);
@@ -182,16 +182,16 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSB data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsbWorkbook> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return XlsbReader.CreateAsync(decrypted, leaveOpen: false, options, ct);
+                return XlsbWorkbook.CreateAsync(decrypted, leaveOpen: false, options, ct);
             }
-            return XlsbReader.CreateAsync(stream, leaveOpen, options, ct);
+            return XlsbWorkbook.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
@@ -213,7 +213,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
         {
@@ -223,7 +223,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source directly from an in-memory buffer.</summary>
-        /// <param name="data">The whole CSV source's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="data">The whole CSV source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsv(ReadOnlyMemory<byte> data, CsvReaderOptions? options = null)
         {
@@ -252,7 +252,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static async ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
@@ -262,11 +262,8 @@ namespace ExcelReader.Core.Reader
             return await CsvReader.CreateAsync(stream, leaveOpen, effective, ct).ConfigureAwait(false);
         }
 
-        /// <summary>
-        /// Guesses a column schema for <paramref name="reader"/>'s current sheet by sampling it from
-        /// the first row, without disturbing any enumerator the caller already holds.
-        /// </summary>
-        /// <param name="reader">The reader whose current sheet is sampled.</param>
+        /// <summary>Guesses a column schema for <paramref name="sheet"/> by sampling it from the first row.</summary>
+        /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
         /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
         /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
         /// <param name="sampleSize">How many rows after the header to inspect.</param>
@@ -278,20 +275,20 @@ namespace ExcelReader.Core.Reader
         /// before trusting it, and feed the result into <see cref="ExcelParser.Build{T}"/> to
         /// build a real map.
         /// </remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelRowReader reader, int headerRow, int sampleSize)
+        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow, int sampleSize)
         {
-            return InferSchema(reader, headerRow, sampleSize, parseText: false);
+            return InferSchema(sheet, headerRow, sampleSize, parseText: false);
         }
 
         /// <summary>
-        /// Guesses a column schema by sampling the reader's rows, as
-        /// <see cref="InferSchema(IExcelRowReader, int, int)"/> does, and can also type cells that hold text.
+        /// Guesses a column schema by sampling the sheet's rows, as
+        /// <see cref="InferSchema(IExcelSheet, int, int)"/> does, and can also type cells that hold text.
         /// </summary>
-        /// <param name="reader">The reader to sample. Its enumeration is not disturbed.</param>
+        /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
         /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
         /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
         /// <param name="sampleSize">How many rows after the header to inspect.</param>
@@ -302,16 +299,16 @@ namespace ExcelReader.Core.Reader
         /// every sampled value converts to it.</param>
         /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
         /// <remarks>Still a guess over a bounded sample: a value past the sample can still fail to convert.
-        /// See <see cref="InferSchema(IExcelRowReader, int, int)"/>.</remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+        /// See <see cref="InferSchema(IExcelSheet, int, int)"/>.</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelRowReader reader, int headerRow = 1, int sampleSize = 100, bool parseText = false)
+        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow = 1, int sampleSize = 100, bool parseText = false)
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            using IExcelRowEnumerator rows = reader.GetEnumerator();
-            return SchemaInference.Infer(rows, reader.IsDate1904, headerRow, sampleSize, parseText);
+            ArgumentNullException.ThrowIfNull(sheet);
+            using IExcelRowEnumerator rows = sheet.GetEnumerator();
+            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText);
         }
 
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
@@ -320,13 +317,13 @@ namespace ExcelReader.Core.Reader
         /// Opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the file's signature
         /// and taking ownership of the file stream.
         /// </summary>
-        /// <remarks>Pattern-match on the returned reader against its concrete type (<see cref="XlsxReader"/> / <see cref="XlsReader"/> / <see cref="XlsbReader"/>) to access format-specific members.</remarks>
+        /// <remarks>Pattern-match on the returned workbook against its concrete type (<see cref="XlsxWorkbook"/> / <see cref="XlsWorkbook"/> / <see cref="XlsbWorkbook"/>) to access format-specific members.</remarks>
         /// <param name="path">The path to the workbook file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
-        public static IExcelRowReader Open(string path, ExcelReaderOptions? options = null)
+        public static IExcelWorkbook Open(string path, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(path);
             return OpenSeekable(File.OpenRead(path), leaveOpen: false, options);
@@ -337,13 +334,13 @@ namespace ExcelReader.Core.Reader
         /// stream's signature.
         /// </summary>
         /// <param name="stream">A seekable stream containing the workbook data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         /// <exception cref="InvalidDataException">The stream's signature does not match a supported format.</exception>
-        public static IExcelRowReader Open(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static IExcelWorkbook Open(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return OpenSeekable(stream, leaveOpen, options);
@@ -352,14 +349,14 @@ namespace ExcelReader.Core.Reader
         /// <summary>
         /// Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
         /// signature. XLSX/XLSB route through <see cref="ZipIndex"/> instead of
-        /// a <c>ZipArchive</c>/<see cref="Stream"/>, so the returned reader never
+        /// a <c>ZipArchive</c>/<see cref="Stream"/>, so the returned workbook never
         /// suspends, even under <c>await foreach</c>.
         /// </summary>
-        /// <param name="data">The whole workbook file's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole workbook file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="InvalidDataException">The buffer's signature does not match a supported format.</exception>
-        public static IExcelRowReader Open(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static IExcelWorkbook Open(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
@@ -375,14 +372,14 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => new XlsReader(data, effective),
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(memZip!, effective),
-                ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(memZip!, effective),
+                ExcelFileFormat.Xls => new XlsWorkbook(data, effective),
+                ExcelFileFormat.Xlsb => XlsbWorkbook.CreateFromIndex(memZip!, effective),
+                ExcelFileFormat.Xlsx => XlsxWorkbook.CreateFromIndex(memZip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
 
-        private static IExcelRowReader OpenFromPlainMemory(ReadOnlyMemory<byte> plain, ExcelReaderOptions options)
+        private static IExcelWorkbook OpenFromPlainMemory(ReadOnlyMemory<byte> plain, ExcelReaderOptions options)
         {
             ExcelFileFormat format = ClassifyMemory(plain, options, out ZipIndex? memZip);
             if (format is not (ExcelFileFormat.Xlsb or ExcelFileFormat.Xlsx))
@@ -392,8 +389,8 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(memZip!, options),
-                ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(memZip!, options),
+                ExcelFileFormat.Xlsb => XlsbWorkbook.CreateFromIndex(memZip!, options),
+                ExcelFileFormat.Xlsx => XlsxWorkbook.CreateFromIndex(memZip!, options),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
@@ -424,10 +421,10 @@ namespace ExcelReader.Core.Reader
         /// <param name="path">The path to the workbook file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
-        public static ValueTask<IExcelRowReader> OpenAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<IExcelWorkbook> OpenAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(path);
             FileStream stream = OpenAsyncFile(path);
@@ -439,14 +436,14 @@ namespace ExcelReader.Core.Reader
         /// (XLSX/XLSB/XLS) from the stream's signature.
         /// </summary>
         /// <param name="stream">A seekable stream containing the workbook data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         /// <exception cref="InvalidDataException">The stream's signature does not match a supported format.</exception>
-        public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<IExcelWorkbook> OpenAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return OpenSeekableAsync(stream, leaveOpen, options, ct);
@@ -461,13 +458,13 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/>.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/>.</returns>
         /// <remarks>CSV carries no signature, so auto-detection never reports it; opening delimited text
         /// means naming <see cref="ExcelFileFormat.Csv"/> here.</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is <see cref="ExcelFileFormat.EncryptedOoxml"/> or not a defined value.</exception>
         /// <exception cref="InvalidDataException"><paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/> and the file's signature matches no supported format.</exception>
-        public static IExcelRowReader Open(string path, ExcelFileFormat format, ExcelReaderOptions? options = null)
+        public static IExcelWorkbook Open(string path, ExcelFileFormat format, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(path);
             RequireOpenableFormat(format);
@@ -488,16 +485,16 @@ namespace ExcelReader.Core.Reader
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/>.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is <see cref="ExcelFileFormat.EncryptedOoxml"/> or not a defined value.</exception>
         /// <exception cref="ArgumentException"><paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/> and <paramref name="stream"/> does not support seeking.</exception>
         /// <exception cref="InvalidDataException"><paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/> and the stream's signature matches no supported format.</exception>
-        public static IExcelRowReader Open(Stream stream, ExcelFileFormat format, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static IExcelWorkbook Open(Stream stream, ExcelFileFormat format, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
             RequireOpenableFormat(format);
@@ -514,16 +511,16 @@ namespace ExcelReader.Core.Reader
         /// <summary>
         /// Opens a workbook of a known format from an in-memory buffer.
         /// </summary>
-        /// <param name="data">The whole source's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="format">The format to read <paramref name="data"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/>.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/>.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is <see cref="ExcelFileFormat.EncryptedOoxml"/> or not a defined value.</exception>
         /// <exception cref="InvalidDataException"><paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/> and the buffer's signature matches no supported format.</exception>
-        public static IExcelRowReader Open(ReadOnlyMemory<byte> data, ExcelFileFormat format, ExcelReaderOptions? options = null)
+        public static IExcelWorkbook Open(ReadOnlyMemory<byte> data, ExcelFileFormat format, ExcelReaderOptions? options = null)
         {
             RequireOpenableFormat(format);
             return format switch
@@ -546,20 +543,20 @@ namespace ExcelReader.Core.Reader
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/>.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is <see cref="ExcelFileFormat.EncryptedOoxml"/> or not a defined value.</exception>
         /// <exception cref="InvalidDataException"><paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/> and the file's signature matches no supported format.</exception>
-        public static ValueTask<IExcelRowReader> OpenAsync(string path, ExcelFileFormat format, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<IExcelWorkbook> OpenAsync(string path, ExcelFileFormat format, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(path);
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => AsRowReaderAsync(FromCsvFileAsync(path, CsvOf(options), ct)),
-                ExcelFileFormat.Xlsx => AsRowReaderAsync(FromXlsxFileAsync(path, options, ct)),
-                ExcelFileFormat.Xlsb => AsRowReaderAsync(FromXlsbFileAsync(path, options, ct)),
-                ExcelFileFormat.Xls => AsRowReaderAsync(FromXlsFileAsync(path, options, ct)),
+                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvFileAsync(path, CsvOf(options), ct)),
+                ExcelFileFormat.Xlsx => AsWorkbookAsync(FromXlsxFileAsync(path, options, ct)),
+                ExcelFileFormat.Xlsb => AsWorkbookAsync(FromXlsbFileAsync(path, options, ct)),
+                ExcelFileFormat.Xls => AsWorkbookAsync(FromXlsFileAsync(path, options, ct)),
                 _ => OpenAsync(path, options, ct),
             };
         }
@@ -571,26 +568,26 @@ namespace ExcelReader.Core.Reader
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        /// <returns>A format-agnostic <see cref="IExcelRowReader"/>.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is <see cref="ExcelFileFormat.EncryptedOoxml"/> or not a defined value.</exception>
         /// <exception cref="ArgumentException"><paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/> and <paramref name="stream"/> does not support seeking.</exception>
         /// <exception cref="InvalidDataException"><paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/> and the stream's signature matches no supported format.</exception>
-        public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, ExcelFileFormat format, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<IExcelWorkbook> OpenAsync(Stream stream, ExcelFileFormat format, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => AsRowReaderAsync(FromCsvAsync(stream, leaveOpen, CsvOf(options), ct)),
-                ExcelFileFormat.Xlsx => AsRowReaderAsync(FromXlsxAsync(stream, leaveOpen, options, ct)),
-                ExcelFileFormat.Xlsb => AsRowReaderAsync(FromXlsbAsync(stream, leaveOpen, options, ct)),
-                ExcelFileFormat.Xls => AsRowReaderAsync(FromXlsAsync(stream, leaveOpen, options, ct)),
+                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvAsync(stream, leaveOpen, CsvOf(options), ct)),
+                ExcelFileFormat.Xlsx => AsWorkbookAsync(FromXlsxAsync(stream, leaveOpen, options, ct)),
+                ExcelFileFormat.Xlsb => AsWorkbookAsync(FromXlsbAsync(stream, leaveOpen, options, ct)),
+                ExcelFileFormat.Xls => AsWorkbookAsync(FromXlsAsync(stream, leaveOpen, options, ct)),
                 _ => OpenAsync(stream, leaveOpen, options, ct),
             };
         }
@@ -600,10 +597,10 @@ namespace ExcelReader.Core.Reader
             return options?.Csv ?? CsvReaderOptions.Default;
         }
 
-        private static async ValueTask<IExcelRowReader> AsRowReaderAsync<TReader>(ValueTask<TReader> opening)
-            where TReader : IExcelRowReader
+        private static async ValueTask<IExcelWorkbook> AsWorkbookAsync<TWorkbook>(ValueTask<TWorkbook> pending)
+            where TWorkbook : IExcelWorkbook
         {
-            return await opening.ConfigureAwait(false);
+            return await pending.ConfigureAwait(false);
         }
 
         private static void RequireOpenableFormat(ExcelFileFormat format)
@@ -659,7 +656,7 @@ namespace ExcelReader.Core.Reader
             return format;
         }
 
-        private static IExcelRowReader OpenSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions? options)
+        private static IExcelWorkbook OpenSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions? options)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             ExcelFileFormat format;
@@ -684,22 +681,22 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => new XlsReader(stream, leaveOpen, options),
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(zip!, effective),
-                ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(zip!, effective),
+                ExcelFileFormat.Xls => new XlsWorkbook(stream, leaveOpen, options),
+                ExcelFileFormat.Xlsb => XlsbWorkbook.CreateFromIndex(zip!, effective),
+                ExcelFileFormat.Xlsx => XlsxWorkbook.CreateFromIndex(zip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
 
-        private static IExcelRowReader OpenDecryptedZip(Stream decrypted, ExcelReaderOptions options)
+        private static IExcelWorkbook OpenDecryptedZip(Stream decrypted, ExcelReaderOptions options)
         {
             ZipIndex zip = ZipIndex.Create(ByteSource.FromStream(decrypted, leaveOpen: false), options);
             return ClassifyZip(zip) is ExcelFileFormat.Xlsb
-                ? XlsbReader.CreateFromIndex(zip, options)
-                : XlsxReader.CreateFromIndex(zip, options);
+                ? XlsbWorkbook.CreateFromIndex(zip, options)
+                : XlsxWorkbook.CreateFromIndex(zip, options);
         }
 
-        private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             ExcelFileFormat format;
@@ -725,20 +722,20 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => await XlsReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsb => await XlsbReader.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsx => await XlsxReader.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xls => await XlsWorkbook.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsb => await XlsbWorkbook.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsx => await XlsxWorkbook.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
 
-        private static async ValueTask<IExcelRowReader> OpenDecryptedZipAsync(Stream decrypted, ExcelReaderOptions options, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenDecryptedZipAsync(Stream decrypted, ExcelReaderOptions options, CancellationToken ct)
         {
             ByteSource source = await ByteSource.FromStreamAsync(decrypted, leaveOpen: false, ct).ConfigureAwait(false);
             ZipIndex zip = await ZipIndex.CreateAsync(source, options, ct).ConfigureAwait(false);
             return ClassifyZip(zip) is ExcelFileFormat.Xlsb
-                ? await XlsbReader.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false)
-                : await XlsxReader.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false);
+                ? await XlsbWorkbook.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false)
+                : await XlsxWorkbook.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false);
         }
 
         private static void DisposeOnFailure(Stream stream, bool leaveOpen)

@@ -15,7 +15,7 @@ namespace ExcelReader.Tests.Reader.Csv
         private static List<string[]> ReadAll(CsvReader reader)
         {
             var rows = new List<string[]>();
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
             while (e.MoveNext())
             {
                 var row = e.Current;
@@ -32,7 +32,7 @@ namespace ExcelReader.Tests.Reader.Csv
         private static async Task<List<string[]>> ReadAllAsync(CsvReader reader)
         {
             var rows = new List<string[]>();
-            await using CsvReader.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            await using CsvReader.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
             while (await e.MoveNextAsync())
             {
                 rows.Add(ToArray(e));
@@ -43,7 +43,7 @@ namespace ExcelReader.Tests.Reader.Csv
         private static async Task<List<string[]>> ReadAllViaAsyncEnumerator(CsvReader reader)
         {
             var rows = new List<string[]>();
-            await foreach (var row in reader)
+            await foreach (var row in reader.FirstSheet)
             {
                 var cells = new string[row.ColumnCount];
                 for (int i = 0; i < row.ColumnCount; i++)
@@ -145,7 +145,7 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             using var ms = Csv("a,,c\n");
             using var reader = Excel.FromCsv(ms);
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             var row = e.Current;
@@ -170,7 +170,7 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             using var ms = Csv("""a,"",c""");
             using var reader = Excel.FromCsv(ms);
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             var row = e.Current;
@@ -294,7 +294,7 @@ namespace ExcelReader.Tests.Reader.Csv
             using var ms = Csv("a," + new string('x', 128 * 1024) + ",c\n");
             var options = new CsvReaderOptions { MaxCellBytes = 1024 };
             using var reader = Excel.FromCsv(ms, options: options);
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => e.MoveNext());
             Assert.Equal(nameof(CsvReaderOptions.MaxCellBytes), ex.LimitName);
@@ -306,7 +306,7 @@ namespace ExcelReader.Tests.Reader.Csv
             using var ms = Csv(new string(',', 32));
             var options = new CsvReaderOptions { MaxCellBytes = 1024 };
             using var reader = Excel.FromCsv(ms, options: options);
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => e.MoveNext());
             Assert.Equal(nameof(CsvReaderOptions.MaxCellBytes), ex.LimitName);
@@ -401,7 +401,7 @@ namespace ExcelReader.Tests.Reader.Csv
             var first = ReadAll(reader);
             Assert.Equal(2, first.Count);
 
-            Assert.Throws<InvalidOperationException>(reader.GetEnumerator);
+            Assert.Throws<InvalidOperationException>(reader.FirstSheet.GetEnumerator);
         }
 
 
@@ -759,7 +759,7 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             using var ms = Csv("a,b\n");
             using var reader = Excel.FromCsv(ms);
-            IExcelRowReader ier = reader;
+            IExcelSheet ier = reader.FirstSheet;
 
             using IExcelRowEnumerator e = ier.GetEnumerator();
 
@@ -771,7 +771,7 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             using var ms = Csv("a,b\n");
             using var reader = Excel.FromCsv(ms);
-            IExcelRowReader ier = reader;
+            IExcelSheet ier = reader.FirstSheet;
 
             await using IExcelRowEnumerator e = ier.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
@@ -783,7 +783,7 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             byte[] csv = "ab,cd\r\nef,gh\nij,kl"u8.ToArray();
             using var reader = Excel.FromCsv(csv);
-            using CsvReader.Enumerator rows = reader.GetEnumerator();
+            using CsvReader.Enumerator rows = reader.FirstSheet.GetEnumerator();
 
             var starts = new List<long>();
             while (rows.MoveNext())
@@ -800,7 +800,7 @@ namespace ExcelReader.Tests.Reader.Csv
             byte[] csv = "ab,cd\r\nef,gh\nij,kl"u8.ToArray();
             using var ms = new MemoryStream(csv, writable: false);
             await using var reader = await Excel.FromCsvAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using CsvReader.Enumerator rows = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            await using CsvReader.Enumerator rows = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             var starts = new List<long>();
             while (await rows.MoveNextAsync())
@@ -827,7 +827,7 @@ namespace ExcelReader.Tests.Reader.Csv
             byte[] csv = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
             using var ms = new MemoryStream(csv, writable: false);
             using var reader = Excel.FromCsv(ms);
-            using CsvReader.Enumerator rows = reader.GetEnumerator();
+            using CsvReader.Enumerator rows = reader.FirstSheet.GetEnumerator();
 
             var actual = new List<long>();
             while (rows.MoveNext())

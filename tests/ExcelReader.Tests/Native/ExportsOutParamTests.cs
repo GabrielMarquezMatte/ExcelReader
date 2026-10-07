@@ -7,15 +7,14 @@ namespace ExcelReader.Tests.Native
     {
         private const int Sentinel = 0x5A5A5A5A;
 
-        public static TheoryData<string> BufferExports => ["xl_sheet_name", "xl_next_row", "xl_read_all_blob", "xl_last_error"];
+        public static TheoryData<string> BufferExports => ["xl_rows_next", "xl_rows_read_all_blob", "xl_last_error"];
 
         private static int CallBufferExport(string export, int capacity, int* outValue)
         {
             return export switch
             {
-                "xl_sheet_name" => ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.SheetName)(0, null, capacity, outValue),
-                "xl_next_row" => ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.NextRow)(0, null, capacity, outValue),
-                "xl_read_all_blob" => ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.ReadAllBlob)(0, null, capacity, outValue),
+                "xl_rows_next" => ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.RowsNext)(0, null, capacity, outValue),
+                "xl_rows_read_all_blob" => ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.RowsReadAllBlob)(0, null, capacity, outValue),
                 "xl_last_error" => ((delegate* unmanaged<byte*, int, int*, int>)&Exports.LastError)(null, capacity, outValue),
                 _ => throw new ArgumentOutOfRangeException(nameof(export)),
             };
@@ -31,6 +30,19 @@ namespace ExcelReader.Tests.Native
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Equal(0, outValue);
+        }
+
+        [Fact]
+        public void AReadingExportRejectingAnUnknownHandleDoesNotLeaveAnEarlierCallsError()
+        {
+            NativeApi.SetLastError("stale");
+            byte* buffer = stackalloc byte[1];
+            int written = Sentinel;
+
+            int status = ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.RowsNext)(0, buffer, 1, &written);
+
+            Assert.Equal(NativeStatus.InvalidHandle, status);
+            Assert.Empty(NativeApi.LastErrorText());
         }
 
         [Fact]
@@ -66,6 +78,28 @@ namespace ExcelReader.Tests.Native
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Equal(nint.Zero, (nint)outState);
+        }
+
+        [Fact]
+        public void SheetIndexRejectingItsArgumentsStillWritesMinusOne()
+        {
+            int outValue = Sentinel;
+
+            int status = ((delegate* unmanaged<nint, byte*, int, int*, int>)&Exports.SheetIndex)(0, null, 5, &outValue);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Equal(-1, outValue);
+        }
+
+        [Fact]
+        public void RowsOpenOnAnUnknownWorkbookStillZeroesTheCursorOutParam()
+        {
+            nint outRows = Sentinel;
+
+            int status = ((delegate* unmanaged<nint, int, nint*, int>)&Exports.RowsOpen)(0, 0, &outRows);
+
+            Assert.Equal(NativeStatus.InvalidHandle, status);
+            Assert.Equal(0, outRows);
         }
     }
 }

@@ -97,7 +97,7 @@ fn warm_up() {
 
     let mut handle: *mut XlWorkbook = std::ptr::null_mut();
     let status = unsafe {
-        crate::xl_open_memory_ex(
+        crate::xl_open_memory(
             CSV.as_ptr(),
             CSV.len() as i32,
             crate::XL_FORMAT_CSV,
@@ -128,11 +128,16 @@ fn warm_up() {
     let _ = crate::aggregate::aggregate_csv_memory_unchecked(CSV, || CountRows(0), &options);
 }
 
-/// An open workbook. Not thread-safe - use one per thread, same contract as the C ABI. (The raw
-/// handle makes this type neither `Send` nor `Sync`, so the compiler enforces that for you.)
+/// An open workbook. Safe to share between threads: every read goes through a [`Sheet`] and opens
+/// its own cursor, so reads on one workbook never disturb one another.
 pub struct Workbook {
     handle: *mut XlWorkbook,
 }
+
+// SAFETY: ABI v6 documents the workbook handle as usable from several threads at once. The only
+// state behind it is immutable after open; each read owns its enumerator.
+unsafe impl Send for Workbook {}
+unsafe impl Sync for Workbook {}
 
 impl Workbook {
     /// Opens `path`, sniffing the format and using every library default.
@@ -156,7 +161,7 @@ impl Workbook {
             .map_or(std::ptr::null(), crate::options::OpenOptionsRaw::as_ptr);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
         let status = unsafe {
-            crate::xl_open_file_ex(
+            crate::xl_open_file(
                 path.as_ptr(),
                 path.len() as i32,
                 format,
@@ -182,7 +187,7 @@ impl Workbook {
             .map_or(std::ptr::null(), crate::options::OpenOptionsRaw::as_ptr);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
         let status = unsafe {
-            crate::xl_open_memory_ex(
+            crate::xl_open_memory(
                 data.as_ptr(),
                 data.len() as i32,
                 format,
@@ -201,15 +206,7 @@ impl Workbook {
         Ok(count)
     }
 
-    /// Name of the currently selected sheet.
-    pub fn sheet_name(&self) -> Result<String, Error> {
-        self.fill_string(|handle, buffer, capacity, out_len| unsafe {
-            crate::xl_sheet_name(handle, buffer, capacity, out_len)
-        })
-    }
-
-    /// Name of the sheet at `index`, without changing the current sheet or disturbing row
-    /// enumeration.
+    /// Name of the sheet at `index`.
     pub fn sheet_name_at(&self, index: i32) -> Result<String, Error> {
         self.fill_string(|handle, buffer, capacity, out_len| unsafe {
             crate::xl_sheet_name_at(handle, index, buffer, capacity, out_len)
@@ -223,13 +220,6 @@ impl Workbook {
             .collect()
     }
 
-    /// Selects the sheet at `index`, resetting row enumeration to its first row.
-    ///
-    /// Takes `&mut self` because it moves the cursor every subsequent read shares.
-    pub fn move_to_sheet(&mut self, index: i32) -> Result<(), Error> {
-        check(unsafe { crate::xl_move_to_sheet(self.handle, index) })
-    }
-
     /// Whether the workbook uses the 1904 date system - needed to interpret raw Excel serial dates.
     pub fn is_date1904(&self) -> Result<bool, Error> {
         let mut flag: i32 = 0;
@@ -237,92 +227,27 @@ impl Workbook {
         Ok(flag != 0)
     }
 
-    /// A row-at-a-time reader over the current sheet.
-    ///
-    /// Takes `&mut self` because it advances the row cursor every read on this handle shares, the
-    /// same reason [`move_to_sheet`](Self::move_to_sheet) does.
-    pub fn rows(&mut self) -> crate::rows::RowCursor<'_> {
-        crate::rows::RowCursor::new(self.handle)
+    /// The sheet at `index`. An index outside the workbook is an error here, not at the first read.
+    pub fn sheet(&self, index: i32) -> Result<Sheet<'_>, Error> {
+        let mut visibility: i32 = 0;
+        check(unsafe { crate::xl_sheet_visibility_at(self.handle, index, &mut visibility) })?;
+        Ok(Sheet { workbook: self, index })
     }
 
-    /// Every remaining row of the current sheet in one native call, avoiding a round-trip per row.
-    ///
-    /// An empty remainder is an empty result, not an error.
-    pub fn read_all_decoded(&mut self) -> Result<crate::rows::DecodedRows, Error> {
-        let mut raw = crate::XlRows { row_count: 0, rows: std::ptr::null_mut() };
-        check(unsafe { crate::xl_read_all_decoded(self.handle, &mut raw) })?;
-        Ok(crate::rows::DecodedRows::new(raw))
+    /// Every sheet, in workbook order. Opens nothing.
+    pub fn sheets(&self) -> Result<Vec<Sheet<'_>>, Error> {
+        Ok((0..self.sheet_count()?)
+            .map(|index| Sheet { workbook: self, index })
+            .collect())
     }
 
-    /// Every remaining row of the current sheet, read in one native call into a buffer this type
-    /// owns outright - no native allocation per row/cell, and no `xl_free_*` call needed on drop.
-    /// Prefer this over [`read_all_decoded`](Self::read_all_decoded) unless something specifically
-    /// needs the decoded-array shape.
-    ///
-    /// An empty remainder is an empty result, not an error.
-    pub fn read_all_blob(&mut self) -> Result<crate::rows::AllRows, Error> {
-        crate::rows::AllRows::read(self.handle)
-    }
-
-    /// [`parse_sheet`] delivered a batch at a time. `batch_size` is rows per batch: 0 unbounded,
-    /// negative an error. The header row is consumed once, here, not re-read per batch.
-    ///
-    /// `&mut self` is what makes a second reader - or a `parse_sheet`/[`rows`](Self::rows) call
-    /// alongside a live one - a compile error rather than a runtime fault.
-    pub fn typed_chunks<T: ExcelMapper>(
-        &mut self,
-        header_row: i32,
-        batch_size: i64,
-    ) -> Result<TypedChunks<'_, T>, Error> {
-        let arena = build_specs::<T>();
-        let mut reader: *mut crate::XlTypedReader = std::ptr::null_mut();
+    /// The sheet called `name`, compared without regard to case. `Ok(None)` when no sheet matches.
+    pub fn sheet_by_name(&self, name: &str) -> Result<Option<Sheet<'_>>, Error> {
+        let mut index: i32 = -1;
         check(unsafe {
-            crate::xl_typed_reader_open(
-                self.handle,
-                arena.specs.as_ptr(),
-                arena.specs.len() as i32,
-                header_row,
-                batch_size,
-                &mut reader,
-            )
+            crate::xl_sheet_index(self.handle, name.as_ptr(), name.len() as i32, &mut index)
         })?;
-        Ok(TypedChunks {
-            reader,
-            bindings: arena.bindings,
-            done: false,
-            _workbook: PhantomData,
-        })
-    }
-
-    /// Guesses a [`parse_sheet`] schema by sampling the current sheet.
-    ///
-    /// `header_row` has the same meaning as in [`parse_sheet`] (0 = no header); `sample_size`
-    /// bounds how many rows after the header are inspected. This is a guess over a sample, not a
-    /// guarantee - always check it fits before trusting it against the full sheet. Takes `&self`:
-    /// the native call samples independently of the shared row cursor and never disturbs it.
-    pub fn infer_schema(
-        &self,
-        header_row: i32,
-        sample_size: i32,
-    ) -> Result<Vec<InferredColumn>, Error> {
-        let mut schema = XlInferredSchema {
-            columns: std::ptr::null_mut(),
-            column_count: 0,
-        };
-        check(unsafe {
-            crate::xl_infer_schema(self.handle, header_row, sample_size, &mut schema)
-        })?;
-
-        let columns = unsafe { copy_inferred(&schema) };
-        unsafe { crate::xl_free_schema(&mut schema) };
-        Ok(columns)
-    }
-
-    /// The raw handle, for sibling modules (e.g. `arrow::parse_arrow`) that need to call an
-    /// `xl_*` function this struct has no wrapper for yet. Not part of the crate's public surface -
-    /// `pub(crate)`, not `pub`.
-    pub(crate) fn handle(&self) -> *mut XlWorkbook {
-        self.handle
+        Ok((index >= 0).then_some(Sheet { workbook: self, index }))
     }
 
     /// Shared two-pass buffer dance for the `xl_*` functions that write a UTF-8 name into a caller
@@ -369,6 +294,164 @@ impl Workbook {
     }
 }
 
+/// How a sheet is shown in the application's tab bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SheetVisibility {
+    Visible,
+    Hidden,
+    VeryHidden,
+}
+
+/// One sheet of a [`Workbook`]: the workbook and an index. Holds no native resource, so it is
+/// `Copy` and free to pass to another thread; each read method opens what it needs.
+#[derive(Clone, Copy)]
+pub struct Sheet<'w> {
+    workbook: &'w Workbook,
+    index: i32,
+}
+
+impl<'w> Sheet<'w> {
+    /// Zero-based position in the workbook.
+    #[must_use]
+    pub fn index(&self) -> i32 {
+        self.index
+    }
+
+    /// The sheet's name.
+    pub fn name(&self) -> Result<String, Error> {
+        self.workbook.sheet_name_at(self.index)
+    }
+
+    /// Whether the sheet is visible, hidden or very hidden. An error if the native side reports a
+    /// value this crate does not know.
+    pub fn visibility(&self) -> Result<SheetVisibility, Error> {
+        let mut raw: i32 = 0;
+        check(unsafe {
+            crate::xl_sheet_visibility_at(self.workbook.handle, self.index, &mut raw)
+        })?;
+        match raw {
+            crate::XL_SHEET_VISIBLE => Ok(SheetVisibility::Visible),
+            crate::XL_SHEET_HIDDEN => Ok(SheetVisibility::Hidden),
+            crate::XL_SHEET_VERY_HIDDEN => Ok(SheetVisibility::VeryHidden),
+            other => Err(Error::from_status(
+                XL_ERROR,
+                format!("native library returned an unknown sheet visibility {other}"),
+            )),
+        }
+    }
+
+    /// A row-at-a-time reader over this sheet, from its first row. Each call opens an independent
+    /// cursor, so several may be alive at once, on this thread or on others.
+    pub fn rows(&self) -> Result<crate::rows::RowCursor<'w>, Error> {
+        crate::rows::RowCursor::open(self.workbook.handle, self.index)
+    }
+
+    /// Every row of this sheet in one native call, avoiding a round-trip per row.
+    pub fn read_all_decoded(&self) -> Result<crate::rows::DecodedRows, Error> {
+        let cursor = self.rows()?;
+        let mut raw = crate::XlRowsDecoded { row_count: 0, rows: std::ptr::null_mut() };
+        check(unsafe { crate::xl_rows_read_all_decoded(cursor.raw(), &mut raw) })?;
+        Ok(crate::rows::DecodedRows::new(raw))
+    }
+
+    /// Every row of this sheet, read in one native call into a buffer this type owns outright.
+    /// Prefer this over [`read_all_decoded`](Self::read_all_decoded) unless something specifically
+    /// needs the decoded-array shape.
+    pub fn read_all_blob(&self) -> Result<crate::rows::AllRows, Error> {
+        let cursor = self.rows()?;
+        crate::rows::AllRows::read(cursor.raw())
+    }
+
+    /// [`parse_sheet`] delivered a batch at a time. `batch_size` is rows per batch: 0 unbounded,
+    /// negative an error. The header row is consumed once, here, not re-read per batch.
+    pub fn typed_chunks<T: ExcelMapper>(
+        &self,
+        header_row: i32,
+        batch_size: i64,
+    ) -> Result<TypedChunks<'w, T>, Error> {
+        let arena = build_specs::<T>();
+        let mut reader: *mut crate::XlTypedReader = std::ptr::null_mut();
+        check(unsafe {
+            crate::xl_typed_reader_open(
+                self.workbook.handle,
+                self.index,
+                arena.specs.as_ptr(),
+                arena.specs.len() as i32,
+                header_row,
+                batch_size,
+                &mut reader,
+            )
+        })?;
+        Ok(TypedChunks {
+            reader,
+            bindings: arena.bindings,
+            done: false,
+            _workbook: PhantomData,
+        })
+    }
+
+    /// Guesses a [`parse_sheet`] schema by sampling this sheet.
+    ///
+    /// `header_row` has the same meaning as in [`parse_sheet`] (0 = no header); `sample_size`
+    /// bounds how many rows after the header are inspected. This is a guess over a sample, not a
+    /// guarantee - always check it fits before trusting it against the full sheet.
+    pub fn infer_schema(
+        &self,
+        header_row: i32,
+        sample_size: i32,
+    ) -> Result<Vec<InferredColumn>, Error> {
+        self.infer_schema_flags(header_row, sample_size, 0)
+    }
+
+    /// [`infer_schema`](Self::infer_schema), also typing cells that hold text — every CSV field,
+    /// or numbers stored as text: integers, decimals, `true`/`false` and ISO dates or date-times,
+    /// when the text has exactly that shape. Leading-zero codes such as `00123` stay text.
+    pub fn infer_schema_parse_text(
+        &self,
+        header_row: i32,
+        sample_size: i32,
+    ) -> Result<Vec<InferredColumn>, Error> {
+        self.infer_schema_flags(header_row, sample_size, crate::XL_INFER_PARSE_TEXT)
+    }
+
+    fn infer_schema_flags(
+        &self,
+        header_row: i32,
+        sample_size: i32,
+        flags: i32,
+    ) -> Result<Vec<InferredColumn>, Error> {
+        let mut schema = XlInferredSchema {
+            columns: std::ptr::null_mut(),
+            column_count: 0,
+        };
+        check(unsafe {
+            crate::xl_infer_schema(
+                self.workbook.handle,
+                self.index,
+                header_row,
+                sample_size,
+                flags,
+                &mut schema,
+            )
+        })?;
+
+        let columns = unsafe { copy_inferred(&schema) };
+        unsafe { crate::xl_free_schema(&mut schema) };
+        Ok(columns)
+    }
+
+    pub(crate) fn handle(&self) -> *mut XlWorkbook {
+        self.workbook.handle
+    }
+}
+
+/// The sheet's position only - reading its name would be a native call inside `Debug`.
+impl std::fmt::Debug for Sheet<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Sheet").field("index", &self.index).finish()
+    }
+}
+
 /// Deep-copies a native-owned inferred schema into owned Rust values, so the caller can free the
 /// native allocation immediately.
 ///
@@ -401,7 +484,7 @@ unsafe fn copy_inferred(schema: &XlInferredSchema) -> Vec<InferredColumn> {
         .collect()
 }
 
-/// One column guessed by [`Workbook::infer_schema`].
+/// One column guessed by [`Sheet::infer_schema`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InferredColumn {
     /// Header text, or `None` when the column must be resolved by [`index`](Self::index) instead.
@@ -611,6 +694,11 @@ impl<T: ExcelMapper> Drop for TableView<T> {
     }
 }
 
+// SAFETY: plain native allocations, read only through &self, released by xl_free_table, which any
+// thread may call. T appears only as fn pointers, never as a stored value.
+unsafe impl<T: ExcelMapper> Send for TableView<T> {}
+unsafe impl<T: ExcelMapper> Sync for TableView<T> {}
+
 /// Shape only. Rendering the rows would mean materializing every `T`, which is the one thing this
 /// type exists to avoid.
 impl<T: ExcelMapper> std::fmt::Debug for TableView<T> {
@@ -627,8 +715,12 @@ pub struct TypedChunks<'a, T: ExcelMapper> {
     reader: *mut crate::XlTypedReader,
     bindings: Vec<ColumnBinding<T>>,
     done: bool,
-    _workbook: PhantomData<&'a mut Workbook>,
+    _workbook: PhantomData<&'a Workbook>,
 }
+
+// SAFETY: a typed reader owns its native enumerator; ABI v6 lets it be used from any one thread
+// at a time, which `&mut self` on `next` already guarantees.
+unsafe impl<T: ExcelMapper> Send for TypedChunks<'_, T> {}
 
 impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
     type Item = Result<TableView<T>, Error>;
@@ -759,12 +851,21 @@ pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena<T> {
     }
 }
 
-/// Schema-driven columnar parse of the current sheet, matching C++'s `xl::parse_sheet<T>`.
-///
-/// Takes `&mut Workbook` because the parse consumes the workbook's shared row cursor.
+/// Schema-driven columnar parse of one sheet, matching C++'s `xl::parse_sheet<T>`.
 pub fn parse_sheet<T: ExcelMapper>(
-    workbook: &mut Workbook,
+    sheet: Sheet<'_>,
     header_row: i32,
+) -> Result<TableView<T>, Error> {
+    parse_sheet_parallel(sheet, header_row, 1)
+}
+
+/// [`parse_sheet`] with a degree of parallelism: `0` uses every processor, `1` is sequential, `n`
+/// up to `n` threads, negative is an error. Only CSV is split; other formats read sequentially.
+/// The table equals `parse_sheet`'s.
+pub fn parse_sheet_parallel<T: ExcelMapper>(
+    sheet: Sheet<'_>,
+    header_row: i32,
+    degree_of_parallelism: i32,
 ) -> Result<TableView<T>, Error> {
     let arena = build_specs::<T>();
     let bindings = arena.bindings;
@@ -775,10 +876,12 @@ pub fn parse_sheet<T: ExcelMapper>(
     };
     unsafe {
         let status = crate::xl_parse_typed(
-            workbook.handle,
+            sheet.handle(),
+            sheet.index(),
             arena.specs.as_ptr(),
             arena.specs.len() as i32,
             header_row,
+            degree_of_parallelism,
             &mut table,
         );
         if status != XL_OK {

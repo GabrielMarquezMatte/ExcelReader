@@ -6,7 +6,7 @@ using ExcelReader.Core.Reader;
 namespace ExcelReader.Native.Reading
 {
     /// <summary>
-    /// The row <c>xl_next_row_view</c> hands out: cell structs and NUL-terminated values in native memory
+    /// The row <c>xl_rows_next_view</c> hands out: cell structs and NUL-terminated values in native memory
     /// owned by the handle, overwritten by the next row and freed with it.
     /// </summary>
     internal sealed unsafe class RowViewBuffer : IDisposable
@@ -36,7 +36,7 @@ namespace ExcelReader.Native.Reading
             return Finish(count);
         }
 
-        /// <summary>Takes over a row <c>xl_next_row</c> already serialized but could not hand back.</summary>
+        /// <summary>Takes over a row <c>xl_rows_next</c> already serialized but could not hand back.</summary>
         internal NativeRow Fill(ReadOnlySpan<byte> blob)
         {
             int cellCount = BinaryPrimitives.ReadInt32LittleEndian(blob);

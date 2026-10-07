@@ -40,7 +40,7 @@ namespace ExcelReader.Fuzz
             FuzzOracle.Guard(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                using XlsxReader reader = Excel.FromXlsx(ms, leaveOpen: true, Limits);
+                using XlsxWorkbook reader = Excel.FromXlsx(ms, leaveOpen: true, Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -50,7 +50,7 @@ namespace ExcelReader.Fuzz
             byte[] bytes = data.ToArray();
             FuzzOracle.Guard(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(new ReadOnlyMemory<byte>(bytes), Limits);
+                using XlsxWorkbook reader = Excel.FromXlsx(new ReadOnlyMemory<byte>(bytes), Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -61,7 +61,7 @@ namespace ExcelReader.Fuzz
             FuzzOracle.Guard(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                using XlsbReader reader = Excel.FromXlsb(ms, leaveOpen: true, Limits);
+                using XlsbWorkbook reader = Excel.FromXlsb(ms, leaveOpen: true, Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -71,7 +71,7 @@ namespace ExcelReader.Fuzz
             byte[] bytes = data.ToArray();
             FuzzOracle.Guard(() =>
             {
-                using XlsbReader reader = Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits);
+                using XlsbWorkbook reader = Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -104,7 +104,7 @@ namespace ExcelReader.Fuzz
             FuzzOracle.Guard(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                using XlsReader reader = Excel.FromXls(ms, leaveOpen: true, Limits);
+                using XlsWorkbook reader = Excel.FromXls(ms, leaveOpen: true, Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -114,7 +114,7 @@ namespace ExcelReader.Fuzz
             byte[] bytes = data.ToArray();
             FuzzOracle.Guard(() =>
             {
-                using IExcelRowReader reader = Excel.Open(bytes, EncryptedLimits);
+                using IExcelWorkbook reader = Excel.Open(bytes, EncryptedLimits);
                 DrainAllSheets(reader);
             });
         }
@@ -122,13 +122,12 @@ namespace ExcelReader.Fuzz
         internal static int OpenEncryptedSeedForSelfCheck(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
-            using IExcelRowReader reader = Excel.Open(bytes, EncryptedLimits);
+            using IExcelWorkbook reader = Excel.Open(bytes, EncryptedLimits);
             int rows = 0;
             int sheets = reader.SheetCount;
             for (int i = 0; i < sheets; i++)
             {
-                reader.MoveToSheet(i);
-                using IExcelRowEnumerator e = reader.GetEnumerator();
+                using IExcelRowEnumerator e = reader.SheetAt(i).GetEnumerator();
                 while (e.MoveNext())
                 {
                     rows++;
@@ -144,7 +143,7 @@ namespace ExcelReader.Fuzz
             {
                 using var ms = new MemoryStream(bytes, writable: false);
                 using CsvReader reader = Excel.FromCsv(ms, leaveOpen: true, CsvLimits);
-                DrainRows(reader);
+                DrainRows(reader.FirstSheet);
             });
         }
 
@@ -156,7 +155,7 @@ namespace ExcelReader.Fuzz
                 CsvDialect dialect = CsvSniffer.Detect(bytes);
                 using var ms = new MemoryStream(bytes, writable: false);
                 using CsvReader reader = Excel.FromCsv(ms, leaveOpen: true, CsvLimits.WithDialect(dialect));
-                DrainRows(reader);
+                DrainRows(reader.FirstSheet);
             });
         }
 
@@ -226,7 +225,7 @@ namespace ExcelReader.Fuzz
         {
             using CsvReader reader = Excel.FromCsv(bytes, CsvLimits);
             var rows = new List<string>();
-            foreach (FuzzRow row in ExcelParser.FromAttributes<FuzzRow>().Parse(reader))
+            foreach (FuzzRow row in ExcelParser.FromAttributes<FuzzRow>().Parse(reader.FirstSheet))
             {
                 rows.Add(Render(row));
             }
@@ -293,8 +292,8 @@ namespace ExcelReader.Fuzz
 
         private static void CompareReaders(
             byte[] bytes,
-            Func<byte[], IExcelRowReader> left,
-            Func<byte[], IExcelRowReader> right,
+            Func<byte[], IExcelWorkbook> left,
+            Func<byte[], IExcelWorkbook> right,
             string leftName,
             string rightName)
         {
@@ -353,7 +352,7 @@ namespace ExcelReader.Fuzz
             }
         }
 
-        private static List<string> RenderAllSheets(IExcelRowReader reader)
+        private static List<string> RenderAllSheets(IExcelWorkbook reader)
         {
             using (reader)
             {
@@ -361,9 +360,8 @@ namespace ExcelReader.Fuzz
                 int sheets = reader.SheetCount;
                 for (int i = 0; i < sheets; i++)
                 {
-                    reader.MoveToSheet(i);
                     rows.Add(string.Create(CultureInfo.InvariantCulture, $"#sheet{i}"));
-                    using IExcelRowEnumerator e = reader.GetEnumerator();
+                    using IExcelRowEnumerator e = reader.SheetAt(i).GetEnumerator();
                     while (e.MoveNext())
                     {
                         rows.Add(RenderRow(e.Current, reader.IsDate1904));
@@ -385,17 +383,16 @@ namespace ExcelReader.Fuzz
             return sb.ToString();
         }
 
-        private static void DrainAllSheets(IExcelRowReader reader)
+        private static void DrainAllSheets(IExcelWorkbook reader)
         {
             int sheets = reader.SheetCount;
             for (int i = 0; i < sheets; i++)
             {
-                reader.MoveToSheet(i);
-                DrainRows(reader);
+                DrainRows(reader.SheetAt(i));
             }
         }
 
-        private static void DrainRows(IExcelRowReader reader)
+        private static void DrainRows(IExcelSheet reader)
         {
             using IExcelRowEnumerator rows = reader.GetEnumerator();
             while (rows.MoveNext())
@@ -404,7 +401,7 @@ namespace ExcelReader.Fuzz
             }
         }
 
-        private static void DrainRows(CsvReader reader)
+        private static void DrainRows(CsvSheet reader)
         {
             using CsvReader.Enumerator rows = reader.GetEnumerator();
             while (rows.MoveNext())

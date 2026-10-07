@@ -263,8 +263,8 @@ namespace ExcelReader.Tests.Writer
             WriteRow(sheet, "after");
             await workbook.DisposeAsync();
 
-            using IExcelRowReader reader = Excel.Open(stream.ToArray().AsMemory());
-            using IExcelRowEnumerator rows = reader.GetEnumerator();
+            using IExcelWorkbook reader = Excel.Open(stream.ToArray().AsMemory());
+            using IExcelRowEnumerator rows = reader.FirstSheet.GetEnumerator();
             Assert.True(rows.MoveNext());
             Assert.Equal("before", rows.Current[0].GetString());
             Assert.True(rows.MoveNext());
@@ -464,7 +464,7 @@ namespace ExcelReader.Tests.Writer
                 sheet.End();
             }
 
-            using IExcelRowReader reader = Excel.Open(stream.ToArray().AsMemory());
+            using IExcelWorkbook reader = Excel.Open(stream.ToArray().AsMemory());
             Assert.Equal(2, reader.SheetCount);
             pool.AssertEveryBufferReturnedOnce();
         }

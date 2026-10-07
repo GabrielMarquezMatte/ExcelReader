@@ -16,6 +16,7 @@ from excelreader import (
     open_bytes,
     open_workbook,
 )
+from excelreader import arrow_stream as arrow_stream_module
 from excelreader import reader as reader_module
 
 ENCRYPTED = Path(__file__).resolve().parents[2] / "tests" / "ExcelReader.Tests" / "data" / "encrypted"
@@ -23,7 +24,7 @@ ENCRYPTED = Path(__file__).resolve().parents[2] / "tests" / "ExcelReader.Tests" 
 
 def test_reads_the_xlsx_header_row(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        header = next(workbook.rows())
+        header = next(workbook.sheets[0].rows())
 
     assert len(header) == 18
     assert header[0] == Cell(column=0, type=CellType.STRING, value="Coluna1")
@@ -32,14 +33,14 @@ def test_reads_the_xlsx_header_row(xlsx_path):
 
 def test_reads_every_xlsx_row(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        rows = list(workbook.rows())
+        rows = list(workbook.sheets[0].rows())
 
     assert len(rows) == 101
 
 
 def test_reports_xlsx_cell_types(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        rows = workbook.rows()
+        rows = workbook.sheets[0].rows()
         next(rows)
         first_data_row = next(rows)
 
@@ -50,7 +51,7 @@ def test_reports_xlsx_cell_types(xlsx_path):
 
 def test_reads_csv_when_the_extension_is_csv(csv_path):
     with open_workbook(csv_path) as workbook:
-        rows = list(workbook.rows())
+        rows = list(workbook.sheets[0].rows())
 
     assert [cell.value for cell in rows[0]] == ["name", "qty"]
     assert [cell.value for cell in rows[2]] == ["gadget", "9"]
@@ -58,14 +59,14 @@ def test_reads_csv_when_the_extension_is_csv(csv_path):
 
 def test_reads_xlsb(xlsb_path):
     with open_workbook(xlsb_path) as workbook:
-        first = next(workbook.rows())
+        first = next(workbook.sheets[0].rows())
 
     assert len(first) > 0
 
 
 def test_reads_xls(xls_path):
     with open_workbook(xls_path) as workbook:
-        rows = workbook.rows()
+        rows = workbook.sheets[0].rows()
         sampled = [next(rows) for _ in range(10)]
 
     assert all(len(row) > 0 for row in sampled)
@@ -73,7 +74,7 @@ def test_reads_xls(xls_path):
 
 def test_reads_from_bytes(xlsx_path):
     with open_bytes(xlsx_path.read_bytes()) as workbook:
-        header = next(workbook.rows())
+        header = next(workbook.sheets[0].rows())
 
     assert header[0].value == "Coluna1"
 
@@ -81,21 +82,21 @@ def test_reads_from_bytes(xlsx_path):
 def test_exposes_sheet_metadata(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
         assert workbook.sheet_count >= 1
-        assert workbook.sheet_name
+        assert workbook.sheets[0].name
         assert workbook.is_date1904 is False
 
 
-def test_sheet_names_matches_sheet_count_and_current_name(xlsx_path):
+def test_sheet_names_matches_sheet_count_and_the_sheets(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
         names = workbook.sheet_names
-        assert len(names) == workbook.sheet_count
-        assert names[0] == workbook.sheet_name
-        assert list(workbook.sheets()) == list(enumerate(names))
+        assert len(names) == workbook.sheet_count == len(workbook.sheets)
+        assert names[0] == workbook.sheets[0].name
+        assert [(sheet.index, sheet.name) for sheet in workbook.sheets] == list(enumerate(names))
 
 
 def test_sheet_names_does_not_disturb_row_enumeration(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        rows = workbook.rows()
+        rows = workbook.sheets[0].rows()
         first = next(rows)
         second = next(rows)
 
@@ -105,15 +106,6 @@ def test_sheet_names_does_not_disturb_row_enumeration(xlsx_path):
 
     assert first != second
     assert second != third
-
-
-def test_move_to_sheet_restarts_enumeration(xlsx_path):
-    with open_workbook(xlsx_path) as workbook:
-        first = next(workbook.rows())
-        workbook.move_to_sheet(0)
-        again = next(workbook.rows())
-
-    assert first == again
 
 
 def test_missing_file_raises(tmp_path):
@@ -135,22 +127,12 @@ def test_close_is_idempotent(xlsx_path):
     workbook.close()
 
 
-def test_rows_iterator_raises_after_close_mid_iteration(xlsx_path):
-    workbook = open_workbook(xlsx_path)
-    rows = workbook.rows()
-    next(rows)
-    workbook.close()
-
-    with pytest.raises(ExcelReaderError):
-        next(rows)
-
-
 def test_dropping_a_workbook_without_close_still_releases_the_file(xlsx_path, tmp_path):
     copy_path = tmp_path / "dropped.xlsx"
     shutil.copyfile(xlsx_path, copy_path)
 
     workbook = open_workbook(copy_path)
-    next(workbook.rows())
+    next(workbook.sheets[0].rows())
     del workbook
     gc.collect()
 
@@ -161,7 +143,7 @@ def test_as_date_converts_the_serial_value(xlsx_path):
     from datetime import date
 
     with open_workbook(xlsx_path) as workbook:
-        rows = workbook.rows()
+        rows = workbook.sheets[0].rows()
         next(rows)
         first_data_row = next(rows)
         date1904 = workbook.is_date1904
@@ -171,7 +153,7 @@ def test_as_date_converts_the_serial_value(xlsx_path):
 
 def test_as_date_returns_none_for_non_date_cells(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        rows = workbook.rows()
+        rows = workbook.sheets[0].rows()
         next(rows)
         first_data_row = next(rows)
 
@@ -180,18 +162,20 @@ def test_as_date_returns_none_for_non_date_cells(xlsx_path):
 
 def test_read_all_matches_row_by_row_iteration(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        all_rows = list(workbook.rows())
+        all_rows = list(workbook.sheets[0].rows())
 
     with open_workbook(xlsx_path) as workbook:
-        bulk_rows = workbook.read_all()
+        bulk_rows = workbook.sheets[0].read_all()
 
     assert bulk_rows == all_rows
 
 
-def test_read_all_returns_empty_list_at_end_of_sheet(xlsx_path):
+def test_read_all_reads_the_whole_sheet_every_time(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        workbook.read_all()  
-        assert workbook.read_all() == []
+        sheet = workbook.sheets[0]
+        first = sheet.read_all()
+        assert first
+        assert sheet.read_all() == first
 
 
 def _columnar_to_rows(sheet) -> list[list[Cell]]:
@@ -207,10 +191,10 @@ def test_read_all_columnar_matches_read_all(fixture_name, request):
     path = request.getfixturevalue(fixture_name)
 
     with open_workbook(path) as workbook:
-        expected = workbook.read_all()
+        expected = workbook.sheets[0].read_all()
 
     with open_workbook(path) as workbook:
-        sheet = workbook.read_all_columnar()
+        sheet = workbook.sheets[0].read_all_columnar()
 
     assert _columnar_to_rows(sheet) == expected
 
@@ -219,35 +203,33 @@ def test_read_all_columnar_without_numpy(xlsx_path, monkeypatch):
     monkeypatch.setattr(reader_module, "_numpy", None)
 
     with open_workbook(xlsx_path) as workbook:
-        sheet = workbook.read_all_columnar()
+        sheet = workbook.sheets[0].read_all_columnar()
 
     from array import array
 
     assert isinstance(sheet.columns, array)
     with open_workbook(xlsx_path) as workbook:
-        assert _columnar_to_rows(sheet) == workbook.read_all()
+        assert _columnar_to_rows(sheet) == workbook.sheets[0].read_all()
 
 
 def test_read_all_columnar_grows_the_buffer(xlsx_path, monkeypatch):
     monkeypatch.setattr(reader_module, "_INITIAL_ALL_ROWS_BUFFER", 4)
 
     with open_workbook(xlsx_path) as workbook:
-        grown = workbook.read_all_columnar()
+        grown = workbook.sheets[0].read_all_columnar()
 
     with open_workbook(xlsx_path) as workbook:
-        expected = workbook.read_all()
+        expected = workbook.sheets[0].read_all()
 
     assert _columnar_to_rows(grown) == expected
 
 
-def test_read_all_columnar_on_empty_sheet(xlsx_path):
+def test_read_all_columnar_reads_the_whole_sheet_every_time(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        workbook.read_all_columnar()  
-        sheet = workbook.read_all_columnar()
-
-    assert list(sheet.row_offsets) == [0]
-    assert len(sheet.columns) == 0
-    assert sheet.values == b""
+        sheet = workbook.sheets[0]
+        first = sheet.read_all_columnar()
+        assert len(first.columns) > 0
+        assert _columnar_to_rows(sheet.read_all_columnar()) == _columnar_to_rows(first)
 
 
 
@@ -277,7 +259,7 @@ _TYPED_SCHEMA = [
 
 def test_parse_typed_returns_every_column_type(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.parse_typed(_TYPED_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_TYPED_SCHEMA)
 
     assert table.row_count == 2
     assert table.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
@@ -293,7 +275,7 @@ def test_parse_typed_returns_every_column_type(typed_csv):
 
 def test_parse_typed_resolves_columns_by_index_when_name_is_none(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, index=1)])
+        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, index=1)])
 
     assert list(table.columns[0]) == [3, 7]
     assert table.names == ["1"]
@@ -301,7 +283,7 @@ def test_parse_typed_resolves_columns_by_index_when_name_is_none(typed_csv):
 
 def test_parse_typed_string_column_supports_len_and_indexing(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.parse_typed([ColumnSpec(ColumnType.STRING, name="name")])
+        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.STRING, name="name")])
 
     column = table.columns[0]
     assert len(column) == 2
@@ -311,7 +293,7 @@ def test_parse_typed_string_column_supports_len_and_indexing(typed_csv):
 
 def test_parse_typed_reports_no_validity_bitmap_when_nothing_is_null(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
 
     assert table.validity == [None]
 
@@ -321,7 +303,7 @@ def test_parse_typed_builds_a_validity_bitmap_for_a_nullable_column(tmp_path):
     path.write_text("qty\n3\n\n9\n", encoding="utf-8")
 
     with open_workbook(path) as workbook:
-        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty", nullable=True)])
+        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty", nullable=True)])
 
     assert table.row_count == 3
     assert list(table.columns[0]) == [3, 0, 9]
@@ -333,32 +315,35 @@ def test_parse_typed_raises_when_a_non_nullable_column_fails_to_convert(tmp_path
     path.write_text("qty\n3\nnot-a-number\n", encoding="utf-8")
 
     with open_workbook(path) as workbook, pytest.raises(ExcelReaderError):
-        workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
 
 
 def test_parse_typed_raises_for_an_unknown_column_name(typed_csv):
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
-        workbook.parse_typed([ColumnSpec(ColumnType.I64, name="nope")])
+        workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="nope")])
 
 
 def test_parse_typed_rejects_an_empty_schema(typed_csv):
     with open_workbook(typed_csv) as workbook, pytest.raises(ValueError):
-        workbook.parse_typed([])
+        workbook.sheets[0].parse_typed([])
 
 
 def test_parse_typed_reads_the_whole_sheet_regardless_of_the_row_cursor(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        next(workbook.rows())
-        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        rows = workbook.sheets[0].rows()
+        next(rows)
+        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        rest = list(rows)
 
     assert table.row_count == 2
+    assert len(rest) == 2
 
 
 def test_to_arrow_returns_a_struct_array_matching_parse_typed(typed_csv):
     pa = pytest.importorskip("pyarrow")
 
     with open_workbook(typed_csv) as workbook:
-        array = workbook.to_arrow(_TYPED_SCHEMA)
+        array = workbook.sheets[0].to_arrow(_TYPED_SCHEMA)
 
     assert isinstance(array, pa.StructArray)
     assert len(array) == 2
@@ -375,7 +360,7 @@ def test_to_arrow_survives_the_workbook_being_closed(typed_csv):
     pytest.importorskip("pyarrow")
 
     with open_workbook(typed_csv) as workbook:
-        array = workbook.to_arrow([ColumnSpec(ColumnType.I64, name="qty")])
+        array = workbook.sheets[0].to_arrow([ColumnSpec(ColumnType.I64, name="qty")])
 
     gc.collect()
     assert array.field(0).to_pylist() == [3, 7]
@@ -385,14 +370,14 @@ def test_to_arrow_raises_for_an_unknown_column_name(typed_csv):
     pytest.importorskip("pyarrow")
 
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
-        workbook.to_arrow([ColumnSpec(ColumnType.I64, name="nope")])
+        workbook.sheets[0].to_arrow([ColumnSpec(ColumnType.I64, name="nope")])
 
 
 def test_to_record_batch_returns_a_column_named_batch_matching_parse_typed(typed_csv):
     pa = pytest.importorskip("pyarrow")
 
     with open_workbook(typed_csv) as workbook:
-        batch = workbook.to_record_batch(_TYPED_SCHEMA)
+        batch = workbook.sheets[0].to_record_batch(_TYPED_SCHEMA)
 
     assert isinstance(batch, pa.RecordBatch)
     assert batch.schema.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
@@ -404,7 +389,7 @@ def test_to_pandas_returns_a_dataframe_matching_parse_typed(typed_csv):
     pd = pytest.importorskip("pandas")
 
     with open_workbook(typed_csv) as workbook:
-        df = workbook.to_pandas(_TYPED_SCHEMA)
+        df = workbook.sheets[0].to_pandas(_TYPED_SCHEMA)
 
     assert isinstance(df, pd.DataFrame)
     assert list(df.columns) == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
@@ -416,7 +401,7 @@ def test_to_polars_returns_a_dataframe_matching_parse_typed(typed_csv):
     pl = pytest.importorskip("polars")
 
     with open_workbook(typed_csv) as workbook:
-        df = workbook.to_polars(_TYPED_SCHEMA)
+        df = workbook.sheets[0].to_polars(_TYPED_SCHEMA)
 
     assert isinstance(df, pl.DataFrame)
     assert df.columns == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
@@ -428,7 +413,7 @@ def test_to_polars_raises_for_an_unknown_column_name(typed_csv):
     pytest.importorskip("polars")
 
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
-        workbook.to_polars([ColumnSpec(ColumnType.I64, name="nope")])
+        workbook.sheets[0].to_polars([ColumnSpec(ColumnType.I64, name="nope")])
 
 
 def test_open_options_reaches_the_csv_reader(tmp_path):
@@ -436,22 +421,22 @@ def test_open_options_reaches_the_csv_reader(tmp_path):
     path.write_text("name;qty;price\nwidget;3;9.99\n", encoding="utf-8")
 
     with open_workbook(path, format="csv") as workbook:
-        assert [cell.value for cell in next(workbook.rows())] == ["name;qty;price"]
+        assert [cell.value for cell in next(workbook.sheets[0].rows())] == ["name;qty;price"]
 
     with open_workbook(path, format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
-        assert [cell.value for cell in next(workbook.rows())] == ["name", "qty", "price"]
+        assert [cell.value for cell in next(workbook.sheets[0].rows())] == ["name", "qty", "price"]
 
 
 def test_open_options_apply_to_open_bytes_too(tmp_path):
     data = b"name;qty\nwidget;3\n"
 
     with open_bytes(data, format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
-        assert [cell.value for cell in next(workbook.rows())] == ["name", "qty"]
+        assert [cell.value for cell in next(workbook.sheets[0].rows())] == ["name", "qty"]
 
 
 def test_open_options_default_to_the_library_defaults(xlsx_path):
     with open_workbook(xlsx_path) as plain, open_workbook(xlsx_path, options=OpenOptions()) as explicit:
-        assert [c.value for c in next(plain.rows())] == [c.value for c in next(explicit.rows())]
+        assert [c.value for c in next(plain.sheets[0].rows())] == [c.value for c in next(explicit.sheets[0].rows())]
 
 
 def test_open_options_rejects_an_out_of_range_value(csv_path):
@@ -464,10 +449,10 @@ def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
     path.write_text("value\n" + ("x" * 200_000) + "\n", encoding="utf-8")
 
     with open_workbook(path, format="csv") as workbook:
-        assert len(list(workbook.rows())[1][0].value) == 200_000
+        assert len(list(workbook.sheets[0].rows())[1][0].value) == 200_000
 
     with pytest.raises(ExcelReaderError), open_workbook(path, format="csv", options=OpenOptions(csv_max_cell_bytes=100_000)) as workbook:
-            list(workbook.rows())
+            list(workbook.sheets[0].rows())
 
 
 
@@ -489,9 +474,9 @@ def test_reports_password_incorrect_with_wrong_password():
 
 def test_encrypted_rows_match_plaintext():
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as enc:
-        encrypted_rows = enc.read_all()
+        encrypted_rows = enc.sheets[0].read_all()
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.plain.xlsx") as plain:
-        assert plain.read_all() == encrypted_rows
+        assert plain.sheets[0].read_all() == encrypted_rows
 
 
 def test_password_is_not_in_repr():
@@ -523,10 +508,10 @@ def _batch_rows(table):
 @pytest.mark.parametrize("batch_size", [1, 7, 8, 9, 1000, 0])
 def test_iter_parse_typed_matches_parse_typed(batched_csv, batch_size):
     with open_workbook(batched_csv) as workbook:
-        expected = _batch_rows(workbook.parse_typed(_BATCH_SCHEMA))
+        expected = _batch_rows(workbook.sheets[0].parse_typed(_BATCH_SCHEMA))
 
     with open_workbook(batched_csv) as workbook:
-        batches = list(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=batch_size))
+        batches = list(workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=batch_size))
 
     assert [row for batch in batches for row in _batch_rows(batch)] == expected
 
@@ -540,36 +525,48 @@ def test_iter_parse_typed_matches_parse_typed(batched_csv, batch_size):
 def test_iter_parse_typed_rejects_a_negative_batch_size(batched_csv):
     with open_workbook(batched_csv) as workbook:
         with pytest.raises(ExcelReaderError):
-            next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=-1))
+            next(workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=-1))
 
 
-def test_a_second_reader_on_one_workbook_is_rejected(batched_csv):
+def test_two_readers_on_one_sheet_each_read_every_row(batched_csv):
     with open_workbook(batched_csv) as workbook:
-        first = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        next(first)  
-        second = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        with pytest.raises(ExcelReaderError):
-            next(second)
-        first.close()
+        sheet = workbook.sheets[0]
+        first = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        second = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+
+        assert next(first).row_count == 4
+        assert next(second).row_count == 4
+        assert sum(batch.row_count for batch in first) == 46
+        assert sum(batch.row_count for batch in second) == 46
 
 
-def test_a_foreign_read_latches_the_readers_error(batched_csv):
+def test_a_whole_sheet_read_leaves_an_open_reader_alone(batched_csv):
     with open_workbook(batched_csv) as workbook:
-        batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        sheet = workbook.sheets[0]
+        batches = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         next(batches)
-        workbook.parse_typed(_BATCH_SCHEMA)  
-        with pytest.raises(ExcelReaderError):
-            next(batches)
+        assert sheet.parse_typed(_BATCH_SCHEMA).row_count == 50
+        assert sum(batch.row_count for batch in batches) == 46
 
 
-def test_abandoning_the_generator_closes_the_reader(batched_csv):
+def _spy_on_native_close(monkeypatch, lib, name):
+    closed = []
+    real = getattr(lib, name)
+    monkeypatch.setattr(lib, name, lambda handle: closed.append(handle.value) or real(handle))
+    return closed
+
+
+def test_abandoning_the_generator_closes_the_reader(batched_csv, monkeypatch):
     with open_workbook(batched_csv) as workbook:
-        batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        closed = _spy_on_native_close(monkeypatch, workbook._lib, "xl_typed_reader_close")
+        batches = workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         next(batches)
-        batches.close()  
-        again = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        assert next(again).row_count == 4
-        again.close()
+        assert closed == []
+
+        batches.close()
+
+        assert len(closed) == 1
+        assert closed[0]
 
 
 
@@ -577,10 +574,10 @@ def test_abandoning_the_generator_closes_the_reader(batched_csv):
 def test_to_record_batch_reader_matches_to_record_batch(batched_csv):
     pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
-        expected = workbook.to_record_batch(_BATCH_SCHEMA)
+        expected = workbook.sheets[0].to_record_batch(_BATCH_SCHEMA)
 
     with open_workbook(batched_csv) as workbook:
-        reader = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=8)
+        reader = workbook.sheets[0].to_record_batch_reader(_BATCH_SCHEMA, batch_size=8)
         assert reader.schema == expected.schema
         batches = list(reader)
 
@@ -593,13 +590,13 @@ def test_to_record_batch_reader_rejects_a_negative_batch_size(batched_csv):
     pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
         with pytest.raises(ExcelReaderError):
-            workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=-1)
+            workbook.sheets[0].to_record_batch_reader(_BATCH_SCHEMA, batch_size=-1)
 
 
 def test_arrow_stream_builds_a_polars_dataframe_in_batches(batched_csv):
     pl = pytest.importorskip("polars")
     with open_workbook(batched_csv) as workbook:
-        df = pl.DataFrame(workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=8))
+        df = pl.DataFrame(workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=8))
 
     assert df.columns == ["name", "qty"]
     assert df["qty"].to_list() == list(range(50))
@@ -607,69 +604,85 @@ def test_arrow_stream_builds_a_polars_dataframe_in_batches(batched_csv):
 
 def test_arrow_stream_is_single_use(batched_csv):
     with open_workbook(batched_csv) as workbook:
-        stream = workbook.to_arrow_stream(_BATCH_SCHEMA)
+        stream = workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA)
         stream.__arrow_c_stream__()
         with pytest.raises(ExcelReaderError):
             stream.__arrow_c_stream__()
 
 
-def test_an_unconsumed_arrow_stream_releases_the_read(batched_csv):
-    with open_workbook(batched_csv) as workbook:
-        workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=4)
-        gc.collect()
-        assert next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)).row_count == 4
+def _spy_on_stream_release(monkeypatch):
+    released = []
+    real = arrow_stream_module._release
+
+    def spy(stream):
+        released.append(bool(stream.release))
+        real(stream)
+
+    monkeypatch.setattr(arrow_stream_module, "_release", spy)
+    return released
 
 
-def test_a_dropped_capsule_releases_the_read(batched_csv):
+def test_an_unconsumed_arrow_stream_releases_the_read(batched_csv, monkeypatch):
     with open_workbook(batched_csv) as workbook:
-        workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=4).__arrow_c_stream__()
+        released = _spy_on_stream_release(monkeypatch)
+        stream = workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=4)
+        assert released == []
+
+        del stream
         gc.collect()
-        assert next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)).row_count == 4
+
+        assert released == [True]
+
+
+def test_a_dropped_capsule_releases_the_read(batched_csv, monkeypatch):
+    with open_workbook(batched_csv) as workbook:
+        released = _spy_on_stream_release(monkeypatch)
+        stream = workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=4)
+        capsule = stream.__arrow_c_stream__()
+        del stream
+        gc.collect()
+        assert released == []
+
+        del capsule
+        gc.collect()
+
+        assert released == [True]
 
 
 def test_arrow_stream_rejects_a_negative_batch_size(batched_csv):
     with open_workbook(batched_csv) as workbook:
         with pytest.raises(ExcelReaderError):
-            workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=-1)
+            workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=-1)
 
 
-def test_a_stream_is_rejected_while_a_reader_is_live(batched_csv):
+def test_a_stream_and_a_reader_on_one_sheet_each_read_every_row(batched_csv):
     pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
-        reader = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        next(reader)  
-        with pytest.raises(ExcelReaderError):
-            workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
-        reader.close()
+        sheet = workbook.sheets[0]
+        reader = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(reader)
+        stream = sheet.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+
+        assert sum(batch.row_count for batch in reader) == 46
+        assert sum(batch.num_rows for batch in stream) == 50
 
 
-def test_a_reader_is_rejected_while_a_stream_is_live(batched_csv):
+def test_a_whole_sheet_read_leaves_an_open_stream_alone(batched_csv):
     pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
-        stream = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)  # noqa: F841 (kept alive on purpose)
-        with pytest.raises(ExcelReaderError):
-            next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4))
-
-
-def test_a_foreign_read_latches_the_streams_error(batched_csv):
-    pytest.importorskip("pyarrow")
-    with open_workbook(batched_csv) as workbook:
-        reader = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+        sheet = workbook.sheets[0]
+        reader = sheet.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
         reader.read_next_batch()
-        workbook.parse_typed(_BATCH_SCHEMA)  
+        assert sheet.parse_typed(_BATCH_SCHEMA).row_count == 50
 
-        with pytest.raises(OSError) as first:
-            reader.read_next_batch()
-        with pytest.raises(OSError) as second:
-            reader.read_next_batch()
-        assert str(first.value) == str(second.value)
+        assert sum(batch.num_rows for batch in reader) == 46
 
 
 def test_iter_pandas_yields_one_frame_per_batch(batched_csv):
     pytest.importorskip("pyarrow")
     pytest.importorskip("pandas")
     with open_workbook(batched_csv) as workbook:
-        frames = list(workbook.iter_pandas(_BATCH_SCHEMA, batch_size=8))
+        frames = list(workbook.sheets[0].iter_pandas(_BATCH_SCHEMA, batch_size=8))
     assert len(frames) == 7
     assert sum(len(frame) for frame in frames) == 50
 
@@ -678,7 +691,7 @@ def test_iter_polars_yields_one_frame_per_batch(batched_csv):
     pytest.importorskip("pyarrow")
     pytest.importorskip("polars")
     with open_workbook(batched_csv) as workbook:
-        frames = list(workbook.iter_polars(_BATCH_SCHEMA, batch_size=8))
+        frames = list(workbook.sheets[0].iter_polars(_BATCH_SCHEMA, batch_size=8))
     assert len(frames) == 7
     assert sum(frame.height for frame in frames) == 50
 
@@ -686,7 +699,7 @@ def test_iter_polars_yields_one_frame_per_batch(batched_csv):
 def test_to_polars_stays_chunked(batched_csv):
     polars = pytest.importorskip("polars")
     with open_workbook(batched_csv) as workbook:
-        frame = workbook.to_polars(_BATCH_SCHEMA, batch_size=8)
+        frame = workbook.sheets[0].to_polars(_BATCH_SCHEMA, batch_size=8)
     assert isinstance(frame, polars.DataFrame)
     assert frame.height == 50
     assert frame.n_chunks() > 1, "to_polars must not rechunk the streamed batches"
@@ -696,7 +709,7 @@ def test_to_pandas_still_reads_the_whole_sheet(batched_csv):
     pytest.importorskip("pyarrow")
     pytest.importorskip("pandas")
     with open_workbook(batched_csv) as workbook:
-        frame = workbook.to_pandas(_BATCH_SCHEMA, batch_size=8)
+        frame = workbook.sheets[0].to_pandas(_BATCH_SCHEMA, batch_size=8)
     assert len(frame) == 50
     assert list(frame.columns) == ["name", "qty"]
 
@@ -706,7 +719,7 @@ def test_to_pandas_splits_blocks_per_column(batched_csv):
     pytest.importorskip("pandas")
     schema = [*_BATCH_SCHEMA, ColumnSpec(ColumnType.I64, index=1)]
     with open_workbook(batched_csv) as workbook:
-        frame = workbook.to_pandas(schema, batch_size=8)
+        frame = workbook.sheets[0].to_pandas(schema, batch_size=8)
     assert frame._mgr.nblocks == 3
 
 
@@ -722,8 +735,8 @@ _FIXTURE_SCHEMA = [
 
 def test_parse_typed_in_parallel_matches_the_sequential_table():
     with open_workbook(_FIXTURE_CSV) as workbook:
-        sequential = workbook.parse_typed(_FIXTURE_SCHEMA)
-        parallel = workbook.parse_typed(_FIXTURE_SCHEMA, parallelism=0)
+        sequential = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA)
+        parallel = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA, parallelism=0)
 
     assert parallel.row_count == sequential.row_count == 65_535
     for expected, actual in zip(sequential.columns, parallel.columns):
@@ -734,21 +747,21 @@ def test_parse_typed_in_parallel_matches_the_sequential_table():
 def test_to_polars_in_parallel_matches_the_streamed_frame():
     pytest.importorskip("polars")
     with open_workbook(_FIXTURE_CSV) as workbook:
-        streamed = workbook.to_polars(_FIXTURE_SCHEMA)
-        parallel = workbook.to_polars(_FIXTURE_SCHEMA, parallelism=0)
+        streamed = workbook.sheets[0].to_polars(_FIXTURE_SCHEMA)
+        parallel = workbook.sheets[0].to_polars(_FIXTURE_SCHEMA, parallelism=0)
 
     assert parallel.equals(streamed)
 
 
 def test_parse_typed_rejects_a_negative_parallelism(typed_csv):
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
-        workbook.parse_typed(_TYPED_SCHEMA, parallelism=-1)
+        workbook.sheets[0].parse_typed(_TYPED_SCHEMA, parallelism=-1)
 
 
 def test_infer_schema_parse_text_types_a_csv():
     with open_workbook(_FIXTURE_CSV) as workbook:
-        schema = workbook.infer_schema(parse_text=True)
-        table = workbook.parse_typed(schema)
+        schema = workbook.sheets[0].infer_schema(parse_text=True)
+        table = workbook.sheets[0].parse_typed(schema)
 
     T = ColumnType
     assert [spec.type for spec in schema] == [T.STRING] * 5 + [T.DATE, T.I64, T.DATE, T.I64] + [T.F64] * 5
@@ -757,6 +770,6 @@ def test_infer_schema_parse_text_types_a_csv():
 
 def test_infer_schema_without_parse_text_keeps_csv_columns_as_strings():
     with open_workbook(_FIXTURE_CSV) as workbook:
-        schema = workbook.infer_schema()
+        schema = workbook.sheets[0].infer_schema()
 
     assert {spec.type for spec in schema} == {ColumnType.STRING}

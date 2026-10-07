@@ -27,13 +27,14 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow header));
+                using NativeRowCursor cursor = OpenRows(handle);
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow header));
                 Assert.Equal([new DecodedCell(0, 1, "name"), new DecodedCell(1, 1, "qty")], ReadView(header));
 
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow data));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow data));
                 Assert.Equal(["widget", "7"], ReadView(data).Select(cell => cell.Value), StringComparer.Ordinal);
 
-                Assert.Equal(NativeStatus.Eof, ReadApi.NextRowView(handle, out NativeRow end));
+                Assert.Equal(NativeStatus.Eof, ReadApi.NextRowView(cursor, out NativeRow end));
                 Assert.Equal(IntPtr.Zero, end.Cells);
             }
             finally
@@ -53,16 +54,18 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, OpenPath(fixture, format, out NativeHandle? viewHandle));
             try
             {
+                using NativeRowCursor viewCursor = OpenRows(viewHandle);
+                using NativeRowCursor blobCursor = OpenRows(blobHandle);
                 byte[] buffer = new byte[1 << 20];
                 int rows = 0;
-                while (ReadApi.NextRow(blobHandle, buffer, out int written) == NativeStatus.Ok)
+                while (ReadApi.NextRow(blobCursor, buffer, out int written) == NativeStatus.Ok)
                 {
-                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(viewHandle, out NativeRow row));
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(viewCursor, out NativeRow row));
                     Assert.Equal(DecodeRow(buffer.AsSpan(0, written)), ReadView(row));
                     rows++;
                 }
                 Assert.True(rows > 1);
-                Assert.Equal(NativeStatus.Eof, ReadApi.NextRowView(viewHandle, out _));
+                Assert.Equal(NativeStatus.Eof, ReadApi.NextRowView(viewCursor, out _));
             }
             finally
             {
@@ -79,11 +82,12 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.BufferTooSmall, ReadApi.NextRow(handle, Span<byte>.Empty, out _));
+                using NativeRowCursor cursor = OpenRows(handle);
+                Assert.Equal(NativeStatus.BufferTooSmall, ReadApi.NextRow(cursor, Span<byte>.Empty, out _));
 
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow header));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow header));
                 Assert.Equal(["name", "qty"], ReadView(header).Select(cell => cell.Value), StringComparer.Ordinal);
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow data));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow data));
                 Assert.Equal(["widget", "7"], ReadView(data).Select(cell => cell.Value), StringComparer.Ordinal);
             }
             finally
@@ -103,13 +107,14 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow first));
+                using NativeRowCursor cursor = OpenRows(handle);
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow first));
                 Assert.Equal("a", ReadView(first)[0].Value);
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow many));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow many));
                 Assert.Equal(wide, ReadView(many).Select(cell => cell.Value), StringComparer.Ordinal);
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow large));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow large));
                 Assert.Equal(big, ReadView(large)[0].Value);
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow last));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow last));
                 Assert.Equal("b", ReadView(last)[0].Value);
             }
             finally
@@ -126,7 +131,8 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(handle, out NativeRow row));
+                using NativeRowCursor cursor = OpenRows(handle);
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out NativeRow row));
                 Assert.Equal(0, row.CellCount);
                 Assert.Equal(IntPtr.Zero, row.Cells);
             }
@@ -146,7 +152,7 @@ namespace ExcelReader.Tests.Native
         [Fact]
         public unsafe void NextRowView_Export_Should_Reject_A_Null_Out_Row()
         {
-            int status = ((delegate* unmanaged<nint, NativeRow*, int>)&Exports.NextRowView)(0, null);
+            int status = ((delegate* unmanaged<nint, NativeRow*, int>)&Exports.RowsNextView)(0, null);
             Assert.Equal(NativeStatus.InvalidArgument, status);
         }
     }

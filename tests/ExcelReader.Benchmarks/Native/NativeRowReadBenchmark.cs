@@ -23,14 +23,16 @@ namespace ExcelReader.Benchmarks
         public int NextRowBlob()
         {
             using NativeHandle handle = Open();
+            ReadApi.OpenRows(handle, 0, out NativeRowCursor? opened);
+            using NativeRowCursor cursor = opened!;
             int rows = 0;
             while (true)
             {
-                int status = ReadApi.NextRow(handle, _buffer, out int written);
+                int status = ReadApi.NextRow(cursor, _buffer, out int written);
                 if (status == NativeStatus.BufferTooSmall)
                 {
                     _buffer = new byte[written];
-                    status = ReadApi.NextRow(handle, _buffer, out written);
+                    status = ReadApi.NextRow(cursor, _buffer, out written);
                 }
                 if (status == NativeStatus.Eof)
                 {
@@ -46,10 +48,12 @@ namespace ExcelReader.Benchmarks
         public int NextRowDecoded()
         {
             using NativeHandle handle = Open();
+            ReadApi.OpenRows(handle, 0, out NativeRowCursor? opened);
+            using NativeRowCursor cursor = opened!;
             int rows = 0;
             while (true)
             {
-                int status = ReadApi.NextRowDecoded(handle, out NativeRow row);
+                int status = ReadApi.NextRowDecoded(cursor, out NativeRow row);
                 if (status == NativeStatus.Eof)
                 {
                     break;
@@ -65,7 +69,9 @@ namespace ExcelReader.Benchmarks
         public int ReadAllBlob()
         {
             using NativeHandle handle = Open();
-            int status = ReadApi.ReadAllBlob(handle, Span<byte>.Empty, out int written);
+            ReadApi.OpenRows(handle, 0, out NativeRowCursor? opened);
+            using NativeRowCursor cursor = opened!;
+            int status = ReadApi.ReadAllBlob(cursor, Span<byte>.Empty, out int written);
             if (status != NativeStatus.BufferTooSmall)
             {
                 throw new InvalidOperationException($"expected XL_BUFFER_TOO_SMALL sizing probe, got status {status}.");
@@ -74,7 +80,7 @@ namespace ExcelReader.Benchmarks
             {
                 _buffer = new byte[written];
             }
-            Verify(ReadApi.ReadAllBlob(handle, _buffer.AsSpan(0, written), out _));
+            Verify(ReadApi.ReadAllBlob(cursor, _buffer.AsSpan(0, written), out _));
             return VerifyRows(RowCountOf(_buffer));
         }
 
@@ -82,7 +88,9 @@ namespace ExcelReader.Benchmarks
         public int ReadAllDecoded()
         {
             using NativeHandle handle = Open();
-            int status = ReadApi.ReadAllDecoded(handle, out NativeRows rows);
+            ReadApi.OpenRows(handle, 0, out NativeRowCursor? opened);
+            using NativeRowCursor cursor = opened!;
+            int status = ReadApi.ReadAllDecoded(cursor, out NativeRows rows);
             try
             {
                 Verify(status);

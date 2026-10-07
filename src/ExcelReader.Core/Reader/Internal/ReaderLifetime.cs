@@ -22,6 +22,11 @@ namespace ExcelReader.Core.Reader.Internal
             }
         }
 
+        internal void ThrowIfClosed(object owner)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, owner);
+        }
+
         internal void Release()
         {
             if (Interlocked.Decrement(ref _count) == 0)

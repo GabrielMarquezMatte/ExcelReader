@@ -6,10 +6,10 @@ namespace ExcelReader.Native.Reading
 {
     internal static unsafe partial class ReadApi
     {
-        internal static int ReadAllBlob(NativeHandle? handle, Span<byte> buffer, out int written)
+        internal static int ReadAllBlob(NativeRowCursor? cursor, Span<byte> buffer, out int written)
         {
             written = 0;
-            if (handle is null)
+            if (cursor is null)
             {
                 return NativeStatus.InvalidHandle;
             }
@@ -17,60 +17,59 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                if (!handle.AllRowsPending)
+                if (!cursor.AllRowsPending)
                 {
-                    AccumulateAllRows(handle);
+                    AccumulateAllRows(cursor);
                 }
 
-                written = handle.AllRowsLength;
-                if (buffer.Length < handle.AllRowsLength)
+                written = cursor.AllRowsLength;
+                if (buffer.Length < cursor.AllRowsLength)
                 {
                     return NativeStatus.BufferTooSmall;
                 }
 
-                BinaryPrimitives.WriteInt32LittleEndian(buffer, handle.AllRowsCount);
-                handle.AllRowsScratch?.CopyTo(buffer[sizeof(int)..handle.AllRowsLength]);
-                handle.AllRowsPending = false;
+                BinaryPrimitives.WriteInt32LittleEndian(buffer, cursor.AllRowsCount);
+                cursor.AllRowsScratch?.CopyTo(buffer[sizeof(int)..cursor.AllRowsLength]);
+                cursor.AllRowsPending = false;
+                cursor.AllRowsScratch = null;
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
             {
                 NativeApi.SetLastError(exception.Message);
-                handle.AllRowsPending = false;
-                handle.AllRowsLength = 0;
-                handle.AllRowsCount = 0;
-                handle.AllRowsScratch = null;
+                cursor.AllRowsPending = false;
+                cursor.AllRowsLength = 0;
+                cursor.AllRowsCount = 0;
+                cursor.AllRowsScratch = null;
                 return NativeStatus.Error;
             }
         }
 
-        private static void AccumulateAllRows(NativeHandle handle)
+        private static void AccumulateAllRows(NativeRowCursor cursor)
         {
             ChunkedBuffer<byte> output = new();
             int rowCount = 0;
 
-            if (handle.HasPending)
+            if (cursor.HasPending)
             {
-                AppendRow(output, handle.Scratch.AsSpan(0, handle.PendingLength));
-                handle.HasPending = false;
+                AppendRow(output, cursor.Scratch.AsSpan(0, cursor.PendingLength));
+                cursor.HasPending = false;
                 rowCount++;
             }
 
             byte[] rowScratch = [];
-            handle.FaultLiveSession("xl_read_all_blob");
-            handle.Rows ??= handle.Reader.GetEnumerator();
-            while (handle.Rows.MoveNext())
+            while (cursor.Rows.MoveNext())
             {
-                Row row = handle.Rows.Current;
+                Row row = cursor.Rows.Current;
                 int rowLength = RowBlob.Serialize(row, ref rowScratch);
                 AppendRow(output, rowScratch.AsSpan(0, rowLength));
                 rowCount++;
             }
 
-            handle.AllRowsScratch = output;
-            handle.AllRowsCount = rowCount;
-            handle.AllRowsLength = sizeof(int) + output.Count;
-            handle.AllRowsPending = true;
+            cursor.AllRowsScratch = output;
+            cursor.AllRowsCount = rowCount;
+            cursor.AllRowsLength = sizeof(int) + output.Count;
+            cursor.AllRowsPending = true;
         }
 
         private static void AppendRow(ChunkedBuffer<byte> output, ReadOnlySpan<byte> rowBlob)
@@ -79,7 +78,7 @@ namespace ExcelReader.Native.Reading
             if (required > int.MaxValue)
             {
                 throw new InvalidOperationException(
-                    "xl_read_all_blob's accumulated result exceeds the 2 GiB int32 limit of this API; " +
+                    "xl_rows_read_all_blob's accumulated result exceeds the 2 GiB int32 limit of this API; " +
                     "use xl_parse_typed instead, which is columnar, uses int64_t lengths, and is markedly faster.");
             }
 
@@ -89,10 +88,10 @@ namespace ExcelReader.Native.Reading
             output.AddRange(rowBlob);
         }
 
-        internal static int ReadAllDecoded(NativeHandle? handle, out NativeRows rows)
+        internal static int ReadAllDecoded(NativeRowCursor? cursor, out NativeRows rows)
         {
             rows = default;
-            if (handle is null)
+            if (cursor is null)
             {
                 return NativeStatus.InvalidHandle;
             }
@@ -102,7 +101,7 @@ namespace ExcelReader.Native.Reading
             {
                 while (true)
                 {
-                    int status = NextRowDecoded(handle, out NativeRow row);
+                    int status = NextRowDecoded(cursor, out NativeRow row);
                     if (status == NativeStatus.Eof)
                     {
                         break;

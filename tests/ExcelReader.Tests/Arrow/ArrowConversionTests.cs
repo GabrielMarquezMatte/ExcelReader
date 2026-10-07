@@ -24,7 +24,7 @@ namespace ExcelReader.Tests.Arrow
                 new() { Index = 1, Name = "qty", Type = ExcelColumnType.Int64Column },
             ];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             Assert.Equal(2, batch.Length);
             Assert.Equal(2, batch.ColumnCount);
@@ -43,7 +43,7 @@ namespace ExcelReader.Tests.Arrow
             using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("qty\n5\n\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "qty", Type = ExcelColumnType.Int64Column, IsNullable = true }];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var qty = Assert.IsType<Int64Array>(batch.Column(0));
             Assert.False(qty.IsNull(0));
@@ -61,7 +61,7 @@ namespace ExcelReader.Tests.Arrow
                 new() { Index = 1, Name = "qty", Type = ExcelColumnType.Int64Column },
             ];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var name = Assert.IsType<StringArray>(batch.Column(0));
             Assert.Equal("widget", name.GetString(0));
@@ -79,7 +79,7 @@ namespace ExcelReader.Tests.Arrow
                 new() { Index = 1, Name = "qty", Type = ExcelColumnType.Int64Column },
             ];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var name = Assert.IsType<StringArray>(batch.Column(0));
             Assert.False(name.IsNull(0));
@@ -92,7 +92,7 @@ namespace ExcelReader.Tests.Arrow
             using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("qty\nnotanumber\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "qty", Type = ExcelColumnType.Int64Column }];
 
-            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => reader.ToArrowRecordBatch(schema));
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => reader.FirstSheet.ToArrowRecordBatch(schema));
             Assert.Contains("qty", exception.Message, StringComparison.Ordinal);
         }
 
@@ -102,7 +102,7 @@ namespace ExcelReader.Tests.Arrow
             using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("price\n1.5\n2.25\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "price", Type = ExcelColumnType.Float64Column }];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var price = Assert.IsType<DoubleArray>(batch.Column(0));
             Assert.Equal(1.5, price.GetValue(0));
@@ -115,7 +115,7 @@ namespace ExcelReader.Tests.Arrow
             using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("flag\ntrue\nfalse\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "flag", Type = ExcelColumnType.BoolColumn }];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var flag = Assert.IsType<BooleanArray>(batch.Column(0));
             Assert.True(flag.GetValue(0));
@@ -128,7 +128,7 @@ namespace ExcelReader.Tests.Arrow
             using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("day\n2024-01-15\n2024-03-01\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "day", Type = ExcelColumnType.DateColumn }];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var day = Assert.IsType<Date32Array>(batch.Column(0));
             int expectedFirst = (new DateTime(2024, 1, 15) - DateTime.UnixEpoch).Days;
@@ -143,7 +143,7 @@ namespace ExcelReader.Tests.Arrow
             using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("clock\n13:30:00\n\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "clock", Type = ExcelColumnType.TimeColumn, IsNullable = true }];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var clock = Assert.IsType<Time64Array>(batch.Column(0));
             Assert.Equal(new TimeSpan(13, 30, 0).Ticks / 10, clock.GetValue(0));
@@ -156,7 +156,7 @@ namespace ExcelReader.Tests.Arrow
             using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("stamp\n2024-01-15 13:30:00\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "stamp", Type = ExcelColumnType.TimestampColumn }];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var stamp = Assert.IsType<TimestampArray>(batch.Column(0));
             long expected = (new DateTime(2024, 1, 15, 13, 30, 0) - DateTime.UnixEpoch).Ticks / 10;
@@ -169,7 +169,7 @@ namespace ExcelReader.Tests.Arrow
             using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("stamp\n2024-01-15T13:30:00Z\n"));
             ExcelColumnSchema[] schema = [new() { Index = 0, Name = "stamp", Type = ExcelColumnType.TimestampColumn }];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema);
 
             var stamp = Assert.IsType<TimestampArray>(batch.Column(0));
             long expected = (new DateTime(2024, 1, 15, 13, 30, 0, DateTimeKind.Utc) - DateTime.UnixEpoch).Ticks / 10;
@@ -181,7 +181,7 @@ namespace ExcelReader.Tests.Arrow
         {
             using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("name,qty\nwidget,3\ngadget,7\n"));
 
-            RecordBatch batch = reader.ToArrowRecordBatch();
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch();
 
             Assert.Equal(2, batch.ColumnCount);
             Assert.Equal("name", batch.Schema.GetFieldByIndex(0).Name);
@@ -199,7 +199,7 @@ namespace ExcelReader.Tests.Arrow
                 new() { Index = 1, Type = ExcelColumnType.Int64Column },
             ];
 
-            RecordBatch batch = reader.ToArrowRecordBatch(schema, headerRow: 0);
+            RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(schema, headerRow: 0);
 
             Assert.Equal(2, batch.Length);
             var name = Assert.IsType<StringArray>(batch.Column(0));
@@ -211,9 +211,9 @@ namespace ExcelReader.Tests.Arrow
         {
             string path = Path.Combine(AppContext.BaseDirectory, "data", "RealExcel.xlsb");
 
-            using IExcelRowReader managedReader = Excel.Open(path);
-            ExcelColumnSchema[] schema = Excel.InferSchema(managedReader);
-            RecordBatch managedBatch = managedReader.ToArrowRecordBatch(schema, headerRow: 1);
+            using IExcelWorkbook managedReader = Excel.Open(path);
+            ExcelColumnSchema[] schema = Excel.InferSchema(managedReader.FirstSheet);
+            RecordBatch managedBatch = managedReader.FirstSheet.ToArrowRecordBatch(schema, headerRow: 1);
 
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Xlsb, out NativeHandle? handle));
             try
@@ -230,7 +230,7 @@ namespace ExcelReader.Tests.Arrow
                     };
                 }
 
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray nativeArray, out ArrowSchema nativeSchema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, 0, specs, headerRow: 1, out ArrowArray nativeArray, out ArrowSchema nativeSchema));
                 try
                 {
                     Assert.Equal(managedBatch.Length, nativeArray.Length);

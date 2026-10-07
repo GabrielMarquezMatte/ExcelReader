@@ -83,7 +83,7 @@ namespace
                 std::fprintf(stderr, "missing or unreadable fixture %s\n", EXCELREADER_XLSX_FIXTURE_PATH);
                 std::abort();
             }
-            auto table = xl::parse_sheet<FullRow>(*workbook);
+            auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
             if (!table.has_value() || table->size() == 0)
             {
                 std::fprintf(stderr, "fixture %s parsed to zero rows\n", EXCELREADER_XLSX_FIXTURE_PATH);

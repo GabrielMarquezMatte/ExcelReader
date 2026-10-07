@@ -80,7 +80,7 @@ def benchmark_pandas(args: argparse.Namespace, tmp: Path):
         print()
         return
     with excelreader.open_workbook(args.path, format="xlsb") as workbook:
-        pandas_df = workbook.to_pandas(_FIXTURE_SCHEMA)
+        pandas_df = workbook.sheets[0].to_pandas(_FIXTURE_SCHEMA)
 
     print("write_pandas() [pandas.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
     _time_and_assert(
@@ -112,8 +112,8 @@ def benchmark_polars(args: argparse.Namespace, tmp: Path):
         print()
         return
     with excelreader.open_workbook(args.path, format="xlsb") as workbook:
-        schema = workbook.infer_schema(sample_size=10)
-        polars_df = workbook.to_polars(schema)
+        schema = workbook.sheets[0].infer_schema(sample_size=10)
+        polars_df = workbook.sheets[0].to_polars(schema)
 
     print("write_polars() [polars.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
     _time_and_assert(
@@ -153,7 +153,7 @@ def main() -> int:
     print(f"source file: {args.path}")
 
     with excelreader.open_workbook(args.path, format="xlsb") as workbook:
-        table = workbook.parse_typed(_FIXTURE_SCHEMA)
+        table = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA)
     print(f"parsed {table.row_count} rows x {len(table.columns)} columns once, before any timing")
     print()
 

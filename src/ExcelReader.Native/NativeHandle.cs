@@ -1,72 +1,19 @@
 using ExcelReader.Core.Reader;
-using ExcelReader.Native.Reading;
-using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native
 {
     internal sealed class NativeHandle : IDisposable
     {
-        internal NativeHandle(IExcelRowReader reader)
+        internal NativeHandle(IExcelWorkbook workbook)
         {
-            Reader = reader;
-            Scratch = new byte[4096];
+            Workbook = workbook;
         }
 
-        internal IExcelRowReader Reader { get; }
-
-        internal IExcelRowEnumerator? Rows { get; set; }
-
-        internal byte[] Scratch { get; set; }
-
-        internal int PendingLength { get; set; }
-
-        internal bool HasPending { get; set; }
-
-        internal RowViewBuffer? View { get; set; }
-
-        internal ChunkedBuffer<byte>? AllRowsScratch { get; set; }
-
-        internal int AllRowsCount { get; set; }
-
-        internal int AllRowsLength { get; set; }
-
-        internal bool AllRowsPending { get; set; }
-
-        internal TypedApi.TypedParseSession? LiveSession { get; set; }
-
-        internal void FaultLiveSession(string cause)
-        {
-            LiveSession?.Fault($"this chunked read was invalidated by {cause} on the same workbook: a " +
-                "workbook serves one row cursor at a time, so this read's position is no longer defined. " +
-                "Finish or close the read before using the workbook for anything else.");
-        }
-
-        internal void ReleaseLiveSession(TypedApi.TypedParseSession session)
-        {
-            if (ReferenceEquals(LiveSession, session))
-            {
-                LiveSession = null;
-            }
-        }
-
-        internal void ResetRows()
-        {
-            Rows?.Dispose();
-            Rows = null;
-            HasPending = false;
-            PendingLength = 0;
-            AllRowsPending = false;
-            AllRowsLength = 0;
-            AllRowsCount = 0;
-            AllRowsScratch = null;
-        }
+        internal IExcelWorkbook Workbook { get; }
 
         public void Dispose()
         {
-            FaultLiveSession("xl_close");
-            ResetRows();
-            View?.Dispose();
-            Reader.Dispose();
+            Workbook.Dispose();
         }
     }
 }

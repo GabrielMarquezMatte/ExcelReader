@@ -45,7 +45,7 @@ static const std::vector<Row> &fixture_rows()
             std::fprintf(stderr, "missing or unreadable fixture %s\n", EXCELREADER_LARGE_FIXTURE_PATH);
             std::abort();
         }
-        auto table = xl::parse_sheet<Row>(*workbook);
+        auto table = xl::parse_sheet<Row>(workbook->sheet(0));
         if (!table.has_value() || table->size() == 0)
         {
             std::fprintf(stderr, "fixture %s parsed to zero rows\n", EXCELREADER_LARGE_FIXTURE_PATH);

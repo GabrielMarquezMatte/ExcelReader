@@ -7,15 +7,15 @@ namespace ExcelReader.Tests.Reader
     public class ConcurrencyContractTests
     {
         [Fact]
-        public Task IndependentXlsxReadersOnSeparateThreadsDoNotInterfere()
+        public Task IndependentXlsxWorkbooksOnSeparateThreadsDoNotInterfere()
         {
             const int readerCount = 16;
             IEnumerable<Task> tasks = Enumerable.Range(0, readerCount).Select(i => Task.Run(() =>
             {
                 string expected = $"value-{i}";
                 using MemoryStream ms = WorkbookBuilder.Build($"""<row r="1"><c r="A1" t="inlineStr"><is><t>{expected}</t></is></c></row>""");
-                using XlsxReader reader = Excel.FromXlsx(ms);
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook reader = Excel.FromXlsx(ms);
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
                 Assert.True(e.MoveNext());
                 Assert.Equal(expected, e.Current[0].GetString());
             }));
@@ -42,8 +42,8 @@ namespace ExcelReader.Tests.Reader
                     await wb.EndAsync(TestContext.Current.CancellationToken);
                 }
                 ms.Position = 0;
-                using XlsxReader reader = Excel.FromXlsx(ms);
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook reader = Excel.FromXlsx(ms);
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
                 Assert.True(e.MoveNext());
                 Assert.Equal(expected, e.Current[0].GetString());
             }));

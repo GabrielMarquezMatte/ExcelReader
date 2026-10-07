@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import ctypes
-from typing import TYPE_CHECKING
 
 from excelreader import _native
 from excelreader.types import ExcelReaderError
-
-if TYPE_CHECKING:
-    from excelreader.reader import Workbook
 
 _CAPSULE_NAME = b"arrow_array_stream"
 
@@ -21,7 +17,7 @@ _capsule_pointer = ctypes.pythonapi.PyCapsule_GetPointer
 _capsule_pointer.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 _capsule_pointer.restype = ctypes.c_void_p
 
-_live: dict[int, tuple[_native.ArrowArrayStream, Workbook]] = {}
+_live: dict[int, _native.ArrowArrayStream] = {}
 
 
 def _release(stream: _native.ArrowArrayStream) -> None:
@@ -31,7 +27,7 @@ def _release(stream: _native.ArrowArrayStream) -> None:
 
 def _destroy_capsule(capsule: int) -> None:
     address = _capsule_pointer(capsule, _CAPSULE_NAME)
-    stream, _workbook = _live.pop(address)
+    stream = _live.pop(address)
     _release(stream)
 
 
@@ -46,16 +42,15 @@ class ArrowStream:
     takes it, the stream is spent; dropping it unconsumed releases the native read.
     """
 
-    def __init__(self, stream: _native.ArrowArrayStream, workbook: Workbook) -> None:
+    def __init__(self, stream: _native.ArrowArrayStream) -> None:
         self._stream: _native.ArrowArrayStream | None = stream
-        self._workbook = workbook
 
     def __arrow_c_stream__(self, requested_schema: object = None) -> object:
         if self._stream is None:
             raise ExcelReaderError("this Arrow stream was already consumed")
         stream, self._stream = self._stream, None
         address = ctypes.addressof(stream)
-        _live[address] = (stream, self._workbook)
+        _live[address] = stream
         return _capsule_new(address, _CAPSULE_NAME, _destroy_capsule_callback)
 
     def __del__(self) -> None:

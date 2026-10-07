@@ -62,15 +62,13 @@ struct ArrowArrayStream {
 
 #endif /* ARROW_C_STREAM_INTERFACE */
 
-int32_t xl_parse_arrow(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
-                       int32_t header_row, struct ArrowArray* out_array, struct ArrowSchema* out_schema);
+/* Same sheet and degree_of_parallelism contract as xl_parse_typed. */
+int32_t xl_parse_arrow(xl_workbook* handle, int32_t sheet, const xl_column_spec* specs, int32_t spec_count,
+                       int32_t header_row, int32_t degree_of_parallelism,
+                       struct ArrowArray* out_array, struct ArrowSchema* out_schema);
 
-/* xl_parse_arrow with a thread count; same contract as xl_parse_typed_ex. */
-int32_t xl_parse_arrow_ex(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
-                          int32_t header_row, int32_t degree_of_parallelism,
-                          struct ArrowArray* out_array, struct ArrowSchema* out_schema);
-
-int32_t xl_parse_arrow_stream(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
+/* The stream owns its position in the sheet and keeps working after xl_close on its workbook. */
+int32_t xl_parse_arrow_stream(xl_workbook* handle, int32_t sheet, const xl_column_spec* specs, int32_t spec_count,
                               int32_t header_row, int64_t max_rows,
                               struct ArrowArrayStream* out_stream);
 

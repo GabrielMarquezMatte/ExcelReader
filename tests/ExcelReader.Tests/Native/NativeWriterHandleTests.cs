@@ -52,8 +52,9 @@ namespace ExcelReader.Tests.Native
                 Assert.NotNull(reader);
                 try
                 {
+                    using NativeRowCursor cursor = NativeApiTests.OpenRows(reader);
                     Span<byte> buffer = stackalloc byte[256];
-                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(reader, buffer, out int written));
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, buffer, out int written));
                     string row = Encoding.UTF8.GetString(buffer[..written]);
                     Assert.Contains("uma", row, StringComparison.Ordinal);
                     Assert.Contains("3", row, StringComparison.Ordinal);
@@ -345,8 +346,9 @@ namespace ExcelReader.Tests.Native
             Assert.NotNull(reader);
             try
             {
+                using NativeRowCursor cursor = NativeApiTests.OpenRows(reader);
                 Span<byte> buffer = stackalloc byte[256];
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(reader, buffer, out int written));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, buffer, out int written));
                 string row = Encoding.UTF8.GetString(buffer[..written]);
                 Assert.Contains("uma", row, StringComparison.Ordinal);
                 Assert.Contains("3", row, StringComparison.Ordinal);

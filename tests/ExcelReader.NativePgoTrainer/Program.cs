@@ -5,7 +5,7 @@ using ExcelReader.Native.Typed;
 namespace ExcelReader.NativePgoTrainer
 {
     /// <summary>
-    /// Runs the managed implementations of xl_parse_typed, xl_next_row and xl_next_row_view over the 65K
+    /// Runs the managed implementations of xl_parse_typed, xl_rows_next and xl_rows_next_view over the 65K
     /// benchmark fixtures, so a dotnet-trace of this process yields the static PGO profile NativeAOT compiles
     /// ExcelReader.Native with. See "Static PGO profile" in src/ExcelReader.Native/README.md.
     /// </summary>
@@ -49,20 +49,24 @@ namespace ExcelReader.NativePgoTrainer
                     int status = ReadApi.OpenMemory(bytes, format, out NativeHandle? handle);
                     if (status == NativeStatus.Ok)
                     {
-                        status = TypedApi.ParseTyped(handle, Specs, headerRow: 1, out NativeTable table);
+                        status = TypedApi.ParseTyped(handle, 0, Specs, headerRow: 1, out NativeTable table);
                         TypedApi.FreeTable(ref table);
                         ReadApi.Close(handle);
                     }
                     if (status == NativeStatus.Ok && (status = ReadApi.OpenMemory(bytes, format, out handle)) == NativeStatus.Ok)
                     {
-                        while ((status = ReadApi.NextRow(handle, rowBuffer, out _)) == NativeStatus.Ok)
+                        ReadApi.OpenRows(handle, 0, out NativeRowCursor? rows);
+                        using NativeRowCursor cursor = rows!;
+                        while ((status = ReadApi.NextRow(cursor, rowBuffer, out _)) == NativeStatus.Ok)
                         {
                         }
                         ReadApi.Close(handle);
                     }
                     if (status == NativeStatus.Eof && (status = ReadApi.OpenMemory(bytes, format, out handle)) == NativeStatus.Ok)
                     {
-                        while ((status = ReadApi.NextRowView(handle, out _)) == NativeStatus.Ok)
+                        ReadApi.OpenRows(handle, 0, out NativeRowCursor? viewRows);
+                        using NativeRowCursor viewCursor = viewRows!;
+                        while ((status = ReadApi.NextRowView(viewCursor, out _)) == NativeStatus.Ok)
                         {
                         }
                         ReadApi.Close(handle);

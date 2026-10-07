@@ -77,7 +77,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("Alice", rows[0].Name);
         }
@@ -206,7 +206,7 @@ namespace ExcelReader.Tests.Writer
                 write => write("People", people)).ConfigureAwait(true);
 
             await using var reader = Excel.Open(ms);
-            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(2, rows.Count);
             Assert.Equal(1, rows[0].Age);
             Assert.Equal(2.5, rows[1].Score);
@@ -228,7 +228,7 @@ namespace ExcelReader.Tests.Writer
                 write => write("Data", rows)).ConfigureAwait(true);
 
             await using var reader = Excel.Open(ms);
-            var parsed = ExcelParser.FromAttributes<FallbackRow>().Parse(reader).ToList();
+            var parsed = ExcelParser.FromAttributes<FallbackRow>().Parse(reader.FirstSheet).ToList();
             var row = Assert.Single(parsed);
             Assert.Equal(Priority.High, row.Priority);
             Assert.Equal(id, row.Id);
@@ -248,13 +248,13 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Name", e.Current[0].GetString());
             Assert.False(e.MoveNext());
 
             await using var reader2 = Excel.FromXlsx(ms);
-            var parsed = ExcelParser.FromAttributes<StringRow>().Parse(reader2).ToList();
+            var parsed = ExcelParser.FromAttributes<StringRow>().Parse(reader2.FirstSheet).ToList();
             Assert.Empty(parsed);
         }
 
@@ -274,7 +274,7 @@ namespace ExcelReader.Tests.Writer
                 write => write("Times", rows)).ConfigureAwait(true);
 
             await using var reader = Excel.Open(ms);
-            var parsed = ExcelParser.FromAttributes<TimeRow>().Parse(reader).ToList();
+            var parsed = ExcelParser.FromAttributes<TimeRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(2, parsed.Count);
             Assert.Equal(new TimeOnly(9, 30, 0), parsed[0].Open);
             Assert.Equal(new TimeOnly(17, 45, 30), parsed[0].Close);
@@ -298,13 +298,13 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Name", e.Current[0].GetString());
             Assert.Equal(CellType.Empty, e.Current[1].Type);
 
             await using var reader2 = Excel.FromXlsx(ms);
-            var parsed = ExcelParser.FromAttributes<IgnoreRow>().Parse(reader2).ToList();
+            var parsed = ExcelParser.FromAttributes<IgnoreRow>().Parse(reader2.FirstSheet).ToList();
             var row = Assert.Single(parsed);
             Assert.Equal("Alice", row.Name);
             Assert.Equal(0, row.Computed);
@@ -322,7 +322,7 @@ namespace ExcelReader.Tests.Writer
                 write => write("Prices", rows)).ConfigureAwait(true);
 
             await using var reader = Excel.Open(ms);
-            var parsed = ExcelParser.FromAttributes<MoneyRow>().Parse(reader).ToList();
+            var parsed = ExcelParser.FromAttributes<MoneyRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(2, parsed.Count);
             Assert.Equal(new Money(19.5m), parsed[0].Price);
             Assert.Equal(new Money(1234.25m), parsed[1].Price);
@@ -353,15 +353,14 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.FromXlsx(ms);
-            var primitives = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader).ToList();
+            var primitives = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(2, primitives.Count);
             Assert.Equal(1, primitives[0].Age);
             Assert.Equal(20m, primitives[1].Balance);
             Assert.False(primitives[1].Active);
 
             await using var reader2 = Excel.FromXlsx(ms);
-            reader2.MoveToSheet(1);
-            var strings = ExcelParser.FromAttributes<StringRow>().Parse(reader2).ToList();
+            var strings = ExcelParser.FromAttributes<StringRow>().Parse(reader2.Sheets[1]).ToList();
             Assert.Equal(["Alice", "Bob"], strings.Select(r => r.Name), StringComparer.Ordinal);
         }
 
@@ -381,7 +380,7 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<AliasedRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<AliasedRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(["Alice", "Bob"], rows.Select(r => r.Name), StringComparer.Ordinal);
         }
 
@@ -405,7 +404,7 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.Open(ms);
-            var parsed = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
+            var parsed = ExcelParser.FromAttributes<NullableRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(2, parsed.Count);
             Assert.Equal(7, parsed[0].Quantity);
             Assert.Equal(new DateTime(2020, 5, 6, 0, 0, 0, DateTimeKind.Unspecified), parsed[0].EventDate);
@@ -459,7 +458,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal(42, rows[0].Age);
             Assert.Equal(3.14, rows[0].Score, precision: 10);
@@ -489,7 +488,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.False(rows[0].Active);
         }
@@ -515,7 +514,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Null(rows[0].Name);
         }
@@ -543,7 +542,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<NullableRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal(77, rows[0].Quantity);
             Assert.Null(rows[0].EventDate);
@@ -574,7 +573,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<NullableRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Null(rows[0].Quantity);
             Assert.NotNull(rows[0].EventDate);
@@ -607,7 +606,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("1234567890123", e.Current[0].GetString());
             Assert.Equal(CellType.Empty, e.Current[1].Type);
@@ -647,7 +646,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(5, rows.Count);
             Assert.Equal("Alice", rows[0].Name);
             Assert.Equal("Bob", rows[1].Name);
@@ -687,13 +686,12 @@ namespace ExcelReader.Tests.Writer
 
             await using var reader = Excel.FromXlsx(ms);
             var parser = ExcelParser.FromAttributes<MultiSheetRow>();
-            var rowsSheet1 = parser.Parse(reader).ToList();
+            var rowsSheet1 = parser.Parse(reader.FirstSheet).ToList();
             Assert.Single(rowsSheet1);
             Assert.Equal("FromAlpha", rowsSheet1[0].Value);
 
             await using var reader2 = Excel.FromXlsx(ms);
-            reader2.MoveToSheet(1);
-            var rowsSheet2 = parser.Parse(reader2).ToList();
+            var rowsSheet2 = parser.Parse(reader2.Sheets[1]).ToList();
             Assert.Single(rowsSheet2);
             Assert.Equal("FromBeta", rowsSheet2[0].Value);
         }
@@ -724,7 +722,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<SparseRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<SparseRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("aaa", rows[0].A);
             Assert.Equal("ccc", rows[0].C);
@@ -775,7 +773,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("<Alice & \"Bob\">", rows[0].Name);
         }
@@ -803,7 +801,7 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<StringRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("Auto", rows[0].Name);
         }
@@ -836,7 +834,7 @@ namespace ExcelReader.Tests.Writer
 
             await using var reader = Excel.FromXlsx(ms);
             var config = new ExcelParserConfig { HeaderRow = 2 };
-            var rows = ExcelParser.FromAttributes<StringRow>(config).Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<StringRow>(config).Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("HeaderRow2", rows[0].Name);
         }
@@ -908,7 +906,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader).ToList();
+            var rows = ExcelParser.FromAttributes<PrimitivesRow>().Parse(reader.FirstSheet).ToList();
             Assert.Equal(rowCount, rows.Count);
             for (int i = 0; i < rowCount; i++)
             {
@@ -996,7 +994,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             for (int expected = 1; expected <= 4; expected++)
             {
                 Assert.True(e.MoveNext());

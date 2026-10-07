@@ -151,10 +151,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public async Task ReaderHandlesProducerShapedXlsxFixtures(ProducerFixture fixture)
         {
             await using MemoryStream workbook = BuildProducerFixture(fixture);
-            await using XlsxReader reader = await Excel.FromXlsxAsync(
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(
                 workbook,
                 ct: TestContext.Current.CancellationToken);
-            await using XlsxReader.Enumerator rows = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            await using XlsxWorkbook.Enumerator rows = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(rows.MoveNext());
             foreach (ExpectedCell expected in fixture.Expected)
@@ -320,7 +320,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal(unchecked((int)0xFFFFFFFF), BitConverter.ToInt32(bytes, directoryOffset + 128 + 76));
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
-            Assert.Equal("Legacy", reader.SheetName);
+            Assert.Equal("Legacy", reader.Sheets[0].Name);
         }
 
         private static MemoryStream BuildProducerFixture(ProducerFixture fixture)
