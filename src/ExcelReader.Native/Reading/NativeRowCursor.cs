@@ -30,8 +30,14 @@ namespace ExcelReader.Native.Reading
 
         public void Dispose()
         {
-            Rows.Dispose();
-            View?.Dispose();
+            try
+            {
+                Rows.Dispose();
+            }
+            finally
+            {
+                View?.Dispose();
+            }
         }
     }
 }

@@ -31,6 +31,7 @@ namespace ExcelReader.Native.Reading
                 BinaryPrimitives.WriteInt32LittleEndian(buffer, cursor.AllRowsCount);
                 cursor.AllRowsScratch?.CopyTo(buffer[sizeof(int)..cursor.AllRowsLength]);
                 cursor.AllRowsPending = false;
+                cursor.AllRowsScratch = null;
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -77,7 +78,7 @@ namespace ExcelReader.Native.Reading
             if (required > int.MaxValue)
             {
                 throw new InvalidOperationException(
-                    "xl_read_all_blob's accumulated result exceeds the 2 GiB int32 limit of this API; " +
+                    "xl_rows_read_all_blob's accumulated result exceeds the 2 GiB int32 limit of this API; " +
                     "use xl_parse_typed instead, which is columnar, uses int64_t lengths, and is markedly faster.");
             }
 

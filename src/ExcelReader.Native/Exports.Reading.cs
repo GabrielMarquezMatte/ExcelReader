@@ -8,6 +8,12 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file")]
         public static int OpenFile(byte* path, int pathLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
+            NativeApi.ClearLastError();
+            if (outHandle is not null)
+            {
+                *outHandle = 0;
+            }
+
             if (!IsValidOpenRequest(path, pathLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
@@ -24,6 +30,12 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_open_memory")]
         public static int OpenMemory(byte* data, int dataLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
+            NativeApi.ClearLastError();
+            if (outHandle is not null)
+            {
+                *outHandle = 0;
+            }
+
             if (!IsValidOpenRequest(data, dataLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
@@ -40,6 +52,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_close")]
         public static int Close(nint handle)
         {
+            NativeApi.ClearLastError();
+
             if (handle == 0)
             {
                 return NativeStatus.InvalidHandle;
@@ -56,6 +70,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_count")]
         public static int SheetCount(nint handle, int* outCount)
         {
+            NativeApi.ClearLastError();
+
             if (outCount is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -69,6 +85,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name_at")]
         public static int SheetNameAt(nint handle, int index, byte* buffer, int capacity, int* outLength)
         {
+            NativeApi.ClearLastError();
+
             if (!IsValidOutBuffer(buffer, capacity, outLength))
             {
                 return NativeStatus.InvalidArgument;
@@ -82,6 +100,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_is_date1904")]
         public static int IsDate1904(nint handle, int* outFlag)
         {
+            NativeApi.ClearLastError();
+
             if (outFlag is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -95,6 +115,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_visibility_at")]
         public static int SheetVisibilityAt(nint handle, int index, int* outVisibility)
         {
+            NativeApi.ClearLastError();
+
             if (outVisibility is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -108,6 +130,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_index")]
         public static int SheetIndex(nint handle, byte* name, int nameLength, int* outIndex)
         {
+            NativeApi.ClearLastError();
+
             if (outIndex is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -126,6 +150,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_open")]
         public static int RowsOpen(nint handle, int sheet, nint* outRows)
         {
+            NativeApi.ClearLastError();
+
             if (outRows is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -143,6 +169,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_close")]
         public static int RowsClose(nint rows)
         {
+            NativeApi.ClearLastError();
+
             if (!NativeHandleTable.TryUnregister(rows, out NativeRowCursor? cursor))
             {
                 return NativeStatus.InvalidHandle;
@@ -154,6 +182,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_next")]
         public static int RowsNext(nint rows, byte* buffer, int capacity, int* outWritten)
         {
+            NativeApi.ClearLastError();
+
             if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
@@ -167,6 +197,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_next_view")]
         public static int RowsNextView(nint rows, NativeRow* outRow)
         {
+            NativeApi.ClearLastError();
+
             if (outRow is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -180,6 +212,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_read_all_blob")]
         public static int RowsReadAllBlob(nint rows, byte* buffer, int capacity, int* outWritten)
         {
+            NativeApi.ClearLastError();
+
             if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
@@ -193,6 +227,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_read_all_decoded")]
         public static int RowsReadAllDecoded(nint rows, NativeRows* outRows)
         {
+            NativeApi.ClearLastError();
+
             if (outRows is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -223,6 +259,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_infer_schema")]
         public static int InferSchema(nint handle, int sheet, int headerRow, int sampleSize, int flags, NativeInferredSchema* outSchema)
         {
+            NativeApi.ClearLastError();
+
             if (outSchema is null)
             {
                 return NativeStatus.InvalidArgument;

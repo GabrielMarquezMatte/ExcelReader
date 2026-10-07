@@ -9,6 +9,8 @@ namespace ExcelReader.Native
         public static int ParseTyped(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             int degreeOfParallelism, NativeTable* outTable)
         {
+            NativeApi.ClearLastError();
+
             if (specs is null || outTable is null || !TypedApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
@@ -55,6 +57,8 @@ namespace ExcelReader.Native
         public static int TypedReaderOpen(nint handle, int sheet, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             long maxRows, nint* outReader)
         {
+            NativeApi.ClearLastError();
+
             if (outReader is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -87,6 +91,8 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_next")]
         public static int TypedReaderNext(nint reader, NativeTable* outTable)
         {
+            NativeApi.ClearLastError();
+
             if (outTable is null)
             {
                 return NativeStatus.InvalidArgument;

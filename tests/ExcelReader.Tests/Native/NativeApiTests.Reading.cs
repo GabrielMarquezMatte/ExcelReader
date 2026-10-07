@@ -225,7 +225,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_With_Null_Options_Behaves_Like_OpenFile()
+        public void OpenFile_With_Null_Options_Uses_The_Defaults()
         {
             int status = ReadApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, null, out NativeHandle? handle);
 
@@ -235,7 +235,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenMemoryEx_With_Null_Options_Behaves_Like_OpenMemory()
+        public void OpenMemory_With_Null_Options_Uses_The_Defaults()
         {
             byte[] bytes = File.ReadAllBytes(XlsxFixture);
 
@@ -249,7 +249,7 @@ namespace ExcelReader.Tests.Native
         [Theory]
         [InlineData(-1)]
         [InlineData(256)]
-        public void OpenFileEx_Rejects_An_Out_Of_Range_Csv_Delimiter(int delimiter)
+        public void OpenFile_Rejects_An_Out_Of_Range_Csv_Delimiter(int delimiter)
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvDelimiter = delimiter };
 
@@ -260,7 +260,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_Rejects_A_Negative_Numeric_Option()
+        public void OpenFile_Rejects_A_Negative_Numeric_Option()
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxZipEntries = -5 };
 
@@ -271,7 +271,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_Rejects_An_Out_Of_Range_Csv_Sniff_Dialect_State()
+        public void OpenFile_Rejects_An_Out_Of_Range_Csv_Sniff_Dialect_State()
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvSniffDialect = 99 };
 
@@ -282,7 +282,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_Applies_An_Explicit_Csv_Delimiter()
+        public void OpenFile_Applies_An_Explicit_Csv_Delimiter()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
             File.WriteAllText(path, "name;qty\nwidget;7\n");
@@ -312,7 +312,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_Sniffs_The_Csv_Dialect_When_Requested()
+        public void OpenFile_Sniffs_The_Csv_Dialect_When_Requested()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
             File.WriteAllText(path, "name;qty\nwidget;7\ngadget;9\n");
@@ -342,7 +342,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_Applies_A_Tiny_Max_Total_Decompressed_Bytes_To_A_Real_Xlsx()
+        public void OpenFile_Applies_A_Tiny_Max_Total_Decompressed_Bytes_To_A_Real_Xlsx()
         {
             NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxTotalDecompressedBytes = 1 };
 
@@ -353,7 +353,7 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void OpenFileEx_Applies_A_Tiny_Csv_Max_Cell_Bytes()
+        public void OpenFile_Applies_A_Tiny_Csv_Max_Cell_Bytes()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
             File.WriteAllText(path, "name\n" + new string('x', 100_000) + "\n");
@@ -608,6 +608,10 @@ namespace ExcelReader.Tests.Native
         {
             Assert.Equal(NativeStatus.InvalidHandle, ReadApi.SheetCount(null, out _));
             Assert.Equal(NativeStatus.InvalidHandle, ReadApi.IsDate1904(null, out _));
+            Assert.Equal(NativeStatus.InvalidHandle, ReadApi.SheetVisibilityAt(null, 0, out _));
+            Assert.Equal(NativeStatus.InvalidHandle, ReadApi.SheetIndex(null, [], out _));
+            Assert.Equal(NativeStatus.InvalidHandle, ReadApi.OpenRows(null, 0, out _));
+            Assert.Equal(NativeStatus.InvalidHandle, ReadApi.CloseRows(null));
         }
 
         [Fact]
