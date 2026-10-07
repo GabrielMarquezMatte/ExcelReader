@@ -1,4 +1,5 @@
 import gc
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from excelreader import ExcelReaderError, Sheet, SheetVisibility, open_bytes, open_writer_to_memory
@@ -16,6 +17,20 @@ def _two_sheets() -> bytes:
 
 def _first_column(sheet: Sheet) -> list[str]:
     return [row[0].value for row in sheet.rows()]
+
+
+_PARALLEL_SHEETS = 6
+_PARALLEL_ROWS = 500
+
+
+def _many_sheets() -> bytes:
+    with open_writer_to_memory("xlsx") as writer:
+        for sheet in range(_PARALLEL_SHEETS):
+            writer.start_sheet(f"sheet{sheet}")
+            for row in range(_PARALLEL_ROWS):
+                writer.write_row([f"s{sheet}-r{row}", sheet * 1_000_000 + row])
+            writer.end_sheet()
+        return writer.bytes()
 
 
 def test_a_sheet_reads_its_own_rows():
@@ -110,3 +125,44 @@ def test_read_all_and_parse_typed_read_the_named_sheet():
         assert second.parse_typed(schema, header_row=0).row_count == 3
         assert sum(table.row_count for table in second.iter_parse_typed(schema, header_row=0, batch_size=2)) == 3
         assert len(second.infer_schema(header_row=0)) == 1
+
+
+def test_every_sheet_read_on_its_own_thread_matches_a_sequential_read():
+    with open_bytes(_many_sheets()) as workbook:
+        sheets = list(workbook.sheets)
+        sequential = [_first_column(sheet) for sheet in sheets]
+        assert sequential[3][0] == "s3-r0"
+        assert len(sequential[3]) == _PARALLEL_ROWS
+
+        with ThreadPoolExecutor(max_workers=_PARALLEL_SHEETS * 2) as pool:
+            parallel = list(pool.map(_first_column, sheets + sheets))
+
+    for position, rows in enumerate(parallel):
+        assert rows == sequential[position % _PARALLEL_SHEETS]
+
+
+def test_typed_parses_of_every_sheet_run_on_separate_threads():
+    from excelreader import ColumnSpec, ColumnType
+
+    schema = [ColumnSpec(ColumnType.I64, index=1)]
+    with open_bytes(_many_sheets()) as workbook, ThreadPoolExecutor(max_workers=_PARALLEL_SHEETS) as pool:
+        tables = list(pool.map(lambda sheet: sheet.parse_typed(schema, header_row=0), workbook.sheets))
+
+    for sheet, table in enumerate(tables):
+        assert table.row_count == _PARALLEL_ROWS
+        assert int(table.columns[0][0]) == sheet * 1_000_000
+
+
+def test_a_record_batch_reader_outlives_its_workbook():
+    pyarrow = pytest.importorskip("pyarrow")
+    from excelreader import ColumnSpec, ColumnType
+
+    schema = [ColumnSpec(ColumnType.I64, index=1)]
+    with open_bytes(_many_sheets()) as workbook:
+        reader = workbook.sheets[2].to_record_batch_reader(schema, header_row=0, batch_size=100)
+
+    table = reader.read_all()
+
+    assert isinstance(table, pyarrow.Table)
+    assert table.num_rows == _PARALLEL_ROWS
+    assert table.column(0)[0].as_py() == 2_000_000
