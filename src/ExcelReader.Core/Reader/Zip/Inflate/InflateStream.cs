@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 
 namespace ExcelReader.Core.Reader.Zip.Inflate
 {
@@ -158,7 +159,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
             InflateStatus status = _decoder.Decode(_input, ref _inPos, _inEnd, _inputEnded, _window, ref _outPos, OutLimit);
             if (_window.AsSpan(CanaryStart, CanarySize).ContainsAnyExcept(CanaryByte))
             {
-                throw new InvalidOperationException("The inflate decoder wrote past its output window.");
+                throw new UnreachableException("The inflate decoder wrote past its output window.");
             }
             _finished = status == InflateStatus.Finished;
             return status != InflateStatus.NeedInput;
