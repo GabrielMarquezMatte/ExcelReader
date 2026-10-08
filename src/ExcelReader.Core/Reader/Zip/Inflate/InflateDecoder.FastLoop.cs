@@ -19,12 +19,11 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         {
             fixed (byte* inBase = input)
             fixed (byte* outBase = window)
-            fixed (uint* litlen = _litlen)
-            fixed (uint* offsets = _offset)
+            fixed (uint* tables = _tables)
             {
                 byte* inNext = inBase + inPos;
                 byte* outNext = outBase + outPos;
-                LoopStatus status = FastLoop(ref inNext, inBase + inLimit, outBase, ref outNext, outBase + outLimit, litlen, offsets);
+                LoopStatus status = FastLoop(ref inNext, inBase + inLimit, outBase, ref outNext, outBase + outLimit, tables);
                 inPos = (int)(inNext - inBase);
                 outPos = (int)(outNext - outBase);
                 return status;
@@ -33,26 +32,29 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
 
         // Entry layout, shared with HuffmanTableBuilder: bits 0-7 hold the bits to consume (codeword
         // plus extra bits), bits 8-11 the codeword length alone, bits 16 and up the literal, the
-        // base length or offset, or the subtable start.
+        // base length or offset, or the subtable start. Bits 12-15 are clear on length and offset
+        // entries, so `entry >> 8` needs no mask before it shifts out the extra bits.
         //
         // Bit budget: a refill leaves at least 56 bits. Three literals from the main table take at
         // most 33; a length takes at most 20 and an offset at most 28, hence the refill between them.
+        //
+        // Only the low byte of `bitsleft` is meaningful: it subtracts whole entries, as libdeflate does.
         [SuppressMessage("Design", "MA0051:Method is too long",
             Justification = "The decode loop is deliberately one call-free method: every live value has to stay in a register across it, and a call inside the loop spills them.")]
         private unsafe LoopStatus FastLoop(
-            ref byte* inPosition, byte* inLimit, byte* window, ref byte* outPosition, byte* outLimit, uint* litlen, uint* offsets)
+            ref byte* inPosition, byte* inLimit, byte* window, ref byte* outPosition, byte* outLimit, uint* tables)
         {
             ulong bitbuf = _bitbuf;
-            int bitsleft = _bitsleft;
+            long bitsleft = _bitsleft;
             byte* inNext = inPosition;
             byte* outNext = outPosition;
             ulong mask = _litlenMask;
             LoopStatus status;
 
-            bitbuf |= LoadWord(inNext) << bitsleft;
-            inNext += (63 - bitsleft) >> 3;
+            bitbuf |= LoadWord(inNext) << (int)bitsleft;
+            inNext += 7 - ((bitsleft >> 3) & 7);
             bitsleft |= 56;
-            uint entry = litlen[bitbuf & mask];
+            uint entry = tables[bitbuf & mask];
 
             while (true)
             {
@@ -64,31 +66,31 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
 
                 ulong saved = bitbuf;
                 bitbuf >>= (int)entry;
-                bitsleft -= (int)(entry & 0xFF);
+                bitsleft -= entry;
 
                 if ((int)entry < 0)
                 {
                     uint literal = entry >> 16;
-                    entry = litlen[bitbuf & mask];
+                    entry = tables[bitbuf & mask];
                     saved = bitbuf;
                     bitbuf >>= (int)entry;
-                    bitsleft -= (int)(entry & 0xFF);
+                    bitsleft -= entry;
                     *outNext++ = (byte)literal;
                     if ((int)entry < 0)
                     {
                         literal = entry >> 16;
-                        entry = litlen[bitbuf & mask];
+                        entry = tables[bitbuf & mask];
                         saved = bitbuf;
                         bitbuf >>= (int)entry;
-                        bitsleft -= (int)(entry & 0xFF);
+                        bitsleft -= entry;
                         *outNext++ = (byte)literal;
                     }
                     if ((int)entry < 0)
                     {
                         *outNext++ = (byte)(entry >> 16);
-                        entry = litlen[bitbuf & mask];
-                        bitbuf |= LoadWord(inNext) << bitsleft;
-                        inNext += (63 - bitsleft) >> 3;
+                        entry = tables[bitbuf & mask];
+                        bitbuf |= LoadWord(inNext) << (int)bitsleft;
+                        inNext += 7 - ((bitsleft >> 3) & 7);
                         bitsleft |= 56;
                         continue;
                     }
@@ -101,16 +103,16 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                         status = LoopStatus.BlockDone;
                         break;
                     }
-                    entry = litlen[(entry >> 16) + (uint)LowBits(bitbuf, (entry >> 8) & 0x3F)];
+                    entry = tables[(entry >> 16) + (uint)LowBits(bitbuf, (entry >> 8) & 0x3F)];
                     saved = bitbuf;
                     bitbuf >>= (int)entry;
-                    bitsleft -= (int)(entry & 0xFF);
+                    bitsleft -= entry;
                     if ((int)entry < 0)
                     {
                         *outNext++ = (byte)(entry >> 16);
-                        entry = litlen[bitbuf & mask];
-                        bitbuf |= LoadWord(inNext) << bitsleft;
-                        inNext += (63 - bitsleft) >> 3;
+                        entry = tables[bitbuf & mask];
+                        bitbuf |= LoadWord(inNext) << (int)bitsleft;
+                        inNext += 7 - ((bitsleft >> 3) & 7);
                         bitsleft |= 56;
                         continue;
                     }
@@ -121,25 +123,25 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                     }
                 }
 
-                uint length = (entry >> 16) + (uint)(LowBits(saved, entry & 0xFF) >> (int)((entry >> 8) & 0xF));
+                uint length = (entry >> 16) + (uint)(LowBits(saved, entry & 0xFF) >> (int)(entry >> 8));
 
-                if (bitsleft < 30)
+                if ((byte)bitsleft < 30)
                 {
-                    bitbuf |= LoadWord(inNext) << bitsleft;
-                    inNext += (63 - bitsleft) >> 3;
+                    bitbuf |= LoadWord(inNext) << (int)bitsleft;
+                    inNext += 7 - ((bitsleft >> 3) & 7);
                     bitsleft |= 56;
                 }
-                uint offsetEntry = offsets[bitbuf & ((1 << InflateFormat.OffsetTableBits) - 1)];
+                uint offsetEntry = tables[InflateFormat.LitlenTableSize + (bitbuf & ((1 << InflateFormat.OffsetTableBits) - 1))];
                 if ((offsetEntry & InflateFormat.Exceptional) != 0)
                 {
                     bitbuf >>= InflateFormat.OffsetTableBits;
                     bitsleft -= InflateFormat.OffsetTableBits;
-                    offsetEntry = offsets[(offsetEntry >> 16) + (uint)LowBits(bitbuf, (offsetEntry >> 8) & 0x3F)];
+                    offsetEntry = tables[InflateFormat.LitlenTableSize + (offsetEntry >> 16) + (uint)LowBits(bitbuf, (offsetEntry >> 8) & 0x3F)];
                 }
                 saved = bitbuf;
                 bitbuf >>= (int)offsetEntry;
-                bitsleft -= (int)(offsetEntry & 0xFF);
-                uint offset = (offsetEntry >> 16) + (uint)(LowBits(saved, offsetEntry & 0xFF) >> (int)((offsetEntry >> 8) & 0xF));
+                bitsleft -= offsetEntry;
+                uint offset = (offsetEntry >> 16) + (uint)(LowBits(saved, offsetEntry & 0xFF) >> (int)(offsetEntry >> 8));
 
                 if (offset > (nuint)(outNext - window))
                 {
@@ -150,16 +152,16 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                 byte* destination = outNext;
                 outNext += length;
 
-                bitbuf |= LoadWord(inNext) << bitsleft;
-                inNext += (63 - bitsleft) >> 3;
+                bitbuf |= LoadWord(inNext) << (int)bitsleft;
+                inNext += 7 - ((bitsleft >> 3) & 7);
                 bitsleft |= 56;
-                entry = litlen[bitbuf & mask];
+                entry = tables[bitbuf & mask];
 
                 CopyMatch(source, destination, outNext, offset);
             }
 
             _bitbuf = bitbuf;
-            _bitsleft = bitsleft;
+            _bitsleft = (int)(bitsleft & 0xFF);
             inPosition = inNext;
             outPosition = outNext;
             return status;

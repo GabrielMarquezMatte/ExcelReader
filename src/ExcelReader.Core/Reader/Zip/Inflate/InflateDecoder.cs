@@ -29,8 +29,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         private const int LensSize = InflateFormat.MaxLitlenSymbols + InflateFormat.MaxOffsetSymbols + InflateFormat.MaxRepeat;
         private const ulong PrecodeMask = (1UL << InflateFormat.PrecodeTableBits) - 1;
 
-        private readonly uint[] _litlen = ArrayPool<uint>.Shared.Rent(InflateFormat.LitlenTableSize);
-        private readonly uint[] _offset = ArrayPool<uint>.Shared.Rent(InflateFormat.OffsetTableSize);
+        private readonly uint[] _tables = ArrayPool<uint>.Shared.Rent(InflateFormat.LitlenTableSize + InflateFormat.OffsetTableSize);
         private ulong _litlenMask;
         private bool _staticCodesLoaded;
         private ulong _bitbuf;
@@ -82,8 +81,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                 return;
             }
             _disposed = true;
-            ArrayPool<uint>.Shared.Return(_litlen);
-            ArrayPool<uint>.Shared.Return(_offset);
+            ArrayPool<uint>.Shared.Return(_tables);
         }
 
         private bool TryReadHeader(byte[] input, ref int inPos, int inEnd, bool inputEnded)
@@ -320,13 +318,13 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         {
             Span<ushort> sorted = stackalloc ushort[InflateFormat.MaxLitlenSymbols];
             if (!HuffmanTableBuilder.TryBuild(
-                _offset.AsSpan(0, InflateFormat.OffsetTableSize), lens.Slice(litlenSymbols, offsetSymbols), InflateFormat.OffsetResults,
+                _tables.AsSpan(InflateFormat.LitlenTableSize, InflateFormat.OffsetTableSize), lens.Slice(litlenSymbols, offsetSymbols), InflateFormat.OffsetResults,
                 InflateFormat.OffsetTableBits, InflateFormat.MaxCodewordLength, sorted, shrink: false, out _))
             {
                 throw new InvalidDataException("A deflate block has an invalid offset code.");
             }
             if (!HuffmanTableBuilder.TryBuild(
-                _litlen.AsSpan(0, InflateFormat.LitlenTableSize), lens[..litlenSymbols], InflateFormat.LitlenResults,
+                _tables.AsSpan(0, InflateFormat.LitlenTableSize), lens[..litlenSymbols], InflateFormat.LitlenResults,
                 InflateFormat.LitlenTableBits, InflateFormat.MaxCodewordLength, sorted, shrink: true, out int litlenBits))
             {
                 throw new InvalidDataException("A deflate block has an invalid literal/length code.");
