@@ -17,6 +17,7 @@ namespace ExcelReader.Fuzz
         {
             FuzzOracle.SelfCheck();
             Harnesses.AssertSameRowsSelfCheck();
+            Harnesses.InflateDivergenceSelfCheck();
             VerifyEncryptedSeedReachesRealCode(corpusDirectory);
             VerifyDifferentialSeedsReachBothReaders(corpusDirectory);
             VerifyInflateSeedsCoverEveryBlockType(corpusDirectory);

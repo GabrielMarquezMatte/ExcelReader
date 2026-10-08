@@ -128,7 +128,17 @@ namespace ExcelReader.Fuzz
             byte[] bytes = data.ToArray();
             FuzzOracle.Guard(() =>
             {
-                byte[] actual = InflateWith(static source => new InflateStream(source), bytes);
+                // A rejected stream may still have delivered bytes first; those must be real ones.
+                using var delivered = new MemoryStream();
+                bool rejected = false;
+                try
+                {
+                    InflateInto(delivered, static source => new InflateStream(source), bytes);
+                }
+                catch (InvalidDataException)
+                {
+                    rejected = true;
+                }
                 byte[] reference;
                 try
                 {
@@ -138,12 +148,31 @@ namespace ExcelReader.Fuzz
                 {
                     return;
                 }
-                if (!actual.AsSpan().SequenceEqual(reference))
-                {
-                    throw new InvalidOperationException(
-                        $"Oracle divergence: InflateStream produced {actual.Length} bytes that differ from DeflateStream's {reference.Length}.");
-                }
+                RequireSameInflate(delivered.ToArray(), reference, rejected);
             });
+        }
+
+        internal static void InflateDivergenceSelfCheck()
+        {
+            try
+            {
+                FuzzOracle.Guard(() => RequireSameInflate([1], [2], prefixOnly: true));
+            }
+            catch (OracleDivergenceException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("The fuzz oracle swallows an inflate divergence.");
+        }
+
+        private static void RequireSameInflate(byte[] actual, byte[] reference, bool prefixOnly)
+        {
+            bool same = prefixOnly ? reference.AsSpan().StartsWith(actual) : actual.AsSpan().SequenceEqual(reference);
+            if (!same)
+            {
+                throw new OracleDivergenceException(
+                    $"Oracle divergence: InflateStream produced {actual.Length} bytes that differ from DeflateStream's {reference.Length}.");
+            }
         }
 
         internal static int InflateSeedForSelfCheck(byte[] bytes)
@@ -159,8 +188,14 @@ namespace ExcelReader.Fuzz
 
         private static byte[] InflateWith(Func<Stream, Stream> open, byte[] bytes)
         {
-            using Stream stream = open(new MemoryStream(bytes, writable: false));
             using var output = new MemoryStream();
+            InflateInto(output, open, bytes);
+            return output.ToArray();
+        }
+
+        private static void InflateInto(MemoryStream output, Func<Stream, Stream> open, byte[] bytes)
+        {
+            using Stream stream = open(new MemoryStream(bytes, writable: false));
             byte[] buffer = new byte[64 * 1024];
             while (output.Length < MaxInflateOutput)
             {
@@ -171,7 +206,6 @@ namespace ExcelReader.Fuzz
                 }
                 output.Write(buffer, 0, read);
             }
-            return output.ToArray();
         }
 
         internal static int OpenEncryptedSeedForSelfCheck(ReadOnlySpan<byte> data)

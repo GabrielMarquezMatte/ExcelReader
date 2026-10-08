@@ -85,6 +85,8 @@ namespace ExcelReader.Fuzz
                 new OutOfMemoryException(),
                 new OverflowException(),
                 new KeyNotFoundException(),
+                new OracleDivergenceException("test"),
+                new System.Diagnostics.UnreachableException(),
             ];
             foreach (Exception ex in mustReject)
             {
