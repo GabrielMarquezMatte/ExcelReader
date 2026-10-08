@@ -1,7 +1,7 @@
 [
   {
     "name": "read",
-    "filter": "ExcelReader.Benchmarks.ReadBenchmark.* ExcelReader.Benchmarks.XlsReadBenchmark.* ExcelReader.Benchmarks.CsvReadBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.ReadBenchmark.* ExcelReader.Benchmarks.XlsReadBenchmark.* ExcelReader.Benchmarks.CsvReadBenchmark.* ExcelReader.Benchmarks.InflateBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },
