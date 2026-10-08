@@ -29,7 +29,7 @@ foreach (var item in parser.Parse(workbook.FirstSheet))
 }
 ```
 
-Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, and `enum`s (matched by member name or numeric value). Each also works as a `Nullable<T>`. Empty cells leave the property at its default; an unparseable cell is skipped (keeps the default) unless the column is required. `T` needs no parameterless-constructor constraint, so models with `required` members are supported.
+Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, and `enum`s (matched by member name or numeric value). Each also works as a `Nullable<T>`. Empty cells leave the property at its default; an unparseable cell is skipped (keeps the default) unless the column is required. `T` needs no parameterless-constructor constraint, so models with `required` members are supported, through both `FromAttributes` and the source generator. `required` alone does not make a column mandatory; that is what `[ExcelRequired]` does.
 
 `Parse` also accepts the `IExcelSheet` of the `IExcelWorkbook` from `Excel.Open`, so you can parse without knowing the concrete format:
 
