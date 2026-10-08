@@ -96,6 +96,32 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.Contains("code-length code", ex.Message, StringComparison.Ordinal);
         }
 
+        [Theory]
+        [InlineData(int.MaxValue)]
+        [InlineData(1)]
+        public void MatchAtTheFullWindowDistanceCopiesAcrossEverySlide(int sourceStep)
+        {
+            byte[] history = Generate(DataShape.Random, 32_768, seed: 3);
+            byte[] expected = new byte[history.Length + (6000 * 258)];
+            history.CopyTo(expected, 0);
+            for (int i = history.Length; i < expected.Length; i++)
+            {
+                expected[i] = expected[i - 32_768];
+            }
+
+            Assert.Equal(expected, Inflate(StoredThenFarMatches(history, matches: 6000), sourceStep: sourceStep));
+        }
+
+        [Fact]
+        public void MatchAtTheFullWindowDistanceWithOneByteTooFewIsRejected()
+        {
+            byte[] stream = StoredThenFarMatches(Generate(DataShape.Random, 32_767, seed: 3), matches: 1);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(() => Inflate(stream));
+
+            Assert.Contains("before the start", ex.Message, StringComparison.Ordinal);
+        }
+
         [Fact]
         public void EmptyInputIsRejected()
         {
@@ -117,6 +143,26 @@ namespace ExcelReader.Tests.Reader.Zip
             foreach (int cut in cuts)
             {
                 Assert.Throws<InvalidDataException>(() => Inflate(stream[..cut]));
+            }
+        }
+
+        [Theory]
+        [InlineData(DataShape.SheetXml, CompressionLevel.Optimal)]
+        [InlineData(DataShape.SheetXml, CompressionLevel.Fastest)]
+        [InlineData(DataShape.MixedRuns, CompressionLevel.Optimal)]
+        public void StreamCutJustBeforeTheWindowFillsDeliversOnlyRealBytes(DataShape shape, CompressionLevel level)
+        {
+            // The window first fills at 98,304 bytes; cuts whose real output ends just short of it make
+            // the zero padding decode across the boundary.
+            byte[] raw = Generate(shape, 200_000, seed: 7);
+            byte[] stream = Deflate(raw, level);
+            int first = FirstCutReaching(stream, 98_304 - 300);
+            int last = FirstCutReaching(stream, 98_304);
+
+            for (int cut = first; cut <= last; cut++)
+            {
+                byte[] delivered = DeliveredBeforeRejection(stream[..cut]);
+                Assert.True(raw.AsSpan().StartsWith(delivered), $"cut {cut} delivered bytes the stream never encoded");
             }
         }
 
@@ -194,6 +240,67 @@ namespace ExcelReader.Tests.Reader.Zip
             inflate.Dispose();
 
             Assert.False(inflate.CanRead);
+        }
+
+        // DeflateStream's output never shrinks as the cut grows, so a binary search finds the boundary.
+        private static int FirstCutReaching(byte[] stream, int outputLength)
+        {
+            int low = 1;
+            int high = stream.Length;
+            while (low < high)
+            {
+                int mid = (low + high) / 2;
+                using var reference = new DeflateStream(new MemoryStream(stream, 0, mid), CompressionMode.Decompress);
+                using var output = new MemoryStream();
+                reference.CopyTo(output);
+                if (output.Length >= outputLength)
+                {
+                    high = mid;
+                }
+                else
+                {
+                    low = mid + 1;
+                }
+            }
+            return low;
+        }
+
+        private static byte[] DeliveredBeforeRejection(byte[] stream)
+        {
+            using var inflate = new InflateStream(new MemoryStream(stream));
+            using var output = new MemoryStream();
+            byte[] buffer = new byte[4096];
+            try
+            {
+                int read;
+                while ((read = inflate.Read(buffer)) > 0)
+                {
+                    output.Write(buffer, 0, read);
+                }
+            }
+            catch (InvalidDataException)
+            {
+                return output.ToArray();
+            }
+            throw new InvalidOperationException("A truncated stream was accepted.");
+        }
+
+        // A stored block holding the history, then a final fixed block of length-258 matches at offset
+        // 32,768: symbol 285 and offset code 29 with all 13 extra bits set. Huffman codes go in bit-reversed.
+        private static byte[] StoredThenFarMatches(byte[] history, int matches)
+        {
+            var bits = new BitWriter();
+            bits.Write(1, 1);
+            bits.Write(1, 2);
+            for (int i = 0; i < matches; i++)
+            {
+                bits.Write(0b1010_0011, 8);
+                bits.Write(0b1_0111, 5);
+                bits.Write(8191, 13);
+            }
+            bits.Write(0, 7);
+            int length = history.Length;
+            return [0x00, (byte)length, (byte)(length >> 8), (byte)~length, (byte)(~length >> 8), .. history, .. bits.ToArray()];
         }
 
         // A final dynamic block declaring 257 literal/length codes and 1 offset code, with the given
