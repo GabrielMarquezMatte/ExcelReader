@@ -171,6 +171,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
             }
             if (outPos >= outLimit)
             {
+                ThrowIfOverrun(inPos, inEnd, inputEnded);
                 return true;
             }
             ThrowIfTruncated(inputEnded);
