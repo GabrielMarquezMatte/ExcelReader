@@ -94,14 +94,9 @@ namespace ExcelReader.Native.Typed
                 }
 
                 NativeApi.ClearLastError();
+                ColumnBuilder[] builders = NewBuilders(_specs);
                 try
                 {
-                    ColumnBuilder[] builders = new ColumnBuilder[_specs.Length];
-                    for (int i = 0; i < _specs.Length; i++)
-                    {
-                        builders[i] = new ColumnBuilder(_specs[i].Type, _specs[i].Nullable);
-                    }
-
                     long taken = 0;
                     while ((_maxRows == 0 || taken < _maxRows) && _rows.MoveNext())
                     {
@@ -123,6 +118,10 @@ namespace ExcelReader.Native.Typed
                 {
                     table = default;
                     return Fail(exception.Message);
+                }
+                finally
+                {
+                    DisposeAll(builders);
                 }
             }
 
