@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [xlsx, xlsx-memory, xlsx-differential, xlsb, xlsb-memory, xlsb-differential, xls, encrypted, csv, csv-sniff, csv-parallel]
+        target: [xlsx, xlsx-memory, xlsx-differential, xlsb, xlsb-memory, xlsb-differential, xls, encrypted, csv, csv-sniff, csv-parallel, inflate]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -110,6 +110,7 @@ jobs:
             xls)       dict=xls ;;
             encrypted) dict=encrypted ;;
             csv*)      dict=csv ;;
+            inflate)   dict=inflate ;;
           esac
           ./libfuzzer-dotnet \
             --target_path=fuzz-out/ExcelReader.Fuzz \

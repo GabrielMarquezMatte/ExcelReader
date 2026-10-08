@@ -28,6 +28,7 @@ namespace ExcelReader.Fuzz
                 ["csv"] = Harnesses.Csv,
                 ["csv-sniff"] = Harnesses.CsvSniff,
                 ["csv-parallel"] = Harnesses.CsvParallel,
+                ["inflate"] = Harnesses.Inflate,
             };
 
         private static async Task<int> Main(string[] args)
