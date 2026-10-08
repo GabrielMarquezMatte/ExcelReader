@@ -645,6 +645,42 @@ namespace ExcelReader.Tests.Generator
         }
 
         [Fact]
+        public void RequiredMembersCompile()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.RequiredMembers
+                {
+                    public class Base
+                    {
+                        public required string Inherited { get; set; }
+                    }
+
+                    [ExcelSerializable]
+                    public partial class Model : Base
+                    {
+                        public required int Id { get; set; }
+                        [ExcelRequired]
+                        public required string Name { get; init; }
+                        public string? Note { get; set; }
+                    }
+
+                    [ExcelSerializable]
+                    public partial struct StructModel
+                    {
+                        public StructModel() { }
+                        public required int Id { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+        }
+
+        [Fact]
         public void RequiredPropertyWithoutPublicSetterReportsEXR009()
         {
             const string source = """
