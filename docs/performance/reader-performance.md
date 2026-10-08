@@ -531,8 +531,11 @@ no faster, and slower in places. libdeflate is whole-buffer only — no streamin
 the entire sheet to be materialized before parsing starts and destroys the inflate/parse overlap
 `PrefetchStream` exists to provide.
 
-**The inflate floor does not move by swapping compression libraries.** Since XLSX and XLSB are both
-bounded by it, this is the single most important negative result here.
+**The inflate floor does not move by swapping in a whole-buffer compression library.** That is what
+this measurement showed, and it was read too broadly: the decoder itself was never at the floor.
+Measured on its own libdeflate is about twice as fast as `DeflateStream` on these entries; what cost
+it the win end to end was having no streaming API. "Fourth round" below measures decoders in
+isolation and replaces `DeflateStream` with a managed streaming one.
 
 ### Lazy number parsing — a trade, not a win
 
@@ -982,8 +985,67 @@ before publishing.
 The C++ binding's full XLSX read moved from 93.2 to ~85.4 ms with no native change, from the
 XLSX changes above.
 
+### Fourth round (2026-10-08, i7-1365U): a managed inflate decoder
+
+Measured on the laptop, so only the ratios mean anything; the published tables need the Ryzen run.
+Harnesses were throwaway console apps: interleaved rounds, minimum of 30 to 60, outputs compared
+byte for byte.
+
+Inflate only, single thread pinned to one core, against `DeflateStream` (.NET 10):
+
+| decoder | XLSX `sheet1.xml`, 6.7 → 34.4 MB | XLSB `sheet1.bin`, 3.7 → 15.9 MB |
+|---|---|---|
+| libdeflate 1.19, whole buffer | 2.14–2.18x | 1.64–1.67x |
+| ISA-L 2.30, whole buffer | 1.48–1.49x | 1.29–1.33x |
+| ISA-L 2.30, streaming, 64 KB | 1.39–1.42x | 1.23–1.25x |
+| `InflateStream` | 1.56–1.61x | 1.35–1.41x |
+
+`InflateStream` is a C# port of libdeflate's decoder design made resumable. It reaches roughly
+three quarters of libdeflate's speed on XLSX and four fifths on XLSB, and passes ISA-L without a
+native dependency. An earlier throwaway version that decoded a whole buffer in one call measured
+1.74–1.78x on XLSX, so streaming costs under a tenth.
+
+End to end in the reader, in-process A/B over the real-data corpus, identical checksums. The
+`InflateStream` column is one run of 30 rounds; the ISA-L column spans four runs:
+
+| read | `InflateStream` | ISA-L behind the same seam |
+|---|---|---|
+| XLSX, no prefetch | 1.25–1.26x | 1.19–1.21x |
+| XLSB, no prefetch | 1.13–1.15x | 1.10–1.14x |
+| XLSX, prefetch | 1.11–1.12x | 1.09–1.15x |
+| XLSB, prefetch | 1.05–1.06x | 1.03–1.07x |
+
+This is the `I + P` model again. Without prefetch a faster `I` converts directly. With prefetch the
+read is `max(I, P)`, both decoders land together, and what is left is the parse.
+
+`InflateBenchmark`, BenchmarkDotNet `--job Short`, in-process, same laptop:
+
+| entry | `DeflateStream` | `InflateStream` | ratio |
+|---|---|---|---|
+| XLSX sheet | 34.91 ms, 541 B | 21.71 ms, 332 B | 0.62 |
+| XLSB sheet | 19.40 ms, 404 B | 13.68 ms, 270 B | 0.71 |
+| string-heavy `sharedStrings.xml` | 16.10 ms, 280 B | 10.32 ms, 270 B | 0.64 |
+
+Measured and not kept:
+
+| attempt | result |
+|---|---|
+| `AggressiveOptimization` on the decode loop | no change, so the loop does not depend on dynamic PGO |
+| `Vector128` match copy for offsets of 16 and up | no change on XLSX, slightly slower on XLSB |
+
+The remaining gap to libdeflate has not been diagnosed; nobody has read the loop's disassembly yet.
+
+**A behavior change came with it.** `DeflateStream` does not reject a stream that ends before its
+final block: it returns what it decoded and reports end of stream. A sheet entry cut short therefore
+used to yield a silent prefix of its rows. `InflateStream` throws `InvalidDataException`.
+
 ## Known open items
 
+- `InflateStream` reaches about three quarters of libdeflate's inflate speed on XLSX. The gap is
+  undiagnosed. Next step: read the Tier1 disassembly of `InflateDecoder.FastLoop` for values the
+  JIT keeps on the stack.
+- Every number in "Fourth round" is from the i7-1365U. `benchmarks.md` still shows `DeflateStream`
+  figures until the suite is re-run on the Ryzen 7 5700X.
 - NativeAOT XLSX is ~13% behind the JIT, and the static profile does not close it (see "NativeAOT,
   again"). Next step: diff the JIT's Tier1 code for `ParseRowInWindow` against ILC's output.
 - 17-digit numbers are parsed twice in XLSX: emit rejects them to keep the text exact, and the
