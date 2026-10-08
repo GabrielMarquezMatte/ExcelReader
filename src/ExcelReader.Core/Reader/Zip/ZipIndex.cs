@@ -1,9 +1,9 @@
 using System.Buffers;
 using System.Buffers.Binary;
-using System.IO.Compression;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Sources;
+using ExcelReader.Core.Reader.Zip.Inflate;
 
 namespace ExcelReader.Core.Reader.Zip
 {
@@ -341,7 +341,7 @@ namespace ExcelReader.Core.Reader.Zip
             try
             {
                 ByteSourceStream raw = new(_source, dataOffset, entry.CompressedSize);
-                Stream content = entry.Method == 0 ? raw : new DeflateStream(raw, CompressionMode.Decompress);
+                Stream content = entry.Method == 0 ? raw : new InflateStream(raw);
                 await using (content.ConfigureAwait(false))
                 {
                     try
@@ -401,7 +401,7 @@ namespace ExcelReader.Core.Reader.Zip
             Stream raw = HasMemory
                 ? ToReadableMemoryStream(CompressedSlice(dataOffset, entry.CompressedSize))
                 : new ByteSourceStream(_source, dataOffset, entry.CompressedSize);
-            Stream opened = entry.Method == 0 ? raw : new DeflateStream(raw, CompressionMode.Decompress);
+            Stream opened = entry.Method == 0 ? raw : new InflateStream(raw);
             return WorkbookLookups.Wrap(opened, counter, options, entryLimitName, entryLimit, entry.UncompressedSize);
         }
 
@@ -451,7 +451,7 @@ namespace ExcelReader.Core.Reader.Zip
             try
             {
                 ByteSourceStream raw = new(_source, dataOffset, entry.CompressedSize);
-                using Stream content = entry.Method == 0 ? raw : new DeflateStream(raw, CompressionMode.Decompress);
+                using Stream content = entry.Method == 0 ? raw : new InflateStream(raw);
                 try
                 {
                     content.ReadExactly(rented.AsSpan(0, size));
@@ -795,7 +795,7 @@ namespace ExcelReader.Core.Reader.Zip
             try
             {
                 using MemoryStream source = ToReadableMemoryStream(compressed);
-                using var inflate = new DeflateStream(source, CompressionMode.Decompress);
+                using var inflate = new InflateStream(source);
                 try
                 {
                     inflate.ReadExactly(rented.AsSpan(0, size));
