@@ -1044,8 +1044,12 @@ used to yield a silent prefix of its rows. `InflateStream` throws `InvalidDataEx
 - `InflateStream` reaches about three quarters of libdeflate's inflate speed on XLSX. The gap is
   undiagnosed. Next step: read the Tier1 disassembly of `InflateDecoder.FastLoop` for values the
   JIT keeps on the stack.
-- Every number in "Fourth round" is from the i7-1365U. `benchmarks.md` still shows `DeflateStream`
-  figures until the suite is re-run on the Ryzen 7 5700X.
+- "Fourth round" is from the i7-1365U. The Ryzen 7 5700X re-run (2026-10-09, `--job Medium`) is in
+  `benchmarks.md`: `InflateStream` is 0.70x / 0.78x / 0.63x of `DeflateStream` on the XLSX sheet, XLSB
+  sheet and string-heavy `sharedStrings.xml`, against 0.62 / 0.71 / 0.64 on the laptop. The
+  non-prefetched reads moved with it (real-data XLSX 49.7 → 43.8 ms, XLSB 27.7 → 25.7 ms; string-heavy
+  XLSX 41.2 → 33.2 ms) and the prefetched ones did not (27.8 → 29.5 ms, 16.9 → 17.4 ms), as the
+  `max(I, P)` model predicts. The native C ABI table in `benchmarks.md` has not been re-run since.
 - NativeAOT XLSX is ~13% behind the JIT, and the static profile does not close it (see "NativeAOT,
   again"). Next step: diff the JIT's Tier1 code for `ParseRowInWindow` against ILC's output.
 - 17-digit numbers are parsed twice in XLSX: emit rejects them to keep the text exact, and the
