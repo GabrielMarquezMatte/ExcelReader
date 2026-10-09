@@ -7,7 +7,7 @@ namespace ExcelReader.Tests.Reader.Tables
     {
         private const string Rows = """<row r="1"><c r="A1" t="inlineStr"><is><t>H</t></is></c></row><row r="2"><c r="A2"><v>1</v></c></row>""";
 
-        public static TheoryData<string> Fixtures { get; } = new() { "tables.xlsx" };
+        public static TheoryData<string> Fixtures { get; } = new() { "tables.xlsx", "tables.xlsb" };
 
         private static readonly (string Name, int Sheet, string Ref, int FirstRow, int FirstColumn, int LastRow, int LastColumn,
             int HeaderRowCount, int TotalsRowCount, string[] Columns, string? Style)[] Expected =
