@@ -14,7 +14,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         /// <remarks>Low-memory: streams the sheet through a refillable pooled buffer, growing it as needed so a single <c>&lt;c&gt;...&lt;/c&gt;</c> element is always guaranteed contiguous.</remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
+        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator, IRowIndexedEnumerator
         {
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxWorkbook _reader;
@@ -23,6 +23,8 @@ namespace ExcelReader.Core.Reader.Xlsx
             private readonly Utf8StringCache? _contentCache;
             private readonly ZipEntryRef _entry;
             private int _nextCol;
+            private bool _trackRowIndex;
+            private int _rowIndex = -1;
 
             private NsTokens? _ns;
             private bool _nsChecked;
@@ -70,6 +72,18 @@ namespace ExcelReader.Core.Reader.Xlsx
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _buf.AsSpan(0, _len), _reader.SharedStringCache, _contentCache);
 
+            int IRowIndexedEnumerator.RowIndex
+            {
+                get
+                {
+                    return _rowIndex;
+                }
+            }
+
+            void IRowIndexedEnumerator.EnableRowIndex()
+            {
+                _trackRowIndex = true;
+            }
 
             /// <inheritdoc/>
             public bool MoveNext()
@@ -548,6 +562,10 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private bool BeginRowAt(int gt)
             {
+                if (_trackRowIndex)
+                {
+                    AdvanceRowIndex(_buf.AsSpan(_pos, gt - _pos));
+                }
                 _pos = gt + 1;
                 _acc.Reset();
                 _nextCol = 0;
@@ -556,10 +574,26 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private bool MissingRowOpenTag()
             {
+                if (_trackRowIndex)
+                {
+                    _rowIndex++;
+                }
                 _pos = _len;
                 _acc.Reset();
                 _nextCol = 0;
                 return true;
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void AdvanceRowIndex(ReadOnlySpan<byte> rowTag)
+            {
+                int rowNumber = XlsxXml.ParseIntOr(XlsxXml.Attr(rowTag, " r="u8), 0);
+                if (rowNumber > 0)
+                {
+                    _rowIndex = rowNumber - 1;
+                    return;
+                }
+                _rowIndex++;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
