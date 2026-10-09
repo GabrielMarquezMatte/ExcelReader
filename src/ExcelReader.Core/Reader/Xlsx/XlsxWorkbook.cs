@@ -17,7 +17,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly ExcelSheetList<XlsxSheet> _sheetList;
-        private readonly ReadOnlyCollection<ExcelTable> _tables = WorkbookTables.Empty;
+        private readonly ReadOnlyCollection<ExcelTable> _tables;
 
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
         private readonly OnceGate _sharedGate = new();
@@ -51,6 +51,8 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _styleIsDate = ParseStyleDateFlags(stylesPart.Memory.Span);
                 IsDate1904 = ParseDate1904(wbPart.Memory.Span);
                 _sheetList = CreateSheetList();
+                _tables = WorkbookTables.Build(
+                    TableDiscovery.Load(zip, _sheets, _decompressedBytes, XlsxTables.ParseTable), _sheetList);
             }
             catch
             {
@@ -61,7 +63,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         private XlsxWorkbook(ZipIndex zip,
             (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
-            ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
+            List<TablePart> tables, ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
             Lifetime = new ReaderLifetime(ReleaseResources);
             _zip = zip;
@@ -71,6 +73,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             _styleIsDate = styleIsDate;
             IsDate1904 = date1904;
             _sheetList = CreateSheetList();
+            _tables = WorkbookTables.Build(tables, _sheetList);
         }
 
         internal static XlsxWorkbook CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
@@ -107,7 +110,8 @@ namespace ExcelReader.Core.Reader.Xlsx
                 using ZipPart stylesPart = await zip.OpenPartOrDefaultAsync("xl/styles.xml"u8, decompressedBytes, ct).ConfigureAwait(false);
                 bool[] styleIsDate = ParseStyleDateFlags(stylesPart.Memory.Span);
                 bool date1904 = ParseDate1904(wbPart.Memory.Span);
-                return new XlsxWorkbook(zip, sheets, styleIsDate, date1904, options, decompressedBytes);
+                List<TablePart> tables = await TableDiscovery.LoadAsync(zip, sheets, decompressedBytes, XlsxTables.ParseTable, ct).ConfigureAwait(false);
+                return new XlsxWorkbook(zip, sheets, styleIsDate, date1904, tables, options, decompressedBytes);
             }
             catch
             {

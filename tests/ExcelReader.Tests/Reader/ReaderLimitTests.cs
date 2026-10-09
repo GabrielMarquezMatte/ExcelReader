@@ -9,12 +9,49 @@ using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Reader.Zip;
 using ExcelReader.Tests.Crypto;
+using ExcelReader.Tests.Reader.Tables;
 using ExcelReader.Tests.Reader.Xls;
 
 namespace ExcelReader.Tests.Reader
 {
     public class ReaderLimitTests
     {
+        [Theory]
+        [InlineData("A1:B2", "")]
+        [InlineData("nonsense", "")]
+        [InlineData("A0:A2", "")]
+        [InlineData("A1:A2", " headerRowCount=\"2\"")]
+        [InlineData("A1:A2", " totalsRowCount=\"x\"")]
+        [InlineData("A1:A1", " totalsRowCount=\"1\"")]
+        public void MalformedXlsxTablePartThrowsInvalidData(string reference, string attributes)
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsx(
+                """<row r="1"><c r="A1"><v>1</v></c></row>""",
+                TableWorkbooks.Table(reference, """<tableColumn id="1" name="A"/>""", attributes));
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(ms));
+        }
+
+        [Fact]
+        public void XlsxTablePartWithoutATableElementThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsx("""<row r="1"><c r="A1"><v>1</v></c></row>""", "<nothing/>");
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(ms));
+        }
+
+        [Fact]
+        public void XlsxTableRelationshipToAMissingPartThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsx(
+                """<row r="1"><c r="A1"><v>1</v></c></row>""",
+                TableWorkbooks.Table("A1:A1", """<tableColumn id="1" name="A"/>"""),
+                target: "../tables/table9.xml");
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(ms));
+            Assert.Contains("xl/tables/table9.xml", ex.Message, StringComparison.Ordinal);
+        }
+
         [Fact]
         public void CellAccumulatorRejectsColumnIndexAtOrAboveExcelLimit()
         {
