@@ -1,5 +1,6 @@
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Sources;
+using ExcelReader.Core.Reader.Xls;
 
 namespace ExcelReader.Native.Reading
 {
@@ -71,7 +72,7 @@ namespace ExcelReader.Native.Reading
                 NativeOpenOptions options = decoded ?? default;
                 ExcelReaderOptions readerOptions = options.ToExcelReaderOptions();
                 IExcelWorkbook workbook;
-                if (format == NativeFormat.Csv)
+                if (format == NativeFormat.Csv || (format == NativeFormat.Auto && !IsWorkbookSignature(stream.Peek(8))))
                 {
                     workbook = Excel.FromCsv(stream, leaveOpen: false, readerOptions.Csv);
                 }
@@ -101,6 +102,11 @@ namespace ExcelReader.Native.Reading
                     stream.Dispose();
                 }
             }
+        }
+
+        private static bool IsWorkbookSignature(ReadOnlySpan<byte> head)
+        {
+            return head.StartsWith("PK\x03\x04"u8) || head.StartsWith(XlsCompoundFile.Signature);
         }
     }
 }

@@ -104,8 +104,22 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(1, test.Releases);
         }
 
+        [Fact]
+        public void Auto_Streams_A_Csv_Instead_Of_Buffering_It()
+        {
+            TestStream test = new(Encoding.UTF8.GetBytes("a,b\n1,2\n3,4\n"));
+            using Pinned pinned = new(test);
+            Assert.Equal(NativeStatus.Ok, Open(pinned, NativeFormat.Auto, out NativeHandle? handle, Options() with { MaxBufferedBytes = 1 }));
+            using (handle)
+            {
+                Assert.Equal(3, CountRows(handle!, 0));
+            }
+            Assert.Equal(1, test.Releases);
+        }
+
         [Theory]
         [InlineData(ConcurrentSheetTests.Format.Xlsx, NativeFormat.Xlsx)]
+        [InlineData(ConcurrentSheetTests.Format.Xlsx, NativeFormat.Auto)]
         [InlineData(ConcurrentSheetTests.Format.Xls, NativeFormat.Auto)]
         public void An_Excel_Workbook_Is_Buffered_And_The_Stream_Released_Before_The_Open_Returns(
             ConcurrentSheetTests.Format format, int nativeFormat)

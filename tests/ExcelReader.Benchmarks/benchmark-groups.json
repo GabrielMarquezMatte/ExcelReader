@@ -31,7 +31,7 @@
   },
   {
     "name": "native",
-    "filter": "ExcelReader.Benchmarks.NativeRowReadBenchmark.* ExcelReader.Benchmarks.NativeTypedParseBenchmark.* ExcelReader.Benchmarks.ChunkedParseBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.NativeRowReadBenchmark.* ExcelReader.Benchmarks.NativeTypedParseBenchmark.* ExcelReader.Benchmarks.ChunkedParseBenchmark.* ExcelReader.Benchmarks.NativeOpenBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },
