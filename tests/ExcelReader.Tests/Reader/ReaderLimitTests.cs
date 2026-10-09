@@ -691,5 +691,16 @@ namespace ExcelReader.Tests.Reader
 
             Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
         }
+
+        [Fact]
+        public async Task MalformedXlsbTableFromStreamingSourceThrowsInvalidData()
+        {
+            byte[] bytes = TableWorkbooks.Xlsb(TableWorkbooks.ListColumn(1, "H")).ToArray();
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(new StreamBackedMemory(bytes)));
+            await Assert.ThrowsAsync<InvalidDataException>(async () => await Excel.FromXlsbAsync(new StreamBackedMemory(bytes), leaveOpen: false, ct: TestContext.Current.CancellationToken));
+        }
+
+        private sealed class StreamBackedMemory(byte[] bytes) : MemoryStream(bytes);
     }
 }
