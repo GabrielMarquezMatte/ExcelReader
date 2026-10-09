@@ -305,6 +305,20 @@ namespace ExcelReader.Core.Reader.Zip
             return false;
         }
 
+        internal bool HasEntryWithPrefix(ReadOnlySpan<byte> utf8Prefix)
+        {
+            ThrowIfDisposed();
+            ReadOnlySpan<byte> directory = _directory.Span;
+            foreach (ref readonly ZipEntryRef candidate in _entries.AsSpan(0, Count))
+            {
+                if (directory.Slice(candidate.NameStart, candidate.NameLength).StartsWith(utf8Prefix))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         internal ZipPart OpenPart(in ZipEntryRef entry, DecompressedByteCounter counter, string entryLimitName = "", long entryLimit = 0)
         {
             ThrowIfDisposed();

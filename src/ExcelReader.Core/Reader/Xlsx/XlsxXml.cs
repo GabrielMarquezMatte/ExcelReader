@@ -331,5 +331,18 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
             return rels;
         }
+
+        internal static List<string> RelationshipTargets(ReadOnlySpan<byte> relsBytes, ReadOnlySpan<byte> typeSuffix)
+        {
+            List<string> targets = [];
+            foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(relsBytes, "<Relationship"u8))
+            {
+                if (Attr(tag, " Type="u8).EndsWith(typeSuffix))
+                {
+                    targets.Add(DecodeToString(Attr(tag, " Target="u8)));
+                }
+            }
+            return targets;
+        }
     }
 }
