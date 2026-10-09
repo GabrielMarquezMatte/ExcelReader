@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Sources;
@@ -16,6 +17,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly ExcelSheetList<XlsxSheet> _sheetList;
+        private readonly ReadOnlyCollection<ExcelTable> _tables = WorkbookTables.Empty;
 
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
         private readonly OnceGate _sharedGate = new();
@@ -172,6 +174,28 @@ namespace ExcelReader.Core.Reader.Xlsx
             bool found = TryGetSheet(name, out XlsxSheet typed);
             sheet = found ? typed : null;
             return found;
+        }
+
+        /// <summary>Gets the workbook's tables, ordered by sheet and then by the order they were created in. Opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public IReadOnlyList<ExcelTable> Tables
+        {
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return _tables;
+            }
+        }
+
+        /// <summary>Finds a table by name, ignoring case. Opens nothing.</summary>
+        /// <param name="name">The table name to look for.</param>
+        /// <param name="table">The matching table, when one is found.</param>
+        /// <returns><see langword="true"/> if a table with that name exists; otherwise <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public bool TryGetTable(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out ExcelTable table)
+        {
+            Lifetime.ThrowIfClosed(this);
+            return WorkbookTables.TryFind(_tables, name, out table);
         }
 
         internal Enumerator OpenSheet(int index)

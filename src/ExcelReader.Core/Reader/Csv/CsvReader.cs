@@ -187,6 +187,29 @@ namespace ExcelReader.Core.Reader.Csv
             return found;
         }
 
+        /// <summary>Gets the workbook's tables: always empty, since CSV workbooks report no tables.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public IReadOnlyList<ExcelTable> Tables
+        {
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return WorkbookTables.Empty;
+            }
+        }
+
+        /// <summary>Finds a table by name: always fails, since CSV workbooks report no tables.</summary>
+        /// <param name="name">The table name to look for.</param>
+        /// <param name="table">Always <see langword="null"/>.</param>
+        /// <returns>Always <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public bool TryGetTable(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out ExcelTable table)
+        {
+            Lifetime.ThrowIfClosed(this);
+            table = null;
+            return false;
+        }
+
         /// <summary>Gets the source's only sheet.</summary>
         /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
         public CsvSheet FirstSheet
