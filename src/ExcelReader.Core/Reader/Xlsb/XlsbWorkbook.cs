@@ -65,10 +65,10 @@ namespace ExcelReader.Core.Reader.Xlsb
                 using ZipPart stylesPart = zip.OpenPartOrDefault("xl/styles.bin"u8, _decompressedBytes);
                 _styleIsDate = XlsbStyles.ParseStyleDateFlags(stylesPart.Memory.Span);
                 IsDate1904 = XlsbWorkbookParts.ParseDate1904(wbPart.Memory.Span);
+                List<TablePart> tableParts = TableDiscovery.Load(zip, _sheets, _decompressedBytes, XlsbTables.ParseTable);
                 (_sharedFlat, _sharedOffsets, _pooledSharedFlat) = LoadSharedStrings(zip, _decompressedBytes, options);
                 _sheetList = CreateSheetList();
-                _tables = WorkbookTables.Build(
-                    TableDiscovery.Load(zip, _sheets, _decompressedBytes, XlsbTables.ParseTable), _sheetList);
+                _tables = WorkbookTables.Build(tableParts, _sheetList);
             }
             catch
             {
@@ -129,8 +129,8 @@ namespace ExcelReader.Core.Reader.Xlsb
                 using ZipPart stylesPart = await zip.OpenPartOrDefaultAsync("xl/styles.bin"u8, decompressedBytes, ct).ConfigureAwait(false);
                 bool[] styleIsDate = XlsbStyles.ParseStyleDateFlags(stylesPart.Memory.Span);
                 bool date1904 = XlsbWorkbookParts.ParseDate1904(wbPart.Memory.Span);
-                (byte[] flat, int[] offsets, bool pooled) = await LoadSharedStringsAsync(zip, decompressedBytes, options, ct).ConfigureAwait(false);
                 List<TablePart> tables = await TableDiscovery.LoadAsync(zip, sheets, decompressedBytes, XlsbTables.ParseTable, ct).ConfigureAwait(false);
+                (byte[] flat, int[] offsets, bool pooled) = await LoadSharedStringsAsync(zip, decompressedBytes, options, ct).ConfigureAwait(false);
                 return new XlsbWorkbook(zip, sheets, styleIsDate, date1904, tables, flat, offsets, pooled, options, decompressedBytes);
             }
             catch
