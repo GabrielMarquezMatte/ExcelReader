@@ -1,1 +1,23 @@
 #nullable enable
+ExcelReader.Core.Reader.Csv.CsvReader.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.ExcelTable!>!
+ExcelReader.Core.Reader.Csv.CsvReader.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool
+ExcelReader.Core.Reader.ExcelTable
+ExcelReader.Core.Reader.ExcelTable.ColumnNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+ExcelReader.Core.Reader.ExcelTable.FirstColumn.get -> int
+ExcelReader.Core.Reader.ExcelTable.FirstRow.get -> int
+ExcelReader.Core.Reader.ExcelTable.HeaderRowCount.get -> int
+ExcelReader.Core.Reader.ExcelTable.LastColumn.get -> int
+ExcelReader.Core.Reader.ExcelTable.LastRow.get -> int
+ExcelReader.Core.Reader.ExcelTable.Name.get -> string!
+ExcelReader.Core.Reader.ExcelTable.Ref.get -> string!
+ExcelReader.Core.Reader.ExcelTable.Sheet.get -> ExcelReader.Core.Reader.IExcelSheet!
+ExcelReader.Core.Reader.ExcelTable.StyleName.get -> string?
+ExcelReader.Core.Reader.ExcelTable.TotalsRowCount.get -> int
+ExcelReader.Core.Reader.IExcelWorkbook.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.ExcelTable!>!
+ExcelReader.Core.Reader.IExcelWorkbook.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool
+ExcelReader.Core.Reader.Xls.XlsWorkbook.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.ExcelTable!>!
+ExcelReader.Core.Reader.Xls.XlsWorkbook.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.ExcelTable!>!
+ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.ExcelTable!>!
+ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool

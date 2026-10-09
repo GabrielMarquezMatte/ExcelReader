@@ -44,6 +44,20 @@ namespace ExcelReader.Core.Reader
         /// <returns><see langword="true"/> if a sheet with that name exists; otherwise <see langword="false"/>.</returns>
         /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
         bool TryGetSheet(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out IExcelSheet sheet);
+
+        /// <summary>
+        /// Gets the workbook's tables (ranges formatted with "Format as Table"), ordered by sheet and then by
+        /// the order they were created in. Always empty for XLS and CSV. Opens nothing.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        IReadOnlyList<ExcelTable> Tables { get; }
+
+        /// <summary>Finds a table by name, ignoring case. Opens nothing.</summary>
+        /// <param name="name">The table name to look for.</param>
+        /// <param name="table">The matching table, when one is found.</param>
+        /// <returns><see langword="true"/> if a table with that name exists; otherwise <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        bool TryGetTable(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out ExcelTable table);
     }
 
     /// <summary>

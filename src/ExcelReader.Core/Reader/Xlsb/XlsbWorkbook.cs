@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Sources;
@@ -25,6 +26,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         private readonly ZipIndex? _zip;
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[]? _sheets;
         private readonly ExcelSheetList<XlsbSheet> _sheetList;
+        private readonly ReadOnlyCollection<ExcelTable> _tables = WorkbookTables.Empty;
         internal ReaderLifetime Lifetime { get; }
 
         internal XlsbWorkbook(byte[] sharedFlat, int[] sharedOffsets, bool[] styleIsDate, bool date1904)
@@ -241,6 +243,28 @@ namespace ExcelReader.Core.Reader.Xlsb
             bool found = TryGetSheet(name, out XlsbSheet typed);
             sheet = found ? typed : null;
             return found;
+        }
+
+        /// <summary>Gets the workbook's tables, ordered by sheet and then by the order they were created in. Opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public IReadOnlyList<ExcelTable> Tables
+        {
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return _tables;
+            }
+        }
+
+        /// <summary>Finds a table by name, ignoring case. Opens nothing.</summary>
+        /// <param name="name">The table name to look for.</param>
+        /// <param name="table">The matching table, when one is found.</param>
+        /// <returns><see langword="true"/> if a table with that name exists; otherwise <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public bool TryGetTable(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out ExcelTable table)
+        {
+            Lifetime.ThrowIfClosed(this);
+            return WorkbookTables.TryFind(_tables, name, out table);
         }
 
         internal Enumerator OpenSheet(int index)

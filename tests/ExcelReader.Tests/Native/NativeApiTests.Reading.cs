@@ -136,6 +136,11 @@ namespace ExcelReader.Tests.Native
                 sheet = null;
                 return false;
             }
+            public IReadOnlyList<ExcelTable> Tables => inner.Tables;
+            public bool TryGetTable(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out ExcelTable table)
+            {
+                return inner.TryGetTable(name, out table);
+            }
 
             public void Dispose()
             {
