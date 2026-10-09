@@ -101,7 +101,8 @@ def open_stream(
 ) -> Workbook:
     """Opens a workbook over a stream that cannot seek, such as `sys.stdin.buffer` or a socket.
 
-    A CSV (`format="csv"`) is read as it arrives, and can be read again from the start
+    A CSV (`format="csv"`, or no format and neither a ZIP nor an OLE2 signature) is read as it
+    arrives, and can be read again from the start
     (`infer_schema()`, then a read) until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole
     before the workbook opens. `stream` needs `readinto` or `read`; the library never closes it.
     """

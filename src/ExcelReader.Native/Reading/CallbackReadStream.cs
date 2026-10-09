@@ -7,6 +7,7 @@ namespace ExcelReader.Native.Reading
         private readonly delegate* unmanaged<void*, byte*, long, long> _read;
         private readonly delegate* unmanaged<void*, void> _release;
         private readonly void* _userData;
+        private ReadOnlyMemory<byte> _peeked;
         private int _released;
 
         private CallbackReadStream(in NativeStreamRaw raw)
@@ -51,6 +52,13 @@ namespace ExcelReader.Native.Reading
             {
                 return 0;
             }
+            if (!_peeked.IsEmpty)
+            {
+                int count = Math.Min(buffer.Length, _peeked.Length);
+                _peeked.Span[..count].CopyTo(buffer);
+                _peeked = _peeked[count..];
+                return count;
+            }
             SourceErrors.Clear();
             long got;
             fixed (byte* destination = buffer)
@@ -62,6 +70,19 @@ namespace ExcelReader.Native.Reading
                 throw SourceErrors.Failed("xl_stream.read", got, buffer.Length);
             }
             return (int)got;
+        }
+
+        internal ReadOnlySpan<byte> Peek(int count)
+        {
+            byte[] head = new byte[count];
+            int filled = 0;
+            int read;
+            while (filled < count && (read = Read(head.AsSpan(filled))) > 0)
+            {
+                filled += read;
+            }
+            _peeked = head.AsMemory(0, filled);
+            return _peeked.Span;
         }
 
         public override int Read(byte[] buffer, int offset, int count)
