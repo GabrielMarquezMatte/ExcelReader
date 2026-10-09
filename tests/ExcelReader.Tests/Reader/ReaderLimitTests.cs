@@ -6,11 +6,13 @@ using System.Text;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Reader.Zip;
 using ExcelReader.Tests.Crypto;
 using ExcelReader.Tests.Reader.Tables;
 using ExcelReader.Tests.Reader.Xls;
+using B = ExcelReader.Tests.Reader.Xlsb.Biff12Build;
 
 namespace ExcelReader.Tests.Reader
 {
@@ -644,6 +646,50 @@ namespace ExcelReader.Tests.Reader
             int[] miniFat = [1, 0, -2, -2];
             Assert.Throws<InvalidDataException>(() =>
                 CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 0, size: 256));
+        }
+
+        [Fact]
+        public void SyntheticXlsbTableParses()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(
+            [
+                .. TableWorkbooks.BeginList(0, 1, 0, 0, 1, 0, "T"),
+                .. TableWorkbooks.ListColumn(1, "H"),
+                .. TableWorkbooks.StyleClient("TableStyleLight1"),
+            ]);
+            using XlsbWorkbook workbook = Excel.FromXlsb(ms);
+
+            ExcelTable table = Assert.Single(workbook.Tables);
+            Assert.Equal(("T", "A1:A2", "TableStyleLight1"), (table.Name, table.Ref, table.StyleName));
+            Assert.Equal(["H"], table.ColumnNames);
+        }
+
+        [Fact]
+        public void TruncatedXlsbBeginListThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(B.Record(Brt.BeginList, new byte[10]));
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
+        }
+
+        [Fact]
+        public void XlsbTablePartWithoutBeginListThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(TableWorkbooks.ListColumn(1, "H"));
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
+        }
+
+        [Fact]
+        public void XlsbTableWithNegativeRowsThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(
+            [
+                .. TableWorkbooks.BeginList(0xFFFFFFFF, 1, 0, 0, 1, 0, "T"),
+                .. TableWorkbooks.ListColumn(1, "H"),
+            ]);
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
         }
     }
 }
