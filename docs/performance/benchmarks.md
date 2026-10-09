@@ -97,13 +97,13 @@ This benchmark reads a real workbook exported in multiple formats.
 
 | Format | ExcelReader | ExcelReader, prefetch | Sylvan |
 |---|---:|---:|---:|
-| XLSX | 49.747 ms, 7.62 KB | 27.818 ms, 25.19 KB | 193.951 ms, 644.23 KB |
-| XLSM | 50.311 ms, 7.62 KB | 28.100 ms, 25.01 KB | 197.515 ms, 644.30 KB |
-| XLSB | 27.658 ms, 7.18 KB | 16.899 ms, 15.70 KB | 30.150 ms, 338.54 KB |
-| XLS | 10.919 ms, 12.02 KB | n/a | 18.306 ms, 185.90 KB |
-| CSV | 4.955 ms, 848 B | n/a | 4.491 ms, 40.26 KB |
+| XLSX | 43.792 ms, 7.23 KB | 29.544 ms, 23.39 KB | 201.558 ms, 644.23 KB |
+| XLSM | 44.486 ms, 7.23 KB | 29.169 ms, 23.42 KB | 207.288 ms, 644.30 KB |
+| XLSB | 25.704 ms, 6.79 KB | 17.403 ms, 17.01 KB | 30.864 ms, 338.54 KB |
+| XLS | 11.335 ms, 12.02 KB | n/a | 19.146 ms, 185.90 KB |
+| CSV | 5.284 ms, 840 B | n/a | 4.630 ms, 40.26 KB |
 
-On this real-data workload, ExcelReader is ~3.9x faster than Sylvan for XLSX and ~3.9x for XLSM, essentially tied for XLSB (~1.09x), and ~1.7x faster for XLS — allocating ~84x less for XLSX and XLSM, ~47x less for XLSB and ~15x less for XLS. On CSV, where both sides read text through spans, Sylvan.Data.Csv is ~10% faster, while ExcelReader allocates ~49x less. The prefetch column is the opt-in [`PrefetchDecompression`](../guide/reading.md#prefetch-decompression-xlsxxlsb) option; XLS and CSV are uncompressed, so it does not apply to them.
+On this real-data workload, ExcelReader is ~4.6x faster than Sylvan for XLSX and ~4.7x for XLSM, ~1.2x faster for XLSB, and ~1.7x faster for XLS — allocating ~89x less for XLSX and XLSM, ~51x less for XLSB and ~15x less for XLS. On CSV, where both sides read text through spans, Sylvan.Data.Csv is ~14% faster, while ExcelReader allocates ~49x less. The prefetch column is the opt-in [`PrefetchDecompression`](../guide/reading.md#prefetch-decompression-xlsxxlsb) option; XLS and CSV are uncompressed, so it does not apply to them.
 
 ### In-memory real-data reads
 
@@ -111,18 +111,18 @@ The real-data benchmark also measures the in-memory path for workbook content lo
 
 | Method | Mean | StdDev | Allocated |
 |---|---:|---:|---:|
-| Xlsx_ExcelReader_Memory | 49.968 ms | 0.156 ms | 7.38 KB |
-| Xlsx_ExcelReader_Memory_Prefetch | 28.667 ms | 0.090 ms | 25.19 KB |
-| Xlsm_ExcelReader_Memory | 50.871 ms | 0.172 ms | 7.38 KB |
-| Xlsm_ExcelReader_Memory_Prefetch | 28.844 ms | 0.081 ms | 25.07 KB |
-| Xlsb_ExcelReader_Memory | 29.321 ms | 0.070 ms | 8.88 KB |
-| Xlsb_ExcelReader_Memory_Prefetch | 15.741 ms | 0.027 ms | 19.11 KB |
-| Xls_ExcelReader_Memory | 10.514 ms | 0.033 ms | 11.88 KB |
-| Csv_ExcelReader_Memory | 4.745 ms | 0.004 ms | 576 B |
+| Xlsx_ExcelReader_Memory | 44.249 ms | 0.341 ms | 6.98 KB |
+| Xlsx_ExcelReader_Memory_Prefetch | 30.115 ms | 0.803 ms | 23.19 KB |
+| Xlsm_ExcelReader_Memory | 45.242 ms | 0.357 ms | 6.98 KB |
+| Xlsm_ExcelReader_Memory_Prefetch | 29.307 ms | 0.718 ms | 23.05 KB |
+| Xlsb_ExcelReader_Memory | 25.606 ms | 0.255 ms | 8.49 KB |
+| Xlsb_ExcelReader_Memory_Prefetch | 16.688 ms | 0.857 ms | 16.64 KB |
+| Xls_ExcelReader_Memory | 11.330 ms | 0.105 ms | 11.88 KB |
+| Csv_ExcelReader_Memory | 4.919 ms | 0.043 ms | 568 B |
 
-`Csv_ExcelReader_Memory` is both faster (4.745 ms vs. 4.955 ms for `Csv_ExcelReader`) and allocates less (576 B vs. 848 B) than its stream twin.
+`Csv_ExcelReader_Memory` is both faster (4.919 ms vs. 5.284 ms for `Csv_ExcelReader`) and allocates less (568 B vs. 840 B) than its stream twin.
 
-`Xls_ExcelReader_Memory` is ~4% faster than its stream twin (10.514 ms vs. 10.919 ms for `Xls_ExcelReader`), with near-identical allocation (11.88 KB vs. 12.02 KB). In earlier runs the in-memory path was ~33% faster, thanks to `BiffCursor` caching the enclosing contiguous sector run; the stream path has since caught up.
+`Xls_ExcelReader_Memory` matches its stream twin (11.330 ms vs. 11.335 ms for `Xls_ExcelReader`), with near-identical allocation (11.88 KB vs. 12.02 KB). In earlier runs the in-memory path was ~33% faster, thanks to `BiffCursor` caching the enclosing contiguous sector run; the stream path has since caught up.
 
 ### String-heavy reads
 
@@ -130,22 +130,34 @@ The real-data corpus above is mostly numbers and dates — its shared-string tab
 
 | Format | ExcelReader | ExcelReader, prefetch | Sylvan |
 |---|---:|---:|---:|
-| XLSX | 41.18 ms, 2.18 MB | 27.36 ms, 2.27 MB | 178.73 ms, 17.41 MB |
-| XLSB | 39.48 ms, 2.18 MB | 26.04 ms, 2.26 MB | 62.55 ms, 17.38 MB |
+| XLSX | 33.16 ms, 2.18 MB | 23.35 ms, 2.21 MB | 187.18 ms, 17.41 MB |
+| XLSB | 35.92 ms, 2.18 MB | 21.86 ms, 2.21 MB | 66.81 ms, 17.38 MB |
 
-Both formats handle this well: ~4.3x and ~1.6x faster than Sylvan for XLSX and XLSB respectively, at roughly ~8x less memory in both cases, with no garbage collections in either configuration. XLSB's shared-string path previously materialized its table eagerly (~27 MB here); `ParseSharedStreaming` brought it in line with the XLSX streaming/pooling path, cutting allocation by ~12x on this workload.
+Both formats handle this well: ~5.6x and ~1.9x faster than Sylvan for XLSX and XLSB respectively, at roughly ~8x less memory in both cases, with no garbage collections in either configuration. XLSB's shared-string path previously materialized its table eagerly (~27 MB here); `ParseSharedStreaming` brought it in line with the XLSX streaming/pooling path, cutting allocation by ~12x on this workload.
 
 `XlsxSharedStringHotPathBenchmark` splits the XLSX read into stages on the same workbook. The stored rows re-zip it without compression, so they show what parsing costs once inflate is gone:
 
 | Stage | Mean | Allocated |
 |---|---:|---:|
-| Whole read | 41.17 ms | 2.18 MB |
-| Whole read, prefetch | 28.21 ms | 2.27 MB |
-| Shared-string table only (open + first row) | 13.54 ms | 747 KB |
-| Whole read, stored | 19.82 ms | 2.18 MB |
-| Shared-string table only, stored | 3.11 ms | 746 KB |
+| Whole read | 33.79 ms | 2.18 MB |
+| Whole read, prefetch | 23.61 ms | 2.21 MB |
+| Shared-string table only (open + first row) | 9.72 ms | 747 KB |
+| Whole read, stored | 20.10 ms | 2.18 MB |
+| Shared-string table only, stored | 3.24 ms | 746 KB |
 
-About half of the default read is inflate: without it the whole read drops from 41.17 ms to 19.82 ms, and the shared-string table from 13.54 ms to 3.11 ms. What remains, ~17 ms, is the worksheet scan.
+About 40% of the default read is inflate: without it the whole read drops from 33.79 ms to 20.10 ms, and the shared-string table from 9.72 ms to 3.24 ms. What remains, ~17 ms, is the worksheet scan.
+
+### Inflate
+
+`InflateBenchmark` decompresses one ZIP entry per method with `System.IO.Compression.DeflateStream` and with the library's managed `InflateStream`, which every ZIP-based reader now uses:
+
+| Entry | `DeflateStream` | `InflateStream` | Ratio |
+|---|---:|---:|---:|
+| XLSX `sheet1.xml` (6.7 MB → 34.4 MB) | 23.433 ms, 280 B | 16.501 ms, 200 B | 0.70 |
+| XLSB `sheet1.bin` (3.7 MB → 15.9 MB) | 13.230 ms, 280 B | 10.259 ms, 200 B | 0.78 |
+| String-heavy `sharedStrings.xml` | 10.522 ms, 281 B | 6.659 ms, 200 B | 0.63 |
+
+Without prefetch a read is inflate plus parse, so the faster inflate converts directly; with prefetch the two overlap and the read is bounded by the slower stage, which is why the prefetch columns above moved little.
 
 ### Matched-work reads (`*_Materialized`)
 
@@ -157,11 +169,11 @@ Real-data workbook, per format:
 
 | Format | Mean | StdDev | Allocated |
 |---|---:|---:|---:|
-| XLSX | 52.42 ms | 0.05 ms | 17.09 KB |
-| XLSM | 51.33 ms | 0.07 ms | 17.09 KB |
-| XLSB | 30.97 ms | 0.09 ms | 16.65 KB |
-| XLS | 12.62 ms | 0.03 ms | 21.48 KB |
-| CSV | 18.42 ms | 0.09 ms | 35.71 MB |
+| XLSX | 46.53 ms | 0.19 ms | 16.70 KB |
+| XLSM | 46.16 ms | 0.48 ms | 16.70 KB |
+| XLSB | 28.46 ms | 0.58 ms | 16.26 KB |
+| XLS | 13.36 ms | 0.27 ms | 21.48 KB |
+| CSV | 19.38 ms | 0.10 ms | 35.71 MB |
 
 Generated 50,000-row XLSX workbook:
 
@@ -173,14 +185,14 @@ String-heavy workbook (65,536 rows, ~190,000 distinct shared strings):
 
 | Format | Mean | StdDev | Gen0 | Gen1 | Gen2 | Allocated |
 |---|---:|---:|---:|---:|---:|---:|
-| XLSX | 61.82 ms | 0.83 ms | 1,111.1 | 1,000.0 | 333.3 | 15.26 MB |
-| XLSB | 59.38 ms | 0.92 ms | 1,111.1 | 1,000.0 | 333.3 | 15.26 MB |
+| XLSX | 57.19 ms | 2.01 ms | 1,111.1 | 1,000.0 | 333.3 | 15.25 MB |
+| XLSB | 57.84 ms | 1.98 ms | 1,100.0 | 1,000.0 | 300.0 | 15.25 MB |
 
 Reading the allocation columns against the tables above gives the honest shape of the tradeoff:
 
-- **CSV real data:** 35.71 MB materialized against 848 B for the span-based read of the same file. Every CSV field is a distinct string, so nothing dedupes — this is where zero-copy reading earns its keep outright.
-- **XLSB real data:** 16.65 KB, essentially cheap. That corpus repeats a small set of values, so the shared-string table dedupes and the reader's string cache materializes each distinct value once.
-- **String-heavy XLSX:** 15.26 MB materialized, against **Sylvan's 17.41 MB on the same workload** — doing matched work here, ExcelReader allocates ~12% *less* than Sylvan, with 333 Gen2 collections, and is still ~2.9x faster (61.82 ms vs. 178.73 ms). The same allocation holds for XLSB (15.26 MB vs. Sylvan's 17.38 MB, also ~12% less, 333 Gen2 collections), where matched-work time is ~5% ahead of Sylvan (59.38 ms vs. 62.55 ms). This was previously an inversion (ExcelReader allocated ~1.75x *more* than Sylvan here): the per-reader shared-string dedup cache was an unpresized `Dictionary<int,string>`, and at ~190,000 distinct values its resize/rehash churn (several of the largest resizes landing on the LOH) accounted for the entire gap — the strings themselves were never the problem, since both readers retain the same ~190,000 distinct instances. Replacing the dictionary with a `string?[]` indexed by shared-string index (sized exactly from the table's known count, no resizing) cut the allocation in half and cut wall-clock time by 14-16% on this benchmark too, since the churn was costing cycles, not just memory.
+- **CSV real data:** 35.71 MB materialized against 840 B for the span-based read of the same file. Every CSV field is a distinct string, so nothing dedupes — this is where zero-copy reading earns its keep outright.
+- **XLSB real data:** 16.26 KB, essentially cheap. That corpus repeats a small set of values, so the shared-string table dedupes and the reader's string cache materializes each distinct value once.
+- **String-heavy XLSX:** 15.25 MB materialized, against **Sylvan's 17.41 MB on the same workload** — doing matched work here, ExcelReader allocates ~12% *less* than Sylvan, with 333 Gen2 collections, and is still ~3.3x faster (57.19 ms vs. 187.18 ms). The same allocation holds for XLSB (15.25 MB vs. Sylvan's 17.38 MB, also ~12% less, 300 Gen2 collections), where matched-work time is ~14% ahead of Sylvan (57.84 ms vs. 66.81 ms). This was previously an inversion (ExcelReader allocated ~1.75x *more* than Sylvan here): the per-reader shared-string dedup cache was an unpresized `Dictionary<int,string>`, and at ~190,000 distinct values its resize/rehash churn (several of the largest resizes landing on the LOH) accounted for the entire gap — the strings themselves were never the problem, since both readers retain the same ~190,000 distinct instances. Replacing the dictionary with a `string?[]` indexed by shared-string index (sized exactly from the table's known count, no resizing) cut the allocation in half and cut wall-clock time by 14-16% on this benchmark too, since the churn was costing cycles, not just memory.
 
 The takeaway is not that one column beats the other: it is that ExcelReader's headline read numbers come from a zero-copy path competitors do not expose, and when it does the same work as them, the gap narrows — and here, with the dedup cache fixed, no longer inverts even at high shared-string cardinality.
 
@@ -307,7 +319,7 @@ dotnet run --project tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj 
 
 The allocation column is **managed memory only**. `MemoryDiagnoser` cannot see the native blocks that `xl_read_all_decoded`, `xl_parse_typed` and `xl_parse_arrow` return their data in.
 
-Row by row, `xl_next_row` costs ~1.4x the managed in-memory read of the same file (40.35 ms vs. 29.321 ms for `Xlsb_ExcelReader_Memory` under [In-memory real-data reads](#in-memory-real-data-reads); different benchmark class, same run). Every cell crosses the ABI as text, so each binary XLSB number is formatted to UTF-8 on the way out. `xl_read_all_blob` adds ~8% over it, because the whole sheet is buffered before it is copied out. `xl_read_all_decoded` adds ~35%, because it allocates a native block per row. `xl_parse_typed` and `xl_parse_arrow` cost about the same as a row-by-row read but return columnar native buffers with numbers still binary, so they are the path to use for bulk typed loads.
+Row by row, `xl_next_row` costs ~1.6x the managed in-memory read of the same file (40.35 ms vs. 25.606 ms for `Xlsb_ExcelReader_Memory` under [In-memory real-data reads](#in-memory-real-data-reads)). The managed figure is from a later run, after `InflateStream`; this native table has not been re-run since, so read the ratio as an upper bound. Every cell crosses the ABI as text, so each binary XLSB number is formatted to UTF-8 on the way out. `xl_read_all_blob` adds ~8% over it, because the whole sheet is buffered before it is copied out. `xl_read_all_decoded` adds ~35%, because it allocates a native block per row. `xl_parse_typed` and `xl_parse_arrow` cost about the same as a row-by-row read but return columnar native buffers with numbers still binary, so they are the path to use for bulk typed loads.
 
 `ChunkedParseBenchmark` compares `xl_parse_typed` on a whole sheet against draining the same sheet in batches through `xl_typed_reader_open`/`xl_typed_reader_next`. It uses the generated 50,000-row XLSX file, read from disk, with three nullable columns (string, int64, float64):
 
