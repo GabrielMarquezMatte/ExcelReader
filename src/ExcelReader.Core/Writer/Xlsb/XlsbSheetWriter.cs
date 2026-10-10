@@ -323,7 +323,11 @@ namespace ExcelReader.Core.Writer.Xlsb
         public void EndTable()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            _tables.End(_rowNumber);
+            if (_tables.End(_rowNumber))
+            {
+                BeginRow(styleId: 0);
+                _rowActive = false;
+            }
         }
 
         private void Fault()

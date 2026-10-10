@@ -29,13 +29,15 @@ namespace ExcelReader.Core.Writer.Internal
             _open = new WrittenTable(id, name, columns, options, headerRow, headerRow);
         }
 
-        internal void End(int lastWrittenRow)
+        internal bool End(int lastWrittenRow)
         {
             if (_open is null)
             {
                 throw new InvalidOperationException("No table is open on this sheet.");
             }
+            bool headerOnly = lastWrittenRow <= _open.HeaderRow;
             CloseOpen(lastWrittenRow);
+            return headerOnly;
         }
 
         internal void CloseOpen(int lastWrittenRow)

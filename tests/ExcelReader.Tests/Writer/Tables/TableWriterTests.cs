@@ -1,5 +1,6 @@
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests.Writer.Tables
@@ -93,6 +94,50 @@ namespace ExcelReader.Tests.Writer.Tables
             using IExcelWorkbook workbook = Read(book.Finish());
 
             Assert.Equal("A1:A2", Assert.Single(workbook.Tables).Ref);
+        }
+
+        [Theory]
+        [MemberData(nameof(TableBooks.Formats), MemberType = typeof(TableBooks))]
+        public void TableAfterAHeaderOnlyTableStartsBelowItsReservedRow(string format)
+        {
+            ITableBook book = TableBooks.Create(format);
+            book.AddSheet("Report");
+            book.BeginTable("A", ["H"]);
+            book.EndTable();
+            book.BeginTable("B", ["H"]);
+            book.Row("x");
+
+            using IExcelWorkbook workbook = Read(book.Finish());
+
+            Assert.Equal(
+                [("A", "A1:A2"), ("B", "A3:A4")],
+                workbook.Tables.Select(static t => (t.Name, t.Ref)));
+        }
+
+        [Theory]
+        [MemberData(nameof(TableBooks.Formats), MemberType = typeof(TableBooks))]
+        public void RowAfterAHeaderOnlyTableLandsOutsideIt(string format)
+        {
+            ITableBook book = TableBooks.Create(format);
+            book.AddSheet("Report");
+            book.BeginTable("A", ["H"]);
+            book.EndTable();
+            book.Row("x");
+
+            using IExcelWorkbook workbook = Read(book.Finish());
+
+            Assert.Equal("A1:A2", Assert.Single(workbook.Tables).Ref);
+            using IExcelRowEnumerator rows = workbook.SheetAt(0).GetEnumerator();
+            IRowIndexedEnumerator indexed = (IRowIndexedEnumerator)rows;
+            indexed.EnableRowIndex();
+            int lastIndex = -1;
+            string? lastText = null;
+            while (rows.MoveNext())
+            {
+                lastIndex = indexed.RowIndex;
+                lastText = rows.Current[0].GetString();
+            }
+            Assert.Equal((2, "x"), (lastIndex, lastText));
         }
 
         [Theory]

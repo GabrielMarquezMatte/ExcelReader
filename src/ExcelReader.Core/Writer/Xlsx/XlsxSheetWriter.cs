@@ -305,7 +305,11 @@ namespace ExcelReader.Core.Writer.Xlsx
         public void EndTable()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            _tables.End(_rowNumber - 1);
+            if (_tables.End(_rowNumber - 1))
+            {
+                BeginRow(styleId: 0);
+                CloseBufferedRow();
+            }
         }
 
         private (string[] Names, ExcelTableOptions Options) PrepareTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options)
@@ -421,10 +425,15 @@ namespace ExcelReader.Core.Writer.Xlsx
             return _rowNumber;
         }
 
-        internal void EndBufferedRow()
+        private void CloseBufferedRow()
         {
             _rowBuffer.Write("</row>"u8);
             _rowActive = false;
+        }
+
+        internal void EndBufferedRow()
+        {
+            CloseBufferedRow();
             if (_rowBuffer.Length >= FlushThreshold)
             {
                 FlushRowBuffer();
@@ -453,8 +462,7 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         internal ValueTask EndBufferedRowAsync(CancellationToken ct = default)
         {
-            _rowBuffer.Write("</row>"u8);
-            _rowActive = false;
+            CloseBufferedRow();
             return _rowBuffer.Length >= FlushThreshold ? FlushRowBufferAsync(ct) : ValueTask.CompletedTask;
         }
 
