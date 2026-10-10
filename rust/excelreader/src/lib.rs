@@ -1,6 +1,10 @@
 //! Raw FFI bindings to ExcelReader's C ABI (`excelreader.h`). The `extern "C"` block below is
 //! declared directly in this crate root (not a submodule), so `crate::xl_open_file` etc. resolve
 //! from anywhere in the crate. See the `workbook` module for the safe wrapper built on top of this.
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png",
+    html_favicon_url = "https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png"
+)]
 
 pub mod aggregate;
 mod error;
