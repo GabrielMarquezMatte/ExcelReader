@@ -19,6 +19,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private readonly SharedStringTable? _sharedStrings;
         private readonly StyleTable _styles = new();
         private readonly List<(string Name, int SheetId, ExcelSheetVisibility Visibility)> _sheets = [];
+        private readonly List<(int SheetId, IReadOnlyList<WrittenTable> Tables)> _sheetTables = [];
         private bool _ended;
         private bool _sheetActive;
         private XlsxSheetWriter? _activeSheet;
@@ -84,6 +85,40 @@ namespace ExcelReader.Core.Writer.Xlsx
             _sheets.Add((name, sheetId, visibility));
         }
 
+        internal TableRegistry Tables { get; } = new();
+
+        internal void RegisterTables(int sheetId, IReadOnlyList<WrittenTable> tables)
+        {
+            if (tables.Count > 0)
+            {
+                _sheetTables.Add((sheetId, tables));
+            }
+        }
+
+        private void WriteTables()
+        {
+            foreach ((int sheetId, IReadOnlyList<WrittenTable> tables) in _sheetTables)
+            {
+                WriteEntry($"xl/worksheets/_rels/sheet{sheetId}.xml.rels", TablePackage.SheetRelsXml(tables, "xml"));
+                foreach (WrittenTable table in tables)
+                {
+                    WriteEntry($"xl/tables/table{table.Id}.xml", XlsxTableXml.Table(table));
+                }
+            }
+        }
+
+        private async ValueTask WriteTablesAsync(CancellationToken ct)
+        {
+            foreach ((int sheetId, IReadOnlyList<WrittenTable> tables) in _sheetTables)
+            {
+                await WriteEntryAsync($"xl/worksheets/_rels/sheet{sheetId}.xml.rels", TablePackage.SheetRelsXml(tables, "xml"), ct).ConfigureAwait(false);
+                foreach (WrittenTable table in tables)
+                {
+                    await WriteEntryAsync($"xl/tables/table{table.Id}.xml", XlsxTableXml.Table(table), ct).ConfigureAwait(false);
+                }
+            }
+        }
+
         internal void NotifySheetEnded(bool faulted)
         {
             _sheetActive = false;
@@ -132,6 +167,7 @@ namespace ExcelReader.Core.Writer.Xlsx
                 {
                     throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
                 }
+                WriteTables();
                 WriteEntry("_rels/.rels", BuildRootRelsXml());
                 WriteEntry("xl/styles.xml", BuildStylesXml());
                 if (_sharedStrings is not null)
@@ -169,6 +205,7 @@ namespace ExcelReader.Core.Writer.Xlsx
                 {
                     throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
                 }
+                await WriteTablesAsync(ct).ConfigureAwait(false);
                 await WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
                 await WriteStylesAsync(ct).ConfigureAwait(false);
                 if (_sharedStrings is not null)
@@ -508,6 +545,13 @@ namespace ExcelReader.Core.Writer.Xlsx
             foreach ((_, int sheetId, _) in _sheets)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/worksheets/sheet{sheetId}.xml\" ContentType=\"{XlsxConstants.WorksheetContentType}\"/>");
+            }
+            foreach ((_, IReadOnlyList<WrittenTable> tables) in _sheetTables)
+            {
+                foreach (WrittenTable table in tables)
+                {
+                    sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/tables/table{table.Id}.xml\" ContentType=\"{XlsxConstants.TableContentType}\"/>");
+                }
             }
             sb.Append("</Types>");
             return sb.ToString();

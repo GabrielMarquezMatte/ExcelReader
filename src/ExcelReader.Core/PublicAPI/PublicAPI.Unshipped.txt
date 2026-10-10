@@ -48,3 +48,6 @@ override ExcelReader.Core.Writer.ExcelTableOptions.ToString() -> string!
 static ExcelReader.Core.Writer.ExcelTableOptions.Default.get -> ExcelReader.Core.Writer.ExcelTableOptions!
 static ExcelReader.Core.Writer.ExcelTableOptions.operator !=(ExcelReader.Core.Writer.ExcelTableOptions? left, ExcelReader.Core.Writer.ExcelTableOptions? right) -> bool
 static ExcelReader.Core.Writer.ExcelTableOptions.operator ==(ExcelReader.Core.Writer.ExcelTableOptions? left, ExcelReader.Core.Writer.ExcelTableOptions? right) -> bool
+ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.BeginTable(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null) -> void
+ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.BeginTableAsync(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.EndTable() -> void
