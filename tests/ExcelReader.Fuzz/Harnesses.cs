@@ -479,6 +479,10 @@ namespace ExcelReader.Fuzz
             {
                 DrainRows(reader.SheetAt(i));
             }
+            foreach (ExcelTable table in reader.Tables)
+            {
+                DrainRows(table.AsSheet());
+            }
         }
 
         private static void DrainRows(IExcelSheet reader)
