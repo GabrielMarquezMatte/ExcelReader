@@ -1,3 +1,5 @@
+![ExcelReader logo](https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png)
+
 # excelreader (C++)
 
 Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path or

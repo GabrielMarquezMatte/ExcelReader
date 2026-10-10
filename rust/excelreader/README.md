@@ -1,3 +1,5 @@
+![ExcelReader logo](https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png)
+
 # excelreader (Rust)
 
 Read and write Excel/CSV workbooks via ExcelReader's native ABI: opening a workbook (from a path or
