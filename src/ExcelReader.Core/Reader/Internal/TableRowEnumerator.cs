@@ -8,6 +8,7 @@ namespace ExcelReader.Core.Reader.Internal
         private readonly int _lastDataRow;
         private readonly int _firstColumn;
         private readonly int _lastColumn;
+        private int _previousRow = -1;
         private bool _done;
 
         internal TableRowEnumerator(IExcelRowEnumerator rows, int firstRow, int lastDataRow, int firstColumn, int lastColumn)
@@ -68,6 +69,11 @@ namespace ExcelReader.Core.Reader.Internal
         private bool IsInTable()
         {
             int row = _indexed.RowIndex;
+            if (row < 0 || row >= ExcelLimits.MaxRows || row <= _previousRow)
+            {
+                throw new InvalidDataException($"Row index {row} is out of range or not after the previous row {_previousRow}.");
+            }
+            _previousRow = row;
             if (row > _lastDataRow)
             {
                 _done = true;

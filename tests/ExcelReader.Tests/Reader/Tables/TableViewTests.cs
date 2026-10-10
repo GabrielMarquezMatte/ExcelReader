@@ -94,6 +94,42 @@ namespace ExcelReader.Tests.Reader.Tables
             Assert.Equal(6, rows.MoveNextCalls);
         }
 
+        public static TheoryData<int[]> MalformedRowIndexes { get; } = new()
+        {
+            new[] { 0, -1 },
+            new[] { 0, ExcelLimits.MaxRows },
+            new[] { 0, 2, 2 },
+            new[] { 0, 3, 2 },
+        };
+
+        [Theory]
+        [MemberData(nameof(MalformedRowIndexes))]
+        public void MalformedRowIndexThrowsInvalidData(int[] rowIndexes)
+        {
+            using TableRowEnumerator table = new(new FakeRows(rowIndexes), firstRow: 0, lastDataRow: 10, firstColumn: 0, lastColumn: 0);
+
+            Assert.Throws<InvalidDataException>(() =>
+            {
+                while (table.MoveNext())
+                {
+                }
+            });
+        }
+
+        [Theory]
+        [MemberData(nameof(MalformedRowIndexes))]
+        public async Task MalformedRowIndexThrowsInvalidDataAsync(int[] rowIndexes)
+        {
+            await using TableRowEnumerator table = new(new FakeRows(rowIndexes), firstRow: 0, lastDataRow: 10, firstColumn: 0, lastColumn: 0);
+
+            await Assert.ThrowsAsync<InvalidDataException>(async () =>
+            {
+                while (await table.MoveNextAsync())
+                {
+                }
+            });
+        }
+
         [Fact]
         public void DisposingTheViewDisposesTheSheetEnumerator()
         {

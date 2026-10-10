@@ -24,7 +24,7 @@ namespace ExcelReader.Tests.Reader.Tables
             return $"""<table xmlns="{Main}" id="1" name="T" displayName="T" ref="{reference}"{attributes}><tableColumns>{columns}</tableColumns></table>""";
         }
 
-        internal static MemoryStream Xlsb(byte[] tableBin)
+        internal static MemoryStream Xlsb(byte[] tableBin, byte[]? sheetBin = null)
         {
             MemoryStream ms = new();
             using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
@@ -34,7 +34,7 @@ namespace ExcelReader.Tests.Reader.Tables
                     """<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.bin"/></Relationships>"""));
                 Add(zip, "xl/styles.bin", []);
                 Add(zip, "xl/sharedStrings.bin", []);
-                Add(zip, "xl/worksheets/sheet1.bin",
+                Add(zip, "xl/worksheets/sheet1.bin", sheetBin ??
                 [
                     .. B.Record(Brt.RowHdr, B.U32(0)),
                     .. B.Record(Brt.CellSt, B.CellSt(0, 0, "H")),
