@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Schema;
 
 namespace ExcelReader.Core.Reader
@@ -49,10 +50,16 @@ namespace ExcelReader.Core.Reader
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
         public ExcelDataReader(IExcelSheet sheet, int headerRow = 1)
         {
             ArgumentNullException.ThrowIfNull(sheet);
             ArgumentOutOfRangeException.ThrowIfNegative(headerRow);
+            if (headerRow > 0)
+            {
+                ExcelTableSheet.ThrowIfHeaderless(sheet);
+            }
+
             _isDate1904 = sheet.IsDate1904;
             _sheetName = sheet.Name;
             _rows = sheet.GetEnumerator();

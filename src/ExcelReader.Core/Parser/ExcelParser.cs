@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Reader.Xlsb;
@@ -66,9 +67,11 @@ namespace ExcelReader.Core.Parser
         /// <param name="sheet">The sheet to pull rows from. Each enumeration of the result starts a new read of it.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
         public ExcelEnumerable<T, IExcelSheet, IExcelRowEnumerator> Parse(IExcelSheet sheet)
         {
             ArgumentNullException.ThrowIfNull(sheet);
+            ExcelTableSheet.ThrowIfHeaderless(sheet);
             return new ExcelEnumerable<T, IExcelSheet, IExcelRowEnumerator>(sheet, _config, _info());
         }
 

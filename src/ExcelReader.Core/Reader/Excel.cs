@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Xls;
@@ -279,6 +280,7 @@ namespace ExcelReader.Core.Reader
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
         public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow, int sampleSize)
         {
             return InferSchema(sheet, headerRow, sampleSize, parseText: false);
@@ -304,9 +306,15 @@ namespace ExcelReader.Core.Reader
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
         public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow = 1, int sampleSize = 100, bool parseText = false)
         {
             ArgumentNullException.ThrowIfNull(sheet);
+            if (headerRow > 0)
+            {
+                ExcelTableSheet.ThrowIfHeaderless(sheet);
+            }
+
             using IExcelRowEnumerator rows = sheet.GetEnumerator();
             return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText);
         }
