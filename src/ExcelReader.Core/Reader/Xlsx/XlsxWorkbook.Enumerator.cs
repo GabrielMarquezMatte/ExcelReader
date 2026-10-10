@@ -178,13 +178,26 @@ namespace ExcelReader.Core.Reader.Xlsx
                 ValueTask<bool> beginTask = BeginRowAsync();
                 if (!beginTask.IsCompletedSuccessfully)
                 {
-                    return AwaitThenRestartAsync(beginTask);
+                    return ReadRowBodyAfterAsync(beginTask);
                 }
                 if (beginTask.Result)
                 {
                     return new ValueTask<bool>(true);
                 }
+                return ReadRowBodyAsync();
+            }
 
+            private async ValueTask<bool> ReadRowBodyAfterAsync(ValueTask<bool> beginTask)
+            {
+                if (await beginTask.ConfigureAwait(false))
+                {
+                    return true;
+                }
+                return await ReadRowBodyAsync().ConfigureAwait(false);
+            }
+
+            private ValueTask<bool> ReadRowBodyAsync()
+            {
                 int rowStart = _pos;
                 if (ParseRowInWindow())
                 {
