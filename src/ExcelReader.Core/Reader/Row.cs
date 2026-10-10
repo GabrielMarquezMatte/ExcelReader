@@ -66,5 +66,31 @@ namespace ExcelReader.Core.Reader
             }
             return -1;
         }
+
+        internal Row Slice(int firstColumn, int lastColumn)
+        {
+            int start = LowerBound(firstColumn);
+            int end = LowerBound(lastColumn + 1);
+            return new Row(_cells[start..end], _rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
+        }
+
+        private int LowerBound(int column)
+        {
+            int lo = 0;
+            int hi = _cells.Length;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (_cells[mid].Column < column)
+                {
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid;
+                }
+            }
+            return lo;
+        }
     }
 }

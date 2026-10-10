@@ -21,3 +21,4 @@ ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Tables.get -> System.Collections.Gener
 ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool
 ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.ExcelTable!>!
 ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool
+ExcelReader.Core.Reader.ExcelTable.AsSheet() -> ExcelReader.Core.Reader.IExcelSheet!
