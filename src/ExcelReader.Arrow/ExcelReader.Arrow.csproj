@@ -14,6 +14,7 @@
     <PackageTags>excel;arrow;apache-arrow;recordbatch;interop</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/GabrielMarquezMatte/ExcelReader</PackageProjectUrl>
     <RepositoryUrl>https://github.com/GabrielMarquezMatte/ExcelReader</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -32,6 +33,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

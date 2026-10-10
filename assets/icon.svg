@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="ExcelReader">
+  <rect width="128" height="128" rx="6" fill="#14202E"/>
+  <rect x="26" y="26" width="76" height="76" fill="none" stroke="#E8EEF4" stroke-width="4"/>
+  <rect x="24" y="46" width="80" height="4" fill="#E8EEF4"/>
+  <rect x="46" y="24" width="4" height="80" fill="#E8EEF4"/>
+  <polygon points="56,60 64,60 80,76 64,92 56,92 72,76" fill="#F2A93B"/>
+  <polygon points="72,60 80,60 96,76 80,92 72,92 88,76" fill="#F2A93B"/>
+</svg>

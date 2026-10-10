@@ -18,6 +18,7 @@
     <PackageTags>excel;xlsx;xlsb;xls;csv;reader;writer;parser;spreadsheet;streaming;performance;low-allocation</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/GabrielMarquezMatte/ExcelReader</PackageProjectUrl>
     <RepositoryUrl>https://github.com/GabrielMarquezMatte/ExcelReader</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -37,6 +38,7 @@
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
   <!-- Binary parsers (BIFF12 framing, etc.) are internal but warrant isolated unit tests. -->
