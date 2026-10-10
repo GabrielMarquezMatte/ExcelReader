@@ -60,6 +60,11 @@ namespace ExcelReader.Core.Reader.Internal
             }
         }
 
+        internal static int FirstColumnOf(IExcelSheet sheet)
+        {
+            return sheet is ExcelTableSheet view ? view._table.FirstColumn : 0;
+        }
+
         private TableRowEnumerator Bound(IExcelRowEnumerator rows)
         {
             return new TableRowEnumerator(rows, _table.FirstRow, _table.LastRow - _table.TotalsRowCount, _table.FirstColumn, _table.LastColumn);

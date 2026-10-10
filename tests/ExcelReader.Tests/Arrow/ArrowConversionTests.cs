@@ -9,11 +9,26 @@ using ExcelReader.Native;
 using ExcelReader.Native.Arrow;
 using ExcelReader.Native.Reading;
 using ExcelReader.Tests.Native;
+using ExcelReader.Tests.Reader.Tables;
 
 namespace ExcelReader.Tests.Arrow
 {
     public sealed class ArrowConversionTests
     {
+        [Theory]
+        [MemberData(nameof(TableMetadataTests.Fixtures), MemberType = typeof(TableMetadataTests))]
+        public void ToArrowRecordBatch_Should_Emit_Only_The_Table_Columns(string file)
+        {
+            using IExcelWorkbook workbook = Excel.Open(TableMetadataTests.FixturePath(file));
+            Assert.True(workbook.TryGetTable("Sales", out ExcelTable? table));
+
+            RecordBatch batch = table.AsSheet().ToArrowRecordBatch();
+
+            Assert.Equal(("Product", "Qty", "Price"), (batch.Schema.GetFieldByIndex(0).Name, batch.Schema.GetFieldByIndex(1).Name, batch.Schema.GetFieldByIndex(2).Name));
+            Assert.Equal((3, 3), (batch.ColumnCount, batch.Length));
+            Assert.Equal("Pen", Assert.IsType<StringArray>(batch.Column(0)).GetString(0));
+        }
+
         [Fact]
         public void ToArrowRecordBatch_Should_Convert_String_And_Int64_Columns()
         {
