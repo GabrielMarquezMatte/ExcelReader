@@ -22,3 +22,29 @@ ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.TryGetTable(System.ReadOnlySpan<char> 
 ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.ExcelTable!>!
 ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.TryGetTable(System.ReadOnlySpan<char> name, out ExcelReader.Core.Reader.ExcelTable! table) -> bool
 ExcelReader.Core.Reader.ExcelTable.AsSheet() -> ExcelReader.Core.Reader.IExcelSheet!
+ExcelReader.Core.Writer.ExcelTableOptions
+ExcelReader.Core.Writer.ExcelTableOptions.<Clone>$() -> ExcelReader.Core.Writer.ExcelTableOptions!
+ExcelReader.Core.Writer.ExcelTableOptions.Equals(ExcelReader.Core.Writer.ExcelTableOptions? other) -> bool
+ExcelReader.Core.Writer.ExcelTableOptions.ExcelTableOptions() -> void
+ExcelReader.Core.Writer.ExcelTableOptions.FirstColumn.get -> int
+ExcelReader.Core.Writer.ExcelTableOptions.FirstColumn.init -> void
+ExcelReader.Core.Writer.ExcelTableOptions.ShowColumnStripes.get -> bool
+ExcelReader.Core.Writer.ExcelTableOptions.ShowColumnStripes.init -> void
+ExcelReader.Core.Writer.ExcelTableOptions.ShowFirstColumn.get -> bool
+ExcelReader.Core.Writer.ExcelTableOptions.ShowFirstColumn.init -> void
+ExcelReader.Core.Writer.ExcelTableOptions.ShowLastColumn.get -> bool
+ExcelReader.Core.Writer.ExcelTableOptions.ShowLastColumn.init -> void
+ExcelReader.Core.Writer.ExcelTableOptions.ShowRowStripes.get -> bool
+ExcelReader.Core.Writer.ExcelTableOptions.ShowRowStripes.init -> void
+ExcelReader.Core.Writer.ExcelTableOptions.StyleName.get -> string?
+ExcelReader.Core.Writer.ExcelTableOptions.StyleName.init -> void
+ExcelReader.Core.Writer.ITableSheetWriter<TRow>
+ExcelReader.Core.Writer.ITableSheetWriter<TRow>.BeginTable(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null) -> void
+ExcelReader.Core.Writer.ITableSheetWriter<TRow>.BeginTableAsync(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Writer.ITableSheetWriter<TRow>.EndTable() -> void
+override ExcelReader.Core.Writer.ExcelTableOptions.Equals(object? obj) -> bool
+override ExcelReader.Core.Writer.ExcelTableOptions.GetHashCode() -> int
+override ExcelReader.Core.Writer.ExcelTableOptions.ToString() -> string!
+static ExcelReader.Core.Writer.ExcelTableOptions.Default.get -> ExcelReader.Core.Writer.ExcelTableOptions!
+static ExcelReader.Core.Writer.ExcelTableOptions.operator !=(ExcelReader.Core.Writer.ExcelTableOptions? left, ExcelReader.Core.Writer.ExcelTableOptions? right) -> bool
+static ExcelReader.Core.Writer.ExcelTableOptions.operator ==(ExcelReader.Core.Writer.ExcelTableOptions? left, ExcelReader.Core.Writer.ExcelTableOptions? right) -> bool
