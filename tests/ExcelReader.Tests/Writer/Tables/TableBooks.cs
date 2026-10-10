@@ -19,6 +19,8 @@ namespace ExcelReader.Tests.Writer.Tables
         void EndSheet();
 
         byte[] Finish();
+
+        ValueTask<byte[]> FinishAsync();
     }
 
     internal sealed class TableBook<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, MemoryStream stream) : ITableBook
@@ -74,6 +76,19 @@ namespace ExcelReader.Tests.Writer.Tables
         {
             workbook.End();
             workbook.Dispose();
+            return stream.ToArray();
+        }
+
+        public async ValueTask<byte[]> FinishAsync()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            if (_sheet is not null)
+            {
+                await _sheet.EndAsync(ct);
+                _sheet = null;
+            }
+            await workbook.EndAsync(ct);
+            await workbook.DisposeAsync();
             return stream.ToArray();
         }
 
