@@ -18,13 +18,13 @@ namespace ExcelReader.Core.Reader.Csv
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "An alias of the stream the ByteSource owns; ReleaseResources disposes the source.")]
         private readonly FileStream? _file;
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
-        private readonly Stream? _stream;
-        private readonly bool _leaveOpen;
+        private readonly ReplayStream? _stream;
         private readonly CsvReaderOptions _options;
         private readonly ReadOnlyMemory<byte> _memory;
         private readonly ExcelSheetList<CsvSheet> _sheetList;
-        private int _enumeratedOnce;
         private SafeFileHandle? _chunkHandle;
+
+        internal const int ReplayLimit = 16 * 1024 * 1024;
 
         internal ReaderLifetime Lifetime { get; }
 
@@ -39,17 +39,15 @@ namespace ExcelReader.Core.Reader.Csv
                 _sourceStart = stream.Position;
                 _file = stream as FileStream;
                 _source = ByteSource.FromStream(stream, leaveOpen);
-                _leaveOpen = true;
             }
             else if (NeedsTranscoding(_options.Encoding))
             {
-                _stream = Encoding.CreateTranscodingStream(stream, _options.Encoding!, Encoding.UTF8, leaveOpen);
-                _leaveOpen = false;
+                Stream transcoding = Encoding.CreateTranscodingStream(stream, _options.Encoding!, Encoding.UTF8, leaveOpen);
+                _stream = new ReplayStream(transcoding, leaveOpen: false, ReplayLimit);
             }
             else
             {
-                _stream = stream;
-                _leaveOpen = leaveOpen;
+                _stream = new ReplayStream(stream, leaveOpen, ReplayLimit);
             }
             _sheetList = new ExcelSheetList<CsvSheet>([new CsvSheet(this)]);
         }
@@ -65,7 +63,6 @@ namespace ExcelReader.Core.Reader.Csv
             ValidateOptions(_options);
             Lifetime = new ReaderLifetime(ReleaseResources);
             _stream = null;
-            _leaveOpen = true;
             _memory = Transcode(data, _options.Encoding);
             _sheetList = new ExcelSheetList<CsvSheet>([new CsvSheet(this)]);
         }
@@ -95,9 +92,7 @@ namespace ExcelReader.Core.Reader.Csv
             return false;
         }
 
-        // A synchronous Windows handle serializes every read on its file object; parallel chunks need an overlapped one.
         // ponytail: reopens by path, safe because Excel's file opens deny write/delete sharing; switch to
-        // ReOpenFile if a caller-supplied FileStream that allows delete ever reaches this.
         private SafeFileHandle ChunkHandle(FileStream file)
         {
             if (!OperatingSystem.IsWindows())
@@ -192,6 +187,29 @@ namespace ExcelReader.Core.Reader.Csv
             return found;
         }
 
+        /// <summary>Gets the workbook's tables: always empty, since CSV workbooks report no tables.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public IReadOnlyList<ExcelTable> Tables
+        {
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return WorkbookTables.Empty;
+            }
+        }
+
+        /// <summary>Finds a table by name: always fails, since CSV workbooks report no tables.</summary>
+        /// <param name="name">The table name to look for.</param>
+        /// <param name="table">Always <see langword="null"/>.</param>
+        /// <returns>Always <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public bool TryGetTable(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out ExcelTable table)
+        {
+            Lifetime.ThrowIfClosed(this);
+            table = null;
+            return false;
+        }
+
         /// <summary>Gets the source's only sheet.</summary>
         /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
         public CsvSheet FirstSheet
@@ -223,12 +241,21 @@ namespace ExcelReader.Core.Reader.Csv
                 {
                     return new Enumerator(_memory, _options, Lifetime, ct);
                 }
-                if (Interlocked.Exchange(ref _enumeratedOnce, 1) != 0)
+                if (!_stream.TryBeginPass())
                 {
                     throw new InvalidOperationException(
-                        "This CsvReader is over a non-seekable stream and can only be enumerated once.");
+                        "This CsvReader is over a non-seekable stream and cannot be enumerated again: "
+                        + $"an enumeration is still open, or one has read past the first {ReplayLimit} bytes.");
                 }
-                return new Enumerator(_stream, _options, ownsSource: false, Lifetime, ct);
+                try
+                {
+                    return new Enumerator(_stream, _options, ownsSource: true, Lifetime, ct);
+                }
+                catch
+                {
+                    _stream.Dispose();
+                    throw;
+                }
             }
             catch
             {
@@ -263,10 +290,7 @@ namespace ExcelReader.Core.Reader.Csv
         {
             _chunkHandle?.Dispose();
             _source?.Dispose();
-            if (!_leaveOpen)
-            {
-                _stream?.Dispose();
-            }
+            _stream?.Release();
         }
     }
 }

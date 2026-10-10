@@ -66,13 +66,20 @@ namespace ExcelReader.Native.Typed
                 CsvParallelOptions options = new() { DegreeOfParallelism = degreeOfParallelism, HeaderRow = headerRow, Reader = reader };
                 PartitionTable merged = Task.Run(() => ParallelCsvProcessor.RunPartitionedAsync(
                     source, aggregation, options, chunkSizeOverride, CancellationToken.None)).GetAwaiter().GetResult();
-                if (merged.FailedColumn >= 0)
+                try
                 {
-                    NativeApi.SetLastError(DescribeFailedColumn(specs, merged.FailedColumn));
-                    return NativeStatus.Error;
+                    if (merged.FailedColumn >= 0)
+                    {
+                        NativeApi.SetLastError(DescribeFailedColumn(specs, merged.FailedColumn));
+                        return NativeStatus.Error;
+                    }
+                    table = BuildTable([.. merged.Parts], ParallelCsvFactory.Normalize(degreeOfParallelism));
+                    return NativeStatus.Ok;
                 }
-                table = BuildTable([.. merged.Parts], ParallelCsvFactory.Normalize(degreeOfParallelism));
-                return NativeStatus.Ok;
+                finally
+                {
+                    merged.Dispose();
+                }
             }
             catch (Exception exception)
             {
@@ -92,7 +99,15 @@ namespace ExcelReader.Native.Typed
             return builders;
         }
 
-        private sealed class PartitionTable
+        private static void DisposeAll(ColumnBuilder[] builders)
+        {
+            foreach (ColumnBuilder builder in builders)
+            {
+                builder.Dispose();
+            }
+        }
+
+        private sealed class PartitionTable : IDisposable
         {
             private readonly ColumnBuilder[] _builders;
 
@@ -114,14 +129,24 @@ namespace ExcelReader.Native.Typed
                 }
             }
 
+            public void Dispose()
+            {
+                foreach (ColumnBuilder[] part in Parts)
+                {
+                    DisposeAll(part);
+                }
+            }
+
             internal static PartitionTable Combine(PartitionTable left, PartitionTable right)
             {
                 if (left.FailedColumn >= 0)
                 {
+                    right.Dispose();
                     return left;
                 }
                 if (right.FailedColumn >= 0)
                 {
+                    left.Dispose();
                     return right;
                 }
                 left.Parts.AddRange(right.Parts);

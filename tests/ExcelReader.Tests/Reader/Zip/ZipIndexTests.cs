@@ -859,6 +859,39 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.Equal(-1, stream.ReadByte());
         }
 
+        [Fact]
+        public void DeflatedEntryCutShortIsRejectedWhenOpenedAsAPart()
+        {
+            byte[] zipBytes = BuildZipWithCutDeflatedEntry("data.xml");
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("data.xml"u8, out ZipEntryRef entry));
+            Assert.Equal((ushort)8, entry.Method);
+            Assert.Throws<InvalidDataException>(() => index.OpenPart(entry, new DecompressedByteCounter(0)));
+        }
+
+        [Fact]
+        public void DeflatedEntryCutShortIsRejectedWhenStreamedInsteadOfEndingEarly()
+        {
+            byte[] zipBytes = BuildZipWithCutDeflatedEntry("data.xml");
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("data.xml"u8, out ZipEntryRef entry));
+            using LimitedReadStream stream = index.OpenEntryStream(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default);
+            Assert.Throws<InvalidDataException>(() => stream.CopyTo(Stream.Null));
+        }
+
+        private static byte[] BuildZipWithCutDeflatedEntry(string entryName)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("<row><c><v>12345</v></c></row>", 4000)));
+            byte[] zipBytes = BuildZipWithOneEntry(entryName, payload, CompressionLevel.Optimal);
+            int cdOffset = FindCentralDirectoryOffset(zipBytes, entryName);
+            uint compressedSize = BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(cdOffset + 20, 4));
+            Assert.True(compressedSize > 8);
+            PatchCentralDirectoryUInt32(zipBytes, entryName, fieldOffset: 20, compressedSize / 2);
+            return zipBytes;
+        }
+
         private static uint ReadDeclaredUncompressedSize(byte[] zipBytes, string entryName)
         {
             int cdOffset = FindCentralDirectoryOffset(zipBytes, entryName);

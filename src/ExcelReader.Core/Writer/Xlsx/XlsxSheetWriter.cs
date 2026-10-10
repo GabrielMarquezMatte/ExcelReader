@@ -11,8 +11,9 @@ namespace ExcelReader.Core.Writer.Xlsx
     /// <summary>
     /// Writes a single worksheet's XML into an XLSX ZIP archive, buffering rows and flushing them to the entry stream once they cross a size threshold.
     /// </summary>
-    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>
+    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>, ITableSheetWriter<XlsxRowWriter>
     {
+        private readonly TableTracker _tables = new();
         private readonly XlsxWorkbookWriter _owner;
         private readonly ZipArchive _zip;
         private readonly CompressionLevel _compression;
@@ -91,7 +92,7 @@ namespace ExcelReader.Core.Writer.Xlsx
                 _rowBuffer.Reset();
                 _rowBuffer.WriteUtf8(
                     "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
+                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">{BuildColsXml()}<sheetData>");
                 _stream.Write(_rowBuffer.Span);
             }
             catch
@@ -120,7 +121,7 @@ namespace ExcelReader.Core.Writer.Xlsx
                 _rowBuffer.Reset();
                 _rowBuffer.WriteUtf8(
                     "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
+                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">{BuildColsXml()}<sheetData>");
                 await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
             }
             catch
@@ -250,7 +251,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             try
             {
                 EnsureStarted();
-                _rowBuffer.Write("</sheetData></worksheet>"u8);
+                WriteTrailer();
 #pragma warning disable CS8602
                 _stream.Write(_rowBuffer.Span);
                 _stream.Flush();
@@ -262,11 +263,66 @@ namespace ExcelReader.Core.Writer.Xlsx
                 Fault();
                 throw;
             }
+            _owner.RegisterTables(SheetId, _tables.Finished);
             Release(faulted: false);
         }
 
-        // Ended is only ever set by Release, after cleanup, so an already-ended sheet has nothing left
-        // to release: a fault raised inside a nested step (start, flush) is handled exactly once.
+        private void WriteTrailer()
+        {
+            _tables.CloseOpen(_rowNumber - 1);
+            _rowBuffer.Write("</sheetData>"u8);
+            if (_tables.Finished.Count > 0)
+            {
+                _rowBuffer.WriteUtf8(XlsxTableXml.TableParts(_tables.Finished.Count));
+            }
+            _rowBuffer.Write("</worksheet>"u8);
+        }
+
+        /// <inheritdoc/>
+        public void BeginTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null)
+        {
+            (string[] names, ExcelTableOptions effective) = PrepareTable(name, columns, options);
+            using (XlsxRowWriter row = StartRow())
+            {
+                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+            }
+            _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber - 1);
+        }
+
+        /// <inheritdoc/>
+        public async ValueTask BeginTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null, CancellationToken ct = default)
+        {
+            (string[] names, ExcelTableOptions effective) = PrepareTable(name, columns, options);
+            XlsxRowWriter row = await StartRowAsync(ct).ConfigureAwait(false);
+            await using (row.ConfigureAwait(false))
+            {
+                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+            }
+            _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber - 1);
+        }
+
+        /// <inheritdoc/>
+        public void EndTable()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            if (_tables.End(_rowNumber - 1))
+            {
+                BeginRow(styleId: 0);
+                CloseBufferedRow();
+            }
+        }
+
+        private (string[] Names, ExcelTableOptions Options) PrepareTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options)
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            ExcelTableOptions effective = options ?? ExcelTableOptions.Default;
+            string[] names = TableValidation.Validate(name, columns, effective);
+            _tables.RequireNoneOpen();
+            _owner.Tables.RequireAvailable(name);
+            TableTracker.RequireRoom(_rowNumber);
+            return (names, effective);
+        }
+
         private void Fault()
         {
             if (_state == WriterState.Ended)
@@ -309,7 +365,7 @@ namespace ExcelReader.Core.Writer.Xlsx
                 {
                     await StartCoreAsync(ct).ConfigureAwait(false);
                 }
-                _rowBuffer.Write("</sheetData></worksheet>"u8);
+                WriteTrailer();
 #pragma warning disable CS8602
                 await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
 #pragma warning restore CS8602
@@ -321,6 +377,7 @@ namespace ExcelReader.Core.Writer.Xlsx
                 await FaultAsync().ConfigureAwait(false);
                 throw;
             }
+            _owner.RegisterTables(SheetId, _tables.Finished);
             Release(faulted: false);
         }
 
@@ -368,10 +425,15 @@ namespace ExcelReader.Core.Writer.Xlsx
             return _rowNumber;
         }
 
-        internal void EndBufferedRow()
+        private void CloseBufferedRow()
         {
             _rowBuffer.Write("</row>"u8);
             _rowActive = false;
+        }
+
+        internal void EndBufferedRow()
+        {
+            CloseBufferedRow();
             if (_rowBuffer.Length >= FlushThreshold)
             {
                 FlushRowBuffer();
@@ -400,8 +462,7 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         internal ValueTask EndBufferedRowAsync(CancellationToken ct = default)
         {
-            _rowBuffer.Write("</row>"u8);
-            _rowActive = false;
+            CloseBufferedRow();
             return _rowBuffer.Length >= FlushThreshold ? FlushRowBufferAsync(ct) : ValueTask.CompletedTask;
         }
 

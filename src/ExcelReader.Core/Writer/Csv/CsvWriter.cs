@@ -212,8 +212,6 @@ namespace ExcelReader.Core.Writer.Csv
             }
         }
 
-        // A failed write leaves an unknown prefix of the buffer in the stream, so writing it again could
-        // silently corrupt the output: the writer becomes terminal and only Dispose remains meaningful.
         private void Fault()
         {
             if (_faulted)

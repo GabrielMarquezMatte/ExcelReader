@@ -98,7 +98,6 @@ namespace ExcelReader.Native.Typed
             FreeBlock(column.Data);
         }
 
-        // AsyncLocal, not ThreadStatic: a test's hooks must follow a parallel build onto pool threads.
         private static readonly AsyncLocal<Func<int, IntPtr>?> AllocOverrideLocal = new();
         private static readonly AsyncLocal<Action<IntPtr>?> FreeOverrideLocal = new();
 
@@ -338,22 +337,33 @@ namespace ExcelReader.Native.Typed
             return block;
         }
 
-        private sealed class ColumnBuilder(int type, bool nullable)
+        private sealed class ColumnBuilder(int type, bool nullable) : IDisposable
         {
-            private readonly ChunkedBuffer<byte> _validity = new();
+            private readonly GrowableNativeBuffer<byte> _validity = new();
             private int _rowCount;
             private bool _anyNull;
 
-            private readonly ChunkedBuffer<long> _longs = new();
-            private readonly ChunkedBuffer<int> _ints = new();
-            private readonly ChunkedBuffer<double> _doubles = new();
-            private readonly ChunkedBuffer<byte> _bools = new();
-            private readonly ChunkedBuffer<int> _stringOffsets = NewStringOffsets(type);
-            private readonly ChunkedBuffer<byte> _stringData = new();
+            private readonly GrowableNativeBuffer<long> _longs = new();
+            private readonly GrowableNativeBuffer<int> _ints = new();
+            private readonly GrowableNativeBuffer<double> _doubles = new();
+            private readonly GrowableNativeBuffer<byte> _bools = new();
+            private readonly GrowableNativeBuffer<int> _stringOffsets = NewStringOffsets(type);
+            private readonly GrowableNativeBuffer<byte> _stringData = new();
 
-            private static ChunkedBuffer<int> NewStringOffsets(int type)
+            public void Dispose()
             {
-                ChunkedBuffer<int> offsets = new();
+                _validity.Dispose();
+                _longs.Dispose();
+                _ints.Dispose();
+                _doubles.Dispose();
+                _bools.Dispose();
+                _stringOffsets.Dispose();
+                _stringData.Dispose();
+            }
+
+            private static GrowableNativeBuffer<int> NewStringOffsets(int type)
+            {
+                GrowableNativeBuffer<int> offsets = new();
                 if (type == NativeColumnType.String)
                 {
                     offsets.Add(0);
@@ -419,8 +429,6 @@ namespace ExcelReader.Native.Typed
                 return true;
             }
 
-            // Each numeric type gets its own method so AppendFrom stays a small dispatcher: with the
-            // inlined double parser in it, every cell of every type paid its prologue.
             [MethodImpl(MethodImplOptions.NoInlining)]
             private bool AppendInt64(in Cell cell, bool isDate1904)
             {
@@ -463,7 +471,7 @@ namespace ExcelReader.Native.Typed
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private bool Append<T>(ChunkedBuffer<T> target, bool converted, T value) where T : unmanaged
+            private bool Append<T>(GrowableNativeBuffer<T> target, bool converted, T value) where T : unmanaged
             {
                 if (!converted && !nullable)
                 {
@@ -562,9 +570,14 @@ namespace ExcelReader.Native.Typed
                 return column;
             }
 
-            private static IntPtr Concat<T>(ReadOnlySpan<ColumnBuilder> parts, Func<ColumnBuilder, ChunkedBuffer<T>> select, out int byteLength)
+            private static IntPtr Concat<T>(ReadOnlySpan<ColumnBuilder> parts, Func<ColumnBuilder, GrowableNativeBuffer<T>> select, out int byteLength)
                 where T : unmanaged
             {
+                if (CanHandOver(parts) && select(parts[0]).Count > 0)
+                {
+                    byteLength = select(parts[0]).ByteLength;
+                    return select(parts[0]).Detach();
+                }
                 byteLength = 0;
                 foreach (ColumnBuilder part in parts)
                 {
@@ -574,15 +587,25 @@ namespace ExcelReader.Native.Typed
                 int offset = 0;
                 foreach (ColumnBuilder part in parts)
                 {
-                    ChunkedBuffer<T> buffer = select(part);
+                    GrowableNativeBuffer<T> buffer = select(part);
                     buffer.CopyTo(new Span<byte>((byte*)block + offset, buffer.ByteLength));
                     offset += buffer.ByteLength;
                 }
                 return block;
             }
 
+            // A single part's block already is the column, unless a test hook is tracking allocations.
+            private static bool CanHandOver(ReadOnlySpan<ColumnBuilder> parts)
+            {
+                return parts.Length == 1 && AllocOverride is null;
+            }
+
             private static IntPtr ConcatStringOffsets(ReadOnlySpan<ColumnBuilder> parts)
             {
+                if (CanHandOver(parts))
+                {
+                    return parts[0]._stringOffsets.Detach();
+                }
                 int count = 1;
                 foreach (ColumnBuilder part in parts)
                 {
@@ -631,7 +654,7 @@ namespace ExcelReader.Native.Typed
                 return block;
             }
 
-            private static void OrBits(Span<byte> bits, long at, ChunkedBuffer<byte> validity)
+            private static void OrBits(Span<byte> bits, long at, GrowableNativeBuffer<byte> validity)
             {
                 int first = (int)(at >> 3);
                 int shift = (int)(at & 7);

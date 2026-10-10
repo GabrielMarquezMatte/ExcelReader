@@ -184,6 +184,36 @@ Detection covers the signed formats only. To open a source whose format you alre
 using IExcelWorkbook workbook = Excel.Open("report.csv", ExcelFileFormat.Csv);
 ```
 
+## Read an Excel table
+
+A workbook's tables (ranges formatted with **Format as Table**) are listed on `Tables`, ordered by sheet
+and creation, and found by name with `TryGetTable`, ignoring case. XLSX/XLSM and XLSB report them; XLS
+and CSV always report none. `AsSheet()` reads only the table: its header row first, then its data rows
+without the totals row, each cut to the table's columns, so it plugs into anything that takes a sheet.
+
+```csharp
+using IExcelWorkbook workbook = Excel.Open("sales.xlsx");
+if (workbook.TryGetTable("Sales", out ExcelTable? sales))
+{
+    foreach (SaleRow row in ExcelParser.FromAttributes<SaleRow>().Parse(sales.AsSheet()))
+    {
+        Console.WriteLine($"{row.Product}: {row.Qty}");
+    }
+}
+```
+
+- `FirstRow`, `FirstColumn`, `LastRow` and `LastColumn` are zero-based and include the header and totals
+  rows; `Ref` is the same range in A1 notation.
+- Column indexes inside `AsSheet()` rows stay those of the sheet: a table starting at column C reports
+  its first cell at index 2. `Excel.InferSchema` keeps those indexes in `ExcelColumnSchema.Index` but
+  lists only the table's columns. `ExcelDataReader` ordinals are relative to the table: ordinal 0 is
+  its first column.
+- A table whose header row is turned off (`HeaderRowCount == 0`) still enumerates, but `Parse` throws
+  `InvalidOperationException` for every map, and `ExcelDataReader` and `InferSchema` throw it when
+  `headerRow` is greater than 0. Read it with `new ExcelDataReader(table.AsSheet(), headerRow: 0)`,
+  `Excel.InferSchema(table.AsSheet(), headerRow: 0)`, or by column index on the rows.
+- `StyleName` is the table style's name, such as `TableStyleMedium2`, or `null` when the table has none.
+
 ## Reading sheets in parallel
 
 Each sheet of a workbook can be read on its own thread:

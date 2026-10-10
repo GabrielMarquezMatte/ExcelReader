@@ -52,7 +52,8 @@ may get worse, not only better.
 | `Reading/RowViewBuffer.cs` | Cursor-owned native row behind `xl_rows_next_view`. |
 | `include/excelreader.h` | Hand-written C header; keep in sync with `Exports*.cs`. |
 
-Reading exports: `xl_open_file`, `xl_open_memory`, `xl_close`, `xl_sheet_count`, `xl_sheet_name_at`,
+Reading exports: `xl_open_file`, `xl_open_memory`, `xl_open_source`, `xl_open_stream`,
+`xl_set_source_error`, `xl_close`, `xl_sheet_count`, `xl_sheet_name_at`,
 `xl_sheet_visibility_at`, `xl_sheet_index`, `xl_is_date1904`, `xl_rows_open`, `xl_rows_next`,
 `xl_rows_next_view`, `xl_rows_read_all_blob`, `xl_rows_read_all_decoded`, `xl_rows_close`,
 `xl_free_rows`, `xl_parse_typed`, `xl_free_table`, `xl_typed_reader_open`, `xl_typed_reader_next`,
@@ -133,12 +134,47 @@ if (status == XL_STATUS_PASSWORD_REQUIRED || status == XL_STATUS_PASSWORD_INCORR
 
 This is why `XL_ABI_VERSION` moved from 3 to 4: `password`/`password_len` are new fields at the end
 of `xl_open_options`, so a caller built against the old, smaller struct passes the old, smaller
-`sizeof(xl_open_options)` as `struct_size` — the mismatch is rejected outright with
+`sizeof(xl_open_options)` as `struct_size`. Any size other than the current one is rejected outright with
 `XL_INVALID_ARGUMENT` instead of the library reading two garbage fields past the end of the caller's
-allocation. Check `xl_abi_version()` against `XL_ABI_VERSION` (see above) and rebuild against the
+allocation, except the 6.0 size of 88 bytes, which is also accepted and read as a prefix with the newer
+fields defaulted. Check `xl_abi_version()` against `XL_ABI_VERSION` (see above) and rebuild against the
 current header rather than only relying on the `struct_size` check to catch it.
 
 To produce one, `xl_encrypt_package` wraps a finished XLSX/XLSB file in the encrypted container, and
 `xl_encrypt_package_to_memory` does the same over bytes, so a package written with
 `xl_write_typed_to_memory` is encrypted without its plaintext ever reaching disk. Release the result
 with `xl_free_buffer`.
+
+## Opening from your own bytes
+
+`xl_open_source` reads through a callback that copies bytes at an offset, from any thread. Use it
+for S3, HTTP range requests or any store you can read at an offset; every sheet can still be read
+in parallel. By default the library asks for 4 MiB blocks and keeps 64 MiB of them
+(`source_block_size`, `source_cache_bytes` in `xl_open_options`).
+
+`xl_open_stream` reads through a callback that copies the next bytes. A CSV is read as it arrives,
+by one cursor at a time, and its first 16 MiB are kept so that `xl_infer_schema` followed by a read
+works; an XLSX, XLSB or XLS is read whole first (`max_buffered_bytes` caps it), because
+those formats need random access. With `XL_FORMAT_AUTO`, a stream that starts with neither a ZIP
+nor an OLE2 signature is read as a CSV.
+
+Both take ownership: `release` runs exactly once, when nothing needs the bytes any more. A failing
+callback calls `xl_set_source_error` and returns -1; that message is what `xl_last_error` reports.
+Inside a callback, no other `xl_` function may be called.
+
+```c
+static int64_t read_at(void* user_data, int64_t offset, uint8_t* buf, int64_t len)
+{
+    my_blob* blob = user_data;
+    int64_t got = my_blob_read(blob, offset, buf, len);   /* your store */
+    if (got < 0) {
+        const char* message = my_blob_error(blob);
+        xl_set_source_error((const uint8_t*)message, (int32_t)strlen(message));
+    }
+    return got;
+}
+
+xl_source source = { sizeof(xl_source), blob, my_blob_size(blob), read_at, my_blob_free };
+xl_workbook* workbook = NULL;
+int32_t status = xl_open_source(&source, XL_FORMAT_AUTO, NULL, &workbook);
+```

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader;
@@ -69,6 +70,29 @@ namespace ExcelReader.Native
 
         public IntPtr Password;
         public int PasswordLen;
+
+        public long SourceCacheBytes;
+        public long MaxBufferedBytes;
+        public int SourceBlockSize;
+
+        internal const int V6Size = 88;
+
+        internal static unsafe bool TryRead(NativeOpenOptionsRaw* options, out NativeOpenOptionsRaw raw, [NotNullWhen(false)] out string? error)
+        {
+            raw = default;
+            int size = options->StructSize;
+            if (size != sizeof(NativeOpenOptionsRaw) && size != V6Size)
+            {
+                error = $"xl_open_options.struct_size is {size}, but this library expects {sizeof(NativeOpenOptionsRaw)} (or {V6Size} for the 6.0 layout).";
+                return false;
+            }
+            NativeOpenOptionsRaw copy = default;
+            Buffer.MemoryCopy(options, &copy, sizeof(NativeOpenOptionsRaw), size);
+            copy.StructSize = sizeof(NativeOpenOptionsRaw);
+            raw = copy;
+            error = null;
+            return true;
+        }
     }
 
     internal readonly struct NativeOpenOptions
@@ -92,6 +116,10 @@ namespace ExcelReader.Native
         internal bool? InternStrings { get; init; }
 
         internal string? Password { get; init; }
+
+        internal int? SourceBlockSize { get; init; }
+        internal long? SourceCacheBytes { get; init; }
+        internal long? MaxBufferedBytes { get; init; }
 
         internal CsvReaderOptions ToCsvReaderOptions()
         {
@@ -170,7 +198,9 @@ namespace ExcelReader.Native
                 || !TryDecodeNonNegative(raw.MaxCellBytes, "max_cell_bytes", out int? maxCellBytes, out error)
                 || !TryDecodeNonNegative(raw.MaxZipEntries, "max_zip_entries", out int? maxZipEntries, out error)
                 || !TryDecodeNonNegative(raw.MaxTotalDecompressedBytes, "max_total_decompressed_bytes", out long? maxTotal, out error)
-                || !TryDecodeNonNegative(raw.MaxSharedStringBytes, "max_shared_string_bytes", out long? maxSharedStrings, out error))
+                || !TryDecodeNonNegative(raw.MaxSharedStringBytes, "max_shared_string_bytes", out long? maxSharedStrings, out error)
+                || !TryDecodeNonNegative(raw.SourceCacheBytes, "source_cache_bytes", out long? sourceCacheBytes, out error)
+                || !TryDecodeNonNegative(raw.MaxBufferedBytes, "max_buffered_bytes", out long? maxBufferedBytes, out error))
             {
                 return false;
             }
@@ -218,6 +248,9 @@ namespace ExcelReader.Native
                 PrefetchDecompression = prefetch,
                 InternStrings = internStrings,
                 Password = password,
+                SourceBlockSize = raw.SourceBlockSize == 0 ? null : raw.SourceBlockSize,
+                SourceCacheBytes = sourceCacheBytes,
+                MaxBufferedBytes = maxBufferedBytes,
             };
             return true;
         }

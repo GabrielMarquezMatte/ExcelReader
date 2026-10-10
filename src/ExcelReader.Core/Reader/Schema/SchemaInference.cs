@@ -28,7 +28,8 @@ namespace ExcelReader.Core.Reader.Schema
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        internal static ExcelColumnSchema[] Infer(IExcelRowEnumerator rows, bool isDate1904, int headerRow, int sampleSize, bool parseText = false)
+        /// <param name="firstColumn">Columns before this index are left out of the result; the remaining entries keep their absolute <see cref="ExcelColumnSchema.Index"/>.</param>
+        internal static ExcelColumnSchema[] Infer(IExcelRowEnumerator rows, bool isDate1904, int headerRow, int sampleSize, bool parseText = false, int firstColumn = 0)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(headerRow);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleSize);
@@ -40,10 +41,10 @@ namespace ExcelReader.Core.Reader.Schema
             }
             int dataRowCount = SampleDataRows(rows, sampleSize, isDate1904, parseText, names, stats);
             MarkSparseColumnsNullable(CollectionsMarshal.AsSpan(stats), dataRowCount);
-            ExcelColumnSchema[] schema = new ExcelColumnSchema[names.Count];
-            for (int i = 0; i < schema.Length; i++)
+            ExcelColumnSchema[] schema = new ExcelColumnSchema[Math.Max(0, names.Count - firstColumn)];
+            for (int i = firstColumn; i < names.Count; i++)
             {
-                schema[i] = new ExcelColumnSchema
+                schema[i - firstColumn] = new ExcelColumnSchema
                 {
                     Index = i,
                     Name = names[i],
@@ -169,15 +170,12 @@ namespace ExcelReader.Core.Reader.Schema
                 }
             }
 
-            // Stricter than the typed converters on purpose: their fallbacks (DateTime.TryParse,
-            // long.TryParse with whitespace) would type ID and ratio columns as dates or numbers.
             private bool ObserveText(in Cell cell, bool isDate1904)
             {
                 ReadOnlySpan<byte> text = cell.Value;
                 bool canonical = HasCanonicalIntegerPart(text, out bool allDigits);
                 if (canonical && allDigits)
                 {
-                    // An integer past long stays text: as a double it would silently lose digits.
                     if (!ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out _))
                     {
                         return false;
@@ -186,7 +184,6 @@ namespace ExcelReader.Core.Reader.Schema
                     SawNonBinaryNumber |= !IsBinaryDigit(text);
                     return true;
                 }
-                // Scientific notation stays text: part codes like 12E4 would silently become 120000.
                 if (canonical && !text.ContainsAny((byte)'e', (byte)'E') && FastDouble.TryParse(text, out _))
                 {
                     SawNumber = true;

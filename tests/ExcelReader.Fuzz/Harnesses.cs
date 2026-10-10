@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.ParallelCsv;
@@ -7,6 +8,7 @@ using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Reader.Zip.Inflate;
 
 namespace ExcelReader.Fuzz
 {
@@ -117,6 +119,93 @@ namespace ExcelReader.Fuzz
                 using IExcelWorkbook reader = Excel.Open(bytes, EncryptedLimits);
                 DrainAllSheets(reader);
             });
+        }
+
+        private const int MaxInflateOutput = 4 * 1024 * 1024;
+
+        internal static void Inflate(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() =>
+            {
+                // A rejected stream may still have delivered bytes first; those must be real ones.
+                using var delivered = new MemoryStream();
+                bool rejected = false;
+                try
+                {
+                    InflateInto(delivered, static source => new InflateStream(source), bytes);
+                }
+                catch (InvalidDataException)
+                {
+                    rejected = true;
+                }
+                byte[] reference;
+                try
+                {
+                    reference = InflateWith(static source => new DeflateStream(source, CompressionMode.Decompress), bytes);
+                }
+                catch (InvalidDataException)
+                {
+                    return;
+                }
+                RequireSameInflate(delivered.ToArray(), reference, rejected);
+            });
+        }
+
+        internal static void InflateDivergenceSelfCheck()
+        {
+            try
+            {
+                FuzzOracle.Guard(() => RequireSameInflate([1], [2], prefixOnly: true));
+            }
+            catch (OracleDivergenceException)
+            {
+                return;
+            }
+            throw new InvalidOperationException("The fuzz oracle swallows an inflate divergence.");
+        }
+
+        private static void RequireSameInflate(byte[] actual, byte[] reference, bool prefixOnly)
+        {
+            bool same = prefixOnly ? reference.AsSpan().StartsWith(actual) : actual.AsSpan().SequenceEqual(reference);
+            if (!same)
+            {
+                throw new OracleDivergenceException(
+                    $"Oracle divergence: InflateStream produced {actual.Length} bytes that differ from DeflateStream's {reference.Length}.");
+            }
+        }
+
+        internal static int InflateSeedForSelfCheck(byte[] bytes)
+        {
+            byte[] actual = InflateWith(static source => new InflateStream(source), bytes);
+            byte[] reference = InflateWith(static source => new DeflateStream(source, CompressionMode.Decompress), bytes);
+            if (!actual.AsSpan().SequenceEqual(reference))
+            {
+                throw new InvalidOperationException("InflateStream and DeflateStream disagree on an unmutated seed.");
+            }
+            return actual.Length;
+        }
+
+        private static byte[] InflateWith(Func<Stream, Stream> open, byte[] bytes)
+        {
+            using var output = new MemoryStream();
+            InflateInto(output, open, bytes);
+            return output.ToArray();
+        }
+
+        private static void InflateInto(MemoryStream output, Func<Stream, Stream> open, byte[] bytes)
+        {
+            using Stream stream = open(new MemoryStream(bytes, writable: false));
+            byte[] buffer = new byte[64 * 1024];
+            while (output.Length < MaxInflateOutput)
+            {
+                int read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, MaxInflateOutput - output.Length));
+                if (read == 0)
+                {
+                    break;
+                }
+                output.Write(buffer, 0, read);
+            }
         }
 
         internal static int OpenEncryptedSeedForSelfCheck(ReadOnlySpan<byte> data)
@@ -389,6 +478,10 @@ namespace ExcelReader.Fuzz
             for (int i = 0; i < sheets; i++)
             {
                 DrainRows(reader.SheetAt(i));
+            }
+            foreach (ExcelTable table in reader.Tables)
+            {
+                DrainRows(table.AsSheet());
             }
         }
 

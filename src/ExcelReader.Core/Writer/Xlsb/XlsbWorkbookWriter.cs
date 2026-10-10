@@ -84,6 +84,8 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         internal bool UseSharedStrings { get; }
 
+        internal TableRegistry Tables { get; } = new();
+
         internal int GetSharedStringIndex(string value)
         {
             return _sharedStrings!.GetOrAdd(value);
@@ -124,6 +126,7 @@ namespace ExcelReader.Core.Writer.Xlsb
                 WriteStyles();
                 WriteSharedStrings();
                 WriteAppProperties();
+                WriteTables();
                 WriteContentTypes();
                 CloseZip();
             }
@@ -157,6 +160,7 @@ namespace ExcelReader.Core.Writer.Xlsb
                 await WriteStylesAsync(ct).ConfigureAwait(false);
                 await WriteSharedStringsAsync(ct).ConfigureAwait(false);
                 await WriteAppPropertiesAsync(ct).ConfigureAwait(false);
+                await WriteTablesAsync(ct).ConfigureAwait(false);
                 await WriteContentTypesAsync(ct).ConfigureAwait(false);
                 await CloseZipAsync().ConfigureAwait(false);
             }
@@ -563,6 +567,49 @@ namespace ExcelReader.Core.Writer.Xlsb
             return WriteEntryAsync("docProps/app.xml", AppPropertiesXml, ct);
         }
 
+        private void WriteTables()
+        {
+            foreach (XlsbSheetWriter sheet in _sheets)
+            {
+                if (sheet.Tables.Count == 0)
+                {
+                    continue;
+                }
+                WriteEntry($"xl/worksheets/_rels/sheet{sheet.SheetId}.bin.rels", TablePackage.SheetRelsXml(sheet.Tables, "bin"));
+                foreach (WrittenTable table in sheet.Tables)
+                {
+                    using BiffBuffer data = new(256);
+                    using BiffBuffer payload = new(128);
+                    XlsbTableRecords.WriteTable(data, payload, table);
+                    WriteEntry($"xl/tables/table{table.Id}.bin", data.Span);
+                }
+            }
+        }
+
+        private async ValueTask WriteTablesAsync(CancellationToken ct)
+        {
+            foreach (XlsbSheetWriter sheet in _sheets)
+            {
+                if (sheet.Tables.Count == 0)
+                {
+                    continue;
+                }
+                await WriteEntryAsync($"xl/worksheets/_rels/sheet{sheet.SheetId}.bin.rels", TablePackage.SheetRelsXml(sheet.Tables, "bin"), ct).ConfigureAwait(false);
+                foreach (WrittenTable table in sheet.Tables)
+                {
+                    await WriteTablePartAsync(table, ct).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async ValueTask WriteTablePartAsync(WrittenTable table, CancellationToken ct)
+        {
+            using BiffBuffer data = new(256);
+            using BiffBuffer payload = new(128);
+            XlsbTableRecords.WriteTable(data, payload, table);
+            await WriteEntryAsync($"xl/tables/table{table.Id}.bin", data.Memory, ct).ConfigureAwait(false);
+        }
+
         private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId, bool isStyleXf = false)
         {
             payload.Reset();
@@ -596,6 +643,13 @@ namespace ExcelReader.Core.Writer.Xlsb
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/worksheets/sheet{sheet.SheetId}.bin\" ContentType=\"application/vnd.ms-excel.worksheet\"/>");
+            }
+            foreach (XlsbSheetWriter sheet in _sheets)
+            {
+                foreach (WrittenTable table in sheet.Tables)
+                {
+                    sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/tables/table{table.Id}.bin\" ContentType=\"application/vnd.ms-excel.table\"/>");
+                }
             }
             sb.Append("</Types>");
             return sb.ToString();

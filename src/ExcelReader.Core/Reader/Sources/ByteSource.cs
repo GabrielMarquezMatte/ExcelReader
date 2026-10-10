@@ -114,6 +114,10 @@ namespace ExcelReader.Core.Reader.Sources
 
         private static bool TryWrapSeekable(Stream stream, bool leaveOpen, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ByteSource? source)
         {
+            if (!leaveOpen && stream is SourceStream view && view.TryTakeSource(out source))
+            {
+                return true;
+            }
             IDisposable? owner = leaveOpen ? null : stream;
             if (stream.GetType() == typeof(MemoryStream) && ((MemoryStream)stream).TryGetBuffer(out ArraySegment<byte> segment))
             {

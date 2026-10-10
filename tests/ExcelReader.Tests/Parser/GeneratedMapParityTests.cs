@@ -82,6 +82,20 @@ namespace ExcelReader.Tests.Parser
             public string Ignored { get; set; } = "default";
         }
 
+        public class RequiredMemberBaseRow
+        {
+            public required string Inherited { get; set; }
+        }
+
+        [ExcelSerializable]
+        public partial class RequiredMemberModel : RequiredMemberBaseRow
+        {
+            public required string Name { get; init; }
+            public required int Age { get; set; }
+            [ExcelIgnore]
+            public required string Skipped { get; set; }
+        }
+
         public class InheritedBaseRow
         {
             public string Inherited { get; set; } = "";
@@ -229,6 +243,20 @@ namespace ExcelReader.Tests.Parser
                 Assert.Equal("default", result.PrivateSet);
                 Assert.Equal("default", result.HiddenValue);
             }
+        }
+
+        [Fact]
+        public async Task GeneratedMapMatchesReflectionForRequiredMembers()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Name", "Age", "Inherited"], ["Alice", 30, "base"]);
+
+            RequiredMemberModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<RequiredMemberModel>().Parse(reader.FirstSheet));
+            RequiredMemberModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<RequiredMemberModel>().Parse(reader.FirstSheet));
+
+            Assert.Equal(("Alice", 30, "base"), (generatedResult.Name, generatedResult.Age, generatedResult.Inherited));
+            Assert.Equal((reflectionResult.Name, reflectionResult.Age, reflectionResult.Inherited), (generatedResult.Name, generatedResult.Age, generatedResult.Inherited));
+            Assert.Null(reflectionResult.Skipped);
+            Assert.Null(generatedResult.Skipped);
         }
 
         [Fact]

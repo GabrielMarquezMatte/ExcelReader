@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
@@ -46,6 +47,7 @@ namespace ExcelReader.Fuzz
                            "csv-invalid-utf8", "csv-utf16le", "csv-utf16be", "csv-unterminated-quote"]),
             ("csv-parallel", ["csv", "csv-ragged", "csv-parallel-0", "csv-parallel-1", "csv-parallel-2",
                               "csv-parallel-3", "csv-parallel-4", "csv-parallel-5", "csv-parallel-6"]),
+            ("inflate", ["inflate-stored", "inflate-fixed", "inflate-dynamic"]),
         ];
 
         internal static async Task GenerateAsync(string rootDirectory)
@@ -93,7 +95,30 @@ namespace ExcelReader.Fuzz
             {
                 seeds[name] = bytes;
             }
+            foreach ((string name, byte[] bytes) in InflateSeeds())
+            {
+                seeds[name] = bytes;
+            }
             return seeds;
+        }
+
+        private static IEnumerable<(string Name, byte[] Bytes)> InflateSeeds()
+        {
+            byte[] sheet = Utf8(string.Concat(Enumerable.Range(1, 40).Select(static row => string.Create(
+                CultureInfo.InvariantCulture, $"<row r=\"{row}\"><c r=\"A{row}\" t=\"s\"><v>{row % 7}</v></c><c r=\"B{row}\"><v>{row * 1.5}</v></c></row>"))));
+            yield return ("inflate-stored", Deflate(sheet, CompressionLevel.NoCompression));
+            yield return ("inflate-fixed", Deflate(Utf8("fixed block"), CompressionLevel.Optimal));
+            yield return ("inflate-dynamic", Deflate(sheet, CompressionLevel.Optimal));
+        }
+
+        private static byte[] Deflate(byte[] raw, CompressionLevel level)
+        {
+            using var compressed = new MemoryStream();
+            using (var deflate = new DeflateStream(compressed, level, leaveOpen: true))
+            {
+                deflate.Write(raw);
+            }
+            return compressed.ToArray();
         }
 
         private static byte[] Encrypt(byte[] package)

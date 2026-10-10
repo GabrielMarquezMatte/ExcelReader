@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         /// </remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
+        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator, IRowIndexedEnumerator
         {
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
                 Justification = "XlsbWorkbook is borrowed; its lifetime is managed by the caller, not this enumerator.")]
@@ -27,6 +27,9 @@ namespace ExcelReader.Core.Reader.Xlsb
             private readonly ZipEntryRef _entry;
             private bool _ended;
             private bool _pendingRowHdr;
+            private bool _trackRowIndex;
+            private int _rowIndex = -1;
+            private int _nextRowIndex = -1;
 
             internal Enumerator(XlsbWorkbook reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
                 : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ownsSource: true, ct)
@@ -63,6 +66,19 @@ namespace ExcelReader.Core.Reader.Xlsb
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache, _contentCache);
 
+            int IRowIndexedEnumerator.RowIndex
+            {
+                get
+                {
+                    return _rowIndex;
+                }
+            }
+
+            void IRowIndexedEnumerator.EnableRowIndex()
+            {
+                _trackRowIndex = true;
+            }
+
             /// <inheritdoc/>
             public bool MoveNext()
             {
@@ -92,6 +108,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                     }
                 }
                 _pendingRowHdr = false;
+                _rowIndex = _nextRowIndex;
                 if (CollectCellsFromBuffer() == 2)
                 {
                     return MoveNextRowAsync(seekDone: true);
@@ -106,6 +123,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                     return false;
                 }
                 _pendingRowHdr = false;
+                _rowIndex = _nextRowIndex;
                 await CollectCellsAsync().ConfigureAwait(false);
                 return true;
             }
@@ -122,6 +140,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                     return false;
                 }
                 _pendingRowHdr = false;
+                _rowIndex = _nextRowIndex;
                 CollectCells();
                 return true;
             }
@@ -180,10 +199,14 @@ namespace ExcelReader.Core.Reader.Xlsb
             private int SeekRowHdrFromBuffer()
             {
                 Biff12RecordReader reader = new(_buf.AsSpan(_pos, _len - _pos));
-                while (reader.TryReadRecord(out int id, out _))
+                while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
                 {
                     if (id == Brt.RowHdr)
                     {
+                        if (_trackRowIndex)
+                        {
+                            NoteRowHeader(payload);
+                        }
                         _pos += reader.Position;
                         return 1;
                     }
@@ -211,6 +234,10 @@ namespace ExcelReader.Core.Reader.Xlsb
                 {
                     if (id == Brt.RowHdr)
                     {
+                        if (_trackRowIndex)
+                        {
+                            NoteRowHeader(payload);
+                        }
                         _pos += reader.Position;
                         _pendingRowHdr = true;
                         return 1;
@@ -231,6 +258,17 @@ namespace ExcelReader.Core.Reader.Xlsb
                     return 0;
                 }
                 return 2;
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void NoteRowHeader(ReadOnlySpan<byte> payload)
+            {
+                if (payload.Length >= 4)
+                {
+                    _nextRowIndex = Biff12.ReadI32(payload, 0);
+                    return;
+                }
+                _nextRowIndex++;
             }
 
             private void ProcessCell(int id, ReadOnlySpan<byte> payload)

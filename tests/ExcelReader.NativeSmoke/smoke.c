@@ -99,6 +99,22 @@ XL_STATIC_ASSERT(sizeof(xl_csv_aggregation) == 48, csv_agg_size);
 XL_STATIC_ASSERT(offsetof(xl_csv_parallel_options, max_cell_bytes) == 24, csv_opt_max_cell_bytes);
 XL_STATIC_ASSERT(sizeof(xl_csv_parallel_options) == 28, csv_opt_size);
 
+XL_STATIC_ASSERT(offsetof(xl_open_options, source_cache_bytes) == 88, open_options_source_cache_bytes);
+XL_STATIC_ASSERT(offsetof(xl_open_options, max_buffered_bytes) == 96, open_options_max_buffered_bytes);
+XL_STATIC_ASSERT(offsetof(xl_open_options, source_block_size) == 104, open_options_source_block_size);
+XL_STATIC_ASSERT(sizeof(xl_open_options) == 112, open_options_size);
+
+XL_STATIC_ASSERT(offsetof(xl_source, user_data) == 8, source_user_data);
+XL_STATIC_ASSERT(offsetof(xl_source, length) == 16, source_length);
+XL_STATIC_ASSERT(offsetof(xl_source, read_at) == 24, source_read_at);
+XL_STATIC_ASSERT(offsetof(xl_source, release) == 32, source_release);
+XL_STATIC_ASSERT(sizeof(xl_source) == 40, source_size);
+
+XL_STATIC_ASSERT(offsetof(xl_stream, user_data) == 8, stream_user_data);
+XL_STATIC_ASSERT(offsetof(xl_stream, read) == 16, stream_read);
+XL_STATIC_ASSERT(offsetof(xl_stream, release) == 24, stream_release);
+XL_STATIC_ASSERT(sizeof(xl_stream) == 32, stream_size);
+
 
 static xl_lib_handle load_library(const char* path)
 {
@@ -506,6 +522,14 @@ static int test_open_file_options(const api_t* api, const char* fixture)
     int32_t status = api->open_file((const uint8_t*)fixture, (int32_t)path_len, XL_FORMAT_XLSB, &bad_options, &handle);
     CHECK(status == XL_INVALID_ARGUMENT, "a wrong xl_open_options.struct_size must be XL_INVALID_ARGUMENT");
     CHECK(handle == NULL, "a rejected xl_open_file must not hand back a handle");
+
+    xl_open_options v6_options;
+    memset(&v6_options, 0, sizeof(v6_options));
+    v6_options.struct_size = 88;
+    handle = NULL;
+    status = api->open_file((const uint8_t*)fixture, (int32_t)path_len, XL_FORMAT_XLSB, &v6_options, &handle);
+    CHECK(status == XL_OK, "the 88-byte 6.0 xl_open_options must still be accepted");
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
     return 0;
 }
 
@@ -1268,6 +1292,64 @@ static int test_csv_aggregate_quoted_records(xl_lib_handle lib)
     return status;
 }
 
+typedef int32_t (*xl_open_source_fn)(const xl_source*, int32_t, const xl_open_options*, xl_workbook**);
+
+typedef struct smoke_buffer {
+    uint8_t* data;
+    int64_t length;
+    int releases;
+} smoke_buffer;
+
+static int64_t smoke_read_at(void* user_data, int64_t offset, uint8_t* buf, int64_t len)
+{
+    smoke_buffer* source = (smoke_buffer*)user_data;
+    if (offset >= source->length)
+    {
+        return 0;
+    }
+    int64_t count = source->length - offset < len ? source->length - offset : len;
+    memcpy(buf, source->data + offset, (size_t)count);
+    return count;
+}
+
+static void smoke_release(void* user_data)
+{
+    ((smoke_buffer*)user_data)->releases++;
+}
+
+static int test_open_source(xl_lib_handle lib, const api_t* api, const char* fixture)
+{
+    xl_open_source_fn open_source = (xl_open_source_fn)load_symbol(lib, "xl_open_source");
+    CHECK(open_source != NULL, "xl_open_source must be exported");
+
+    FILE* file = fopen(fixture, "rb");
+    CHECK(file != NULL, "the fixture must open");
+    fseek(file, 0, SEEK_END);
+    smoke_buffer buffer = { NULL, ftell(file), 0 };
+    fseek(file, 0, SEEK_SET);
+    buffer.data = (uint8_t*)malloc((size_t)buffer.length);
+    CHECK(buffer.data != NULL && fread(buffer.data, 1, (size_t)buffer.length, file) == (size_t)buffer.length, "the fixture must read");
+    fclose(file);
+
+    xl_source source;
+    memset(&source, 0, sizeof(source));
+    source.struct_size = (int32_t)sizeof(xl_source);
+    source.user_data = &buffer;
+    source.length = buffer.length;
+    source.read_at = smoke_read_at;
+    source.release = smoke_release;
+
+    xl_workbook* handle = NULL;
+    CHECK(open_source(&source, XL_FORMAT_XLSB, NULL, &handle) == XL_OK && handle != NULL, "xl_open_source must open the fixture");
+    int32_t count = 0;
+    CHECK(api->sheet_count(handle, &count) == XL_OK && count == 1, "the fixture has one sheet");
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    CHECK(buffer.releases == 1, "release must run exactly once");
+
+    free(buffer.data);
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     const char* library_path = argc > 1 ? argv[1] : EXCELREADER_LIB_PATH_DEFAULT;
@@ -1308,6 +1390,7 @@ int main(int argc, char** argv)
     failures += test_write_typed(&api);
     failures += test_csv_aggregate_file(lib);
     failures += test_csv_aggregate_quoted_records(lib);
+    failures += test_open_source(lib, &api, fixture_path);
 
     if (failures == 0)
     {

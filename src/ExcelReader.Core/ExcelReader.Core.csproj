@@ -18,6 +18,7 @@
     <PackageTags>excel;xlsx;xlsb;xls;csv;reader;writer;parser;spreadsheet;streaming;performance;low-allocation</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/GabrielMarquezMatte/ExcelReader</PackageProjectUrl>
     <RepositoryUrl>https://github.com/GabrielMarquezMatte/ExcelReader</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -36,6 +37,8 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
   <!-- Binary parsers (BIFF12 framing, etc.) are internal but warrant isolated unit tests. -->
@@ -47,6 +50,8 @@
     <!-- The CsvParallel fuzz target drives ParallelCsvFactory.CreateWithChunkSize<T> directly (the
          Task 9 test seam) to compare it against the sequential parser over arbitrary bytes. -->
     <InternalsVisibleTo Include="ExcelReader.Fuzz" />
+    <!-- InflateBenchmark measures InflateStream on its own, without a reader on top of it. -->
+    <InternalsVisibleTo Include="ExcelReader.Benchmarks" />
   </ItemGroup>
 
   <!-- The source generator runs as an analyzer during this project's own build (and any consumer's),

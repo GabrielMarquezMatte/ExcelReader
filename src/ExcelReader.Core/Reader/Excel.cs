@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Xls;
@@ -44,12 +45,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <c>ZipArchive</c>
-        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// workbook never suspends, even under <c>await foreach</c>.
+        /// central directory without a <c>ZipArchive</c>. Small parts (workbook, styles, shared strings)
+        /// are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+        /// without <see cref="ExcelReaderOptions.PrefetchDecompression"/> enumeration never suspends, even
+        /// under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole XLSX file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</param>
         public static XlsxWorkbook FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
@@ -109,12 +111,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <c>ZipArchive</c>
-        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// workbook never suspends, even under <c>await foreach</c>.
+        /// central directory without a <c>ZipArchive</c>. Small parts (workbook, styles, shared strings)
+        /// are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+        /// without <see cref="ExcelReaderOptions.PrefetchDecompression"/> enumeration never suspends, even
+        /// under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole XLSB file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</param>
         public static XlsbWorkbook FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
@@ -279,6 +282,7 @@ namespace ExcelReader.Core.Reader
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
         public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow, int sampleSize)
         {
             return InferSchema(sheet, headerRow, sampleSize, parseText: false);
@@ -304,11 +308,17 @@ namespace ExcelReader.Core.Reader
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
         public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow = 1, int sampleSize = 100, bool parseText = false)
         {
             ArgumentNullException.ThrowIfNull(sheet);
+            if (headerRow > 0)
+            {
+                ExcelTableSheet.ThrowIfHeaderless(sheet);
+            }
+
             using IExcelRowEnumerator rows = sheet.GetEnumerator();
-            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText);
+            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText, ExcelTableSheet.FirstColumnOf(sheet));
         }
 
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];

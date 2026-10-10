@@ -366,7 +366,6 @@ namespace ExcelReader.Generator
             {
                 return ($"m.{member} = v", null);
             }
-            // Init accessors can't be called outside an object initializer; UnsafeAccessor binds the same setter reflection's GetSetMethod() does.
             string accessor = $"__ExcelInit_{property.Name}";
             string byRef = init.ContainingType.IsValueType ? "ref " : "";
             string target = init.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -612,13 +611,32 @@ namespace ExcelReader.Generator
                 && !symbol.Constructors.Any(static c => c.Parameters.Length == 0 && !c.IsImplicitlyDeclared);
             sb.AppendLine(useDefault
                 ? "        builder.Factory(null)"
-                : $"        builder.Factory(static () => new {qualifiedType}())");
+                : $"        builder.Factory(static () => new {qualifiedType}(){RequiredMembersInitializer(symbol)})");
             foreach (PropertyPlan p in properties)
             {
                 EmitReadFragment(sb, qualifiedType, p);
             }
             sb.AppendLine("        ;");
             sb.AppendLine("    }");
+        }
+
+        // C# requires every required member in the object initializer; the parse overwrites the ones it maps,
+        // and the rest stay default, as on the reflection path, which the runtime never checks.
+        private static string RequiredMembersInitializer(INamedTypeSymbol symbol)
+        {
+            var names = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (INamedTypeSymbol? type = symbol; type is not null; type = type.BaseType)
+            {
+                foreach (ISymbol member in type.GetMembers())
+                {
+                    if (member is IPropertySymbol { IsRequired: true } or IFieldSymbol { IsRequired: true } && seen.Add(member.Name))
+                    {
+                        names.Add($"{Identifier(member.Name)} = default!");
+                    }
+                }
+            }
+            return names.Count == 0 ? "" : " { " + string.Join(", ", names) + " }";
         }
 
         private static void EmitReadFragment(StringBuilder sb, string qualifiedType, PropertyPlan p)

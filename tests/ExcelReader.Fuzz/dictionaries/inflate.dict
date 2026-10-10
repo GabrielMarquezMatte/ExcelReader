@@ -1,0 +1,15 @@
+# libFuzzer token dictionary for the inflate target (a raw DEFLATE stream).
+#
+# DEFLATE is bit-packed, so most of its structure cannot be expressed as byte tokens. These are the
+# byte-aligned pieces: stored-block length fields and the shortest complete blocks.
+
+# Empty stored block: not final, then final
+"\x00\x00\x00\xff\xff"
+"\x01\x00\x00\xff\xff"
+
+# Stored-block length fields for one byte and for the maximum
+"\x01\x00\xfe\xff"
+"\xff\xff\x00\x00"
+
+# Final fixed block holding only end-of-block
+"\x03\x00"
