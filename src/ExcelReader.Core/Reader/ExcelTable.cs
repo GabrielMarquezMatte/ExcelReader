@@ -56,5 +56,20 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Gets the name of the table's style, such as <c>TableStyleMedium2</c>, or <see langword="null"/> when the table has none.</summary>
         public string? StyleName { get; }
+
+        /// <summary>
+        /// Gets a sheet that reads only this table: its header row first (when it has one), then its data
+        /// rows without the totals row, each cut to the table's columns.
+        /// </summary>
+        /// <remarks>
+        /// Column indexes stay those of <see cref="Sheet"/>: a table starting at column C reports its first
+        /// cell at index 2. The returned sheet reports <see cref="Sheet"/>'s name, index and visibility.
+        /// Rows absent from the file are skipped, as on any sheet.
+        /// </remarks>
+        /// <returns>A sheet bounded to this table.</returns>
+        public IExcelSheet AsSheet()
+        {
+            return new ExcelTableSheet(this);
+        }
     }
 }
