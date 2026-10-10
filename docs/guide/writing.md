@@ -187,6 +187,43 @@ Column behavior mirrors the parser attributes:
 
 For a model marked `[ExcelSerializable]`, pass `ExcelRecordLayout.Generated<T>()` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](parsing.md#generate-typed-maps-at-compile-time-native-aot--trimming).
 
+## Write an Excel table
+
+The XLSX and XLSB sheet writers implement `ITableSheetWriter<TRow>`. `BeginTable` writes the header row
+and opens a table there; every row written until `EndTable` (or the end of the sheet) belongs to it. The
+file opens in Excel already formatted as a table, with filter buttons and the chosen built-in style, and
+reads back through `IExcelWorkbook.Tables`.
+
+```csharp
+using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("report.xlsx"));
+XlsxSheetWriter sheet = workbook.AddSheet("Report");
+sheet.BeginTable("Sales", ["Product", "Qty", "Price"]);
+foreach (Sale s in sales)
+{
+    using XlsxRowWriter row = sheet.StartRow();
+    row.Write(s.Product);
+    row.Write(s.Qty);
+    row.Write(s.Price);
+}
+sheet.EndTable();
+```
+
+For records, `WriteTableAsync` does all three steps with the same layouts as `WriteRecordsAsync`:
+
+```csharp
+await sheet.WriteTableAsync(sales, "Sales", ExcelRecordLayout.FromAttributes<Sale>());
+```
+
+- `ExcelTableOptions` sets `FirstColumn`, `StyleName` (a built-in `TableStyleLight1`–`21`,
+  `TableStyleMedium1`–`28` or `TableStyleDark1`–`11`, or `null` for none; default `TableStyleMedium2`) and
+  the banding flags `ShowRowStripes`, `ShowColumnStripes`, `ShowFirstColumn`, `ShowLastColumn`.
+- With `FirstColumn > 0`, rows you write yourself must `Skip(FirstColumn)` to reach the table;
+  `WriteTableAsync` does it for you.
+- One table can be open per sheet at a time; write as many as you like one after another. Table names
+  must be valid Excel names, must not read as cell references (`A1`, `R1C1`), and must be unique in the
+  workbook, ignoring case. A table with no data rows gets one empty row, as Excel requires.
+- Totals rows, custom table styles, and tables in XLS or CSV are not supported.
+
 ## Prefetch compression (XLSX/XLSB writing)
 
 The write-side mirror of [Prefetch decompression](reading.md#prefetch-decompression-xlsxxlsb). XLSX and XLSB
