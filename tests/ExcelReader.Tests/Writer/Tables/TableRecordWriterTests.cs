@@ -66,6 +66,21 @@ namespace ExcelReader.Tests.Writer.Tables
             Assert.Equal([("First", "A1:C3"), ("Second", "A4:C6")], read.Tables.Select(static t => (t.Name, t.Ref)));
         }
 
+        [Fact]
+        public async Task EmptyTableDoesNotOverlapTheNextOne()
+        {
+            using MemoryStream stream = new();
+            await using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(stream, leaveOpen: true))
+            {
+                XlsxSheetWriter sheet = workbook.AddSheet("Report");
+                await sheet.WriteTableAsync(Array.Empty<Sale>(), "Empty", ExcelRecordLayout.FromAttributes<Sale>(), ct: TestContext.Current.CancellationToken);
+                await sheet.WriteTableAsync(Sales, "Full", ExcelRecordLayout.FromAttributes<Sale>(), ct: TestContext.Current.CancellationToken);
+            }
+
+            using IExcelWorkbook read = Excel.Open(new ReadOnlyMemory<byte>(stream.ToArray()));
+            Assert.Equal([("Empty", "A1:C2"), ("Full", "A3:C5")], read.Tables.Select(static t => (t.Name, t.Ref)));
+        }
+
         private static async IAsyncEnumerable<Sale> Stream()
         {
             foreach (Sale sale in Sales)
