@@ -33,6 +33,7 @@ namespace ExcelReader.Core.Reader
         private readonly IExcelRowEnumerator _rows;
         private readonly bool _isDate1904;
         private readonly string _sheetName;
+        private readonly int _firstColumn;
         private readonly string?[] _names;
         private readonly Dictionary<string, int> _ordinals;
         private readonly bool _hasPendingRow;
@@ -62,13 +63,14 @@ namespace ExcelReader.Core.Reader
 
             _isDate1904 = sheet.IsDate1904;
             _sheetName = sheet.Name;
+            _firstColumn = ExcelTableSheet.FirstColumnOf(sheet);
             _rows = sheet.GetEnumerator();
             _pendingConsumed = true;
             try
             {
                 if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
                 {
-                    _names = ReadHeaderNames(_rows.Current);
+                    _names = ReadHeaderNames(_rows.Current, _firstColumn);
                 }
                 else if (headerRow > 0)
                 {
@@ -78,7 +80,7 @@ namespace ExcelReader.Core.Reader
                 {
                     _hasPendingRow = _rows.MoveNext();
                     _pendingConsumed = false;
-                    _names = _hasPendingRow ? new string?[_rows.Current.ColumnCount] : [];
+                    _names = _hasPendingRow ? new string?[Math.Max(0, _rows.Current.ColumnCount - _firstColumn)] : [];
                 }
                 _ordinals = BuildOrdinals(_names);
             }
@@ -89,13 +91,13 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        private static string?[] ReadHeaderNames(Row header)
+        private static string?[] ReadHeaderNames(Row header, int firstColumn)
         {
-            string?[] names = new string?[header.ColumnCount];
+            string?[] names = new string?[Math.Max(0, header.ColumnCount - firstColumn)];
             foreach (RowCell cell in header.Cells)
             {
                 string text = cell.Value.GetString().Trim();
-                names[cell.ColumnIndex] = text.Length == 0 ? null : text;
+                names[cell.ColumnIndex - firstColumn] = text.Length == 0 ? null : text;
             }
             return names;
         }
@@ -431,7 +433,7 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidOperationException("No current row; call Read() first.");
             }
-            return _rows.Current[i];
+            return _rows.Current[_firstColumn + i];
         }
 
         private T GetParsed<T>(int i) where T : struct, IUtf8SpanParsable<T>

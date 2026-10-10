@@ -316,7 +316,7 @@ namespace ExcelReader.Core.Reader
             }
 
             using IExcelRowEnumerator rows = sheet.GetEnumerator();
-            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText);
+            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText, ExcelTableSheet.FirstColumnOf(sheet));
         }
 
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
