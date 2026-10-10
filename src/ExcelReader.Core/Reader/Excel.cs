@@ -45,12 +45,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <c>ZipArchive</c>
-        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// workbook never suspends, even under <c>await foreach</c>.
+        /// central directory without a <c>ZipArchive</c>. Small parts (workbook, styles, shared strings)
+        /// are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+        /// without <see cref="ExcelReaderOptions.PrefetchDecompression"/> enumeration never suspends, even
+        /// under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole XLSX file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</param>
         public static XlsxWorkbook FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
@@ -110,12 +111,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <c>ZipArchive</c>
-        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// workbook never suspends, even under <c>await foreach</c>.
+        /// central directory without a <c>ZipArchive</c>. Small parts (workbook, styles, shared strings)
+        /// are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+        /// without <see cref="ExcelReaderOptions.PrefetchDecompression"/> enumeration never suspends, even
+        /// under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole XLSB file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</param>
         public static XlsbWorkbook FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
