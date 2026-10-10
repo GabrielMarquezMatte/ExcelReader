@@ -51,3 +51,6 @@ static ExcelReader.Core.Writer.ExcelTableOptions.operator ==(ExcelReader.Core.Wr
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.BeginTable(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null) -> void
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.BeginTableAsync(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.EndTable() -> void
+ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.BeginTable(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null) -> void
+ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.BeginTableAsync(string! name, System.Collections.Generic.IReadOnlyList<string!>! columns, ExcelReader.Core.Writer.ExcelTableOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.EndTable() -> void

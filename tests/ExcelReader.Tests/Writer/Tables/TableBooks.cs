@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Tests.Writer.Tables
@@ -116,7 +117,7 @@ namespace ExcelReader.Tests.Writer.Tables
 
     public static class TableBooks
     {
-        public static TheoryData<string> Formats { get; } = new() { "xlsx" };
+        public static TheoryData<string> Formats { get; } = new() { "xlsx", "xlsb" };
 
         internal static ITableBook Create(string format)
         {
@@ -124,6 +125,7 @@ namespace ExcelReader.Tests.Writer.Tables
             return format switch
             {
                 "xlsx" => new TableBook<XlsxSheetWriter, XlsxRowWriter>(XlsxWorkbookWriter.Create(stream, leaveOpen: true), stream),
+                "xlsb" => new TableBook<XlsbSheetWriter, XlsbRowWriter>(XlsbWorkbookWriter.Create(stream, leaveOpen: true), stream),
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
         }

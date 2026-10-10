@@ -21,6 +21,15 @@ namespace ExcelReader.Core.Reader.Xlsb
         internal const int BeginList = 343;
         internal const int BeginListCol = 347;
         internal const int ListTableStyleClient = 513;
+        internal const int BeginAFilter = 161;
+        internal const int EndAFilter = 162;
+        internal const int EndList = 344;
+        internal const int BeginListCols = 345;
+        internal const int EndListCols = 346;
+        internal const int EndListCol = 348;
+        internal const int BeginListParts = 660;
+        internal const int ListPart = 661;
+        internal const int EndListParts = 662;
         internal const int Fmt = 44;
         internal const int Fill = 45;
         internal const int Border = 46;
