@@ -63,6 +63,18 @@ namespace ExcelReader.Tests.Writer.Tables
             Assert.Contains("<tableStyleInfo showFirstColumn=\"0\" showLastColumn=\"0\" showRowStripes=\"1\" showColumnStripes=\"0\"/>", table, StringComparison.Ordinal);
         }
 
+        [Fact]
+        public void ColumnNameWithAnEscapeLookalikeIsEscapedLikeItsHeaderCell()
+        {
+            ITableBook book = TableBooks.Create("xlsx");
+            book.AddSheet("S");
+            book.BeginTable("Codes", ["Code_x0041_"]);
+            book.Row("a");
+            byte[] package = book.Finish();
+
+            Assert.Contains("<tableColumn id=\"1\" name=\"Code_x005F_x0041_\"/>", Text(package, "xl/tables/table1.xml"), StringComparison.Ordinal);
+        }
+
         private static byte[] TwoTables()
         {
             ITableBook book = TableBooks.Create("xlsx");

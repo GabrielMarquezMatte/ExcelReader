@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Security;
 using System.Text;
 using ExcelReader.Core.Writer.Internal;
 
@@ -21,7 +20,7 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         internal static string Table(WrittenTable table)
         {
-            string name = SecurityElement.Escape(table.Name);
+            string name = Escape(table.Name);
             string reference = table.Ref;
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -31,12 +30,19 @@ namespace ExcelReader.Core.Writer.Xlsx
             sb.Append(CultureInfo.InvariantCulture, $"<tableColumns count=\"{table.Columns.Length}\">");
             for (int i = 0; i < table.Columns.Length; i++)
             {
-                sb.Append(CultureInfo.InvariantCulture, $"<tableColumn id=\"{i + 1}\" name=\"{SecurityElement.Escape(table.Columns[i])}\"/>");
+                sb.Append(CultureInfo.InvariantCulture, $"<tableColumn id=\"{i + 1}\" name=\"{Escape(table.Columns[i])}\"/>");
             }
             sb.Append("</tableColumns>");
             AppendStyleInfo(sb, table.Options);
             sb.Append("</table>");
             return sb.ToString();
+        }
+
+        private static string Escape(string value)
+        {
+            using BiffBuffer buffer = new(value.Length + 16);
+            CellFormatter.WriteEscaped(buffer, value);
+            return Encoding.UTF8.GetString(buffer.Span);
         }
 
         private static void AppendStyleInfo(StringBuilder sb, ExcelTableOptions options)
