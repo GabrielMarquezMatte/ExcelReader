@@ -84,6 +84,28 @@ namespace ExcelReader.Tests.Writer.Tables
             Assert.Contains("Target=\"../tables/table1.bin\"", System.Text.Encoding.UTF8.GetString(TableBooks.Entry(package, "xl/worksheets/_rels/sheet1.bin.rels")), StringComparison.Ordinal);
         }
 
+        [Fact]
+        public void SheetWithoutTableHasNoAutoFilterOrSortState()
+        {
+            ITableBook book = TableBooks.Create("xlsb");
+            book.AddSheet("S");
+            book.Row("Pen", 100);
+
+            List<int> ids = [.. Records(TableBooks.Entry(book.Finish(), "xl/worksheets/sheet1.bin")).Select(static r => r.Id)];
+
+            Assert.DoesNotContain(161, ids);
+            Assert.DoesNotContain(648, ids);
+            Assert.Equal([146, 130], ids.Skip(ids.Count - 2));
+        }
+
+        [Fact]
+        public void TableSheetTailAfterSheetDataIsOnlyListParts()
+        {
+            List<int> ids = [.. Records(TableBooks.Entry(StockPackage(), "xl/worksheets/sheet1.bin")).Select(static r => r.Id)];
+
+            Assert.Equal([660, 661, 662, 130], ids.Skip(ids.IndexOf(146) + 1));
+        }
+
         private static byte[] StockPackage()
         {
             ITableBook book = TableBooks.Create("xlsb");

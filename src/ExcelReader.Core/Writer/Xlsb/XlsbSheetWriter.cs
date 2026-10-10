@@ -223,7 +223,6 @@ namespace ExcelReader.Core.Writer.Xlsb
                 EnsureStarted();
                 _tables.CloseOpen(_rowNumber);
                 WriteRecord(Brt.EndSheetData);
-                WriteSheetMetadata();
                 WriteListParts();
                 WriteRecord(Brt.EndSheet);
                 if (_stream is null)
@@ -256,7 +255,6 @@ namespace ExcelReader.Core.Writer.Xlsb
                 EnsureStarted();
                 _tables.CloseOpen(_rowNumber);
                 WriteRecord(Brt.EndSheetData);
-                WriteSheetMetadata();
                 WriteListParts();
                 WriteRecord(Brt.EndSheet);
                 if (_stream is null)
@@ -586,16 +584,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriteBlobRecord(Brt.Pane, SecondPayload);
             WriteRecord(Brt.EndWsView);
             WriteRecord(Brt.EndWsViews);
-        }
-        private static ReadOnlySpan<byte> SheetMetadataPayload => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
-        private static ReadOnlySpan<byte> TableStyleClientPayload => [0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
-        private void WriteSheetMetadata()
-        {
-            WriteBlobRecord(Brt.BeginCellMetadata, SheetMetadataPayload);
-            WriteRecord(Brt.EndCellMetadata);
-            WriteRecord(Brt.BeginTableStyles);
-            WriteBlobRecord(Brt.TableStyleClient, TableStyleClientPayload);
-            WriteRecord(Brt.EndTableStyles);
         }
 
         private void WriteCell(int columnIndex, XlsbCell cell)
