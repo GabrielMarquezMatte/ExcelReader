@@ -692,6 +692,35 @@ namespace ExcelReader.Tests.Reader
             Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
         }
 
+        [Theory]
+        [InlineData(0xFFFFFFFFu)]
+        [InlineData(0u)]
+        public void XlsbTableOverMalformedRowNumbersThrowsInvalidData(uint badRow)
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(
+                [.. TableWorkbooks.BeginList(0, 3, 0, 0, 1, 0, "T"), .. TableWorkbooks.ListColumn(1, "H")],
+                [
+                    .. B.Record(Brt.RowHdr, B.U32(0)),
+                    .. B.Record(Brt.CellSt, B.CellSt(0, 0, "H")),
+                    .. B.Record(Brt.RowHdr, B.U32(1)),
+                    .. B.Record(Brt.CellRk, B.CellRk(0, 0, (1u << 2) | 0x02)),
+                    .. B.Record(Brt.RowHdr, B.U32(badRow)),
+                    .. B.Record(Brt.CellRk, B.CellRk(0, 0, (2u << 2) | 0x02)),
+                    .. B.Record(Brt.RowHdr, B.U32(2)),
+                    .. B.Record(Brt.CellRk, B.CellRk(0, 0, (3u << 2) | 0x02)),
+                    .. B.Record(Brt.EndSheetData),
+                ]);
+            using XlsbWorkbook workbook = Excel.FromXlsb(ms);
+            using IExcelRowEnumerator rows = Assert.Single(workbook.Tables).AsSheet().GetEnumerator();
+
+            Assert.Throws<InvalidDataException>(() =>
+            {
+                while (rows.MoveNext())
+                {
+                }
+            });
+        }
+
         [Fact]
         public async Task MalformedXlsbTableFromStreamingSourceThrowsInvalidData()
         {
