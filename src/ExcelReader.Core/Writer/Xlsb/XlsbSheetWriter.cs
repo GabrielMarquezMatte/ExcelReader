@@ -8,7 +8,7 @@ using ExcelReader.Core.Writer.Internal;
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
-    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
+    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>
     {
         private const int SpillThreshold = 64 * 1024;
 
@@ -18,6 +18,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private readonly CompressionLevel _compression;
         private readonly bool _offloadWrite;
         private readonly BiffBuffer _records = new(4096);
+        private readonly TableTracker _tables = new();
         private Stream? _stream;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
@@ -63,6 +64,14 @@ namespace ExcelReader.Core.Writer.Xlsb
         internal BiffBuffer Payload { get; } = new(256);
         internal bool UseSharedStrings => _owner.UseSharedStrings;
         internal bool ResourcesReleased => _stream is null && _buffersDisposed;
+
+        internal IReadOnlyList<WrittenTable> Tables
+        {
+            get
+            {
+                return _tables.Finished;
+            }
+        }
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
@@ -212,8 +221,10 @@ namespace ExcelReader.Core.Writer.Xlsb
             try
             {
                 EnsureStarted();
+                _tables.CloseOpen(_rowNumber);
                 WriteRecord(Brt.EndSheetData);
                 WriteSheetMetadata();
+                WriteListParts();
                 WriteRecord(Brt.EndSheet);
                 if (_stream is null)
                 {
@@ -243,8 +254,10 @@ namespace ExcelReader.Core.Writer.Xlsb
             try
             {
                 EnsureStarted();
+                _tables.CloseOpen(_rowNumber);
                 WriteRecord(Brt.EndSheetData);
                 WriteSheetMetadata();
+                WriteListParts();
                 WriteRecord(Brt.EndSheet);
                 if (_stream is null)
                 {
@@ -263,6 +276,56 @@ namespace ExcelReader.Core.Writer.Xlsb
                 throw;
             }
             Release(faulted: false);
+        }
+
+        private void WriteListParts()
+        {
+            IReadOnlyList<WrittenTable> tables = _tables.Finished;
+            if (tables.Count == 0)
+            {
+                return;
+            }
+            Payload.Reset();
+            Payload.WriteU32((uint)tables.Count);
+            WriteRecord(Brt.BeginListParts, Payload.Span);
+            for (int i = 0; i < tables.Count; i++)
+            {
+                Payload.Reset();
+                Biff12RecordWriter.WriteWideString(Payload, TablePackage.RelationshipId(i));
+                WriteRecord(Brt.ListPart, Payload.Span);
+            }
+            WriteRecord(Brt.EndListParts);
+        }
+
+        /// <inheritdoc/>
+        public void BeginTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null)
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            ExcelTableOptions effective = options ?? ExcelTableOptions.Default;
+            string[] names = TableValidation.Validate(name, columns, effective);
+            _tables.RequireNoneOpen();
+            _owner.Tables.RequireAvailable(name);
+            TableTracker.RequireRoom(_rowNumber + 1);
+            using (XlsbRowWriter row = StartRow())
+            {
+                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+            }
+            _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber);
+        }
+
+        /// <inheritdoc/>
+        public ValueTask BeginTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            BeginTable(name, columns, options);
+            return ValueTask.CompletedTask;
+        }
+
+        /// <inheritdoc/>
+        public void EndTable()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            _tables.End(_rowNumber);
         }
 
         private void Fault()
