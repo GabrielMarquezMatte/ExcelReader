@@ -191,7 +191,7 @@ namespace ExcelReader.Tests.Writer.Tables
             async.Row(null, "Pen", 100);
 
             Dictionary<string, byte[]> expected = TableBooks.Entries(sync.Finish());
-            Dictionary<string, byte[]> actual = TableBooks.Entries(async.Finish());
+            Dictionary<string, byte[]> actual = TableBooks.Entries(await async.FinishAsync());
             Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), actual.Keys.Order(StringComparer.Ordinal));
             foreach ((string name, byte[] bytes) in expected)
             {
