@@ -204,11 +204,14 @@ if (workbook.TryGetTable("Sales", out ExcelTable? sales))
 
 - `FirstRow`, `FirstColumn`, `LastRow` and `LastColumn` are zero-based and include the header and totals
   rows; `Ref` is the same range in A1 notation.
-- Column indexes inside `AsSheet()` stay those of the sheet: a table starting at column C reports its
-  first cell at index 2.
-- A table whose header row is turned off (`HeaderRowCount == 0`) still enumerates, but binding by name
-  throws `InvalidOperationException`. Read it with `new ExcelDataReader(table.AsSheet(), headerRow: 0)`
-  or by column index.
+- Column indexes inside `AsSheet()` rows stay those of the sheet: a table starting at column C reports
+  its first cell at index 2. `Excel.InferSchema` keeps those indexes in `ExcelColumnSchema.Index` but
+  lists only the table's columns. `ExcelDataReader` ordinals are relative to the table: ordinal 0 is
+  its first column.
+- A table whose header row is turned off (`HeaderRowCount == 0`) still enumerates, but `Parse` throws
+  `InvalidOperationException` for every map, and `ExcelDataReader` and `InferSchema` throw it when
+  `headerRow` is greater than 0. Read it with `new ExcelDataReader(table.AsSheet(), headerRow: 0)`,
+  `Excel.InferSchema(table.AsSheet(), headerRow: 0)`, or by column index on the rows.
 - `StyleName` is the table style's name, such as `TableStyleMedium2`, or `null` when the table has none.
 
 ## Reading sheets in parallel
