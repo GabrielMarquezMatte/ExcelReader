@@ -71,7 +71,7 @@ namespace ExcelReader.Tests.Reader.Tables
             IExcelSheet view = Table(workbook, "NoHeader").AsSheet();
 
             Assert.Throws<InvalidOperationException>(() => ExcelParser.FromAttributes<StockRow>().Parse(view));
-            Assert.Throws<InvalidOperationException>(() => new ExcelDataReader(view));
+            Assert.Throws<InvalidOperationException>(() => new SheetDataReader(view));
             Assert.Throws<InvalidOperationException>(() => Excel.InferSchema(view));
         }
 
@@ -82,7 +82,7 @@ namespace ExcelReader.Tests.Reader.Tables
             using IExcelWorkbook workbook = Excel.Open(TableMetadataTests.FixturePath(file));
             IExcelSheet view = Table(workbook, "NoHeader").AsSheet();
 
-            using ExcelDataReader reader = new(view, new ExcelDataReaderOptions { HeaderRow = 0 });
+            using SheetDataReader reader = new(view, new SheetDataReaderOptions { HeaderRow = 0 });
             List<string> letters = [];
             while (reader.Read())
             {
@@ -99,7 +99,7 @@ namespace ExcelReader.Tests.Reader.Tables
         {
             using IExcelWorkbook workbook = Excel.Open(TableMetadataTests.FixturePath(file));
 
-            using ExcelDataReader reader = new(Table(workbook, "Sales").AsSheet());
+            using SheetDataReader reader = new(Table(workbook, "Sales").AsSheet());
             Assert.True(reader.Read());
 
             Assert.Equal(3, reader.FieldCount);
@@ -115,9 +115,9 @@ namespace ExcelReader.Tests.Reader.Tables
             using IExcelWorkbook workbook = Excel.Open(TableMetadataTests.FixturePath(file));
             IExcelSheet view = Table(workbook, "NoStyle").AsSheet();
 
-            using ExcelDataReader named = new(view, new ExcelDataReaderOptions { HeaderRow = 1 });
+            using SheetDataReader named = new(view, new SheetDataReaderOptions { HeaderRow = 1 });
             Assert.True(named.Read());
-            using ExcelDataReader unnamed = new(view, new ExcelDataReaderOptions { HeaderRow = 0 });
+            using SheetDataReader unnamed = new(view, new SheetDataReaderOptions { HeaderRow = 0 });
             Assert.True(unnamed.Read());
 
             Assert.Equal((2, "Name", "Value", "x"), (named.FieldCount, named.GetName(0), named.GetName(1), named.GetString(0)));

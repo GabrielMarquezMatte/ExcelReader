@@ -167,16 +167,16 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
-        public void ExcelDataReader_Reads_The_Sheet_It_Is_Given_And_Names_Its_Table_After_It()
+        public void SheetDataReader_Reads_The_Sheet_It_Is_Given_And_Names_Its_Table_After_It()
         {
             using XlsxWorkbook workbook = Excel.FromXlsx(BuildXlsx());
-            using ExcelDataReader data = new(workbook.Sheets[1]);
+            using SheetDataReader data = new(workbook.Sheets[1]);
             Assert.Equal(2, data.FieldCount);
             Assert.True(data.Read());
             Assert.Equal("s1-0", data.GetString(0));
             using DataTable schema = data.GetSchemaTable()!;
             Assert.Equal("S1", schema.Rows[0][SchemaTableColumn.BaseTableName]);
-            Assert.Throws<ArgumentNullException>(() => new ExcelDataReader((IExcelSheet)null!));
+            Assert.Throws<ArgumentNullException>(() => new SheetDataReader((IExcelSheet)null!));
         }
 
         [Fact]

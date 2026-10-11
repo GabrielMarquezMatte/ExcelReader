@@ -1,10 +1,10 @@
 namespace ExcelReader.Core.Reader
 {
-    /// <summary>Options for adapting a sheet to <see cref="System.Data.IDataReader"/> with <see cref="ExcelDataReader"/>.</summary>
-    public sealed class ExcelDataReaderOptions
+    /// <summary>Options for adapting a sheet to <see cref="System.Data.IDataReader"/> with <see cref="SheetDataReader"/>.</summary>
+    public sealed class SheetDataReaderOptions
     {
         /// <summary>Gets the default options: column names on row 1.</summary>
-        public static ExcelDataReaderOptions Default { get; } = new();
+        public static SheetDataReaderOptions Default { get; } = new();
 
         /// <summary>
         /// Gets the 1-based row holding column names. <c>0</c> means a header-less sheet, whose columns come

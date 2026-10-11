@@ -251,11 +251,11 @@ if (workbook.TryGetTable("Sales", out ExcelTable? sales))
   rows; `Ref` is the same range in A1 notation.
 - Column indexes inside `AsSheet()` rows stay those of the sheet: a table starting at column C reports
   its first cell at index 2. `Excel.InferSchema` keeps those indexes in `ExcelColumnSchema.Index` but
-  lists only the table's columns. `ExcelDataReader` ordinals are relative to the table: ordinal 0 is
+  lists only the table's columns. `SheetDataReader` ordinals are relative to the table: ordinal 0 is
   its first column.
 - A table whose header row is turned off (`HeaderRowCount == 0`) still enumerates, but `Parse` throws
-  `InvalidOperationException` for every map, and `ExcelDataReader` and `InferSchema` throw it when
-  `HeaderRow` is greater than 0. Read it with `new ExcelDataReader(table.AsSheet(), new ExcelDataReaderOptions { HeaderRow = 0 })`,
+  `InvalidOperationException` for every map, and `SheetDataReader` and `InferSchema` throw it when
+  `HeaderRow` is greater than 0. Read it with `new SheetDataReader(table.AsSheet(), new SheetDataReaderOptions { HeaderRow = 0 })`,
   `Excel.InferSchema(table.AsSheet(), new SchemaInferenceOptions { HeaderRow = 0 })`, or by column index on the rows.
 - `StyleName` is the table style's name, such as `TableStyleMedium2`, or `null` when the table has none.
 
@@ -359,20 +359,20 @@ Writing has the same option, under a different name: see
 
 ## Bridge to ADO.NET (`IDataReader`)
 
-`ExcelDataReader` adapts one `IExcelSheet` to `System.Data.IDataReader`, so it drops straight into `SqlBulkCopy`, `DataTable.Load`, Dapper, or any other ADO.NET consumer:
+`SheetDataReader` adapts one `IExcelSheet` to `System.Data.IDataReader`, so it drops straight into `SqlBulkCopy`, `DataTable.Load`, Dapper, or any other ADO.NET consumer:
 
 ```csharp
 using System.Data;
 using ExcelReader.Core.Reader;
 
 using IExcelWorkbook workbook = Excel.Open("report.xlsx");
-using IDataReader data = new ExcelDataReader(workbook.FirstSheet); // header on row 1 by default
+using IDataReader data = new SheetDataReader(workbook.FirstSheet); // header on row 1 by default
 
 var table = new DataTable();
 table.Load(data);
 ```
 
-The header row (1-based, default 1) fixes the column shape; pass `new ExcelDataReaderOptions { HeaderRow = 0 }` for a header-less sheet, whose columns come back named `Column0`, `Column1`, ... sized from the first data row. There is no schema-inference pass — `GetFieldType`/`GetValue`/the typed getters read the *current* row's own cell type, so a consumer building its schema from the first row (like `DataTable.Load`) locks in that row's types for the whole load. `NextResult()` always returns `false`; build one `ExcelDataReader` per sheet instead of chaining result sets.
+The header row (1-based, default 1) fixes the column shape; pass `new SheetDataReaderOptions { HeaderRow = 0 }` for a header-less sheet, whose columns come back named `Column0`, `Column1`, ... sized from the first data row. There is no schema-inference pass — `GetFieldType`/`GetValue`/the typed getters read the *current* row's own cell type, so a consumer building its schema from the first row (like `DataTable.Load`) locks in that row's types for the whole load. `NextResult()` always returns `false`; build one `SheetDataReader` per sheet instead of chaining result sets.
 
 The bridge costs ~1.3–1.4x over iterating rows directly, and `GetBytes` stays within ~10% of the direct read. See [ADO.NET bridge](../performance/benchmarks.md#adonet-bridge-idatareader) in the benchmarks.
 

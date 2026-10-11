@@ -102,12 +102,13 @@ These changes replace positional parameters and loose arguments with types that 
 | `IExcelCellConverter<T>.TryConvert(in Cell, bool isDate1904, IFormatProvider provider, out T)` | `TryConvert(in Cell, in ExcelRowContext context, out T)` |
 | `ExcelCellReader<T>`, `ExcelRowParser<T>`, `ExcelCellReaders.*`: `(…, bool isDate1904, IFormatProvider provider, …)` | `(…, in ExcelRowContext context, …)` |
 | `Excel.InferSchema(sheet, headerRow, sampleSize, parseText)` returning `ExcelColumnSchema[]` | `Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = …, SampleSize = …, ParseText = … })` returning `IReadOnlyList<ExcelColumnSchema>` |
-| `new ExcelDataReader(sheet, headerRow)` | `new ExcelDataReader(sheet, new ExcelDataReaderOptions { HeaderRow = … })` |
+| `new ExcelDataReader(sheet, headerRow)` | `new SheetDataReader(sheet, new SheetDataReaderOptions { HeaderRow = … })` |
 | `sheet.ToArrowRecordBatch(schema, headerRow)` | `sheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = schema, HeaderRow = … })` |
 | `WriteRecordBatch(batch, sheetName, writeHeader)` and the async form | `WriteRecordBatch(batch, new ArrowWriteOptions { SheetName = …, WriteHeader = … })` |
 | `XlsWorkbookWriter.Create(stream, leaveOpen, date1904)` | `XlsWorkbookWriter.Create(stream, leaveOpen, new XlsWriterOptions { Date1904 = … })` |
 | `Excel.FromCsv*(…, CsvReaderOptions options)` | `Excel.FromCsv*(…, new ExcelReaderOptions { Csv = options })` |
 | `CsvReaderOptions.MaxCellBytes`, `CsvReaderOptions.InternStrings` | `ExcelReaderOptions.MaxCellBytes`, `ExcelReaderOptions.InternStrings` |
+| `ExcelDataReader` (its name collided with Sylvan.Data.Excel and the ExcelDataReader package) | `SheetDataReader` |
 | `Cell.TryGetDateTime(out DateTime)`, which silently assumed the 1900 date system | `Cell.TryGetDateTime(workbook.IsDate1904, out DateTime)` |
 
 A converter reads the date system and culture from the context:
