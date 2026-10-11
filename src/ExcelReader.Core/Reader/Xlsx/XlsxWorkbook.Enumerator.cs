@@ -516,7 +516,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     return -1;
                 }
                 int lt = textStart + rel;
-                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8))
+                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8) || buf.AsSpan(textStart, rel).IndexOf("_x"u8) >= 0)
                 {
                     return -1;
                 }
@@ -878,7 +878,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private void EmitScalarValueFast(Kind kind, ReadOnlySpan<byte> v, int valueStart, int col, int style)
             {
-                if (kind == Kind.IsoDate || (kind == Kind.Formula && v.IndexOf((byte)'&') >= 0))
+                if (kind == Kind.IsoDate || (kind == Kind.Formula && (v.IndexOf((byte)'&') >= 0 || v.IndexOf("_x"u8) >= 0)))
                 {
                     EmitScalarValue(kind, v, col, style);
                     return;
@@ -964,7 +964,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     return;
                 }
                 Span<byte> dst = _acc.ReserveValueSpan(src.Length);
-                _acc.Advance(XlsxXml.Decode(src, dst));
+                _acc.Advance(XlsxXml.UnescapeXString(dst[..XlsxXml.Decode(src, dst)]));
             }
 
             private void AppendRaw(ReadOnlySpan<byte> src)
