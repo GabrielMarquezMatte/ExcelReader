@@ -3,5 +3,5 @@ using ExcelReader.Core.Reader.Csv;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
 {
-    internal delegate CsvRowAction<TState> CsvAccumulateFactory<TState>(Row header, bool sequential);
+    internal delegate RowAction<TState> RowActionFactory<TState>(Row header, bool sequential);
 }

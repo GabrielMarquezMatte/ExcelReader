@@ -57,7 +57,7 @@ namespace ExcelReader.Native.Typed
                 }
 
                 bool isDate1904 = handle.Workbook.IsDate1904;
-                CsvAggregation<PartitionTable> aggregation = new()
+                RowAggregation<PartitionTable> aggregation = new()
                 {
                     Seed = () => new PartitionTable(specs),
                     Accumulate = (ref PartitionTable state, Row row) => state.Append(row, columnIndices, isDate1904),

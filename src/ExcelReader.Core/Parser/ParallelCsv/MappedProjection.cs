@@ -9,8 +9,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
     {
         private const int StackallocLimit = 256;
 
-        internal static CsvRowAction<TState> Bind(
-            ExcelParser<TModel> parser, Row header, int headerRow, bool sequential, CsvModelSink<TState, TModel> sink)
+        internal static RowAction<TState> Bind(
+            ExcelParser<TModel> parser, Row header, int headerRow, bool sequential, ModelSink<TState, TModel> sink)
         {
             TypeMapInfo<TModel> info = parser.CsvInfo;
             ExcelParserConfig config = parser.Config;

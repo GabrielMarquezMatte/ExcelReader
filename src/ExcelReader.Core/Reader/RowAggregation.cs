@@ -1,18 +1,20 @@
-namespace ExcelReader.Core.Reader.Csv
+using ExcelReader.Core.Reader.Csv;
+
+namespace ExcelReader.Core.Reader
 {
     /// <summary>
     /// A fold over CSV records expressed as three functions, for
-    /// <see cref="CsvParallel.AggregateAsync{TState}(ReadOnlyMemory{byte}, CsvAggregation{TState}, CsvParallelOptions?, CancellationToken)"/>.
-    /// Carries the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>, without requiring a type.
+    /// <see cref="CsvParallel.AggregateAsync{TState}(ReadOnlyMemory{byte}, RowAggregation{TState}, CsvParallelOptions?, CancellationToken)"/>.
+    /// Carries the same contract as <see cref="IRowAccumulator{TSelf, TModel}"/>, without requiring a type.
     /// </summary>
     /// <typeparam name="TState">The accumulator type. Each partition of the source owns one instance.</typeparam>
-    public sealed class CsvAggregation<TState>
+    public sealed class RowAggregation<TState>
     {
         /// <summary>Gets the function that creates an empty accumulator. Called once per partition, possibly more.</summary>
         public required Func<TState> Seed { get; init; }
 
         /// <summary>Gets the function that folds one record into its partition's accumulator. Runs concurrently on worker threads and must mutate only the accumulator it is given.</summary>
-        public required CsvRowAction<TState> Accumulate { get; init; }
+        public required RowAction<TState> Accumulate { get; init; }
 
         /// <summary>Gets the function that folds the following partition's accumulator into the preceding one. Called on one thread, left to right in source order.</summary>
         public required Func<TState, TState, TState> Combine { get; init; }

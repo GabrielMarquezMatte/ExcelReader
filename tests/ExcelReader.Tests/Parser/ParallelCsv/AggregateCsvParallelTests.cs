@@ -9,7 +9,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 {
     public class AggregateCsvParallelTests
     {
-        private readonly struct RowText : ICsvRecord<RowText>
+        private readonly struct RowText : IRowRecord<RowText>
         {
             public string Text { get; init; }
 
@@ -20,7 +20,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             }
         }
 
-        private ref struct NumberedRow : ICsvRecord<NumberedRow>
+        private ref struct NumberedRow : IRowRecord<NumberedRow>
         {
             public ReadOnlySpan<byte> Name;
             public int Id;
@@ -37,7 +37,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             }
         }
 
-        private sealed class RowLog : ICsvAccumulator<RowLog, RowText>, ICsvAccumulator<RowLog, NumberedRow>
+        private sealed class RowLog : IRowAccumulator<RowLog, RowText>, IRowAccumulator<RowLog, NumberedRow>
         {
             public List<string> Rows { get; } = [];
 
@@ -57,7 +57,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             }
         }
 
-        private static readonly CsvAggregation<List<string>> Collecting = new()
+        private static readonly RowAggregation<List<string>> Collecting = new()
         {
             Seed = static () => [],
             Accumulate = static (ref List<string> rows, Row row) => rows.Add(Render(row)),
@@ -89,7 +89,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             return rows.Count > headerRow ? rows[headerRow..] : [];
         }
 
-        private static Task<List<string>> WithChunkSize(byte[] csv, int dop, int chunkSize, int headerRow = 0, CsvAggregation<List<string>>? aggregation = null)
+        private static Task<List<string>> WithChunkSize(byte[] csv, int dop, int chunkSize, int headerRow = 0, RowAggregation<List<string>>? aggregation = null)
         {
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
@@ -153,7 +153,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = Encoding.UTF8.GetBytes("ok,\"one\nBOOM,x\"\nok,two\nok,\"three\nBOOM,y\"\nok,four\n");
             List<string> expected = Sequential(csv);
             int misguessedDeliveries = 0;
-            var throwOnBoom = new CsvAggregation<List<string>>
+            var throwOnBoom = new RowAggregation<List<string>>
             {
                 Seed = Collecting.Seed,
                 Accumulate = (ref List<string> rows, Row row) =>
@@ -179,7 +179,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task SurfacesAnExceptionThrownForARealRecord()
         {
             byte[] csv = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Range(0, 200).Select(i => $"r{i},v\n")));
-            var failAt150 = new CsvAggregation<int>
+            var failAt150 = new RowAggregation<int>
             {
                 Seed = static () => 0,
                 Accumulate = static (ref int count, Row row) =>
@@ -259,8 +259,8 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = "a\n"u8.ToArray();
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => CsvParallel.AggregateAsync<RowLog, RowText>(csv, new CsvParallelOptions { DegreeOfParallelism = -1 }, TestContext.Current.CancellationToken));
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => CsvParallel.AggregateAsync<RowLog, RowText>(csv, new CsvParallelOptions { HeaderRow = -1 }, TestContext.Current.CancellationToken));
-            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync(csv, (CsvAggregation<int>)null!, null, TestContext.Current.CancellationToken));
-            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync(csv, new CsvAggregation<int> { Seed = null!, Accumulate = static (ref int s, Row r) => s++, Combine = static (a, b) => a + b }, null, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync(csv, (RowAggregation<int>)null!, null, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync(csv, new RowAggregation<int> { Seed = null!, Accumulate = static (ref int s, Row r) => s++, Combine = static (a, b) => a + b }, null, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -284,7 +284,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             foreach (bool partitioned in new[] { true, false })
             {
                 var calls = new ConcurrentBag<(string Header, bool Sequential)>();
-                CsvAccumulateFactory<List<string>> factory = (Row header, bool sequential) =>
+                RowActionFactory<List<string>> factory = (Row header, bool sequential) =>
                 {
                     calls.Add((Render(header), sequential));
                     return Collecting.Accumulate;
@@ -306,7 +306,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = LargeCsv(rows: 500);
             CancellationToken ct = TestContext.Current.CancellationToken;
             var columnCounts = new ConcurrentBag<int>();
-            CsvAccumulateFactory<List<string>> factory = (Row header, bool sequential) =>
+            RowActionFactory<List<string>> factory = (Row header, bool sequential) =>
             {
                 columnCounts.Add(header.ColumnCount);
                 return Collecting.Accumulate;
@@ -322,7 +322,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task DoesNotCallTheFactoryWhenTheInputEndsBeforeTheHeader()
         {
             int calls = 0;
-            CsvAccumulateFactory<List<string>> factory = (Row header, bool sequential) =>
+            RowActionFactory<List<string>> factory = (Row header, bool sequential) =>
             {
                 Interlocked.Increment(ref calls);
                 return Collecting.Accumulate;
