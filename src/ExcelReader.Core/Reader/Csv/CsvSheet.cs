@@ -46,7 +46,7 @@ namespace ExcelReader.Core.Reader.Csv
             }
         }
 
-        private CsvReader Reader
+        internal CsvReader Reader
         {
             get
             {

@@ -1,3 +1,4 @@
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
@@ -13,11 +14,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             Combine = static (left, _) => left,
         };
 
-        internal static RowActionFactory<byte> Binder(ExcelParser<TModel> parser, int headerRow, Action<TModel> body)
+        internal static RowActionFactory<byte> Binder(ExcelParser<TModel> parser, TypeMapInfo<TModel> info, bool isDate1904, int headerRow, Action<TModel> body)
         {
             ModelSink<byte, TModel> sink = (ref byte _, TModel model) => body(model);
             return (Row header, bool sequential) =>
-                MappedProjection<byte, TModel>.Bind(parser, header, headerRow, sequential, sink);
+                MappedProjection<byte, TModel>.Bind(parser, info, isDate1904, header, headerRow, sequential, sink);
         }
     }
 }

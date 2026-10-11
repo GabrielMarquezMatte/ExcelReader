@@ -3,6 +3,7 @@ using System.Text;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Internal;
 using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
@@ -65,6 +66,16 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             return Build(new CsvChunkSource(data), options, parser, Normalize(degreeOfParallelism), chunkSize, ownedHandle: null, ct);
         }
 
+        internal static IAsyncEnumerable<T> Create<T>(CsvReader reader, int degreeOfParallelism, ExcelParser<T> parser, CancellationToken ct)
+        {
+            int dop = Normalize(degreeOfParallelism);
+            if (!reader.TryGetChunkSource(out CsvChunkSource source) || !CanPartition(dop, source.Length, reader.Options))
+            {
+                return new CsvEnumerable<T>(reader.FirstSheet, parser.Config, parser.CsvInfo, ownedReader: null, ct);
+            }
+            return Build(source, reader.Options, parser, dop, chunkSizeOverride: 0, ownedHandle: null, ct, reader.Lifetime, reader);
+        }
+
         internal static int Normalize(int degreeOfParallelism)
         {
             return degreeOfParallelism == 0 ? Environment.ProcessorCount : degreeOfParallelism;
@@ -86,7 +97,9 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             int dop,
             int chunkSizeOverride,
             SafeFileHandle? ownedHandle,
-            CancellationToken ct)
+            CancellationToken ct,
+            ReaderLifetime? lease = null,
+            object? owner = null)
         {
             ExcelParserConfig config = parser.Config;
             TypeMapInfo<T> info = parser.CsvInfo;
@@ -110,7 +123,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 return Sequential(source.OpenReader(options), parser, ct);
             }
 
-            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, ownedHandle);
+            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, ownedHandle, lease, owner);
         }
 
         private static CsvEnumerable<T> Sequential<T>(

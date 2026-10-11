@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Internal;
 using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
@@ -18,6 +19,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         private readonly int _dop;
 
         private readonly SafeFileHandle? _ownedHandle;
+        private readonly ReaderLifetime? _lease;
+        private readonly object? _owner;
 
         internal ParallelCsvEnumerable(
             CsvChunkSource source,
@@ -28,7 +31,9 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvReaderOptions readerOptions,
             ExcelParserConfig config,
             int degreeOfParallelism,
-            SafeFileHandle? ownedHandle)
+            SafeFileHandle? ownedHandle,
+            ReaderLifetime? lease = null,
+            object? owner = null)
         {
             _source = source;
             _plan = plan;
@@ -39,12 +44,15 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             _config = config;
             _dop = degreeOfParallelism;
             _ownedHandle = ownedHandle;
+            _lease = lease;
+            _owner = owner;
         }
 
         [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks",
             Justification = "The CTS and semaphore handed to the workers outlive them by construction: the finally block cancels and then awaits every worker task to completion, and only the enclosing `using` declarations' finally — which runs after it — disposes them.")]
         public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
+            _lease?.Acquire(_owner!);
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             CancellationToken ct = cts.Token;
 
@@ -90,6 +98,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 await cts.CancelAsync().ConfigureAwait(false);
                 await allWorkers.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
                 _ownedHandle?.Dispose();
+                _lease?.Release();
             }
         }
 

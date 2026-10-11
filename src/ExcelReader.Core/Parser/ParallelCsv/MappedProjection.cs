@@ -10,9 +10,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         private const int StackallocLimit = 256;
 
         internal static RowAction<TState> Bind(
-            ExcelParser<TModel> parser, Row header, int headerRow, bool sequential, ModelSink<TState, TModel> sink)
+            ExcelParser<TModel> parser, TypeMapInfo<TModel> info, bool isDate1904, Row header, int headerRow, bool sequential, ModelSink<TState, TModel> sink)
         {
-            TypeMapInfo<TModel> info = parser.CsvInfo;
             ExcelParserConfig config = parser.Config;
             ColumnBinding<TModel>[] bindings;
             int requireValueCount;
@@ -37,7 +36,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                     return;
                 }
                 TModel model = info.CreateInstance();
-                SparseRowProjection.ParseRow(in row, bindings, default, false, false, provider, throwOnParseFailure, 0, ref model);
+                SparseRowProjection.ParseRow(in row, bindings, default, false, isDate1904, provider, throwOnParseFailure, 0, ref model);
                 sink(ref state, model);
             }
 
@@ -49,7 +48,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                     return;
                 }
                 TModel model = info.CreateInstance();
-                SparseRowProjection.ParseRow(in row, bindings, default, false, false, provider, throwOnParseFailure, current, ref model);
+                SparseRowProjection.ParseRow(in row, bindings, default, false, isDate1904, provider, throwOnParseFailure, current, ref model);
                 sink(ref state, model);
             }
 
@@ -63,11 +62,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 if (bindings.Length <= StackallocLimit)
                 {
                     Span<bool> seen = stackalloc bool[bindings.Length];
-                    SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, 0, ref model);
+                    SparseRowProjection.ParseRow(in row, bindings, seen, true, isDate1904, provider, throwOnParseFailure, 0, ref model);
                 }
                 else
                 {
-                    SparseRowProjection.ParseRow(in row, bindings, new bool[bindings.Length], true, false, provider, throwOnParseFailure, 0, ref model);
+                    SparseRowProjection.ParseRow(in row, bindings, new bool[bindings.Length], true, isDate1904, provider, throwOnParseFailure, 0, ref model);
                 }
                 sink(ref state, model);
             }
@@ -83,11 +82,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 if (bindings.Length <= StackallocLimit)
                 {
                     Span<bool> seen = stackalloc bool[bindings.Length];
-                    SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, current, ref model);
+                    SparseRowProjection.ParseRow(in row, bindings, seen, true, isDate1904, provider, throwOnParseFailure, current, ref model);
                 }
                 else
                 {
-                    SparseRowProjection.ParseRow(in row, bindings, new bool[bindings.Length], true, false, provider, throwOnParseFailure, current, ref model);
+                    SparseRowProjection.ParseRow(in row, bindings, new bool[bindings.Length], true, isDate1904, provider, throwOnParseFailure, current, ref model);
                 }
                 sink(ref state, model);
             }

@@ -1,3 +1,4 @@
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
@@ -21,10 +22,10 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             },
         };
 
-        internal static RowActionFactory<TAccumulator> Binder(ExcelParser<TModel> parser, int headerRow)
+        internal static RowActionFactory<TAccumulator> Binder(ExcelParser<TModel> parser, TypeMapInfo<TModel> info, bool isDate1904, int headerRow)
         {
             return (Row header, bool sequential) =>
-                MappedProjection<TAccumulator, TModel>.Bind(parser, header, headerRow, sequential, Sink);
+                MappedProjection<TAccumulator, TModel>.Bind(parser, info, isDate1904, header, headerRow, sequential, Sink);
         }
     }
 }
