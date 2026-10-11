@@ -1,6 +1,7 @@
 import ctypes
 import gc
 import shutil
+import sys
 import threading
 import time
 from pathlib import Path
@@ -674,6 +675,8 @@ def test_a_consumer_holding_the_gil_does_not_block_other_threads_while_a_batch_p
         holding_gil = ctypes.PYFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
         get_next = holding_gil(ctypes.cast(stream.get_next, ctypes.c_void_p).value)
         batch = _native.ArrowArray()
+        switch_interval = sys.getswitchinterval()
+        sys.setswitchinterval(0.001)
         ticker = threading.Thread(target=tick)
         ticker.start()
         try:
@@ -683,6 +686,7 @@ def test_a_consumer_holding_the_gil_does_not_block_other_threads_while_a_batch_p
         finally:
             stop.set()
             ticker.join()
+            sys.setswitchinterval(switch_interval)
         release_batch = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(batch.release)
         release_batch(ctypes.addressof(batch))
         del capsule
@@ -691,7 +695,7 @@ def test_a_consumer_holding_the_gil_does_not_block_other_threads_while_a_batch_p
     assert batch.length == rows
     inside = [start] + [t for t in ticks if start < t < end] + [end]
     longest_gap = max(b - a for a, b in zip(inside, inside[1:]))
-    assert end - start > 0.05, "the batch must parse long enough for the gap to mean something"
+    assert end - start > 0.02, "the batch must parse for many switch intervals for the gap to mean something"
     assert longest_gap < (end - start) / 2
 
 
