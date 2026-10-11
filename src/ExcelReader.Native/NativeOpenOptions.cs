@@ -144,7 +144,7 @@ namespace ExcelReader.Native
             {
                 options = options with { InternStrings = internStrings };
             }
-            return options;
+            return options with { MaxCellBytesOverride = options.MaxCellBytes, InternStringsOverride = options.InternStrings };
         }
 
         internal ExcelReaderOptions ToExcelReaderOptions()

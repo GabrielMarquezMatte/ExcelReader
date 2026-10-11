@@ -136,7 +136,7 @@ namespace ExcelReader.Tests.Native
 
         private static Row FirstRowOf(string csv)
         {
-            CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes(csv), CsvReaderOptions.Default);
+            CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes(csv), new ExcelReaderOptions { Csv = CsvReaderOptions.Default });
             CsvReader.Enumerator rows = reader.FirstSheet.GetEnumerator();
             Assert.True(rows.MoveNext());
             return rows.Current;

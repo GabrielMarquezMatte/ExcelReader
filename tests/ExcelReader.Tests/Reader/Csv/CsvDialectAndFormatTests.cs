@@ -135,7 +135,7 @@ namespace ExcelReader.Tests.Reader.Csv
             string path = WriteTemp("Name;City;Age\nAda;London;36\n");
             try
             {
-                using CsvReader reader = Excel.FromCsvFile(path, CsvReaderOptions.Default with { SniffDialect = true });
+                using CsvReader reader = Excel.FromCsvFile(path, new ExcelReaderOptions { Csv = CsvReaderOptions.Default with { SniffDialect = true } });
 
                 Assert.Equal(["Ada", "London", "36"], ReadAll(reader.FirstSheet)[1]);
             }
@@ -152,7 +152,7 @@ namespace ExcelReader.Tests.Reader.Csv
             try
             {
                 var options = CsvReaderOptions.Default with { SniffDialect = true, Encoding = Encoding.Latin1 };
-                using CsvReader reader = Excel.FromCsvFile(path, options);
+                using CsvReader reader = Excel.FromCsvFile(path, new ExcelReaderOptions { Csv = options });
 
                 Assert.Equal(["José", "São Paulo"], ReadAll(reader.FirstSheet)[1]);
             }
@@ -174,7 +174,7 @@ namespace ExcelReader.Tests.Reader.Csv
             try
             {
                 var options = new SheetParallelOptions { DegreeOfParallelism = 4 };
-                using CsvReader reader = Excel.FromCsvFile(path, CsvReaderOptions.Default with { SniffDialect = true });
+                using CsvReader reader = Excel.FromCsvFile(path, new ExcelReaderOptions { Csv = CsvReaderOptions.Default with { SniffDialect = true } });
 
                 var rows = new List<Person>();
                 await foreach (Person person in SheetParallel.ParseAsync(reader.FirstSheet, ExcelParser.FromAttributes<Person>(), options, ct: TestContext.Current.CancellationToken))

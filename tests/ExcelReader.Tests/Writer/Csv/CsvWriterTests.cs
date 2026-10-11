@@ -246,7 +246,7 @@ namespace ExcelReader.Tests.Writer.Csv
             }
             ms.Position = 0;
 
-            using IExcelWorkbook reader = Excel.FromCsv(ms, options: new CsvReaderOptions { Quote = (byte)'5' });
+            using IExcelWorkbook reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = new CsvReaderOptions { Quote = (byte)'5' } });
             using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("155", e.Current[0].GetString());

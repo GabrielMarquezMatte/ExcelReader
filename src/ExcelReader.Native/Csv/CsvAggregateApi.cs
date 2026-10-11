@@ -92,7 +92,7 @@ namespace ExcelReader.Native.Csv
             {
                 using PointerMemoryManager manager = new(data, dataLength);
                 CsvAggregateContext context = new(aggregation);
-                using CsvReader csv = Excel.FromCsv(manager.Memory, reader);
+                using CsvReader csv = Excel.OpenCsv(manager.Memory, reader);
                 return Run(context, Task.Run(() => SheetParallel.AggregateAsync(csv.FirstSheet, Build(context), options, CancellationToken.None)), out result);
             }
             catch (Exception exception)
@@ -184,7 +184,7 @@ namespace ExcelReader.Native.Csv
         internal static async Task<CsvAggregateState> AggregateAsync(
             string path, CsvReaderOptions reader, RowAggregation<CsvAggregateState> aggregation, SheetParallelOptions options)
         {
-            CsvReader csv = await Excel.FromCsvFileAsync(path, reader, CancellationToken.None).ConfigureAwait(false);
+            CsvReader csv = await Excel.OpenCsvFileAsync(path, reader, CancellationToken.None).ConfigureAwait(false);
             await using (csv.ConfigureAwait(false))
             {
                 return await SheetParallel.AggregateAsync(csv.FirstSheet, aggregation, options, CancellationToken.None).ConfigureAwait(false);

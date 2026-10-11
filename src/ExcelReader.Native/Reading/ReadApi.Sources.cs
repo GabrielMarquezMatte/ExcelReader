@@ -1,4 +1,5 @@
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Xls;
 
@@ -74,7 +75,7 @@ namespace ExcelReader.Native.Reading
                 IExcelWorkbook workbook;
                 if (format == NativeFormat.Csv || (format == NativeFormat.Auto && !IsWorkbookSignature(stream.Peek(8))))
                 {
-                    workbook = Excel.FromCsv(stream, leaveOpen: false, readerOptions.Csv);
+                    workbook = Excel.OpenCsv(stream, leaveOpen: false, readerOptions.Csv ?? CsvReaderOptions.Default);
                 }
                 else
                 {
