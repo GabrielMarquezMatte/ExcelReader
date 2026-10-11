@@ -19,7 +19,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             using var headerReader = Excel.FromCsv(csv);
             CsvBoundColumnMap<Row> map = CsvHeaderBinder.Bind(
-                headerReader, new ExcelParserConfig(), TypeMapper<Row>.GetCsvInfo(), out _);
+                headerReader, new ExcelParserOptions(), TypeMapper<Row>.GetCsvInfo(), out _);
 
             var source = new CsvChunkSource(csv.AsMemory());
             return await CsvChunkWorker.ParseAsync(
@@ -29,7 +29,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 map,
                 TypeMapper<Row>.GetCsvInfo(),
                 CsvReaderOptions.Default,
-                new ExcelParserConfig(),
+                new ExcelParserOptions(),
                 [],
                 CancellationToken.None);
         }
@@ -120,7 +120,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             {
                 using var headerReader = Excel.FromCsv(csv);
                 CsvBoundColumnMap<Row> map = CsvHeaderBinder.Bind(
-                    headerReader, new ExcelParserConfig(), TypeMapper<Row>.GetCsvInfo(), out _);
+                    headerReader, new ExcelParserOptions(), TypeMapper<Row>.GetCsvInfo(), out _);
 
                 using SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 var source = new CsvChunkSource(handle, csv.Length);
@@ -132,7 +132,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                     map,
                     TypeMapper<Row>.GetCsvInfo(),
                     CsvReaderOptions.Default,
-                    new ExcelParserConfig(),
+                    new ExcelParserOptions(),
                     [],
                     TestContext.Current.CancellationToken);
 

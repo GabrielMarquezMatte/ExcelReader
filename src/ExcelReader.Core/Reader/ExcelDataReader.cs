@@ -208,7 +208,7 @@ namespace ExcelReader.Core.Reader
                 CellType.Empty => DBNull.Value,
                 CellType.Number => cell.TryGetDouble(out double d) ? d : cell.GetString(),
                 CellType.Date => cell.TryGetDateTime(_isDate1904, out DateTime dt) ? dt : cell.GetString(),
-                CellType.Boolean => ExcelCellReaders.Bool(in cell, _isDate1904, CultureInfo.InvariantCulture, out bool b) ? b : cell.GetString(),
+                CellType.Boolean => ExcelCellReaders.Bool(in cell, default, out bool b) ? b : cell.GetString(),
                 _ => cell.GetString(),
             };
         }
@@ -241,7 +241,7 @@ namespace ExcelReader.Core.Reader
         public bool GetBoolean(int i)
         {
             Cell cell = CurrentCell(i);
-            return ExcelCellReaders.Bool(in cell, _isDate1904, CultureInfo.InvariantCulture, out bool value)
+            return ExcelCellReaders.Bool(in cell, default, out bool value)
                 ? value
                 : throw new FormatException($"Column {i} is not a valid boolean.");
         }

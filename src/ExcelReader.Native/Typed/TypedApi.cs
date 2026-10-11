@@ -432,41 +432,41 @@ namespace ExcelReader.Native.Typed
             [MethodImpl(MethodImplOptions.NoInlining)]
             private bool AppendInt64(in Cell cell, bool isDate1904)
             {
-                return Append(_longs, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out long value), value);
+                return Append(_longs, ExcelCellReaders.Parsable(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out long value), value);
             }
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             private bool AppendFloat64(in Cell cell, bool isDate1904)
             {
-                return Append(_doubles, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out double value), value);
+                return Append(_doubles, ExcelCellReaders.Parsable(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out double value), value);
             }
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             private bool AppendBool(in Cell cell, bool isDate1904)
             {
-                return Append(_bools, ColumnParserFactory.ReadBool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0));
+                return Append(_bools, ColumnParserFactory.ReadBool(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out bool flag), (byte)(flag ? 1 : 0));
             }
 
             private static readonly int UnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
             private bool AppendDate(in Cell cell, bool isDate1904)
             {
-                bool ok = ColumnParserFactory.ReadDateOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value)
-                    || ColumnParserFactory.ReadTextDateOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out value);
+                bool ok = ColumnParserFactory.ReadDateOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out DateOnly value)
+                    || ColumnParserFactory.ReadTextDateOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out value);
                 return Append(_ints, ok, value.DayNumber - UnixEpochDayNumber);
             }
 
             private bool AppendTime(in Cell cell, bool isDate1904)
             {
-                bool ok = ColumnParserFactory.ReadTimeOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out TimeOnly value)
-                    || ColumnParserFactory.ReadTextTimeOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out value);
+                bool ok = ColumnParserFactory.ReadTimeOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out TimeOnly value)
+                    || ColumnParserFactory.ReadTextTimeOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out value);
                 return Append(_longs, ok, value.ToTimeSpan().Ticks / 10);
             }
 
             private bool AppendTimestamp(in Cell cell, bool isDate1904)
             {
-                bool ok = ColumnParserFactory.ReadDateTime(in cell, isDate1904, CultureInfo.InvariantCulture, out DateTime value)
-                    || ColumnParserFactory.ReadTextDateTime(in cell, isDate1904, CultureInfo.InvariantCulture, out value);
+                bool ok = ColumnParserFactory.ReadDateTime(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out DateTime value)
+                    || ColumnParserFactory.ReadTextDateTime(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out value);
                 return Append(_longs, ok, (value - DateTime.UnixEpoch).Ticks / 10);
             }
 

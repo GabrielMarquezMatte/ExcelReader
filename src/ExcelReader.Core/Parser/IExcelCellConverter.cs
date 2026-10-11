@@ -21,9 +21,8 @@ namespace ExcelReader.Core.Parser
         /// signal a parse failure, which leaves the target property at its default.
         /// </summary>
         /// <param name="cell">The non-empty cell to convert.</param>
-        /// <param name="isDate1904">True when the source workbook uses the 1904 date system.</param>
-        /// <param name="provider">The format provider configured for parsing.</param>
+        /// <param name="context">The date system and format provider to convert with.</param>
         /// <param name="value">The converted value, when this method returns true.</param>
-        bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out T value);
+        bool TryConvert(in Cell cell, in ExcelRowContext context, out T value);
     }
 }

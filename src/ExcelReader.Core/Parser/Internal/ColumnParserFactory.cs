@@ -188,7 +188,7 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, string> setter = CompileSetter<T, string>(prop);
-            return (ref model, in cell, _, _) =>
+            return (ref model, in cell, in _) =>
             {
                 setter(ref model, cell.GetString());
                 return true;
@@ -199,22 +199,22 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, ReadOnlySpan<byte>> setter = CompileRefStructSetter<T, ReadOnlySpan<byte>>(prop);
-            return (ref model, in cell, _, _) =>
+            return (ref model, in cell, in _) =>
             {
                 setter(ref model, cell.Value);
                 return true;
             };
         }
 
-        private delegate bool CellReader<V>(in Cell cell, bool isDate1904, IFormatProvider provider, out V value);
+        private delegate bool CellReader<V>(in Cell cell, in ExcelRowContext context, out V value);
 
         private static ColumnParser<T> BuildValue<T, V>(PropertyInfo prop, CellReader<V> read)
             where T : allows ref struct
         {
             RefAction<T, V> setter = CompileSetter<T, V>(prop);
-            return (ref model, in cell, isDate1904, provider) =>
+            return (ref model, in cell, in context) =>
             {
-                if (!read(in cell, isDate1904, provider, out V value))
+                if (!read(in cell, in context, out V value))
                 {
                     return false;
                 }
@@ -228,9 +228,9 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, V?> setter = CompileSetter<T, V?>(prop);
-            return (ref model, in cell, isDate1904, provider) =>
+            return (ref model, in cell, in context) =>
             {
-                if (!read(in cell, isDate1904, provider, out V value))
+                if (!read(in cell, in context, out V value))
                 {
                     return false;
                 }
@@ -240,19 +240,19 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
 #pragma warning disable S1172 
-        internal static bool ReadBool(in Cell cell, bool isDate1904, IFormatProvider provider, out bool value)
+        internal static bool ReadBool(in Cell cell, in ExcelRowContext context, out bool value)
         {
             return TryParseBool(in cell, out value);
         }
 
-        internal static bool ReadDateTime(in Cell cell, bool isDate1904, IFormatProvider _, out DateTime value)
+        internal static bool ReadDateTime(in Cell cell, in ExcelRowContext context, out DateTime value)
         {
-            return cell.TryGetDateTime(isDate1904, out value);
+            return cell.TryGetDateTime(context.IsDate1904, out value);
         }
 
-        internal static bool ReadDateOnly(in Cell cell, bool isDate1904, IFormatProvider _, out DateOnly value)
+        internal static bool ReadDateOnly(in Cell cell, in ExcelRowContext context, out DateOnly value)
         {
-            if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
+            if (!cell.TryGetDateTime(context.IsDate1904, out DateTime dt))
             {
                 value = default;
                 return false;
@@ -261,7 +261,7 @@ namespace ExcelReader.Core.Parser.Internal
             return true;
         }
 
-        internal static bool ReadTimeOnly(in Cell cell, bool isDate1904, IFormatProvider provider, out TimeOnly value)
+        internal static bool ReadTimeOnly(in Cell cell, in ExcelRowContext context, out TimeOnly value)
         {
             if (!cell.TryGetDouble(out double serial) || !double.IsFinite(serial))
             {
@@ -272,19 +272,19 @@ namespace ExcelReader.Core.Parser.Internal
             return true;
         }
 
-        internal static bool ReadTextDateTime(in Cell cell, bool _, IFormatProvider provider, out DateTime value)
+        internal static bool ReadTextDateTime(in Cell cell, in ExcelRowContext context, out DateTime value)
         {
-            return TryParseDateTimeText(in cell, provider, out value);
+            return TryParseDateTimeText(in cell, context.FormatProvider, out value);
         }
 
-        internal static bool ReadTextDateOnly(in Cell cell, bool _, IFormatProvider provider, out DateOnly value)
+        internal static bool ReadTextDateOnly(in Cell cell, in ExcelRowContext context, out DateOnly value)
         {
-            return TryParseDateOnlyText(in cell, provider, out value);
+            return TryParseDateOnlyText(in cell, context.FormatProvider, out value);
         }
 
-        internal static bool ReadTextTimeOnly(in Cell cell, bool _, IFormatProvider provider, out TimeOnly value)
+        internal static bool ReadTextTimeOnly(in Cell cell, in ExcelRowContext context, out TimeOnly value)
         {
-            return TryParseTimeOnlyText(in cell, provider, out value);
+            return TryParseTimeOnlyText(in cell, context.FormatProvider, out value);
         }
 #pragma warning restore S1172
 
@@ -387,9 +387,9 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
-            return (ref model, in cell, _, provider) =>
+            return (ref model, in cell, in context) =>
             {
-                if (!cell.TryParse<TProp>(provider, out var value))
+                if (!cell.TryParse<TProp>(context.FormatProvider, out var value))
                 {
                     return false;
                 }
@@ -403,9 +403,9 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, TProp?> setter = CompileSetter<T, TProp?>(prop);
-            return (ref model, in cell, _, provider) =>
+            return (ref model, in cell, in context) =>
             {
-                if (!cell.TryParse(provider, out TProp parsed))
+                if (!cell.TryParse(context.FormatProvider, out TProp parsed))
                 {
                     return false;
                 }
@@ -420,9 +420,9 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
-            return (ref model, in cell, _, provider) =>
+            return (ref model, in cell, in context) =>
             {
-                if (!TryParseSpanParsable<TProp>(in cell, provider, out var value))
+                if (!TryParseSpanParsable<TProp>(in cell, context.FormatProvider, out var value))
                 {
                     return false;
                 }
@@ -436,9 +436,9 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, TProp?> setter = CompileSetter<T, TProp?>(prop);
-            return (ref model, in cell, _, provider) =>
+            return (ref model, in cell, in context) =>
             {
-                if (!TryParseSpanParsable(in cell, provider, out TProp parsed))
+                if (!TryParseSpanParsable(in cell, context.FormatProvider, out TProp parsed))
                 {
                     return false;
                 }
@@ -512,7 +512,7 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, TEnum> setter = CompileSetter<T, TEnum>(prop);
-            return (ref model, in cell, _, _) =>
+            return (ref model, in cell, in _) =>
             {
                 if (!EnumCache<TEnum>.TryParse(in cell, out TEnum value))
                 {
@@ -528,7 +528,7 @@ namespace ExcelReader.Core.Parser.Internal
             where T : allows ref struct
         {
             RefAction<T, TEnum?> setter = CompileSetter<T, TEnum?>(prop);
-            return (ref model, in cell, _, _) =>
+            return (ref model, in cell, in _) =>
             {
                 if (!EnumCache<TEnum>.TryParse(in cell, out TEnum parsed))
                 {
@@ -545,9 +545,9 @@ namespace ExcelReader.Core.Parser.Internal
         {
             var typed = (TConv)converter;
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
-            return (ref model, in cell, isDate1904, provider) =>
+            return (ref model, in cell, in context) =>
             {
-                if (!typed.TryConvert(in cell, isDate1904, provider, out TProp value))
+                if (!typed.TryConvert(in cell, in context, out TProp value))
                 {
                     return false;
                 }

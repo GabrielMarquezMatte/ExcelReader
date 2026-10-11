@@ -24,18 +24,18 @@ namespace ExcelReader.Core.Parser
     public sealed class ExcelParser<T>
         where T : allows ref struct
     {
-        private readonly ExcelParserConfig _config;
+        private readonly ExcelParserOptions _config;
         private readonly Func<TypeMapInfo<T>> _info;
         private readonly Func<TypeMapInfo<T>> _csvInfo;
 
-        internal ExcelParser(ExcelParserConfig config, Func<TypeMapInfo<T>> info, Func<TypeMapInfo<T>> csvInfo)
+        internal ExcelParser(ExcelParserOptions config, Func<TypeMapInfo<T>> info, Func<TypeMapInfo<T>> csvInfo)
         {
             _config = config;
             _info = info;
             _csvInfo = csvInfo;
         }
 
-        internal ExcelParserConfig Config => _config;
+        internal ExcelParserOptions Config => _config;
 
         internal TypeMapInfo<T> CsvInfo => _csvInfo();
 
@@ -104,15 +104,15 @@ namespace ExcelReader.Core.Parser
         /// a separate map with text-based date parsing.
         /// </remarks>
         /// <typeparam name="T">The model type.</typeparam>
-        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <param name="options">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserOptions"/>.</param>
         /// <returns>The parser.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> has <see cref="ExcelParserOptions.HeaderRow"/> less than 1.</exception>
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        public static ExcelParser<T> FromAttributes<T>(ExcelParserConfig? config = null)
+        public static ExcelParser<T> FromAttributes<T>(ExcelParserOptions? options = null)
             where T : allows ref struct
         {
-            return new ExcelParser<T>(ValidateConfig(config), TypeMapper<T>.GetInfo, TypeMapper<T>.GetCsvInfo);
+            return new ExcelParser<T>(ValidateOptions(options), TypeMapper<T>.GetInfo, TypeMapper<T>.GetCsvInfo);
         }
 
         /// <summary>Creates a parser from the map the <c>[ExcelSerializable]</c> source generator emitted for <typeparamref name="T"/>. Trimming and AOT safe.</summary>
@@ -122,13 +122,13 @@ namespace ExcelReader.Core.Parser
         /// <c>*Auto</c> readers in <see cref="ExcelCellReaders"/> — serial number first, text as a fallback.
         /// </remarks>
         /// <typeparam name="T">The model type; must implement <see cref="IExcelRowMap{T}"/>.</typeparam>
-        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <param name="options">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserOptions"/>.</param>
         /// <returns>The parser.</returns>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
-        public static ExcelParser<T> Generated<T>(ExcelParserConfig? config = null)
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> has <see cref="ExcelParserOptions.HeaderRow"/> less than 1.</exception>
+        public static ExcelParser<T> Generated<T>(ExcelParserOptions? options = null)
             where T : IExcelRowMap<T>, allows ref struct
         {
-            ExcelParserConfig effective = ValidateConfig(config);
+            ExcelParserOptions effective = ValidateOptions(options);
             var builder = new ExcelRowMapBuilder<T>();
             T.ConfigureExcelRowMap(builder);
             return Fixed(effective, builder.Build());
@@ -142,15 +142,15 @@ namespace ExcelReader.Core.Parser
         /// </remarks>
         /// <typeparam name="T">The model type.</typeparam>
         /// <param name="configure">Configures the row map by calling <see cref="ExcelRowMapBuilder{T}.Property{TValue}"/> and its siblings.</param>
-        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <param name="options">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserOptions"/>.</param>
         /// <returns>The parser.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
-        public static ExcelParser<T> Build<T>(Action<ExcelRowMapBuilder<T>> configure, ExcelParserConfig? config = null)
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> has <see cref="ExcelParserOptions.HeaderRow"/> less than 1.</exception>
+        public static ExcelParser<T> Build<T>(Action<ExcelRowMapBuilder<T>> configure, ExcelParserOptions? options = null)
             where T : allows ref struct
         {
             ArgumentNullException.ThrowIfNull(configure);
-            ExcelParserConfig effective = ValidateConfig(config);
+            ExcelParserOptions effective = ValidateOptions(options);
             var builder = new ExcelRowMapBuilder<T>();
             configure(builder);
             return Fixed(effective, builder.Build());
@@ -171,18 +171,18 @@ namespace ExcelReader.Core.Parser
         /// </remarks>
         /// <typeparam name="T">The model type.</typeparam>
         /// <param name="configure">Configures the properties that should override their attribute-driven binding.</param>
-        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <param name="options">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserOptions"/>.</param>
         /// <returns>The parser.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> has <see cref="ExcelParserOptions.HeaderRow"/> less than 1.</exception>
         /// <exception cref="InvalidOperationException"><paramref name="configure"/> calls <see cref="ExcelRowMapBuilder{T}.PropertyAt{TValue}"/>: an index-based map has no header row to match attribute-driven properties against.</exception>
         [RequiresUnreferencedCode("BuildWithAttributeFallback reflects over T's public properties for the attribute-driven fallback, which trimming may remove.")]
         [RequiresDynamicCode("BuildWithAttributeFallback binds attribute-driven property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        public static ExcelParser<T> BuildWithAttributeFallback<T>(Action<ExcelRowMapBuilder<T>> configure, ExcelParserConfig? config = null)
+        public static ExcelParser<T> BuildWithAttributeFallback<T>(Action<ExcelRowMapBuilder<T>> configure, ExcelParserOptions? options = null)
             where T : allows ref struct
         {
             ArgumentNullException.ThrowIfNull(configure);
-            ExcelParserConfig effective = ValidateConfig(config);
+            ExcelParserOptions effective = ValidateOptions(options);
             var builder = new ExcelRowMapBuilder<T>();
             configure(builder);
             TypeMapInfo<T> fluent = builder.Build(requireFactory: false);
@@ -191,19 +191,19 @@ namespace ExcelReader.Core.Parser
             return Fixed(effective, merged);
         }
 
-        private static ExcelParser<T> Fixed<T>(ExcelParserConfig config, TypeMapInfo<T> info)
+        private static ExcelParser<T> Fixed<T>(ExcelParserOptions config, TypeMapInfo<T> info)
             where T : allows ref struct
         {
             return new ExcelParser<T>(config, () => info, () => info);
         }
 
-        private static ExcelParserConfig ValidateConfig(ExcelParserConfig? config)
+        private static ExcelParserOptions ValidateOptions(ExcelParserOptions? options)
         {
-            if (config is not null && config.HeaderRow < 1)
+            if (options is not null && options.HeaderRow < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(config), config.HeaderRow, "HeaderRow must be at least 1.");
+                throw new ArgumentOutOfRangeException(nameof(options), options.HeaderRow, "HeaderRow must be at least 1.");
             }
-            return config ?? new ExcelParserConfig();
+            return options ?? new ExcelParserOptions();
         }
     }
 }

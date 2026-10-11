@@ -154,14 +154,14 @@ namespace ExcelReader.Tests.Parser
         {
             using CsvReader reader = Excel.FromCsv(Csv);
             var parser = ExcelParser.Build<FluentSale>(static builder => builder
-                .PropertyRaw(["Name"], static (ref FluentSale m, in Cell c, bool _, IFormatProvider _) =>
+                .PropertyRaw(["Name"], static (ref FluentSale m, in Cell c, in ExcelRowContext _) =>
                 {
                     m.Name = c.Value;
                     return true;
                 })
-                .PropertyRaw(["Id"], static (ref FluentSale m, in Cell c, bool _, IFormatProvider p) =>
+                .PropertyRaw(["Id"], static (ref FluentSale m, in Cell c, in ExcelRowContext x) =>
                 {
-                    bool ok = c.TryParse(p, out int id);
+                    bool ok = c.TryParse(x.FormatProvider, out int id);
                     m.Id = id;
                     return ok;
                 }));

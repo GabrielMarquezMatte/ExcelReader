@@ -6,7 +6,7 @@ namespace ExcelReader.Core.Parser
     /// Options controlling how <see cref="ExcelParser{T}"/> locates the header row, matches header
     /// text to bound properties, and handles cells that fail to parse.
     /// </summary>
-    public sealed class ExcelParserConfig
+    public sealed class ExcelParserOptions
     {
         /// <summary>Gets the 1-based row number that contains column headers. Defaults to <c>1</c>.</summary>
         public int HeaderRow { get; init; } = 1;

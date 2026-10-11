@@ -39,19 +39,19 @@ namespace ExcelReader.Core.Parser.SheetPipeline
         {
             return (Row header, bool _) =>
             {
-                ExcelParserConfig config = parser.Config;
+                ExcelParserOptions config = parser.Config;
                 ColumnBinding<T>[] bindings = info.IsIndexBased
                     ? info.IndexBindings
                     : SparseRowProjection.BuildColumnMap(in header, info, config.ColumnNameComparer, config.HeaderNormalization, out int _);
                 bool track = bindings.Any(static binding => binding.RequireValue);
-                IFormatProvider provider = config.Culture;
+                ExcelRowContext context = new() { IsDate1904 = isDate1904, FormatProvider = config.Culture };
                 bool throwOnParseFailure = config.ThrowOnParseFailure;
                 return (ref Chunk chunk, Row row) =>
                 {
                     int rowInChunk = ++chunk.Rows;
                     T model = info.CreateInstance();
                     Span<bool> seen = track ? (chunk.Seen ??= new bool[bindings.Length]) : default;
-                    SparseRowProjection.ParseRow(in row, bindings, seen, track, isDate1904, provider, throwOnParseFailure, rowInChunk, ref model);
+                    SparseRowProjection.ParseRow(in row, bindings, seen, track, in context, throwOnParseFailure, rowInChunk, ref model);
                     chunk.Items.Add(model);
                 };
             };

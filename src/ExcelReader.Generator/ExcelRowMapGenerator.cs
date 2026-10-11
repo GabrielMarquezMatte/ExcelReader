@@ -650,16 +650,16 @@ namespace ExcelReader.Generator
                 case ReadKind.Value:
                 case ReadKind.Nullable:
                     EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.Assign, req,
-                        $"{p.Read.Reader}(in c, d, pr, out {p.Read.ValueType} v)");
+                        $"{p.Read.Reader}(in c, in x, out {p.Read.ValueType} v)");
                     return;
                 case ReadKind.Converted:
                     EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.Assign, req,
-                        $"{p.Read.Reader}.TryConvert(in c, d, pr, out {p.Read.ValueType} v)");
+                        $"{p.Read.Reader}.TryConvert(in c, in x, out {p.Read.ValueType} v)");
                     return;
                 case ReadKind.GuidValue:
                 case ReadKind.GuidNullable:
                     EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.Assign, req,
-                        "global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>(in c, d, pr, out global::System.Guid v)");
+                        "global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>(in c, in x, out global::System.Guid v)");
                     return;
                 default:
                     return;
@@ -668,7 +668,7 @@ namespace ExcelReader.Generator
 
         private static void EmitPropertyRaw(StringBuilder sb, string qualifiedType, string namesLiteral, string assign, string req, string tryReadExpr)
         {
-            sb.AppendLine($"            .PropertyRaw([{namesLiteral}], static (ref {qualifiedType} m, in global::ExcelReader.Core.Reader.Cell c, bool d, global::System.IFormatProvider pr) =>");
+            sb.AppendLine($"            .PropertyRaw([{namesLiteral}], static (ref {qualifiedType} m, in global::ExcelReader.Core.Reader.Cell c, in global::ExcelReader.Core.Parser.ExcelRowContext x) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                if (!{tryReadExpr}) {{ return false; }}");
             sb.AppendLine($"                {assign};");

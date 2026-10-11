@@ -180,7 +180,7 @@ namespace ExcelReader.Core.Writer.Internal
     }
 
     /// <summary>
-    /// Formats text-fallback columns with the invariant culture, which is what <see cref="ExcelParserConfig.Culture"/>
+    /// Formats text-fallback columns with the invariant culture, which is what <see cref="ExcelParserOptions.Culture"/>
     /// defaults to, so a column written on any machine parses back.
     /// </summary>
     internal static class InvariantText

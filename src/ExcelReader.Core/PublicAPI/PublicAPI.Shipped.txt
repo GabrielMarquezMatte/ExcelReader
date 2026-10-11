@@ -42,18 +42,18 @@ ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.IExcelSheet
 ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xls.XlsSheet sheet) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.Xls.XlsSheet, ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator!>!
 ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xlsb.XlsbSheet sheet) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.Xlsb.XlsbSheet, ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator!>!
 ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.Xlsx.XlsxSheet sheet) -> ExcelReader.Core.Parser.ExcelEnumerable<T>!
-ExcelReader.Core.Parser.ExcelParserConfig
-ExcelReader.Core.Parser.ExcelParserConfig.ColumnNameComparer.get -> System.StringComparer!
-ExcelReader.Core.Parser.ExcelParserConfig.ColumnNameComparer.init -> void
-ExcelReader.Core.Parser.ExcelParserConfig.Culture.get -> System.Globalization.CultureInfo!
-ExcelReader.Core.Parser.ExcelParserConfig.Culture.init -> void
-ExcelReader.Core.Parser.ExcelParserConfig.ExcelParserConfig() -> void
-ExcelReader.Core.Parser.ExcelParserConfig.HeaderNormalization.get -> ExcelReader.Core.Parser.HeaderNormalization
-ExcelReader.Core.Parser.ExcelParserConfig.HeaderNormalization.init -> void
-ExcelReader.Core.Parser.ExcelParserConfig.HeaderRow.get -> int
-ExcelReader.Core.Parser.ExcelParserConfig.HeaderRow.init -> void
-ExcelReader.Core.Parser.ExcelParserConfig.ThrowOnParseFailure.get -> bool
-ExcelReader.Core.Parser.ExcelParserConfig.ThrowOnParseFailure.init -> void
+ExcelReader.Core.Parser.ExcelParserOptions
+ExcelReader.Core.Parser.ExcelParserOptions.ColumnNameComparer.get -> System.StringComparer!
+ExcelReader.Core.Parser.ExcelParserOptions.ColumnNameComparer.init -> void
+ExcelReader.Core.Parser.ExcelParserOptions.Culture.get -> System.Globalization.CultureInfo!
+ExcelReader.Core.Parser.ExcelParserOptions.Culture.init -> void
+ExcelReader.Core.Parser.ExcelParserOptions.ExcelParserOptions() -> void
+ExcelReader.Core.Parser.ExcelParserOptions.HeaderNormalization.get -> ExcelReader.Core.Parser.HeaderNormalization
+ExcelReader.Core.Parser.ExcelParserOptions.HeaderNormalization.init -> void
+ExcelReader.Core.Parser.ExcelParserOptions.HeaderRow.get -> int
+ExcelReader.Core.Parser.ExcelParserOptions.HeaderRow.init -> void
+ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure.get -> bool
+ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure.init -> void
 ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>
 ExcelReader.Core.Parser.ExcelRequiredAttribute
 ExcelReader.Core.Parser.ExcelRequiredAttribute.AllowEmpty.get -> bool
@@ -63,7 +63,9 @@ ExcelReader.Core.Parser.ExcelRowContext
 ExcelReader.Core.Parser.ExcelRowContext.Equals(ExcelReader.Core.Parser.ExcelRowContext other) -> bool
 ExcelReader.Core.Parser.ExcelRowContext.ExcelRowContext() -> void
 ExcelReader.Core.Parser.ExcelRowContext.FormatProvider.get -> System.IFormatProvider!
+ExcelReader.Core.Parser.ExcelRowContext.FormatProvider.init -> void
 ExcelReader.Core.Parser.ExcelRowContext.IsDate1904.get -> bool
+ExcelReader.Core.Parser.ExcelRowContext.IsDate1904.init -> void
 ExcelReader.Core.Parser.ExcelRowMapBuilder<T>
 ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.Converted<TValue>(string![]! names, ExcelReader.Core.Parser.IExcelCellConverter<TValue>! converter, ExcelReader.Core.Parser.ExcelPropertySetter<T, TValue>! set, bool isRequired = false, bool requireValue = false) -> ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!
 ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.ExcelRowMapBuilder() -> void
@@ -81,7 +83,7 @@ ExcelReader.Core.Parser.HeaderNormalization.None = 0 -> ExcelReader.Core.Parser.
 ExcelReader.Core.Parser.HeaderNormalization.RemoveDiacritics = 4 -> ExcelReader.Core.Parser.HeaderNormalization
 ExcelReader.Core.Parser.HeaderNormalization.Trim = 1 -> ExcelReader.Core.Parser.HeaderNormalization
 ExcelReader.Core.Parser.IExcelCellConverter<T>
-ExcelReader.Core.Parser.IExcelCellConverter<T>.TryConvert(in ExcelReader.Core.Reader.Cell cell, bool isDate1904, System.IFormatProvider! provider, out T value) -> bool
+ExcelReader.Core.Parser.IExcelCellConverter<T>.TryConvert(in ExcelReader.Core.Reader.Cell cell, in ExcelReader.Core.Parser.ExcelRowContext context, out T value) -> bool
 ExcelReader.Core.Parser.IExcelRowMap<T>
 ExcelReader.Core.Parser.IExcelRowMap<T>.ConfigureExcelRowMap(ExcelReader.Core.Parser.ExcelRowMapBuilder<T>! builder) -> void
 ExcelReader.Core.Parser.SyncRowEnumerator<T, TRows>
@@ -671,14 +673,14 @@ override ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.ToString() -> string!
 override ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.Equals(object? obj) -> bool
 override ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.GetHashCode() -> int
 override ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.ToString() -> string!
-static ExcelReader.Core.Parser.ExcelCellReaders.Enum<TEnum>(in ExcelReader.Core.Reader.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TEnum value) -> bool
-static ExcelReader.Core.Parser.ExcelCellReaders.Parsable<TValue>(in ExcelReader.Core.Reader.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
-static ExcelReader.Core.Parser.ExcelCellReaders.SpanParsable<TValue>(in ExcelReader.Core.Reader.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
-static ExcelReader.Core.Parser.ExcelCellReaders.Utf8(scoped in ExcelReader.Core.Reader.Cell cell, bool isDate1904, System.IFormatProvider! provider, out System.ReadOnlySpan<byte> value) -> bool
-static ExcelReader.Core.Parser.ExcelParser.Build<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
-static ExcelReader.Core.Parser.ExcelParser.BuildWithAttributeFallback<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
-static ExcelReader.Core.Parser.ExcelParser.FromAttributes<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
-static ExcelReader.Core.Parser.ExcelParser.Generated<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
+static ExcelReader.Core.Parser.ExcelCellReaders.Enum<TEnum>(in ExcelReader.Core.Reader.Cell cell, in ExcelReader.Core.Parser.ExcelRowContext context, out TEnum value) -> bool
+static ExcelReader.Core.Parser.ExcelCellReaders.Parsable<TValue>(in ExcelReader.Core.Reader.Cell cell, in ExcelReader.Core.Parser.ExcelRowContext context, out TValue value) -> bool
+static ExcelReader.Core.Parser.ExcelCellReaders.SpanParsable<TValue>(in ExcelReader.Core.Reader.Cell cell, in ExcelReader.Core.Parser.ExcelRowContext context, out TValue value) -> bool
+static ExcelReader.Core.Parser.ExcelCellReaders.Utf8(scoped in ExcelReader.Core.Reader.Cell cell, scoped in ExcelReader.Core.Parser.ExcelRowContext context, out System.ReadOnlySpan<byte> value) -> bool
+static ExcelReader.Core.Parser.ExcelParser.Build<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserOptions? options = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
+static ExcelReader.Core.Parser.ExcelParser.BuildWithAttributeFallback<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserOptions? options = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
+static ExcelReader.Core.Parser.ExcelParser.FromAttributes<T>(ExcelReader.Core.Parser.ExcelParserOptions? options = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
+static ExcelReader.Core.Parser.ExcelParser.Generated<T>(ExcelReader.Core.Parser.ExcelParserOptions? options = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
 static ExcelReader.Core.Parser.ExcelRowContext.operator !=(ExcelReader.Core.Parser.ExcelRowContext left, ExcelReader.Core.Parser.ExcelRowContext right) -> bool
 static ExcelReader.Core.Parser.ExcelRowContext.operator ==(ExcelReader.Core.Parser.ExcelRowContext left, ExcelReader.Core.Parser.ExcelRowContext right) -> bool
 static ExcelReader.Core.Reader.Csv.CsvDialect.Default.get -> ExcelReader.Core.Reader.Csv.CsvDialect
@@ -803,9 +805,9 @@ static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlyAuto -> ExcelRe
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlySerial -> ExcelReader.Core.Parser.ExcelCellReader<System.TimeOnly>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlyText -> ExcelReader.Core.Parser.ExcelCellReader<System.TimeOnly>!
 virtual ExcelReader.Core.Parser.AsyncRowEnumerator<T, TSheet, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
-virtual ExcelReader.Core.Parser.ExcelCellReader<TValue>.Invoke(in ExcelReader.Core.Reader.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
+virtual ExcelReader.Core.Parser.ExcelCellReader<TValue>.Invoke(in ExcelReader.Core.Reader.Cell cell, in ExcelReader.Core.Parser.ExcelRowContext context, out TValue value) -> bool
 virtual ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>.Invoke(ref TModel model, TValue value) -> void
-virtual ExcelReader.Core.Parser.ExcelRowParser<TModel>.Invoke(ref TModel model, in ExcelReader.Core.Reader.Cell cell, bool isDate1904, System.IFormatProvider! provider) -> bool
+virtual ExcelReader.Core.Parser.ExcelRowParser<TModel>.Invoke(ref TModel model, in ExcelReader.Core.Reader.Cell cell, in ExcelReader.Core.Parser.ExcelRowContext context) -> bool
 virtual ExcelReader.Core.Reader.RowAction<TState>.Invoke(ref TState state, ExcelReader.Core.Reader.Row row) -> void
 ~ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.AsyncEnumerator!
 ~ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.ExcelEnumerable<T, TSheet, TEnumerator>.Enumerator!

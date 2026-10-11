@@ -88,7 +88,7 @@ await foreach (Sale s in SheetParallel.ParseAsync(workbook.FirstSheet, parser, n
 - The caller owns the workbook and keeps it open until the task completes or the enumeration ends. v6 opened and closed its own source.
 - The CSV dialect is given when the workbook is opened (`CsvReaderOptions`), not in the parallel options.
 - A CSV in a `MemoryStream` is no longer partitioned: the stream overload of `Excel.FromCsv` reads it sequentially. Pass the bytes as `ReadOnlyMemory<byte>` to keep partitioning.
-- `HeaderRow` rules are the same as v6. `ParseAsync` takes the header from `ExcelParserConfig.HeaderRow` and rejects a non-zero `SheetParallelOptions.HeaderRow`; the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
+- `HeaderRow` rules are the same as v6. `ParseAsync` takes the header from `ExcelParserOptions.HeaderRow` and rejects a non-zero `SheetParallelOptions.HeaderRow`; the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
 - XLSX and XLSB sheets are now read on several threads when `DegreeOfParallelism` allows it. XLS, a table view (`ExcelTable.AsSheet()`), a sheet under 256 KB uncompressed and a CSV that cannot be partitioned still read sequentially with the same results.
 - `PrefetchDecompression` does not apply to a parallel XLSX or XLSB read; the pipeline already overlaps inflate and parse.
 

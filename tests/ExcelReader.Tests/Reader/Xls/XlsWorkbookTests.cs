@@ -305,7 +305,7 @@ namespace ExcelReader.Tests.Reader.Xls
         {
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["skip"], ["Name"], ["Sol"]])]);
             using var reader = Excel.FromXls(ms);
-            var parser = ExcelParser.FromAttributes<PersonRow>(new ExcelParserConfig { HeaderRow = 2 });
+            var parser = ExcelParser.FromAttributes<PersonRow>(new ExcelParserOptions { HeaderRow = 2 });
 
             var result = parser.Parse(reader.FirstSheet).ToList();
             Assert.Single(result);

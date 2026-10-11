@@ -152,7 +152,7 @@ namespace ExcelReader.Core.Reader.Schema
                         break;
                     case CellType.Number:
                         SawNumber = true;
-                        if (!ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out _))
+                        if (!cell.TryParse<long>(CultureInfo.InvariantCulture, out _))
                         {
                             SawNonIntegralNumber = true;
                         }
@@ -176,7 +176,7 @@ namespace ExcelReader.Core.Reader.Schema
                 bool canonical = HasCanonicalIntegerPart(text, out bool allDigits);
                 if (canonical && allDigits)
                 {
-                    if (!ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out _))
+                    if (!cell.TryParse<long>(CultureInfo.InvariantCulture, out _))
                     {
                         return false;
                     }

@@ -133,7 +133,7 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], ["oops", "Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => ExcelParser.FromAttributes<Row>(config).Parse(reader.FirstSheet).ToList());

@@ -76,7 +76,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             using CsvReader reader = Excel.FromCsv(csv);
             var rows = new List<string>();
-            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader.FirstSheet))
+            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserOptions { HeaderRow = headerRow }).Parse(reader.FirstSheet))
             {
                 rows.Add(Render(person));
             }
@@ -92,7 +92,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 ExcelParser.Generated<Person>(),
                 ExcelParser.FromAttributes<Person>(),
                 ExcelParser.Build<Person>(static b => b
-                    .PropertyRaw(["Name"], static (ref Person m, in Cell c, bool d, IFormatProvider pr) =>
+                    .PropertyRaw(["Name"], static (ref Person m, in Cell c, in ExcelRowContext x) =>
                     {
                         m.Name = c.Value;
                         return true;
@@ -204,7 +204,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             byte[] csv = "Note,Identifier,Name\nn1,1,ada\nn2,2,bob\n"u8.ToArray();
             ExcelParser<Person> map = ExcelParser.Build<Person>(static b => b
-                .PropertyRaw(["Name"], static (ref Person m, in Cell c, bool d, IFormatProvider pr) =>
+                .PropertyRaw(["Name"], static (ref Person m, in Cell c, in ExcelRowContext x) =>
                 {
                     m.Name = c.Value;
                     return true;
@@ -274,7 +274,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task ReportsTheExactRowSequentiallyAndZeroWhenPartitioned()
         {
             byte[] csv = "Name,Id,Note\nada,1,n\nbob,2,n\ncid,oops,n\ndan,4,n\n"u8.ToArray();
-            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserOptions { ThrowOnParseFailure = true });
 
             using CsvReader reader = Excel.FromCsv(csv);
             ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => SheetParallel.AggregateAsync<PeopleLog, Person>(
@@ -289,7 +289,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task DiscardsParseFailuresFromAMisguessedPartition()
         {
             byte[] csv = "Name,Id,Note\nok,1,\"one\nBOOM,notint,x\"\nok,2,two\nok,3,\"three\nBOOM,bad,y\"\nok,4,four\n"u8.ToArray();
-            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserOptions { ThrowOnParseFailure = true });
             List<string> expected = Sequential(csv, headerRow: 1);
             for (int chunkSize = 1; chunkSize <= csv.Length; chunkSize++)
             {
