@@ -70,3 +70,19 @@ static ExcelReader.Core.Reader.SheetParallel.ForEachAsync<TModel>(ExcelReader.Co
 static ExcelReader.Core.Reader.SheetParallel.ForEachAsync<TRecord>(ExcelReader.Core.Reader.IExcelSheet! sheet, System.Action<TRecord>! body, ExcelReader.Core.Reader.SheetParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 static ExcelReader.Core.Reader.SheetParallel.ParseAsync<T>(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Parser.ExcelParser<T>! parser, ExcelReader.Core.Reader.SheetParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<T>!
 static ExcelReader.Core.Reader.SheetParallelOptions.Default.get -> ExcelReader.Core.Reader.SheetParallelOptions!
+ExcelReader.Core.Reader.ExcelDataReader.ExcelDataReader(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.ExcelDataReaderOptions? options = null) -> void
+ExcelReader.Core.Reader.ExcelDataReaderOptions
+ExcelReader.Core.Reader.ExcelDataReaderOptions.ExcelDataReaderOptions() -> void
+ExcelReader.Core.Reader.ExcelDataReaderOptions.HeaderRow.get -> int
+ExcelReader.Core.Reader.ExcelDataReaderOptions.HeaderRow.init -> void
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.HeaderRow.get -> int
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.HeaderRow.init -> void
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.ParseText.get -> bool
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.ParseText.init -> void
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SampleSize.get -> int
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SampleSize.init -> void
+ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SchemaInferenceOptions() -> void
+static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.Schema.SchemaInferenceOptions? options = null) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
+static ExcelReader.Core.Reader.ExcelDataReaderOptions.Default.get -> ExcelReader.Core.Reader.ExcelDataReaderOptions!
+static ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.Default.get -> ExcelReader.Core.Reader.Schema.SchemaInferenceOptions!

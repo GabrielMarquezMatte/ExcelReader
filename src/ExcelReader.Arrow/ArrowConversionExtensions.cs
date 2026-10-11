@@ -9,26 +9,24 @@ namespace ExcelReader.Arrow
     {
         /// <summary>Converts one sheet into an Arrow <see cref="RecordBatch"/>.</summary>
         /// <param name="sheet">The sheet to convert.</param>
-        /// <param name="schema">The column schema to use; inferred from the sheet with <see cref="Excel.InferSchema(IExcelSheet, int, int, bool)"/> when <see langword="null"/>.</param>
-        /// <param name="headerRow">
-        /// 1-based header row, reused both for schema inference (when <paramref name="schema"/> is
-        /// <see langword="null"/>) and to skip the header line during the data pass. 0 means no header row.
-        /// </param>
+        /// <param name="options">The schema and header row; <see cref="ArrowReadOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>A record batch with one column per schema entry and one row per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidOperationException">
         /// A cell failed to convert to its column's declared type on a non-nullable column.
         /// </exception>
-        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        /// <exception cref="NotSupportedException"><paramref name="schema"/> names an unrecognized <see cref="ExcelColumnType"/>.</exception>
-        public static RecordBatch ToArrowRecordBatch(this IExcelSheet sheet, ExcelColumnSchema[]? schema = null, int headerRow = 1)
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <see cref="ArrowReadOptions.HeaderRow"/>.</exception>
+        /// <exception cref="NotSupportedException"><see cref="ArrowReadOptions.Schema"/> names an unrecognized <see cref="ExcelColumnType"/>.</exception>
+        public static RecordBatch ToArrowRecordBatch(this IExcelSheet sheet, ArrowReadOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(sheet);
-            schema ??= Excel.InferSchema(sheet, headerRow);
+            options ??= ArrowReadOptions.Default;
+            int headerRow = options.HeaderRow;
+            IReadOnlyList<ExcelColumnSchema> schema = options.Schema ?? Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = headerRow });
             bool isDate1904 = sheet.IsDate1904;
             using IExcelRowEnumerator rows = sheet.GetEnumerator();
-            ColumnAppender[] appenders = new ColumnAppender[schema.Length];
-            for (int i = 0; i < schema.Length; i++)
+            ColumnAppender[] appenders = new ColumnAppender[schema.Count];
+            for (int i = 0; i < schema.Count; i++)
             {
                 appenders[i] = ColumnAppender.Create(schema[i]);
             }

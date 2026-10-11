@@ -67,7 +67,7 @@ namespace ExcelReader.Tests.Reader
         {
             using CsvReader reader = Excel.FromCsvFile(FixtureCsv());
 
-            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet, parseText: true);
+            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet, new SchemaInferenceOptions { ParseText = true });
 
             ExcelColumnType s = ExcelColumnType.StringColumn, d = ExcelColumnType.DateColumn,
                 i = ExcelColumnType.Int64Column, f = ExcelColumnType.Float64Column;

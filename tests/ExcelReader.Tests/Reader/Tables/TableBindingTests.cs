@@ -82,7 +82,7 @@ namespace ExcelReader.Tests.Reader.Tables
             using IExcelWorkbook workbook = Excel.Open(TableMetadataTests.FixturePath(file));
             IExcelSheet view = Table(workbook, "NoHeader").AsSheet();
 
-            using ExcelDataReader reader = new(view, headerRow: 0);
+            using ExcelDataReader reader = new(view, new ExcelDataReaderOptions { HeaderRow = 0 });
             List<string> letters = [];
             while (reader.Read())
             {
@@ -90,7 +90,7 @@ namespace ExcelReader.Tests.Reader.Tables
             }
 
             Assert.Equal(["a", "b", "c"], letters);
-            Assert.Equal(2, Excel.InferSchema(view, headerRow: 0).Length);
+            Assert.Equal(2, Excel.InferSchema(view, new SchemaInferenceOptions { HeaderRow = 0 }).Length);
         }
 
         [Theory]
@@ -115,9 +115,9 @@ namespace ExcelReader.Tests.Reader.Tables
             using IExcelWorkbook workbook = Excel.Open(TableMetadataTests.FixturePath(file));
             IExcelSheet view = Table(workbook, "NoStyle").AsSheet();
 
-            using ExcelDataReader named = new(view, headerRow: 1);
+            using ExcelDataReader named = new(view, new ExcelDataReaderOptions { HeaderRow = 1 });
             Assert.True(named.Read());
-            using ExcelDataReader unnamed = new(view, headerRow: 0);
+            using ExcelDataReader unnamed = new(view, new ExcelDataReaderOptions { HeaderRow = 0 });
             Assert.True(unnamed.Read());
 
             Assert.Equal((2, "Name", "Value", "x"), (named.FieldCount, named.GetName(0), named.GetName(1), named.GetString(0)));

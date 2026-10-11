@@ -141,7 +141,7 @@ using var workbook = Excel.FromXlsxFile("report.xlsx");
 Apache.Arrow.RecordBatch batch = workbook.FirstSheet.ToArrowRecordBatch();
 ```
 
-`schema` defaults to `Excel.InferSchema`'s guess; pass an explicit `ExcelColumnSchema[]` to skip inference. The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet. Inference costs about the same time and ~1.8x the allocation of an explicit schema on the same file. See [Arrow conversion](../performance/benchmarks.md#arrow-conversion) in the benchmarks.
+The schema defaults to `Excel.InferSchema`'s guess; pass one in `new ArrowReadOptions { Schema = ... }` to skip inference, and set `HeaderRow` there (default 1, 0 for none). The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet. Inference costs about the same time and ~1.8x the allocation of an explicit schema on the same file. See [Arrow conversion](../performance/benchmarks.md#arrow-conversion) in the benchmarks.
 
 `WriteRecordBatch`/`WriteRecordBatchAsync` are the write-side mirror — one call from a `RecordBatch` to a sheet, for XLSX, XLSB, XLS, and CSV:
 
@@ -154,7 +154,7 @@ using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("repor
 workbook.WriteRecordBatch(batch); // adds the sheet, writes the header + every row, ends the workbook
 ```
 
-Supports string, large string, string view, every integer width (signed and unsigned), half float, float, double, decimal128, decimal256, boolean, date32, date64, time32, time64, timestamp and null columns; any other type (binary, nested, dictionary) throws `NotSupportedException`. Pass `writeHeader: false` to skip the header row, or a `sheetName` (XLSX/XLSB/XLS only — CSV has no sheet name) to rename it from the `"Sheet1"` default.
+Supports string, large string, string view, every integer width (signed and unsigned), half float, float, double, decimal128, decimal256, boolean, date32, date64, time32, time64, timestamp and null columns; any other type (binary, nested, dictionary) throws `NotSupportedException`. Pass `new ArrowWriteOptions { WriteHeader = false }` to skip the header row, or set `SheetName` (XLSX/XLSB/XLS only — CSV has no sheet name) to rename it from the `"Sheet1"` default.
 
 ## Open by auto-detecting the format
 
@@ -255,8 +255,8 @@ if (workbook.TryGetTable("Sales", out ExcelTable? sales))
   its first column.
 - A table whose header row is turned off (`HeaderRowCount == 0`) still enumerates, but `Parse` throws
   `InvalidOperationException` for every map, and `ExcelDataReader` and `InferSchema` throw it when
-  `headerRow` is greater than 0. Read it with `new ExcelDataReader(table.AsSheet(), headerRow: 0)`,
-  `Excel.InferSchema(table.AsSheet(), headerRow: 0)`, or by column index on the rows.
+  `HeaderRow` is greater than 0. Read it with `new ExcelDataReader(table.AsSheet(), new ExcelDataReaderOptions { HeaderRow = 0 })`,
+  `Excel.InferSchema(table.AsSheet(), new SchemaInferenceOptions { HeaderRow = 0 })`, or by column index on the rows.
 - `StyleName` is the table style's name, such as `TableStyleMedium2`, or `null` when the table has none.
 
 ## Reading sheets in parallel
@@ -366,13 +366,13 @@ using System.Data;
 using ExcelReader.Core.Reader;
 
 using IExcelWorkbook workbook = Excel.Open("report.xlsx");
-using IDataReader data = new ExcelDataReader(workbook.FirstSheet); // headerRow: 1 by default
+using IDataReader data = new ExcelDataReader(workbook.FirstSheet); // header on row 1 by default
 
 var table = new DataTable();
 table.Load(data);
 ```
 
-The header row (1-based, default 1) fixes the column shape; pass `headerRow: 0` for a header-less sheet, whose columns come back named `Column0`, `Column1`, ... sized from the first data row. There is no schema-inference pass — `GetFieldType`/`GetValue`/the typed getters read the *current* row's own cell type, so a consumer building its schema from the first row (like `DataTable.Load`) locks in that row's types for the whole load. `NextResult()` always returns `false`; build one `ExcelDataReader` per sheet instead of chaining result sets.
+The header row (1-based, default 1) fixes the column shape; pass `new ExcelDataReaderOptions { HeaderRow = 0 }` for a header-less sheet, whose columns come back named `Column0`, `Column1`, ... sized from the first data row. There is no schema-inference pass — `GetFieldType`/`GetValue`/the typed getters read the *current* row's own cell type, so a consumer building its schema from the first row (like `DataTable.Load`) locks in that row's types for the whole load. `NextResult()` always returns `false`; build one `ExcelDataReader` per sheet instead of chaining result sets.
 
 The bridge costs ~1.3–1.4x over iterating rows directly, and `GetBytes` stays within ~10% of the direct read. See [ADO.NET bridge](../performance/benchmarks.md#adonet-bridge-idatareader) in the benchmarks.
 
