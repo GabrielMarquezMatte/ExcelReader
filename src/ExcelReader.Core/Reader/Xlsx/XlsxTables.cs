@@ -44,7 +44,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             List<string> names = [];
             foreach (ReadOnlySpan<byte> column in new TagSpanEnumerable(xml, XlsxXml.Token("<"u8, prefix, "tableColumn"u8)))
             {
-                names.Add(XlsxXml.DecodeToString(XlsxXml.Attr(column, " name="u8)));
+                names.Add(XlsxXml.DecodeXStringToString(XlsxXml.Attr(column, " name="u8)));
             }
             return [.. names];
         }

@@ -278,7 +278,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
             EnsureSharedFlat(flat + rel, flat);
             text[..rel].CopyTo(_sharedFlat.AsSpan(flat));
-            flat += rel;
+            flat += XlsxXml.UnescapeXString(_sharedFlat.AsSpan(flat, rel));
             return io.Pos + 7 + rel + 9;
         }
 
