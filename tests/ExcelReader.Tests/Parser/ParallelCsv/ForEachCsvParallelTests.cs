@@ -10,7 +10,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 {
     public class ForEachCsvParallelTests
     {
-        public readonly ref struct Sale : ICsvRecord<Sale>
+        public readonly ref struct Sale : IRowRecord<Sale>
         {
             private Sale(int units)
             {
@@ -275,10 +275,10 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             internal int Chunks => Volatile.Read(ref _chunks);
 
-            internal CsvAggregation<byte> Wrap(CsvAggregation<byte> inner)
+            internal RowAggregation<byte> Wrap(RowAggregation<byte> inner)
             {
                 Func<byte> seed = inner.Seed;
-                return new CsvAggregation<byte>
+                return new RowAggregation<byte>
                 {
                     Seed = () =>
                     {

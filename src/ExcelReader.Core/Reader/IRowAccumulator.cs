@@ -1,11 +1,13 @@
-namespace ExcelReader.Core.Reader.Csv
+using ExcelReader.Core.Reader.Csv;
+
+namespace ExcelReader.Core.Reader
 {
     /// <summary>
     /// Folds typed CSV records read by <c>CsvParallel.AggregateAsync</c> into a result. Each partition
     /// of the source gets its own instance.
     /// </summary>
     /// <typeparam name="TSelf">The implementing type.</typeparam>
-    /// <typeparam name="TModel">The record type, produced by <see cref="ICsvRecord{TSelf}.TryParse"/> or by an <see cref="Parser.ExcelParser{T}"/>.</typeparam>
+    /// <typeparam name="TModel">The record type, produced by <see cref="IRowRecord{TSelf}.TryParse"/> or by an <see cref="Parser.ExcelParser{T}"/>.</typeparam>
     /// <remarks>
     /// <para>
     /// <see cref="Add"/> runs concurrently across instances on worker threads, and must mutate only the
@@ -19,8 +21,8 @@ namespace ExcelReader.Core.Reader.Csv
     /// partition into the accumulator of everything before it. It may receive an instance that saw no records.
     /// </para>
     /// </remarks>
-    public interface ICsvAccumulator<TSelf, TModel>
-        where TSelf : ICsvAccumulator<TSelf, TModel>
+    public interface IRowAccumulator<TSelf, TModel>
+        where TSelf : IRowAccumulator<TSelf, TModel>
         where TModel : allows ref struct
     {
         /// <summary>Folds one record into this instance.</summary>

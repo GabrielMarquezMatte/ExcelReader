@@ -82,7 +82,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = Numbered(50_000);
             using CsvReader reader = Excel.FromCsv(csv.AsMemory());
             Assert.True(reader.TryGetChunkSource(out CsvChunkSource source));
-            CsvAggregation<long> count = new()
+            RowAggregation<long> count = new()
             {
                 Seed = () => 0L,
                 Accumulate = (ref long seen, Row _) => seen++,

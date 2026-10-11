@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
 namespace ExcelReader.Benchmarks
@@ -83,7 +84,7 @@ namespace ExcelReader.Benchmarks
             return n;
         }
 
-        private sealed class Aggregation : ICsvAccumulator<Aggregation, WideRowRef>
+        private sealed class Aggregation : IRowAccumulator<Aggregation, WideRowRef>
         {
             public long Units { get; private set; }
             public void Add(WideRowRef model)
@@ -97,7 +98,7 @@ namespace ExcelReader.Benchmarks
             }
         }
 
-        private sealed class AggregationNarrow : ICsvAccumulator<AggregationNarrow, NarrowRowStruct>
+        private sealed class AggregationNarrow : IRowAccumulator<AggregationNarrow, NarrowRowStruct>
         {
             public long Units { get; private set; }
             public void Add(NarrowRowStruct model)

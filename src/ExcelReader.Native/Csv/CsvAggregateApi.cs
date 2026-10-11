@@ -99,9 +99,9 @@ namespace ExcelReader.Native.Csv
                 out result);
         }
 
-        private static CsvAggregation<CsvAggregateState> Build(CsvAggregateContext context)
+        private static RowAggregation<CsvAggregateState> Build(CsvAggregateContext context)
         {
-            return new CsvAggregation<CsvAggregateState>
+            return new RowAggregation<CsvAggregateState>
             {
                 Seed = () =>
                 {

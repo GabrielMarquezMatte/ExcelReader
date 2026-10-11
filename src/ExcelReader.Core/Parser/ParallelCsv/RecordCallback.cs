@@ -4,11 +4,11 @@ using ExcelReader.Core.Reader.Csv;
 namespace ExcelReader.Core.Parser.ParallelCsv
 {
     internal static class RecordCallback<TRecord>
-        where TRecord : ICsvRecord<TRecord>, allows ref struct
+        where TRecord : IRowRecord<TRecord>, allows ref struct
     {
-        internal static CsvAggregation<byte> For(Action<TRecord> body)
+        internal static RowAggregation<byte> For(Action<TRecord> body)
         {
-            return new CsvAggregation<byte>
+            return new RowAggregation<byte>
             {
                 Seed = static () => 0,
                 Accumulate = (ref byte _, Row row) =>

@@ -31,7 +31,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             public int Id { get; set; }
         }
 
-        private sealed class PeopleLog : ICsvAccumulator<PeopleLog, Person>, ICsvAccumulator<PeopleLog, IdOnly>
+        private sealed class PeopleLog : IRowAccumulator<PeopleLog, Person>, IRowAccumulator<PeopleLog, IdOnly>
         {
             public List<string> Rows { get; } = [];
 
@@ -345,7 +345,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             public static bool operator !=(WideRow left, WideRow right) => !left.Equals(right);
         }
 
-        private sealed class WideLog : ICsvAccumulator<WideLog, WideRow>
+        private sealed class WideLog : IRowAccumulator<WideLog, WideRow>
         {
             public List<int> Values { get; } = [];
 
