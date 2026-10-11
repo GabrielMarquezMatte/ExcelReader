@@ -76,6 +76,8 @@ For raw CSV reads, all three libraries read text through spans. ExcelReader is ~
 | 8 | 285.2 ms, 680.15 MB | 204.7 ms, 254.63 MB | 158.3 ms, 1.54 MB | 94.6 ms, 1.62 MB |
 | 16 | 324.9 ms, 680.32 MB | 189.0 ms, 255.15 MB | 114.4 ms, 1.66 MB | 73.0 ms, 1.69 MB |
 
+These numbers were measured before the rename to `SheetParallel`; the rename did not touch the CSV engine, and a scratch harness comparing the two builds on a 156 MB CSV showed no regression.
+
 The typed path scales ~2.8x on the conversion-heavy corpus (bimodal at dop 16: 86.7 ms standard deviation, median 275.8 ms) and ~2.7x on narrow ints, where it flattens out after dop 4 (217.2 ms vs. 189.0 ms at dop 16). Its ~680 MB is one materialized row object per record, and at dop 16 that costs 42,000 Gen0 plus 41,000 Gen1 collections.
 
 The aggregate columns fold each record into a per-partition accumulator through a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and no row object is ever materialized. They scale better than the typed path — ~6.9x (conversion-heavy) and ~6.5x (narrow) at dop 16 — because they are not fighting the allocator: at dop 16 the conversion-heavy aggregate is ~2.8x faster than typed while allocating ~410x less (1.66 MB against 680.32 MB), with **zero** garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.
@@ -101,6 +103,8 @@ Sequentially, ExcelReader's typed parser is ~1.1x faster than Sep on narrow ints
 | 2 | 37.84 ms, 8.13 MB | 25.60 ms, 8.07 MB |
 | 4 | 20.07 ms, 8.11 MB | 14.94 ms, 8.07 MB |
 | 8 | 19.94 ms, 8.16 MB | 15.26 ms, 8.09 MB |
+
+This run had background load and may read a few percent high: on an idle machine a scratch harness's minimums at dop 4 were 18.85 ms for XLSX (against 20.07 ms here) and 14.44 ms for XLSB (against 14.94 ms); an idle rerun is pending.
 
 At dop 4 XLSX reads ~2.7x faster than sequentially and XLSB ~2.4x. Dop 2 is a single parse worker running alongside the inflating thread. Past dop 4 nothing improves: the one inflating thread is the floor (~15 ms for XLSX, ~10 ms for XLSB, plus the XLSB record walk that finds row boundaries). Allocation barely moves with dop (8.02 to 8.16 MB): it is the typed model's strings.
 
