@@ -31,14 +31,14 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
-        public void FormulaCellHasFormulaType()
+        public void AFormulaTextResultIsAString()
         {
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="str"><v>Hello</v></c></row>""");
             using var reader = Excel.FromXlsx(ms);
             using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
-            Assert.Equal(CellType.Formula, e.Current[0].Type);
+            Assert.Equal(CellType.ExcelString, e.Current[0].Type);
             Assert.Equal("Hello", e.Current[0].GetString());
         }
 

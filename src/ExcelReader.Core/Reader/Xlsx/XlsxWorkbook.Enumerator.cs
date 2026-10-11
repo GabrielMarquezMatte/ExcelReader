@@ -859,7 +859,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
-                    Kind.Formula => CellType.Formula,
+                    Kind.Formula => CellType.ExcelString,
                     _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 int vStart = _acc.ValueLength;
@@ -887,7 +887,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
-                    Kind.Formula => CellType.Formula,
+                    Kind.Formula => CellType.ExcelString,
                     _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 double number = 0;

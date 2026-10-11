@@ -38,9 +38,23 @@ namespace ExcelReader.Tests.Reader.Xls
             Assert.Equal("1", row[2].GetString());
             Assert.Equal(CellType.Error, row[3].Type);
             Assert.Equal("#DIV/0!", row[3].GetString());
-            Assert.Equal(CellType.Formula, row[4].Type);
+            Assert.Equal(CellType.Number, row[4].Type);
             Assert.Equal("12.5", row[4].GetString());
             Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public void AFormulaWithADateStyleReadsAsADate()
+        {
+            var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
+            using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [[new XlsFormulaDate(date)]])]);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.True(e.Current[0].TryGetDateTime(isDate1904: false, out DateTime parsed));
+            Assert.Equal(date, parsed);
         }
 
         [Fact]

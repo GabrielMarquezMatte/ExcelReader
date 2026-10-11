@@ -308,12 +308,12 @@ namespace ExcelReader.Core.Reader.Xls
                     }
                     return;
                 }
-                AddDouble(col, style, BinaryPrimitives.ReadDoubleLittleEndian(result), CellType.Formula);
+                AddDouble(col, style, BinaryPrimitives.ReadDoubleLittleEndian(result));
             }
 
-            private void AddDouble(int col, int style, double value, CellType? forced = null)
+            private void AddDouble(int col, int style, double value)
             {
-                CellType type = forced ?? (_reader.IsDateStyle(style) ? CellType.Date : CellType.Number);
+                CellType type = _reader.IsDateStyle(style) ? CellType.Date : CellType.Number;
                 _acc.Add(col, _acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
             }
 

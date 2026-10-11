@@ -108,7 +108,6 @@ ExcelReader.Core.Reader.CellType.Date = 3 -> ExcelReader.Core.Reader.CellType
 ExcelReader.Core.Reader.CellType.Empty = 0 -> ExcelReader.Core.Reader.CellType
 ExcelReader.Core.Reader.CellType.Error = 6 -> ExcelReader.Core.Reader.CellType
 ExcelReader.Core.Reader.CellType.ExcelString = 1 -> ExcelReader.Core.Reader.CellType
-ExcelReader.Core.Reader.CellType.Formula = 5 -> ExcelReader.Core.Reader.CellType
 ExcelReader.Core.Reader.CellType.Number = 2 -> ExcelReader.Core.Reader.CellType
 ExcelReader.Core.Reader.RowAggregation<TState>
 ExcelReader.Core.Reader.RowAggregation<TState>.Accumulate.get -> ExcelReader.Core.Reader.RowAction<TState>!
