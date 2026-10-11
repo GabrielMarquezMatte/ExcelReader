@@ -85,9 +85,9 @@ namespace ExcelReader.Core.Reader.Internal
         {
             if (!options.PrefetchDecompression || uncompressedSize < PrefetchMinUncompressedSize)
             {
-                return new LimitedReadStream(opened, counter, entryLimitName, entryLimit);
+                return new LimitedReadStream(opened, uncompressedSize, counter, entryLimitName, entryLimit);
             }
-            return new LimitedReadStream(new PrefetchStream(opened), counter, entryLimitName, entryLimit);
+            return new LimitedReadStream(new PrefetchStream(opened), uncompressedSize, counter, entryLimitName, entryLimit);
         }
 
         internal static int InitialBufferCapacity(long entryLength)
