@@ -52,13 +52,13 @@ namespace ExcelReader.Native.Writer
             {
                 case NativeFormat.Xlsx:
                     return new NativeWriterHandle<XlsxSheetWriter, XlsxRowWriter>(
-                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = sharedStrings }));
+                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }));
                 case NativeFormat.Xlsb:
                     return new NativeWriterHandle<XlsbSheetWriter, XlsbRowWriter>(
                         XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }));
                 case NativeFormat.Xls:
                     return new NativeWriterHandle<XlsSheetWriter, XlsRowWriter>(
-                        XlsWorkbookWriter.Create(stream, date1904: date1904));
+                        XlsWorkbookWriter.Create(stream, options: new XlsWriterOptions { Date1904 = date1904 }));
                 case NativeFormat.Csv:
                     return new NativeWriterHandle<CsvSheetWriter, CsvRowWriter>(
                         CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()));

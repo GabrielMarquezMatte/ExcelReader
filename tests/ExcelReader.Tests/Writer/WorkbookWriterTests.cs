@@ -12,6 +12,36 @@ namespace ExcelReader.Tests.Writer
 {
     public class WorkbookWriterTests
     {
+        [Fact]
+        public async Task XlsxDate1904RoundTrips()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var date = new DateTime(1904, 1, 2, 6, 0, 0, DateTimeKind.Unspecified);
+            var day = new DateOnly(2024, 5, 6);
+            var ms = new MemoryStream();
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, new XlsxWriterOptions { Date1904 = true }))
+            {
+                XlsxSheetWriter sheet = wb.AddSheet("S");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(ct))
+                {
+                    row.Write(date);
+                    row.Write(day);
+                }
+                await sheet.EndAsync(ct);
+                await wb.EndAsync(ct);
+            }
+            ms.Position = 0;
+
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            Assert.True(reader.IsDate1904);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDateTime(isDate1904: true, out DateTime parsed));
+            Assert.Equal(date, parsed);
+            Assert.True(e.Current[1].TryGetDateTime(isDate1904: true, out DateTime parsedDay));
+            Assert.Equal(day.ToDateTime(TimeOnly.MinValue), parsedDay);
+        }
+
 
         private sealed class StringRow
         {

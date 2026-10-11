@@ -194,7 +194,7 @@ namespace ExcelReader.Native.Writer
             {
                 case NativeFormat.Xlsx:
                     WriteWorkbook<XlsxSheetWriter, XlsxRowWriter>(
-                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
+                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
                     return;
                 case NativeFormat.Xlsb:
                     WriteWorkbook<XlsbSheetWriter, XlsbRowWriter>(
@@ -202,7 +202,7 @@ namespace ExcelReader.Native.Writer
                     return;
                 case NativeFormat.Xls:
                     WriteWorkbook<XlsSheetWriter, XlsRowWriter>(
-                        XlsWorkbookWriter.Create(stream, date1904: date1904), specs, table, sheetName, hasHeader);
+                        XlsWorkbookWriter.Create(stream, options: new XlsWriterOptions { Date1904 = date1904 }), specs, table, sheetName, hasHeader);
                     return;
                 default:
                     WriteWorkbook<CsvSheetWriter, CsvRowWriter>(

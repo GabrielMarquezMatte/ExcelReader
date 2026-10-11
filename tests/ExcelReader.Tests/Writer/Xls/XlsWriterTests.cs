@@ -13,7 +13,7 @@ namespace ExcelReader.Tests.Writer.Xls
             Action<XlsWorkbookWriter> build, bool date1904 = false, CancellationToken ct = default)
         {
             var ms = new MemoryStream();
-            await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true, date1904: date1904))
+            await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true, new XlsWriterOptions { Date1904 = date1904 }))
             {
                 build(wb);
                 await wb.EndAsync(ct);
