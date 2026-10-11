@@ -18,11 +18,16 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
             return Encoding.UTF8.GetBytes(sb.Append("</sheetData></worksheet>").ToString());
         }
 
+        private static byte[] UpToSheetDataEnd(byte[] input, string token = "</sheetData")
+        {
+            return input[..(input.AsSpan().IndexOf(Encoding.UTF8.GetBytes(token)) + token.Length)];
+        }
+
         private static async Task<List<byte[]>> ProduceAsync(byte[] input, int chunkBytes, int maxCellBytes = 0, RowCutter? cutter = null)
         {
             var chunks = new List<byte[]>();
             await ChunkProducer.RunAsync(
-                new MemoryStream(input), cutter ?? new XlsxRowCutter("<row"u8.ToArray()), chunkBytes, maxCellBytes,
+                new MemoryStream(input), cutter ?? new XlsxRowCutter("<row"u8.ToArray(), "</sheetData"u8.ToArray()), chunkBytes, maxCellBytes,
                 chunk =>
                 {
                     chunks.Add(chunk.Buffer.AsSpan(0, chunk.Length).ToArray());
@@ -43,7 +48,7 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
 
             List<byte[]> chunks = await ProduceAsync(input, chunkBytes);
 
-            Assert.Equal(input, chunks.SelectMany(c => c).ToArray());
+            Assert.Equal(UpToSheetDataEnd(input), chunks.SelectMany(c => c).ToArray());
             Assert.True(chunks.Count > 1);
             Assert.All(chunks.Skip(1), chunk => Assert.StartsWith("<row ", Encoding.UTF8.GetString(chunk), StringComparison.Ordinal));
         }
@@ -61,7 +66,7 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
 
             List<byte[]> chunks = await ProduceAsync(input, 64);
 
-            Assert.Equal(input, chunks.SelectMany(c => c).ToArray());
+            Assert.Equal(UpToSheetDataEnd(input), chunks.SelectMany(c => c).ToArray());
             Assert.All(chunks.Skip(1), chunk => Assert.StartsWith("<row ", Encoding.UTF8.GetString(chunk), StringComparison.Ordinal));
         }
 
@@ -80,8 +85,46 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
 
             List<byte[]> chunks = await ProduceAsync(input, 48);
 
-            Assert.Equal(input, chunks.SelectMany(c => c).ToArray());
+            Assert.Equal(UpToSheetDataEnd(input), chunks.SelectMany(c => c).ToArray());
             Assert.All(chunks.Skip(1), chunk => Assert.StartsWith("<row ", Encoding.UTF8.GetString(chunk), StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public async Task AnXlsxTrailerAfterSheetDataIsNotBuffered()
+        {
+            string rows = Encoding.UTF8.GetString(Sheet(20))[..^"</worksheet>".Length];
+            byte[] input = Encoding.UTF8.GetBytes(rows + string.Concat(Enumerable.Repeat("<mergeCell ref=\"A1:B2\"/>", 3000)) + "</worksheet>");
+            Assert.True(input.Length > 50_000);
+
+            List<byte[]> chunks = await ProduceAsync(input, 64, maxCellBytes: 1024);
+
+            Assert.Equal(UpToSheetDataEnd(input), chunks.SelectMany(c => c).ToArray());
+        }
+
+        [Fact]
+        public async Task APrefixedSheetEndsAtItsPrefixedTag()
+        {
+            var sb = new StringBuilder("<x:worksheet><x:sheetData>");
+            for (int r = 1; r <= 20; r++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"<x:row r=\"{r}\"><x:c><x:v>{r}</x:v></x:c></x:row>");
+            }
+            sb.Append("</x:sheetData>").Append(string.Concat(Enumerable.Repeat("<x:mergeCell ref=\"A1:B2\"/>", 3000))).Append("</x:worksheet>");
+            byte[] input = Encoding.UTF8.GetBytes(sb.ToString());
+            var chunks = new List<byte[]>();
+
+            await ChunkProducer.RunAsync(
+                new MemoryStream(input), new XlsxRowCutter("<x:row"u8.ToArray(), "</x:sheetData"u8.ToArray()), 64, 1024,
+                chunk =>
+                {
+                    chunks.Add(chunk.Buffer.AsSpan(0, chunk.Length).ToArray());
+                    ArrayPool<byte>.Shared.Return(chunk.Buffer);
+                    return ValueTask.CompletedTask;
+                },
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(UpToSheetDataEnd(input, "</x:sheetData"), chunks.SelectMany(c => c).ToArray());
+            Assert.All(chunks.Skip(1), chunk => Assert.StartsWith("<x:row ", Encoding.UTF8.GetString(chunk), StringComparison.Ordinal));
         }
 
         private static byte[] Record(int id, int payload)
