@@ -510,13 +510,13 @@ namespace ExcelReader.Core.Reader.Xlsx
                     return -1;
                 }
                 int textStart = p + 7;
-                int rel = buf.AsSpan(textStart, len - textStart).IndexOfAny((byte)'<', (byte)'&');
+                int rel = XlsxXml.IndexOfMarkup(buf.AsSpan(textStart, len - textStart), out bool mayEscape);
                 if (rel < 0)
                 {
                     return -1;
                 }
                 int lt = textStart + rel;
-                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8) || buf.AsSpan(textStart, rel).IndexOf("_x"u8) >= 0)
+                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8) || (mayEscape && buf.AsSpan(textStart, rel).IndexOf("_x"u8) >= 0))
                 {
                     return -1;
                 }
