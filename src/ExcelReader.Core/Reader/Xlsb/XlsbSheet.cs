@@ -26,7 +26,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
-        private XlsbWorkbook Workbook
+        internal XlsbWorkbook Owner
         {
             get
             {
@@ -37,13 +37,13 @@ namespace ExcelReader.Core.Reader.Xlsb
         /// <inheritdoc/>
         public XlsbWorkbook.Enumerator GetEnumerator()
         {
-            return Workbook.OpenSheet(Index);
+            return Owner.OpenSheet(Index);
         }
 
         /// <inheritdoc/>
         public XlsbWorkbook.Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
-            return Workbook.OpenSheetAsync(Index, ct);
+            return Owner.OpenSheetAsync(Index, ct);
         }
 
         IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetEnumerator()

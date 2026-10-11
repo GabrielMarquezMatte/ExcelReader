@@ -25,6 +25,8 @@ namespace ExcelReader.Core.Reader.Xlsx
             private int _nextCol;
             private bool _trackRowIndex;
             private int _rowIndex = -1;
+            private bool _reachedEnd;
+            private bool _endedMidMarkup;
 
             private NsTokens? _ns;
             private bool _nsChecked;
@@ -54,6 +56,17 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _lease = reader.Lifetime;
             }
 
+            internal Enumerator(XlsxWorkbook reader, ReadOnlyMemory<byte> chunk, NsTokens? ns, CancellationToken ct)
+                : base(chunk, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), ct)
+            {
+                _reader = reader;
+                _styleIsDate = reader._styleIsDate;
+                _sharedOffsets = reader._sharedOffsets;
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _ns = ns;
+                _nsChecked = true;
+            }
+
             private protected override Stream OpenSource()
             {
                 _reader.EnsureSharedLoaded();
@@ -71,6 +84,25 @@ namespace ExcelReader.Core.Reader.Xlsx
             /// <inheritdoc/>
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _buf.AsSpan(0, _len), _reader.SharedStringCache, _contentCache);
+
+            internal NsTokens? Namespace
+            {
+                get
+                {
+                    if (!_nsChecked)
+                    {
+                        DetectNamespace();
+                    }
+                    return _ns;
+                }
+            }
+
+            internal long Offset => _io.BaseOffset + _pos;
+
+            internal bool ReachedEnd => _reachedEnd;
+
+            // True once the end of the input cut a row or a tag short: what was read last is not what a longer input would give.
+            internal bool EndedMidMarkup => _endedMidMarkup;
 
             int IRowIndexedEnumerator.RowIndex
             {
@@ -104,6 +136,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     switch (ClassifyHead())
                     {
                         case HeadKind.End:
+                            _reachedEnd = true;
                             return false;
                         case HeadKind.Row:
                             if (!BeginRow())
@@ -114,6 +147,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                         default:
                             if (!SkipMarkup())
                             {
+                                _endedMidMarkup = true;
                                 return false;
                             }
                             break;
@@ -283,6 +317,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private void ParseTruncatedRow(int rowStart)
             {
+                _endedMidMarkup = true;
                 RestartRowAt(rowStart);
                 ParseRow(_len);
             }
@@ -587,6 +622,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private bool MissingRowOpenTag()
             {
+                _endedMidMarkup = true;
                 if (_trackRowIndex)
                 {
                     _rowIndex++;
@@ -1016,7 +1052,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return true;
             }
 
-            private static bool IsBoundary(byte b)
+            internal static bool IsBoundary(byte b)
             {
                 return b is (byte)' ' or (byte)'>' or (byte)'/' or (byte)'\t' or (byte)'\r' or (byte)'\n';
             }
