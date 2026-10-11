@@ -25,7 +25,7 @@
   },
   {
     "name": "realdata",
-    "filter": "ExcelReader.Benchmarks.RealDataReadBenchmark.* ExcelReader.Benchmarks.RealDataTypedParseBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.RealDataReadBenchmark.* ExcelReader.Benchmarks.RealDataTypedParseBenchmark.* ExcelReader.Benchmarks.SheetParallelBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },
