@@ -19,6 +19,12 @@ namespace ExcelReader.Core.Parser.SheetPipeline
             {
                 return ParallelCsvProcessor.RunAsync(csv.Reader, aggregation, factory, options, ct);
             }
+            int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
+            SheetPipelineSource? pipeline = SheetPipelineSource.TryCreate(sheet, dop);
+            if (pipeline is not null)
+            {
+                return SheetPipelineRunner.AggregateAsync(pipeline, aggregation, factory, options.HeaderRow, dop, SheetPipelineSource.DefaultChunkBytes, ct);
+            }
             return SequentialAsync(sheet, aggregation, factory, options.HeaderRow, ct);
         }
 
@@ -27,6 +33,12 @@ namespace ExcelReader.Core.Parser.SheetPipeline
             if (sheet is CsvSheet csv)
             {
                 return ParallelCsvFactory.Create(csv.Reader, degreeOfParallelism, parser, ct);
+            }
+            int dop = ParallelCsvFactory.Normalize(degreeOfParallelism);
+            SheetPipelineSource? pipeline = SheetPipelineSource.TryCreate(sheet, dop);
+            if (pipeline is not null)
+            {
+                return SheetRowProjection<T>.ParseAsync(pipeline, parser, sheet.IsDate1904, dop, SheetPipelineSource.DefaultChunkBytes, ct);
             }
             return Sequential(sheet, parser, ct);
         }
