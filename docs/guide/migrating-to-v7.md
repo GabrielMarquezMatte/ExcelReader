@@ -26,13 +26,13 @@ A CSV file:
 
 ```csharp
 // v6
-await foreach (Sale s in CsvParallel.ParseAsync(path, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = dialect }))
+await foreach (Sale s in CsvParallel.ParseAsync(path, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }))
 {
     Total += s.Revenue;
 }
 
 // v7
-using CsvReader csv = Excel.FromCsvFile(path, dialect);
+using CsvReader csv = Excel.FromCsvFile(path, options);
 await foreach (Sale s in SheetParallel.ParseAsync(csv.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 8 }))
 {
     Total += s.Revenue;
@@ -43,13 +43,13 @@ CSV bytes in memory:
 
 ```csharp
 // v6
-await foreach (Sale s in CsvParallel.ParseAsync(data, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = dialect }))
+await foreach (Sale s in CsvParallel.ParseAsync(data, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }))
 {
     Total += s.Revenue;
 }
 
 // v7
-using CsvReader csv = Excel.FromCsv(data, dialect);
+using CsvReader csv = Excel.FromCsv(data, options);
 await foreach (Sale s in SheetParallel.ParseAsync(csv.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 8 }))
 {
     Total += s.Revenue;
@@ -60,13 +60,13 @@ A stream:
 
 ```csharp
 // v6
-await foreach (Sale s in CsvParallel.ParseAsync(stream, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = dialect }))
+await foreach (Sale s in CsvParallel.ParseAsync(stream, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }))
 {
     Total += s.Revenue;
 }
 
 // v7
-using CsvReader csv = Excel.FromCsv(stream, leaveOpen: true, dialect);
+using CsvReader csv = Excel.FromCsv(stream, leaveOpen: true, options);
 await foreach (Sale s in SheetParallel.ParseAsync(csv.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 8 }))
 {
     Total += s.Revenue;

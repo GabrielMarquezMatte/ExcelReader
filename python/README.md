@@ -195,8 +195,8 @@ file instead of streaming it in batches.
 
 The same call on the real-data workbooks (XLSX 6.7 MB compressed, XLSB 3.7 MB; measured with the
 published NativeAOT library): XLSX 54.1 ms at
-`parallelism=1` against 20.3 ms at `0` (2.6x), XLSB 28.1 ms against 15.2 ms (1.8x). Inflate runs on
-one thread, so these formats stop scaling at about three threads.
+`parallelism=1` against 20.3 ms at `0` (2.6x), XLSB 28.2 ms against 15.2 ms (1.85x). Inflate runs on
+one thread, so under the JIT the sheet stage stops scaling at about three threads.
 
 Peak working set on the 160 MB file, above the interpreter's own, went from 470 MiB to 503 MiB (both
 include the file's bytes and the handle's copy of them).

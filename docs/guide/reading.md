@@ -41,7 +41,7 @@ await foreach (var row in SheetParallel.ParseAsync(workbook.FirstSheet, ExcelPar
 }
 ```
 
-You own the workbook: keep it open until the task completes or the enumeration ends. For CSV, give the dialect when you open it (`Excel.FromCsvFile(path, dialect)`), not in the options. `DegreeOfParallelism` of `0` (the default) uses every processor; `1` reads sequentially.
+You own the workbook: keep it open until the task completes or the enumeration ends. For CSV, give the dialect when you open it (`Excel.FromCsvFile(path, options)`), not in the options. `DegreeOfParallelism` of `0` (the default) uses every processor; `1` reads sequentially.
 
 There are three families, each over a sheet:
 
@@ -108,7 +108,7 @@ These cases read on one thread with the same results and no error:
 - A sheet under 256 KB uncompressed.
 - XLS.
 - A table view (`ExcelTable.AsSheet()`).
-- A CSV that cannot be partitioned: a non-seekable stream or a non-UTF-8 encoding. A CSV over a `MemoryStream` is one of them; pass the bytes as `ReadOnlyMemory<byte>` to partition it.
+- A CSV that cannot be partitioned: a stream that is not a file, or a non-UTF-8 encoding. Only in-memory data (`ReadOnlyMemory<byte>`, `byte[]`) and a `FileStream`-backed source partition; a CSV over a `MemoryStream` does not, so pass its bytes as `ReadOnlyMemory<byte>`.
 
 `PrefetchDecompression` does not apply on this path: XLSX and XLSB go through a pipeline that already overlaps inflate and parse.
 
