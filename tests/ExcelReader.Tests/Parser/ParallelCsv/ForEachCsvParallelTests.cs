@@ -61,10 +61,11 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = SalesCsv(rows);
             long total = 0;
             long count = 0;
-            var options = new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 };
+            var options = new SheetParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 };
+            using CsvReader reader = Excel.FromCsv(csv);
 
-            await CsvParallel.ForEachAsync<Sale>(
-                csv.AsMemory(),
+            await SheetParallel.ForEachAsync<Sale>(
+                reader.FirstSheet,
                 sale =>
                 {
                     Interlocked.Add(ref total, sale.Units);
@@ -86,10 +87,11 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             long total = 0;
             try
             {
-                await CsvParallel.ForEachAsync<Sale>(
-                    path,
+                using CsvReader reader = Excel.FromCsvFile(path);
+                await SheetParallel.ForEachAsync<Sale>(
+                    reader.FirstSheet,
                     sale => Interlocked.Add(ref total, sale.Units),
-                    new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
+                    new SheetParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
                     TestContext.Current.CancellationToken);
             }
             finally
@@ -107,10 +109,12 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             using var stream = new MemoryStream(SalesCsv(rows), writable: false);
             long total = 0;
 
-            await CsvParallel.ForEachAsync<Sale>(
-                stream,
+            using CsvReader reader = Excel.FromCsv(stream, leaveOpen: true);
+
+            await SheetParallel.ForEachAsync<Sale>(
+                reader.FirstSheet,
                 sale => Interlocked.Add(ref total, sale.Units),
-                new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
+                new SheetParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
                 TestContext.Current.CancellationToken);
 
             Assert.Equal(ExpectedUnits(rows), total);
@@ -122,10 +126,12 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = SalesCsv(5);
             var seen = new List<int>();
 
-            await CsvParallel.ForEachAsync<Sale>(
-                csv.AsMemory(),
+            using CsvReader reader = Excel.FromCsv(csv);
+
+            await SheetParallel.ForEachAsync<Sale>(
+                reader.FirstSheet,
                 sale => seen.Add(sale.Units),
-                new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 },
+                new SheetParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 },
                 TestContext.Current.CancellationToken);
 
             Assert.Equal([1, 2, 3, 4, 5], seen);
@@ -135,20 +141,22 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task ForEachRecord_NullBody_Throws()
         {
             byte[] csv = SalesCsv(4);
+            using CsvReader reader = Excel.FromCsv(csv);
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => CsvParallel.ForEachAsync<Sale>(csv.AsMemory(), null!, null, TestContext.Current.CancellationToken));
+                () => SheetParallel.ForEachAsync<Sale>(reader.FirstSheet, null!, null, TestContext.Current.CancellationToken));
         }
 
         [Fact]
         public async Task ForEachRecord_BodyThrows_SurfacesFromTask()
         {
             byte[] csv = SalesCsv(20_000);
+            using CsvReader reader = Excel.FromCsv(csv);
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => CsvParallel.ForEachAsync<Sale>(
-                    csv.AsMemory(),
+                () => SheetParallel.ForEachAsync<Sale>(
+                    reader.FirstSheet,
                     static _ => throw new InvalidOperationException("boom"),
-                    new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
+                    new SheetParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
                     TestContext.Current.CancellationToken));
         }
 
@@ -157,12 +165,13 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             byte[] csv = SalesCsv(200_000);
             using var cts = new CancellationTokenSource();
+            using CsvReader reader = Excel.FromCsv(csv);
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => CsvParallel.ForEachAsync<Sale>(
-                    csv.AsMemory(),
+                () => SheetParallel.ForEachAsync<Sale>(
+                    reader.FirstSheet,
                     _ => cts.Cancel(),
-                    new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
+                    new SheetParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 },
                     cts.Token));
         }
 
@@ -197,9 +206,10 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             long units = 0;
             long regionBytes = 0;
             long count = 0;
+            using CsvReader reader = Excel.FromCsv(csv);
 
-            await CsvParallel.ForEachAsync(
-                csv.AsMemory(),
+            await SheetParallel.ForEachAsync(
+                reader.FirstSheet,
                 ExcelParser.FromAttributes<Order>(),
                 order =>
                 {
@@ -207,7 +217,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                     Interlocked.Add(ref regionBytes, order.Region.Length);
                     Interlocked.Increment(ref count);
                 },
-                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
+                new SheetParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
                 TestContext.Current.CancellationToken);
 
             Assert.Equal(rows, count);
@@ -221,20 +231,22 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             const int rows = 20_000;
             byte[] csv = OrdersCsv(rows);
             long parallel = 0;
+            using CsvReader reader = Excel.FromCsv(csv);
 
-            await CsvParallel.ForEachAsync(
-                csv.AsMemory(),
+            await SheetParallel.ForEachAsync(
+                reader.FirstSheet,
                 ExcelParser.FromAttributes<Order>(),
                 order => Interlocked.Add(ref parallel, order.Units),
-                new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 },
+                new SheetParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 },
                 TestContext.Current.CancellationToken);
 
             long sequential = 0;
-            await CsvParallel.ForEachAsync(
-                csv.AsMemory(),
+            using CsvReader sequentialReader = Excel.FromCsv(csv);
+            await SheetParallel.ForEachAsync(
+                sequentialReader.FirstSheet,
                 ExcelParser.FromAttributes<Order>(),
                 order => sequential += order.Units,
-                new CsvParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 },
+                new SheetParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 },
                 TestContext.Current.CancellationToken);
 
             Assert.Equal(sequential, parallel);
@@ -245,13 +257,14 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task ForEachMapped_HeaderRowZeroWithNamedMap_Throws()
         {
             byte[] csv = OrdersCsv(8);
+            using CsvReader reader = Excel.FromCsv(csv);
 
             await Assert.ThrowsAsync<ArgumentException>(
-                () => CsvParallel.ForEachAsync(
-                    csv.AsMemory(),
+                () => SheetParallel.ForEachAsync(
+                    reader.FirstSheet,
                     ExcelParser.FromAttributes<Order>(),
                     static _ => { },
-                    new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 0 },
+                    new SheetParallelOptions { DegreeOfParallelism = 4, HeaderRow = 0 },
                     TestContext.Current.CancellationToken));
         }
 
@@ -259,10 +272,11 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task ForEachMapped_NullMap_Throws()
         {
             byte[] csv = OrdersCsv(8);
+            using CsvReader reader = Excel.FromCsv(csv);
 
             await Assert.ThrowsAsync<ArgumentNullException>(
-                () => CsvParallel.ForEachAsync<Order>(
-                    csv.AsMemory(),
+                () => SheetParallel.ForEachAsync<Order>(
+                    reader.FirstSheet,
                     null!,
                     static _ => { },
                     null,
@@ -297,7 +311,9 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 csv.AsMemory(),
                 probe.Wrap(RecordCallback<Sale>.For(body)),
                 null,
-                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
+                CsvReaderOptions.Default,
+                1,
+                dop,
                 chunkSize,
                 TestContext.Current.CancellationToken);
         }
@@ -309,7 +325,9 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 csv.AsMemory(),
                 probe.Wrap(MappedCallback<Order>.Unbound),
                 MappedCallback<Order>.Binder(order, order.CsvInfo, false, 1, body),
-                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
+                CsvReaderOptions.Default,
+                1,
+                dop,
                 chunkSize,
                 TestContext.Current.CancellationToken);
         }

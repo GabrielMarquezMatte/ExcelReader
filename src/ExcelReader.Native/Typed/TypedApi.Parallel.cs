@@ -63,9 +63,8 @@ namespace ExcelReader.Native.Typed
                     Accumulate = (ref PartitionTable state, Row row) => state.Append(row, columnIndices, isDate1904),
                     Combine = PartitionTable.Combine,
                 };
-                CsvParallelOptions options = new() { DegreeOfParallelism = degreeOfParallelism, HeaderRow = headerRow, Reader = reader };
                 PartitionTable merged = Task.Run(() => ParallelCsvProcessor.RunPartitionedAsync(
-                    source, aggregation, options, chunkSizeOverride, CancellationToken.None)).GetAwaiter().GetResult();
+                    source, aggregation, reader, headerRow, degreeOfParallelism, chunkSizeOverride, CancellationToken.None)).GetAwaiter().GetResult();
                 try
                 {
                     if (merged.FailedColumn >= 0)

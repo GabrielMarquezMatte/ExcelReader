@@ -142,15 +142,16 @@ namespace ExcelReader.Benchmarks
                 return seqAcc;
             }
             long acc = 0;
+            using CsvReader csv = Excel.FromCsvFile(Path);
             if (Corpus == ParallelCorpus.NarrowInt)
             {
-                await foreach (NarrowRow row in CsvParallel.ParseAsync(Path, ExcelParser.FromAttributes<NarrowRow>(), new CsvParallelOptions { DegreeOfParallelism = degreeOfParallelism }))
+                await foreach (NarrowRow row in SheetParallel.ParseAsync(csv.FirstSheet, ExcelParser.FromAttributes<NarrowRow>(), new SheetParallelOptions { DegreeOfParallelism = degreeOfParallelism }))
                 {
                     acc += row.A;
                 }
                 return acc;
             }
-            await foreach (WideRow row in CsvParallel.ParseAsync(Path, ExcelParser.FromAttributes<WideRow>(), new CsvParallelOptions { DegreeOfParallelism = degreeOfParallelism }))
+            await foreach (WideRow row in SheetParallel.ParseAsync(csv.FirstSheet, ExcelParser.FromAttributes<WideRow>(), new SheetParallelOptions { DegreeOfParallelism = degreeOfParallelism }))
             {
                 acc += row.Units;
             }

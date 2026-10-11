@@ -65,7 +65,7 @@ namespace ExcelReader.Native.Csv
         {
             NativeApi.ClearLastError();
             result = 0;
-            int status = NativeCsvAggregateOptions.Translate(rawOptions, out CsvParallelOptions options);
+            int status = NativeCsvAggregateOptions.Translate(rawOptions, out SheetParallelOptions options, out CsvReaderOptions reader);
             if (status != NativeStatus.Ok)
             {
                 return status;
@@ -73,10 +73,7 @@ namespace ExcelReader.Native.Csv
 
             string path = Encoding.UTF8.GetString(utf8Path);
             CsvAggregateContext context = new(aggregation);
-            return Run(
-                context,
-                Task.Run(() => CsvParallel.AggregateAsync(path, Build(context), options, CancellationToken.None)),
-                out result);
+            return Run(context, Task.Run(() => CsvAggregateFile.AggregateAsync(path, reader, Build(context), options)), out result);
         }
 
         internal static int AggregateCsvMemory(
@@ -85,18 +82,24 @@ namespace ExcelReader.Native.Csv
         {
             NativeApi.ClearLastError();
             result = 0;
-            int status = NativeCsvAggregateOptions.Translate(rawOptions, out CsvParallelOptions options);
+            int status = NativeCsvAggregateOptions.Translate(rawOptions, out SheetParallelOptions options, out CsvReaderOptions reader);
             if (status != NativeStatus.Ok)
             {
                 return status;
             }
 
-            using PointerMemoryManager manager = new(data, dataLength);
-            CsvAggregateContext context = new(aggregation);
-            return Run(
-                context,
-                Task.Run(() => CsvParallel.AggregateAsync(manager.Memory, Build(context), options, CancellationToken.None)),
-                out result);
+            try
+            {
+                using PointerMemoryManager manager = new(data, dataLength);
+                CsvAggregateContext context = new(aggregation);
+                using CsvReader csv = Excel.FromCsv(manager.Memory, reader);
+                return Run(context, Task.Run(() => SheetParallel.AggregateAsync(csv.FirstSheet, Build(context), options, CancellationToken.None)), out result);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
         }
 
         private static RowAggregation<CsvAggregateState> Build(CsvAggregateContext context)
@@ -172,6 +175,19 @@ namespace ExcelReader.Native.Csv
                     context.FreeState((void*)state.Native, context.UserData);
                 }
                 state.ReleaseScratch();
+            }
+        }
+    }
+
+    internal static class CsvAggregateFile
+    {
+        internal static async Task<CsvAggregateState> AggregateAsync(
+            string path, CsvReaderOptions reader, RowAggregation<CsvAggregateState> aggregation, SheetParallelOptions options)
+        {
+            CsvReader csv = await Excel.FromCsvFileAsync(path, reader, CancellationToken.None).ConfigureAwait(false);
+            await using (csv.ConfigureAwait(false))
+            {
+                return await SheetParallel.AggregateAsync(csv.FirstSheet, aggregation, options, CancellationToken.None).ConfigureAwait(false);
             }
         }
     }

@@ -88,9 +88,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 Accumulate = (ref long seen, Row _) => seen++,
                 Combine = (left, right) => left + right,
             };
-            CsvParallelOptions options = new() { DegreeOfParallelism = 4, HeaderRow = 1, Reader = reader.Options };
-
-            long rows = await ParallelCsvProcessor.RunPartitionedAsync(source, count, options, chunkSizeOverride: 4096, CancellationToken.None);
+            long rows = await ParallelCsvProcessor.RunPartitionedAsync(source, count, reader.Options, headerRow: 1, degreeOfParallelism: 4, chunkSizeOverride: 4096, CancellationToken.None);
 
             Assert.Equal(50_000, rows);
         }

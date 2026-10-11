@@ -1,7 +1,6 @@
 using System.Runtime.ExceptionServices;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
-using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
 {
@@ -21,60 +20,19 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             public ExceptionDispatchInfo? Failure;
         }
 
-        internal static async Task<TState> RunAsync<TState>(
-            string path, RowAggregation<TState> aggregation, RowActionFactory<TState>? factory, CsvParallelOptions options, CancellationToken ct)
-        {
-            options = WithResolvedDialect(options, CsvDialectResolver.Resolve(path, options.Reader));
-            int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
-            long length = new FileInfo(path).Length;
-            if (!ParallelCsvFactory.CanPartition(dop, length, options.Reader))
-            {
-                CsvReader reader = await Excel.FromCsvFileAsync(path, options.Reader, ct).ConfigureAwait(false);
-                return await SequentialAsync(reader, ownsReader: true, aggregation, factory, options.HeaderRow, ct).ConfigureAwait(false);
-            }
-            using SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.Asynchronous | FileOptions.RandomAccess);
-            return await PartitionedAsync(new CsvChunkSource(handle, length), aggregation, factory, options.Reader, options.HeaderRow, dop, chunkSizeOverride: 0, ct).ConfigureAwait(false);
-        }
-
-        internal static Task<TState> RunAsync<TState>(
-            ReadOnlyMemory<byte> data, RowAggregation<TState> aggregation, RowActionFactory<TState>? factory, CsvParallelOptions options, CancellationToken ct)
-        {
-            options = WithResolvedDialect(options, CsvDialectResolver.Resolve(data, options.Reader));
-            int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
-            if (!ParallelCsvFactory.CanPartition(dop, data.Length, options.Reader))
-            {
-                return SequentialAsync(Excel.FromCsv(data, options.Reader), ownsReader: true, aggregation, factory, options.HeaderRow, ct);
-            }
-            return PartitionedAsync(new CsvChunkSource(data), aggregation, factory, options.Reader, options.HeaderRow, dop, chunkSizeOverride: 0, ct);
-        }
-
-        internal static async Task<TState> RunAsync<TState>(
-            Stream stream, RowAggregation<TState> aggregation, RowActionFactory<TState>? factory, CsvParallelOptions options, CancellationToken ct)
-        {
-            options = WithResolvedDialect(options, await CsvDialectResolver.ResolveAsync(stream, options.Reader, ct).ConfigureAwait(false));
-            int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
-            if (!CsvSourceResolver.TryResolve(stream, out CsvChunkSource source)
-                || !ParallelCsvFactory.CanPartition(dop, source.Length, options.Reader))
-            {
-                CsvReader reader = await Excel.FromCsvAsync(stream, leaveOpen: true, options.Reader, ct).ConfigureAwait(false);
-                return await SequentialAsync(reader, ownsReader: true, aggregation, factory, options.HeaderRow, ct).ConfigureAwait(false);
-            }
-            return await PartitionedAsync(source, aggregation, factory, options.Reader, options.HeaderRow, dop, chunkSizeOverride: 0, ct).ConfigureAwait(false);
-        }
-
         internal static Task<TState> RunWithChunkSizeAsync<TState>(
-            ReadOnlyMemory<byte> data, RowAggregation<TState> aggregation, RowActionFactory<TState>? factory, CsvParallelOptions options, int chunkSize, CancellationToken ct)
+            ReadOnlyMemory<byte> data, RowAggregation<TState> aggregation, RowActionFactory<TState>? factory,
+            CsvReaderOptions reader, int headerRow, int degreeOfParallelism, int chunkSize, CancellationToken ct)
         {
-            options = WithResolvedDialect(options, CsvDialectResolver.Resolve(data, options.Reader));
-            int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
-            return PartitionedAsync(new CsvChunkSource(data), aggregation, factory, options.Reader, options.HeaderRow, dop, chunkSize, ct);
+            CsvReaderOptions resolved = CsvDialectResolver.Resolve(data, reader);
+            return PartitionedAsync(new CsvChunkSource(data), aggregation, factory, resolved, headerRow, ParallelCsvFactory.Normalize(degreeOfParallelism), chunkSize, ct);
         }
 
         internal static Task<TState> RunPartitionedAsync<TState>(
-            CsvChunkSource source, RowAggregation<TState> aggregation, CsvParallelOptions options, int chunkSizeOverride, CancellationToken ct)
+            CsvChunkSource source, RowAggregation<TState> aggregation, CsvReaderOptions reader, int headerRow, int degreeOfParallelism,
+            int chunkSizeOverride, CancellationToken ct)
         {
-            int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
-            return PartitionedAsync(source, aggregation, null, options.Reader, options.HeaderRow, dop, chunkSizeOverride, ct);
+            return PartitionedAsync(source, aggregation, null, reader, headerRow, ParallelCsvFactory.Normalize(degreeOfParallelism), chunkSizeOverride, ct);
         }
 
         internal static async Task<TState> RunAsync<TState>(
@@ -86,7 +44,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
                 if (!reader.TryGetChunkSource(out CsvChunkSource source) || !ParallelCsvFactory.CanPartition(dop, source.Length, reader.Options))
                 {
-                    return await SequentialAsync(reader, ownsReader: false, aggregation, factory, options.HeaderRow, ct).ConfigureAwait(false);
+                    return await SequentialAsync(reader, aggregation, factory, options.HeaderRow, ct).ConfigureAwait(false);
                 }
                 return await PartitionedAsync(source, aggregation, factory, reader.Options, options.HeaderRow, dop, chunkSizeOverride: 0, ct).ConfigureAwait(false);
             }
@@ -96,67 +54,43 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             }
         }
 
-        private static CsvParallelOptions WithResolvedDialect(CsvParallelOptions options, CsvReaderOptions reader)
-        {
-            if (ReferenceEquals(reader, options.Reader))
-            {
-                return options;
-            }
-            return new CsvParallelOptions
-            {
-                DegreeOfParallelism = options.DegreeOfParallelism,
-                Reader = reader,
-                HeaderRow = options.HeaderRow,
-            };
-        }
-
         private static RowAggregation<TState> WithAccumulate<TState>(RowAggregation<TState> aggregation, RowAction<TState> accumulate)
         {
             return new RowAggregation<TState> { Seed = aggregation.Seed, Accumulate = accumulate, Combine = aggregation.Combine };
         }
 
         private static async Task<TState> SequentialAsync<TState>(
-            CsvReader reader, bool ownsReader, RowAggregation<TState> aggregation, RowActionFactory<TState>? factory, int headerRow, CancellationToken ct)
+            CsvReader reader, RowAggregation<TState> aggregation, RowActionFactory<TState>? factory, int headerRow, CancellationToken ct)
         {
-            try
+            CsvReader.Enumerator rows = reader.OpenSheet(ct);
+            await using (rows.ConfigureAwait(false))
             {
-                CsvReader.Enumerator rows = reader.OpenSheet(ct);
-                await using (rows.ConfigureAwait(false))
+                TState state = aggregation.Seed();
+                if (factory is not null && headerRow == 0)
                 {
-                    TState state = aggregation.Seed();
-                    if (factory is not null && headerRow == 0)
-                    {
-                        aggregation = WithAccumulate(aggregation, factory(default, sequential: true));
-                    }
-                    for (int skipped = 0; skipped < headerRow; skipped++)
-                    {
-                        if (!await rows.MoveNextAsync().ConfigureAwait(false))
-                        {
-                            return state;
-                        }
-                        if (factory is not null && skipped == headerRow - 1)
-                        {
-                            aggregation = WithAccumulate(aggregation, factory(rows.Current, sequential: true));
-                        }
-                    }
-                    long delivered = 0;
-                    while (await rows.MoveNextAsync().ConfigureAwait(false))
-                    {
-                        if (++delivered % RowsPerCancellationCheck == 0)
-                        {
-                            ct.ThrowIfCancellationRequested();
-                        }
-                        Deliver(aggregation.Accumulate, ref state, rows);
-                    }
-                    return state;
+                    aggregation = WithAccumulate(aggregation, factory(default, sequential: true));
                 }
-            }
-            finally
-            {
-                if (ownsReader)
+                for (int skipped = 0; skipped < headerRow; skipped++)
                 {
-                    await reader.DisposeAsync().ConfigureAwait(false);
+                    if (!await rows.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        return state;
+                    }
+                    if (factory is not null && skipped == headerRow - 1)
+                    {
+                        aggregation = WithAccumulate(aggregation, factory(rows.Current, sequential: true));
+                    }
                 }
+                long delivered = 0;
+                while (await rows.MoveNextAsync().ConfigureAwait(false))
+                {
+                    if (++delivered % RowsPerCancellationCheck == 0)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                    }
+                    Deliver(aggregation.Accumulate, ref state, rows);
+                }
+                return state;
             }
         }
 
