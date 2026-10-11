@@ -170,7 +170,7 @@ namespace ExcelReader.Cli
                             }
                             break;
                         case CellType.Date:
-                            var dateValue = cellValue.TryGetDateTime(out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");
+                            var dateValue = cellValue.TryGetDateTime(sheet.IsDate1904, out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");
                             row.Write(dateValue);
                             break;
                         default:

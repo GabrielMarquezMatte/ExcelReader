@@ -21,7 +21,7 @@ namespace ExcelReader.Benchmarks
                         if (cell.TryParse(null, out double n)) { acc += (long)n; }
                         break;
                     case CellType.Date:
-                        if (cell.TryGetDateTime(out DateTime d)) { acc += d.Ticks; }
+                        if (cell.TryGetDateTime(isDate1904: false, out DateTime d)) { acc += d.Ticks; }
                         break;
                 }
             }
@@ -43,7 +43,7 @@ namespace ExcelReader.Benchmarks
                         if (cell.TryParse(null, out double n)) { acc += (long)n; }
                         break;
                     case CellType.Date:
-                        if (cell.TryGetDateTime(out DateTime d)) { acc += d.Ticks; }
+                        if (cell.TryGetDateTime(isDate1904: false, out DateTime d)) { acc += d.Ticks; }
                         break;
                 }
             }

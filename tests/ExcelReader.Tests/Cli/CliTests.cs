@@ -284,6 +284,45 @@ namespace ExcelReader.Tests.Cli
             }
         }
 
+        [Theory]
+        [InlineData("xlsx")]
+        [InlineData("xlsb")]
+        [InlineData("xls")]
+        public void Should_KeepDates_When_ConvertingA1904Workbook(string extension)
+        {
+            var date = new DateTime(2024, 5, 6, 12, 30, 0, DateTimeKind.Unspecified);
+            string source = Path.Combine(Path.GetTempPath(), $"excelreader-cli-{Guid.NewGuid():N}.xlsx");
+            string target = Path.ChangeExtension(source, "out." + extension);
+            try
+            {
+                using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(File.Create(source), options: new XlsxWriterOptions { Date1904 = true }))
+                {
+                    XlsxSheetWriter sheet = wb.AddSheet("S");
+                    using (XlsxRowWriter row = sheet.StartRow())
+                    {
+                        row.Write(date);
+                    }
+                    sheet.End();
+                    wb.End();
+                }
+
+                (int code, _, string error) = Convert(source, output: target);
+
+                Assert.Equal(0, code);
+                Assert.Empty(error);
+                using IExcelWorkbook written = Excel.Open(target);
+                using IExcelRowEnumerator rows = written.FirstSheet.GetEnumerator();
+                Assert.True(rows.MoveNext());
+                Assert.True(rows.Current[0].TryGetDateTime(written.IsDate1904, out DateTime readBack));
+                Assert.Equal(date, readBack);
+            }
+            finally
+            {
+                File.Delete(source);
+                File.Delete(target);
+            }
+        }
+
         [Fact]
         public void Should_UseTheExplicitFormat_When_FormatOverridesTheOutputExtension()
         {

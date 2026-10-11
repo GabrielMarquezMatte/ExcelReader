@@ -108,6 +108,7 @@ These changes replace positional parameters and loose arguments with types that 
 | `XlsWorkbookWriter.Create(stream, leaveOpen, date1904)` | `XlsWorkbookWriter.Create(stream, leaveOpen, new XlsWriterOptions { Date1904 = … })` |
 | `Excel.FromCsv*(…, CsvReaderOptions options)` | `Excel.FromCsv*(…, new ExcelReaderOptions { Csv = options })` |
 | `CsvReaderOptions.MaxCellBytes`, `CsvReaderOptions.InternStrings` | `ExcelReaderOptions.MaxCellBytes`, `ExcelReaderOptions.InternStrings` |
+| `Cell.TryGetDateTime(out DateTime)`, which silently assumed the 1900 date system | `Cell.TryGetDateTime(workbook.IsDate1904, out DateTime)` |
 
 A converter reads the date system and culture from the context:
 
@@ -126,6 +127,7 @@ To unit-test a converter, build the context with an initializer: `new ExcelRowCo
 Two behavior changes come with them:
 
 - `Excel.Open` with `ExcelFileFormat.Csv` now applies `ExcelReaderOptions.MaxCellBytes` and `InternStrings`. v6 ignored both and used the CSV defaults.
+- The CLI `convert` command no longer shifts dates by four years when the source workbook uses the 1904 date system.
 - `XlsxWriterOptions` gains `Date1904`, which v6 lacked. It defaults to `false`, so existing output is unchanged.
 
 ## Native bindings

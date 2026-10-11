@@ -211,7 +211,7 @@ namespace ExcelReader.Tests.Reader.Xls
             Assert.True(e.MoveNext());
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Date, e.Current[0].Type);
-            Assert.True(e.Current[0].TryGetDateTime(out DateTime parsed));
+            Assert.True(e.Current[0].TryGetDateTime(isDate1904: false, out DateTime parsed));
             Assert.Equal(date, parsed);
         }
 

@@ -30,19 +30,19 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal(CellType.Boolean, e.Current[3].Type);
             Assert.Equal("1", e.Current[3].GetString());
             Assert.Equal(CellType.Date, e.Current[4].Type);
-            Assert.True(e.Current[4].TryGetDateTime(out DateTime restock));
+            Assert.True(e.Current[4].TryGetDateTime(isDate1904: false, out DateTime restock));
             Assert.Equal(new DateTime(2024, 1, 14, 21, 0, 0, DateTimeKind.Unspecified), restock);
 
             Assert.True(e.MoveNext());
             Assert.Equal("Gadget", e.Current[0].GetString());
             Assert.True(e.Current[1].TryParse(null, out int gadgetQty));
             Assert.Equal(0, gadgetQty);
-            Assert.True(e.Current[4].TryGetDateTime(out DateTime gadgetDate));
+            Assert.True(e.Current[4].TryGetDateTime(isDate1904: false, out DateTime gadgetDate));
             Assert.Equal(new DateTime(2024, 2, 29, 21, 0, 0, DateTimeKind.Unspecified), gadgetDate);
 
             Assert.True(e.MoveNext());
             Assert.Equal("Gizmo", e.Current[0].GetString());
-            Assert.True(e.Current[4].TryGetDateTime(out DateTime gizmoDate));
+            Assert.True(e.Current[4].TryGetDateTime(isDate1904: false, out DateTime gizmoDate));
             Assert.Equal(new DateTime(2024, 6, 29, 21, 0, 0, DateTimeKind.Unspecified), gizmoDate);
 
             Assert.False(e.MoveNext());
