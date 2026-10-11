@@ -71,7 +71,7 @@ for column in workbook.sheet(1)?.infer_schema(1, 100)? {
 `infer_schema_parse_text(header_row, sample_size)` also types text cells (every CSV field, or
 numbers stored as text): integers, decimals, `true`/`false` and ISO dates. `parse_sheet_parallel`
 and `arrow::parse_arrow_parallel` take a `degree_of_parallelism` (`0` = every processor, `1` =
-sequential); only CSV is split, and the result equals `parse_sheet`'s.
+sequential); XLSX, XLSB and CSV are split, and the result equals `parse_sheet`'s.
 
 A workbook hands out sheets. A `Sheet` is the workbook and an index: it holds no native
 resource, it is `Copy`, and every read on it opens its own cursor.
@@ -368,6 +368,9 @@ can crash the process on macOS arm64. The fault is inside the native runtime's s
 in this crate: a .NET thread resumes at address 0 after a signal the runtime sent it, which ends the
 process with no message. It happens with any `degree_of_parallelism` above 1, and the same runtime
 built into a plain C host does not show it, so a Rust host appears to make it far more likely.
+
+`parse_sheet_parallel` and `arrow::parse_arrow_parallel` now fan out on XLSX and XLSB too; this has not been tested
+on macOS, so treat them the same way.
 
 Until it is fixed upstream, pass `degree_of_parallelism: 1` on macOS for a sequential run, or keep
 sources under the 256 KB partitioning floor, where the library never fans out. Linux and Windows are
