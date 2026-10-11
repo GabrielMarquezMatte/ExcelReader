@@ -160,6 +160,36 @@ namespace ExcelReader.Tests.Parser
         }
 
         [Fact]
+        public async Task AParseFailureAfterPipelineRecoveryReportsTheSheetRow()
+        {
+            var sb = new StringBuilder("<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Name</t></is></c><c r=\"B1\" t=\"inlineStr\"><is><t>Qty</t></is></c></row>");
+            for (int r = 2; r <= 300; r++)
+            {
+                string name = r == 20 ? "<![CDATA[ <row r=\"9\"> ]]>" : string.Create(CultureInfo.InvariantCulture, $"n{r}");
+                string qty = r == 211 ? "<c r=\"B211\" t=\"inlineStr\"><is><t>oops</t></is></c>" : string.Create(CultureInfo.InvariantCulture, $"<c r=\"B{r}\"><v>{r}</v></c>");
+                sb.Append(CultureInfo.InvariantCulture, $"<row r=\"{r}\"><c r=\"A{r}\" t=\"inlineStr\"><is><t>{name}</t></is></c>{qty}</row>");
+            }
+            using MemoryStream ms = WorkbookBuilder.Build(sb.ToString());
+            using XlsxWorkbook workbook = Excel.FromXlsx(ms);
+            ExcelParser<Sale> parser = ExcelParser.FromAttributes<Sale>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParseException sequential = Assert.Throws<ExcelParseException>(() => parser.Parse(workbook.FirstSheet).ToList());
+            SheetPipelineSource source = SheetPipelineSource.Create(workbook.FirstSheet)!;
+            Assert.Equal(211, sequential.Row);
+
+            foreach (int chunkBytes in new[] { 64, 90, 96, 150, 400 })
+            {
+                ExcelParseException parallel = await Assert.ThrowsAsync<ExcelParseException>(async () =>
+                {
+                    await foreach (Sale _ in SheetRowProjection<Sale>.ParseAsync(source, parser, isDate1904: false, 4, chunkBytes, TestContext.Current.CancellationToken))
+                    {
+                    }
+                });
+                Assert.Equal(sequential.Row, parallel.Row);
+                Assert.Equal(sequential.ColumnName, parallel.ColumnName);
+            }
+        }
+
+        [Fact]
         public async Task ACallbackExceptionReachesTheCaller()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;

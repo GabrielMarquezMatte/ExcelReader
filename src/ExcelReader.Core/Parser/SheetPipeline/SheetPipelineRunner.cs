@@ -92,7 +92,16 @@ namespace ExcelReader.Core.Parser.SheetPipeline
 
                 if (recover)
                 {
-                    yield return source.ParseTail(headerRow, rows, aggregation, cancellationToken);
+                    TState tail = default!;
+                    try
+                    {
+                        tail = source.ParseTail(headerRow, rows, aggregation, cancellationToken);
+                    }
+                    catch (ExcelParseException ex)
+                    {
+                        ThrowRenumbered(ExceptionDispatchInfo.Capture(ex), headerRow + rows);
+                    }
+                    yield return tail;
                 }
             }
             finally
