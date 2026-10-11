@@ -66,7 +66,7 @@ For raw CSV reads, all three libraries read text through spans. ExcelReader is ~
 
 ### Parallel CSV
 
-`CsvParallel.ParseAsync<T>` and `CsvParallel.AggregateAsync` on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
+`SheetParallel.ParseAsync<T>` and `SheetParallel.AggregateAsync` over a `CsvSheet`, on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
 
 | Dop | Conversion-heavy, typed | Narrow ints, typed | Conversion-heavy, `ref struct` aggregate | Narrow ints, `ref struct` aggregate |
 |---:|---:|---:|---:|---:|
@@ -90,6 +90,19 @@ Against [Sep](https://github.com/nietras/Sep)'s own `ParallelEnumerate` (all cor
 | Conversion-heavy | 626.6 ms, 467.31 MB | 184.9 ms, 474.82 MB | 817.5 ms, 467.31 MB | 605.5 ms, 468.84 MB |
 
 Sequentially, ExcelReader's typed parser is ~1.1x faster than Sep on narrow ints (490.6 ms vs. 521.7 ms), and ~1.3x faster on the conversion-heavy corpus. In parallel ExcelReader is ~2.3x (narrow) and ~3.3x (conversion-heavy) faster than Sep's, while yielding rows in file order.
+
+### Parallel sheet reading
+
+`SheetParallel.AggregateAsync<TAccumulator, TModel>` over the first sheet of the real-data workbook (65,535 rows, 14 columns; XLSX 6.7 MB compressed, 34.4 MB sheet XML; XLSB 3.7 MB, 15.9 MB sheet records), folding every row of a typed model into a per-partition sum (`SheetParallelBenchmark`). One thread inflates the sheet and cuts it into row-aligned chunks; `Dop - 1` workers parse them.
+
+| Dop | XLSX | XLSB |
+|---:|---:|---:|
+| 1 | 54.38 ms, 8.02 MB | 36.55 ms, 8.02 MB |
+| 2 | 37.84 ms, 8.13 MB | 25.60 ms, 8.07 MB |
+| 4 | 20.07 ms, 8.11 MB | 14.94 ms, 8.07 MB |
+| 8 | 19.94 ms, 8.16 MB | 15.26 ms, 8.09 MB |
+
+At dop 4 XLSX reads ~2.7x faster than sequentially and XLSB ~2.4x. Dop 2 is a single parse worker running alongside the inflating thread. Past dop 4 nothing improves: the one inflating thread is the floor (~15 ms for XLSX, ~10 ms for XLSB, plus the XLSB record walk that finds row boundaries). Allocation barely moves with dop (8.02 to 8.16 MB): it is the typed model's strings.
 
 ### Real data reads
 
