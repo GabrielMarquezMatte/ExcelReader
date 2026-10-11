@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Runtime.ExceptionServices;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
 
 namespace ExcelReader.Core.Parser.SheetPipeline
@@ -49,6 +50,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
             return sheet switch
             {
                 XlsxSheet xlsx => new XlsxPipelineSource(xlsx.Owner, xlsx.Index),
+                XlsbSheet xlsb => new XlsbPipelineSource(xlsb.Owner, xlsb.Index),
                 _ => null,
             };
         }
