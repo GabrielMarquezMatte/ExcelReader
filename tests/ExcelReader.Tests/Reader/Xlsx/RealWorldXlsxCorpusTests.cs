@@ -19,7 +19,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal("price", e.Current[2].GetString());
             Assert.Equal("in_stock", e.Current[3].GetString());
             Assert.Equal("restock_date", e.Current[4].GetString());
-            Assert.Equal(CellType.Formula, e.Current[0].Type);
+            Assert.Equal(CellType.ExcelString, e.Current[0].Type);
 
             Assert.True(e.MoveNext());
             Assert.Equal("Widget", e.Current[0].GetString());

@@ -108,6 +108,7 @@ These changes replace positional parameters and loose arguments with types that 
 | `XlsWorkbookWriter.Create(stream, leaveOpen, date1904)` | `XlsWorkbookWriter.Create(stream, leaveOpen, new XlsWriterOptions { Date1904 = … })` |
 | `Excel.FromCsv*(…, CsvReaderOptions options)` | `Excel.FromCsv*(…, new ExcelReaderOptions { Csv = options })` |
 | `CsvReaderOptions.MaxCellBytes`, `CsvReaderOptions.InternStrings` | `ExcelReaderOptions.MaxCellBytes`, `ExcelReaderOptions.InternStrings` |
+| `CellType.Formula` | Removed. A formula cell reports its cached result's type: `Number`, `Date`, `ExcelString`, `Boolean` or `Error` |
 | `ExcelDataReader` (its name collided with Sylvan.Data.Excel and the ExcelDataReader package) | `SheetDataReader` |
 | `Cell.TryGetDateTime(out DateTime)`, which silently assumed the 1900 date system | `Cell.TryGetDateTime(workbook.IsDate1904, out DateTime)` |
 
@@ -128,12 +129,15 @@ To unit-test a converter, build the context with an initializer: `new ExcelRowCo
 Two behavior changes come with them:
 
 - `Excel.Open` with `ExcelFileFormat.Csv` now applies `ExcelReaderOptions.MaxCellBytes` and `InternStrings`. v6 ignored both and used the CSV defaults.
+- Formula cells are typed by their cached result in every format. v6 reported an XLSX text result and an XLS numeric result as `Formula`, so an XLS formula with a date style lost its `Date` type, and XLSB never used `Formula`.
 - The CLI `convert` command no longer shifts dates by four years when the source workbook uses the 1904 date system.
 - `XlsxWriterOptions` gains `Date1904`, which v6 lacked. It defaults to `false`, so existing output is unchanged.
 
 ## Native bindings
 
 The C ABI is unchanged: no signature moved, and `XL_ABI_VERSION` stays 6. Behavior changed. `degree_of_parallelism` of `0` on `xl_parse_typed` and the Arrow exports now parallelises XLSX and XLSB as well as CSV, using every processor. Pass `1` for the old sequential behavior. The Rust, Python and C++ bindings take the same value (`degree_of_parallelism`, `parallelism`) and need no code change; a `parallelism=0` call on an XLSX or XLSB sheet is now faster, and holds every partition's columns until they merge, so its peak memory is higher.
+
+`XL_CELL_FORMULA` (5) is no longer produced; formula cells come back with their result's cell type. The constant stays defined in the header and in the bindings.
 
 `xl_write_options.date1904` now applies to XLSX as well as XLSB and XLS; v6 ignored it for XLSX.
 

@@ -12,6 +12,7 @@ namespace ExcelReader.Tests.Reader.Xls
     internal sealed record XlsError(byte Code);
     internal sealed record XlsFormula(double Value);
     internal sealed record XlsFormulaBool(bool Value);
+    internal sealed record XlsFormulaDate(DateTime Value);
     internal sealed record XlsFormulaError(byte Code);
     internal sealed record XlsRkInt(int Value);
     internal sealed record XlsRkRaw(uint Value);
@@ -318,6 +319,9 @@ namespace ExcelReader.Tests.Reader.Xls
                 case XlsFormula f:
                     byte[] data = [.. U16(row), .. U16(col), .. U16(0), .. Double(f.Value), .. new byte[8]];
                     WriteRecord(sheet, 0x0006, data);
+                    break;
+                case XlsFormulaDate f:
+                    WriteRecord(sheet, 0x0006, [.. U16(row), .. U16(col), .. U16(1), .. Double(f.Value.ToOADate()), .. new byte[8]]);
                     break;
                 case XlsFormulaBool f:
                     WriteRecord(sheet, 0x0006, [.. U16(row), .. U16(col), .. U16(0), .. FormulaSpecial(1, (byte)(f.Value ? 1 : 0)), .. new byte[8]]);

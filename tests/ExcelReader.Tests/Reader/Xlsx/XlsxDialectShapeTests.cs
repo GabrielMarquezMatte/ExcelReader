@@ -73,7 +73,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                     """,
                     null,
                     [
-                        new ExpectedCell(0, 0, "ab", CellType.Formula),
+                        new ExpectedCell(0, 0, "ab", CellType.ExcelString),
                         new ExpectedCell(0, 1, "#DIV/0!", CellType.Error),
                         new ExpectedCell(0, 2, "0", CellType.Boolean),
                     ])

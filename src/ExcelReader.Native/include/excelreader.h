@@ -29,7 +29,7 @@ extern "C" {
 #define XL_CELL_NUMBER  2
 #define XL_CELL_DATE    3
 #define XL_CELL_BOOL    4
-#define XL_CELL_FORMULA 5
+#define XL_CELL_FORMULA 5  /* no longer produced: a formula cell reports its cached result type */
 #define XL_CELL_ERROR   6
 
 #define XL_MAX_COLUMN_SPECS      16384
