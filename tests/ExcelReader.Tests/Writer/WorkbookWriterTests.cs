@@ -114,9 +114,9 @@ namespace ExcelReader.Tests.Writer
 
         private sealed class MoneyConverter : IExcelCellConverter<Money>, IExcelCellWriter<Money>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Money value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out Money value)
             {
-                if (cell.TryParse(provider, out decimal amount))
+                if (cell.TryParse(context.FormatProvider, out decimal amount))
                 {
                     value = new Money(amount);
                     return true;
@@ -833,7 +833,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var config = new ExcelParserConfig { HeaderRow = 2 };
+            var config = new ExcelParserOptions { HeaderRow = 2 };
             var rows = ExcelParser.FromAttributes<StringRow>(config).Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("HeaderRow2", rows[0].Name);

@@ -11,11 +11,10 @@ namespace ExcelReader.Core.Parser
     /// </summary>
     /// <typeparam name="TValue">The value type the cell is read into.</typeparam>
     /// <param name="cell">The cell to read; callers only invoke this for a non-empty cell.</param>
-    /// <param name="isDate1904">True when the source workbook uses the 1904 date system.</param>
-    /// <param name="provider">The format provider configured for parsing.</param>
+    /// <param name="context">The date system and format provider to convert with.</param>
     /// <param name="value">The read value, when this method returns true.</param>
     /// <returns><see langword="true"/> if the cell was read successfully.</returns>
-    public delegate bool ExcelCellReader<TValue>(in Cell cell, bool isDate1904, IFormatProvider provider, out TValue value);
+    public delegate bool ExcelCellReader<TValue>(in Cell cell, in ExcelRowContext context, out TValue value);
 
     /// <summary>
     /// Assigns <paramref name="value"/> to a property of <paramref name="model"/>. The source generator
@@ -41,9 +40,8 @@ namespace ExcelReader.Core.Parser
     /// <typeparam name="TModel">The row model type being read into.</typeparam>
     /// <param name="model">The model instance to mutate.</param>
     /// <param name="cell">The cell to read; callers only invoke this for a non-empty cell.</param>
-    /// <param name="isDate1904">True when the source workbook uses the 1904 date system.</param>
-    /// <param name="provider">The format provider configured for parsing.</param>
+    /// <param name="context">The date system and format provider to convert with.</param>
     /// <returns><see langword="true"/> if the cell was read and assigned successfully.</returns>
-    public delegate bool ExcelRowParser<TModel>(ref TModel model, in Cell cell, bool isDate1904, IFormatProvider provider)
+    public delegate bool ExcelRowParser<TModel>(ref TModel model, in Cell cell, in ExcelRowContext context)
         where TModel : allows ref struct;
 }

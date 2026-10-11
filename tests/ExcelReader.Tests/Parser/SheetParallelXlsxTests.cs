@@ -143,7 +143,7 @@ namespace ExcelReader.Tests.Parser
             }
             using MemoryStream ms = WorkbookBuilder.Build(sb.ToString());
             using XlsxWorkbook workbook = Excel.FromXlsx(ms);
-            ExcelParser<Sale> parser = ExcelParser.FromAttributes<Sale>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Sale> parser = ExcelParser.FromAttributes<Sale>(new ExcelParserOptions { ThrowOnParseFailure = true });
             ExcelParseException sequential = Assert.Throws<ExcelParseException>(() => parser.Parse(workbook.FirstSheet).ToList());
             SheetPipelineSource source = SheetPipelineSource.Create(workbook.FirstSheet)!;
 
@@ -171,7 +171,7 @@ namespace ExcelReader.Tests.Parser
             }
             using MemoryStream ms = WorkbookBuilder.Build(sb.ToString());
             using XlsxWorkbook workbook = Excel.FromXlsx(ms);
-            ExcelParser<Sale> parser = ExcelParser.FromAttributes<Sale>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Sale> parser = ExcelParser.FromAttributes<Sale>(new ExcelParserOptions { ThrowOnParseFailure = true });
             ExcelParseException sequential = Assert.Throws<ExcelParseException>(() => parser.Parse(workbook.FirstSheet).ToList());
             SheetPipelineSource source = SheetPipelineSource.Create(workbook.FirstSheet)!;
             Assert.Equal(211, sequential.Row);

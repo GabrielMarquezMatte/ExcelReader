@@ -26,10 +26,10 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
         private static ParallelCsvEnumerable<Row> Build(byte[] csv, int dop, int chunkSizeOverride)
         {
-            return Build<Row>(csv, dop, chunkSizeOverride, new ExcelParserConfig());
+            return Build<Row>(csv, dop, chunkSizeOverride, new ExcelParserOptions());
         }
 
-        private static ParallelCsvEnumerable<TRow> Build<TRow>(byte[] csv, int dop, int chunkSizeOverride, ExcelParserConfig config)
+        private static ParallelCsvEnumerable<TRow> Build<TRow>(byte[] csv, int dop, int chunkSizeOverride, ExcelParserOptions config)
         {
             using var headerReader = Excel.FromCsv(csv);
             CsvBoundColumnMap<TRow> map = CsvHeaderBinder.Bind(
@@ -42,7 +42,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 CsvReaderOptions.Default, config, dop);
         }
 
-        private static async Task AssertSameFailureAsSequentialAsync<TRow>(byte[] csv, ExcelParserConfig config)
+        private static async Task AssertSameFailureAsSequentialAsync<TRow>(byte[] csv, ExcelParserOptions config)
         {
             using CsvReader sequentialReader = Excel.FromCsv(csv);
             ExcelParseException expected = Assert.Throws<ExcelParseException>(
@@ -169,7 +169,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             return AssertSameFailureAsSequentialAsync<Row>(
                 Encoding.UTF8.GetBytes(sb.ToString()),
-                new ExcelParserConfig { ThrowOnParseFailure = true });
+                new ExcelParserOptions { ThrowOnParseFailure = true });
         }
 
         [Fact]
@@ -183,7 +183,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             }
 
             return AssertSameFailureAsSequentialAsync<RequiredRow>(
-                Encoding.UTF8.GetBytes(sb.ToString()), new ExcelParserConfig());
+                Encoding.UTF8.GetBytes(sb.ToString()), new ExcelParserOptions());
         }
 
         [Fact]
@@ -198,7 +198,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             return AssertSameFailureAsSequentialAsync<Row>(
                 Encoding.UTF8.GetBytes(sb.ToString()),
-                new ExcelParserConfig { HeaderRow = 3, ThrowOnParseFailure = true });
+                new ExcelParserOptions { HeaderRow = 3, ThrowOnParseFailure = true });
         }
 
         [Fact]

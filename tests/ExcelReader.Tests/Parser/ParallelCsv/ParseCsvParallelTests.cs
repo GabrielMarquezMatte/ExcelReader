@@ -138,7 +138,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             ArgumentException exception = Assert.Throws<ArgumentException>(
                 () => SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { HeaderRow = 2 }, ct: TestContext.Current.CancellationToken));
-            Assert.Contains(nameof(ExcelParserConfig.HeaderRow), exception.Message, StringComparison.Ordinal);
+            Assert.Contains(nameof(ExcelParserOptions.HeaderRow), exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]

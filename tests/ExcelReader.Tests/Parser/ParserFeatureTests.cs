@@ -73,7 +73,7 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "1.234,56"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
+            var config = new ExcelParserOptions { Culture = CultureInfo.GetCultureInfo("pt-BR") };
 
             MoneyRow row = ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader.FirstSheet).Single();
 
@@ -97,7 +97,7 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "not-a-number"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader.FirstSheet).ToList());

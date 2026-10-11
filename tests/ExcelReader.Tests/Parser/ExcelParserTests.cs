@@ -223,7 +223,7 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["name"], ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var config = new ExcelParserConfig { ColumnNameComparer = StringComparer.Ordinal };
+            var config = new ExcelParserOptions { ColumnNameComparer = StringComparer.Ordinal };
             var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Null(result[0].Name);
@@ -234,7 +234,7 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var config = new ExcelParserConfig { ColumnNameComparer = StringComparer.Ordinal };
+            var config = new ExcelParserOptions { ColumnNameComparer = StringComparer.Ordinal };
             var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Equal("Alice", result[0].Name);
@@ -249,7 +249,7 @@ namespace ExcelReader.Tests.Parser
                 ["Name"],
                 ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var config = new ExcelParserConfig { HeaderRow = 2 };
+            var config = new ExcelParserOptions { HeaderRow = 2 };
             var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Equal("Alice", result[0].Name);
@@ -264,7 +264,7 @@ namespace ExcelReader.Tests.Parser
                 ["Name"],
                 ["Bob"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var config = new ExcelParserConfig { HeaderRow = 3 };
+            var config = new ExcelParserOptions { HeaderRow = 3 };
             var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Equal("Bob", result[0].Name);
@@ -275,14 +275,14 @@ namespace ExcelReader.Tests.Parser
         public void ZeroHeaderRowThrows()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                ExcelParser.FromAttributes<PersonRow>(new ExcelParserConfig { HeaderRow = 0 }));
+                ExcelParser.FromAttributes<PersonRow>(new ExcelParserOptions { HeaderRow = 0 }));
         }
 
         [Fact]
         public void NegativeHeaderRowThrows()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                ExcelParser.FromAttributes<PersonRow>(new ExcelParserConfig { HeaderRow = -1 }));
+                ExcelParser.FromAttributes<PersonRow>(new ExcelParserOptions { HeaderRow = -1 }));
         }
 
 

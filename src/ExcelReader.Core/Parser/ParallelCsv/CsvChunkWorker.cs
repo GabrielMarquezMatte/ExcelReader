@@ -112,7 +112,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvBoundColumnMap<T> map,
             TypeMapInfo<T> info,
             CsvReaderOptions readerOptions,
-            ExcelParserConfig config,
+            ExcelParserOptions config,
             List<T> models,
             CancellationToken ct)
         {
@@ -134,7 +134,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvBoundColumnMap<T> map,
             TypeMapInfo<T> info,
             CsvReaderOptions options,
-            ExcelParserConfig config,
+            ExcelParserOptions config,
             CancellationToken ct)
         {
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);

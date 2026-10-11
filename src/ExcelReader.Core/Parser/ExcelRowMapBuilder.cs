@@ -37,9 +37,9 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(names);
             ArgumentNullException.ThrowIfNull(read);
             ArgumentNullException.ThrowIfNull(set);
-            bool parser(ref T model, in Cell cell, bool isDate1904, IFormatProvider provider)
+            bool parser(ref T model, in Cell cell, in ExcelRowContext context)
             {
-                if (!read(in cell, isDate1904, provider, out TValue value))
+                if (!read(in cell, in context, out TValue value))
                 {
                     return false;
                 }
@@ -77,9 +77,9 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(names);
             ArgumentNullException.ThrowIfNull(read);
             ArgumentNullException.ThrowIfNull(set);
-            bool parser(ref T model, in Cell cell, bool isDate1904, IFormatProvider provider)
+            bool parser(ref T model, in Cell cell, in ExcelRowContext context)
             {
-                if (!read(in cell, isDate1904, provider, out TValue value))
+                if (!read(in cell, in context, out TValue value))
                 {
                     return false;
                 }
@@ -138,9 +138,9 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(names);
             ArgumentNullException.ThrowIfNull(converter);
             ArgumentNullException.ThrowIfNull(set);
-            bool parser(ref T model, in Cell cell, bool isDate1904, IFormatProvider provider)
+            bool parser(ref T model, in Cell cell, in ExcelRowContext context)
             {
-                if (!converter.TryConvert(in cell, isDate1904, provider, out TValue value))
+                if (!converter.TryConvert(in cell, in context, out TValue value))
                 {
                     return false;
                 }
@@ -176,9 +176,9 @@ namespace ExcelReader.Core.Parser
             ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
             ArgumentNullException.ThrowIfNull(read);
             ArgumentNullException.ThrowIfNull(set);
-            bool parser(ref T model, in Cell cell, bool isDate1904, IFormatProvider provider)
+            bool parser(ref T model, in Cell cell, in ExcelRowContext context)
             {
-                if (!read(in cell, isDate1904, provider, out TValue value))
+                if (!read(in cell, in context, out TValue value))
                 {
                     return false;
                 }

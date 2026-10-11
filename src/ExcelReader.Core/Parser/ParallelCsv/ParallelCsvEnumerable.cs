@@ -14,7 +14,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         private readonly CsvBoundColumnMap<T> _map;
         private readonly TypeMapInfo<T> _info;
         private readonly CsvReaderOptions _readerOptions;
-        private readonly ExcelParserConfig _config;
+        private readonly ExcelParserOptions _config;
         private readonly int _dop;
 
         private readonly ReaderLifetime? _lease;
@@ -27,7 +27,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvBoundColumnMap<T> map,
             TypeMapInfo<T> info,
             CsvReaderOptions readerOptions,
-            ExcelParserConfig config,
+            ExcelParserOptions config,
             int degreeOfParallelism,
             ReaderLifetime? lease = null,
             object? owner = null)

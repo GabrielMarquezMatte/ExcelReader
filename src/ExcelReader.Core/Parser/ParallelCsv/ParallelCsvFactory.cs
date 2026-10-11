@@ -51,7 +51,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             ReaderLifetime? lease = null,
             object? owner = null)
         {
-            ExcelParserConfig config = parser.Config;
+            ExcelParserOptions config = parser.Config;
             TypeMapInfo<T> info = parser.CsvInfo;
             CsvBoundColumnMap<T> map;
             long dataStart;

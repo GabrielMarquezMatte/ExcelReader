@@ -98,7 +98,7 @@ await SheetParallel.ForEachAsync(
 
 Unlike `ParseAsync`, the callback runs on the worker threads, so records arrive in no particular order and the callback must be safe to call from several threads at once. Spans are valid only for the duration of the call.
 
-`HeaderRow` follows the same rule as before: `ParseAsync` takes the header from the parser's `ExcelParserConfig.HeaderRow` and rejects a non-zero `SheetParallelOptions.HeaderRow`, while the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
+`HeaderRow` follows the same rule as before: `ParseAsync` takes the header from the parser's `ExcelParserOptions.HeaderRow` and rejects a non-zero `SheetParallelOptions.HeaderRow`, while the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
 
 #### When it reads sequentially
 

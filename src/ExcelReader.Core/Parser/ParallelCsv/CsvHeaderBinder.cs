@@ -7,7 +7,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
     {
         internal static CsvBoundColumnMap<T> Bind<T>(
             CsvReader reader,
-            ExcelParserConfig config,
+            ExcelParserOptions config,
             TypeMapInfo<T> info,
             out long firstDataRecordOffset)
         {

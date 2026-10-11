@@ -1,27 +1,29 @@
+using System.Globalization;
+
 namespace ExcelReader.Core.Parser
 {
     /// <summary>
-    /// Immutable per-enumeration context handed to every generated <c>IExcelRowModel&lt;TSelf&gt;.FromRow</c>
-    /// call, carrying settings a row model needs to convert its own cells.
+    /// Settings a cell reader, converter or row parser needs to convert a cell, handed to every
+    /// <see cref="ExcelCellReader{TValue}"/>, <see cref="ExcelRowParser{TModel}"/> and
+    /// <see cref="IExcelCellConverter{T}.TryConvert"/> call.
     /// </summary>
     /// <remarks>
-    /// A normal <see langword="readonly"/> struct (not a ref struct), so it can be passed <c>in</c>
-    /// freely, unlike <c>Row</c> itself. Declared as a record struct purely for its
-    /// compiler-synthesized equality members (satisfying CA1815 without hand-written boilerplate; no
-    /// code in this library actually compares two contexts), and kept non-positional (no primary
-    /// constructor) so construction stays internal-only.
+    /// Passed by <see langword="in"/> reference. New settings arrive as new properties, so a converter
+    /// written against this type keeps compiling. Construct one with an object initializer to unit-test a
+    /// converter; <see langword="default"/> means the 1900 date system and the invariant culture.
     /// </remarks>
     public readonly record struct ExcelRowContext
     {
-        /// <summary>True when the source workbook uses the 1904 date system.</summary>
-        public bool IsDate1904 { get; }
-        /// <summary>The format provider to use when parsing cell values.</summary>
-        public IFormatProvider FormatProvider { get; }
+        private readonly IFormatProvider? _formatProvider;
 
-        internal ExcelRowContext(bool isDate1904, IFormatProvider formatProvider)
+        /// <summary>True when the source workbook uses the 1904 date system.</summary>
+        public bool IsDate1904 { get; init; }
+
+        /// <summary>The format provider to use when parsing cell text. Defaults to <see cref="CultureInfo.InvariantCulture"/>.</summary>
+        public IFormatProvider FormatProvider
         {
-            IsDate1904 = isDate1904;
-            FormatProvider = formatProvider;
+            get => _formatProvider ?? CultureInfo.InvariantCulture;
+            init => _formatProvider = value;
         }
     }
 }

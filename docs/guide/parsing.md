@@ -133,13 +133,13 @@ The match is by header name, not by property identity: configuring a *different*
 
 ## Parser configuration
 
-Pass an `ExcelParserConfig` to control header handling and culture:
+Pass an `ExcelParserOptions` to control header handling and culture:
 
 ```csharp
 using System.Globalization;
 using ExcelReader.Core.Parser;
 
-var config = new ExcelParserConfig
+var options = new ExcelParserOptions
 {
     HeaderRow = 1,                                   // 1-based row holding the headers
     ColumnNameComparer = StringComparer.OrdinalIgnoreCase,
@@ -147,7 +147,7 @@ var config = new ExcelParserConfig
     Culture = CultureInfo.GetCultureInfo("pt-BR"),   // parse "1.234,56" as 1234.56m
 };
 
-var parser = ExcelParser.FromAttributes<ChangeRow>(config);
+var parser = ExcelParser.FromAttributes<ChangeRow>(options);
 ```
 
 `Culture` applies when parsing text-backed numeric/`Guid` cells (XLSX inline and shared strings); binary numeric cells (XLS/XLSB) carry a raw value and ignore it. `HeaderNormalization` flags (`Trim`, `CollapseSpaces`, `RemoveDiacritics`) are applied to both the sheet headers and the property names before matching.
@@ -182,7 +182,7 @@ using ExcelReader.Core.Reader;
 
 public sealed class BrlMoneyConverter : IExcelCellConverter<decimal>
 {
-    public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out decimal value)
+    public bool TryConvert(in Cell cell, in ExcelRowContext context, out decimal value)
     {
         string text = cell.GetString().Replace("R$", "", StringComparison.Ordinal).Trim();
         return decimal.TryParse(text, NumberStyles.Currency, CultureInfo.GetCultureInfo("pt-BR"), out value);
@@ -196,7 +196,7 @@ public sealed class Invoice
 }
 ```
 
-Return `false` to signal a parse failure (the property keeps its default). Empty cells are skipped before the converter runs.
+Return `false` to signal a parse failure (the property keeps its default). Empty cells are skipped before the converter runs. `context` carries the workbook's date system (`IsDate1904`) and the parser culture (`FormatProvider`); to unit-test a converter, pass `new ExcelRowContext { IsDate1904 = false, FormatProvider = CultureInfo.InvariantCulture }`.
 
 ## Parse into a ref struct (zero-copy)
 

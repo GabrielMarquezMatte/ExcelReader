@@ -47,7 +47,7 @@ namespace ExcelReader.Tests.Parser
 
         public sealed class UpperCaseConverter : IExcelCellConverter<string>, IExcelCellWriter<string>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out string value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out string value)
             {
                 value = cell.GetString().ToUpperInvariant();
                 return true;

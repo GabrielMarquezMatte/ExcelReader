@@ -43,7 +43,7 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="T">The row model type to bind each row to.</typeparam>
         /// <param name="sheet">The sheet to read. The caller keeps ownership and keeps its workbook open until the enumeration ends.</param>
-        /// <param name="parser">How columns bind to <typeparamref name="T"/>; created with <see cref="ExcelParser"/>. Its <see cref="ExcelParserConfig.HeaderRow"/> locates the header.</param>
+        /// <param name="parser">How columns bind to <typeparamref name="T"/>; created with <see cref="ExcelParser"/>. Its <see cref="ExcelParserOptions.HeaderRow"/> locates the header.</param>
         /// <param name="options">Parallelism options. Defaults to <see cref="SheetParallelOptions.Default"/>. <see cref="SheetParallelOptions.HeaderRow"/> does not apply here and must be left at <c>0</c>.</param>
         /// <param name="ct">A token to cancel enumeration.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
@@ -67,7 +67,7 @@ namespace ExcelReader.Core.Reader
             if (validated.HeaderRow != 0)
             {
                 throw new ArgumentException(
-                    $"{nameof(SheetParallelOptions)}.{nameof(SheetParallelOptions.HeaderRow)} does not apply to typed parsing; set {nameof(ExcelParserConfig)}.{nameof(ExcelParserConfig.HeaderRow)} instead.",
+                    $"{nameof(SheetParallelOptions)}.{nameof(SheetParallelOptions.HeaderRow)} does not apply to typed parsing; set {nameof(ExcelParserOptions)}.{nameof(ExcelParserOptions.HeaderRow)} instead.",
                     nameof(options));
             }
             return SheetRunner.Parse(sheet, parser, validated.DegreeOfParallelism, ct);
@@ -127,7 +127,7 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="TModel">The model type. May be a <see langword="ref struct"/> with <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> properties.</typeparam>
         /// <param name="sheet">The sheet to read. The caller keeps ownership and keeps its workbook open until the task completes.</param>
-        /// <param name="parser">How columns bind to <typeparamref name="TModel"/>; created with <see cref="ExcelParser"/>. Its <see cref="ExcelParserConfig.HeaderRow"/> is ignored in favour of <see cref="SheetParallelOptions.HeaderRow"/>.</param>
+        /// <param name="parser">How columns bind to <typeparamref name="TModel"/>; created with <see cref="ExcelParser"/>. Its <see cref="ExcelParserOptions.HeaderRow"/> is ignored in favour of <see cref="SheetParallelOptions.HeaderRow"/>.</param>
         /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
         /// <param name="options">Parallelism and header options. Defaults to <see cref="SheetParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
@@ -141,7 +141,7 @@ namespace ExcelReader.Core.Reader
         /// <see cref="IRowRecord{TSelf}"/> overload: <paramref name="body"/> runs concurrently, delivery is
         /// at least once in general (exactly once on XLSB, and on a well-formed XLSX sheet), and records arrive
         /// in no particular order. A property that fails to parse keeps its default unless
-        /// <see cref="ExcelParserConfig.ThrowOnParseFailure"/> is set; a missing <c>[ExcelRequired]</c> column or
+        /// <see cref="ExcelParserOptions.ThrowOnParseFailure"/> is set; a missing <c>[ExcelRequired]</c> column or
         /// value throws <see cref="ExcelParseException"/>; empty rows are skipped.
         /// </para>
         /// <para>
@@ -198,7 +198,7 @@ namespace ExcelReader.Core.Reader
         /// <typeparam name="TAccumulator">The accumulator type. See <see cref="IRowAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
         /// <typeparam name="TModel">The model type.</typeparam>
         /// <param name="sheet">The sheet to read. The caller keeps ownership and keeps its workbook open until the task completes.</param>
-        /// <param name="parser">How columns bind to <typeparamref name="TModel"/>; created with <see cref="ExcelParser"/>. Its <see cref="ExcelParserConfig.HeaderRow"/> is ignored in favour of <see cref="SheetParallelOptions.HeaderRow"/>.</param>
+        /// <param name="parser">How columns bind to <typeparamref name="TModel"/>; created with <see cref="ExcelParser"/>. Its <see cref="ExcelParserOptions.HeaderRow"/> is ignored in favour of <see cref="SheetParallelOptions.HeaderRow"/>.</param>
         /// <param name="options">Parallelism and header options. Defaults to <see cref="SheetParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The accumulator holding every record.</returns>
@@ -208,7 +208,7 @@ namespace ExcelReader.Core.Reader
         /// <remarks>
         /// <para>
         /// The header is bound once, before any row is folded. A property that fails to parse keeps its
-        /// default unless <see cref="ExcelParserConfig.ThrowOnParseFailure"/> is set; a missing
+        /// default unless <see cref="ExcelParserOptions.ThrowOnParseFailure"/> is set; a missing
         /// <c>[ExcelRequired]</c> column or value throws <see cref="ExcelParseException"/>; empty rows are skipped.
         /// </para>
         /// <para>
