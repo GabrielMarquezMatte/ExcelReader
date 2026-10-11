@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Internal;
-using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
 {
@@ -18,7 +17,6 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         private readonly ExcelParserConfig _config;
         private readonly int _dop;
 
-        private readonly SafeFileHandle? _ownedHandle;
         private readonly ReaderLifetime? _lease;
         private readonly object? _owner;
 
@@ -31,7 +29,6 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvReaderOptions readerOptions,
             ExcelParserConfig config,
             int degreeOfParallelism,
-            SafeFileHandle? ownedHandle,
             ReaderLifetime? lease = null,
             object? owner = null)
         {
@@ -43,7 +40,6 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             _readerOptions = readerOptions;
             _config = config;
             _dop = degreeOfParallelism;
-            _ownedHandle = ownedHandle;
             _lease = lease;
             _owner = owner;
         }
@@ -97,7 +93,6 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             {
                 await cts.CancelAsync().ConfigureAwait(false);
                 await allWorkers.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-                _ownedHandle?.Dispose();
                 _lease?.Release();
             }
         }

@@ -39,7 +39,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             CsvChunkPlan plan = CsvChunkPlan.Create(dataStart, csv.Length - dataStart, dop, chunkSizeOverride);
             return new ParallelCsvEnumerable<TRow>(
                 source, plan, dataStart, map, TypeMapper<TRow>.GetCsvInfo(),
-                CsvReaderOptions.Default, config, dop, null);
+                CsvReaderOptions.Default, config, dop);
         }
 
         private static async Task AssertSameFailureAsSequentialAsync<TRow>(byte[] csv, ExcelParserConfig config)
