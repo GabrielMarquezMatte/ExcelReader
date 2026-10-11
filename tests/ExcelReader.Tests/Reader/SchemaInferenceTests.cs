@@ -45,9 +45,9 @@ namespace ExcelReader.Tests.Reader
             return SchemaInference.Infer(rows, isDate1904: false, headerRow, sampleSize, parseText);
         }
 
-        private static ExcelColumnType[] TypesOf(ExcelColumnSchema[] schema)
+        private static ExcelColumnType[] TypesOf(IReadOnlyList<ExcelColumnSchema> schema)
         {
-            return Array.ConvertAll(schema, column => column.Type);
+            return [.. schema.Select(column => column.Type)];
         }
 
         private static string FixtureCsv()
@@ -67,7 +67,7 @@ namespace ExcelReader.Tests.Reader
         {
             using CsvReader reader = Excel.FromCsvFile(FixtureCsv());
 
-            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet, new SchemaInferenceOptions { ParseText = true });
+            IReadOnlyList<ExcelColumnSchema> schema = Excel.InferSchema(reader.FirstSheet, new SchemaInferenceOptions { ParseText = true });
 
             ExcelColumnType s = ExcelColumnType.StringColumn, d = ExcelColumnType.DateColumn,
                 i = ExcelColumnType.Int64Column, f = ExcelColumnType.Float64Column;
@@ -292,11 +292,11 @@ namespace ExcelReader.Tests.Reader
         public void Should_InferAcrossEveryFormat_When_CalledThroughTheExcelFacade()
         {
             using IExcelWorkbook reader = Excel.Open(Path.Combine("data", "RealExcel.xlsb"));
-            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet);
+            IReadOnlyList<ExcelColumnSchema> schema = Excel.InferSchema(reader.FirstSheet);
 
             Assert.NotEmpty(schema);
             Assert.All(schema, column => Assert.True(column.Index >= 0));
-            for (int i = 0; i < schema.Length; i++)
+            for (int i = 0; i < schema.Count; i++)
             {
                 Assert.Equal(i, schema[i].Index);
             }

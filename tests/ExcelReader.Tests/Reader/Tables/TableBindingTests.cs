@@ -90,7 +90,7 @@ namespace ExcelReader.Tests.Reader.Tables
             }
 
             Assert.Equal(["a", "b", "c"], letters);
-            Assert.Equal(2, Excel.InferSchema(view, new SchemaInferenceOptions { HeaderRow = 0 }).Length);
+            Assert.Equal(2, Excel.InferSchema(view, new SchemaInferenceOptions { HeaderRow = 0 }).Count);
         }
 
         [Theory]
@@ -130,7 +130,7 @@ namespace ExcelReader.Tests.Reader.Tables
         {
             using IExcelWorkbook workbook = Excel.Open(TableMetadataTests.FixturePath(file));
 
-            ExcelColumnSchema[] schema = Excel.InferSchema(Table(workbook, "Sales").AsSheet());
+            IReadOnlyList<ExcelColumnSchema> schema = Excel.InferSchema(Table(workbook, "Sales").AsSheet());
 
             Assert.Equal([("Product", 2), ("Qty", 3), ("Price", 4)], schema.Select(static c => (c.Name, c.Index)));
         }

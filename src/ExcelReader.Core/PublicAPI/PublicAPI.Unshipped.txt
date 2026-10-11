@@ -83,7 +83,6 @@ ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.ParseText.init -> void
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SampleSize.get -> int
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SampleSize.init -> void
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SchemaInferenceOptions() -> void
-static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.Schema.SchemaInferenceOptions? options = null) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
 static ExcelReader.Core.Reader.ExcelDataReaderOptions.Default.get -> ExcelReader.Core.Reader.ExcelDataReaderOptions!
 static ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.Default.get -> ExcelReader.Core.Reader.Schema.SchemaInferenceOptions!
 ExcelReader.Core.Writer.Xls.XlsWriterOptions
@@ -106,3 +105,4 @@ static ExcelReader.Core.Reader.Excel.FromCsv(System.ReadOnlyMemory<byte> data, E
 static ExcelReader.Core.Reader.Excel.FromCsvAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Csv.CsvReader!>
 static ExcelReader.Core.Reader.Excel.FromCsvFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Csv.CsvReader!
 static ExcelReader.Core.Reader.Excel.FromCsvFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Csv.CsvReader!>
+static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.Schema.SchemaInferenceOptions? options = null) -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.Schema.ExcelColumnSchema>!

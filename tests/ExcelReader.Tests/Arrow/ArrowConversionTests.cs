@@ -227,14 +227,14 @@ namespace ExcelReader.Tests.Arrow
             string path = Path.Combine(AppContext.BaseDirectory, "data", "RealExcel.xlsb");
 
             using IExcelWorkbook managedReader = Excel.Open(path);
-            ExcelColumnSchema[] schema = Excel.InferSchema(managedReader.FirstSheet);
+            IReadOnlyList<ExcelColumnSchema> schema = Excel.InferSchema(managedReader.FirstSheet);
             RecordBatch managedBatch = managedReader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = schema, HeaderRow = 1 });
 
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Xlsb, out NativeHandle? handle));
             try
             {
-                NativeColumnSpec[] specs = new NativeColumnSpec[schema.Length];
-                for (int i = 0; i < schema.Length; i++)
+                NativeColumnSpec[] specs = new NativeColumnSpec[schema.Count];
+                for (int i = 0; i < schema.Count; i++)
                 {
                     specs[i] = new NativeColumnSpec
                     {
@@ -249,7 +249,7 @@ namespace ExcelReader.Tests.Arrow
                 try
                 {
                     Assert.Equal(managedBatch.Length, nativeArray.Length);
-                    for (int i = 0; i < schema.Length; i++)
+                    for (int i = 0; i < schema.Count; i++)
                     {
                         ArrowArray nativeColumn = NativeApiTests.ArrowChildArray(nativeArray, i);
                         Assert.Equal(nativeColumn.Length, managedBatch.Column(i).Length);
