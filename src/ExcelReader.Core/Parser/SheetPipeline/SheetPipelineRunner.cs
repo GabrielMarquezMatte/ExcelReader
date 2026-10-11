@@ -131,7 +131,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                     },
                     ct).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
             }
             catch (Exception ex)
@@ -158,6 +158,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                 catch (Exception ex)
                 {
                     item.Done.TrySetException(ex);
+                    _ = item.Done.Task.Exception;
                     throw;
                 }
                 finally

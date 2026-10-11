@@ -82,6 +82,74 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
             Assert.Equal(Sequential(workbook, 3), await PipelineAsync(workbook, 3, dop, chunkBytes));
         }
 
+        [Fact]
+        public async Task SourceStreamCancellationIsNotSwallowed()
+        {
+            using var ms = WorkbookBuilder.Build(Rows(20000));
+            using var stream = new CancelAfterArmedStream(ms);
+            using XlsxWorkbook workbook = Excel.FromXlsx(stream);
+            SheetPipelineSource source = SheetPipelineSource.Create(workbook.FirstSheet)!;
+            stream.Arm(100 * 1024);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                SheetPipelineRunner.AggregateAsync(source, Collecting, null, 0, 2, 64, CancellationToken.None));
+        }
+
+        private sealed class CancelAfterArmedStream(Stream inner) : Stream
+        {
+            private long _remaining = long.MaxValue;
+
+            public void Arm(long budget) => _remaining = budget;
+
+            public override bool CanRead => inner.CanRead;
+            public override bool CanSeek => inner.CanSeek;
+            public override bool CanWrite => false;
+            public override long Length => inner.Length;
+            public override long Position
+            {
+                get => inner.Position;
+                set => inner.Position = value;
+            }
+
+            public override void Flush()
+            {
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                int n = inner.Read(buffer, offset, count);
+                Spend(n);
+                return n;
+            }
+
+            public override int Read(Span<byte> buffer)
+            {
+                int n = inner.Read(buffer);
+                Spend(n);
+                return n;
+            }
+
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                int n = await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                Spend(n);
+                return n;
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            private void Spend(int n)
+            {
+                _remaining -= n;
+                if (_remaining < 0)
+                {
+                    throw new OperationCanceledException("source timeout");
+                }
+            }
+        }
+
         [Theory]
         [InlineData("")]
         [InlineData("<row r=\"1\"><c r=\"A1\"><v>1</v></c></row>")]

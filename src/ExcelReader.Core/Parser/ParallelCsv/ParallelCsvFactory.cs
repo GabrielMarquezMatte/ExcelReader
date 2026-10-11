@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 return Sequential(source.OpenReader(options), parser, ct);
             }
 
-            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, null, lease, owner);
+            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, lease, owner);
         }
 
         private static CsvEnumerable<T> Sequential<T>(
