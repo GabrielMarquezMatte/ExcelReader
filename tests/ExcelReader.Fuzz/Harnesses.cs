@@ -315,7 +315,7 @@ namespace ExcelReader.Fuzz
             FuzzOracle.Guard(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                using CsvReader reader = Excel.FromCsv(ms, leaveOpen: true, CsvLimits);
+                using CsvReader reader = Excel.FromCsv(ms, leaveOpen: true, Limits);
                 DrainRows(reader.FirstSheet);
             });
         }
@@ -327,7 +327,7 @@ namespace ExcelReader.Fuzz
             {
                 CsvDialect dialect = CsvSniffer.Detect(bytes);
                 using var ms = new MemoryStream(bytes, writable: false);
-                using CsvReader reader = Excel.FromCsv(ms, leaveOpen: true, CsvLimits.WithDialect(dialect));
+                using CsvReader reader = Excel.FromCsv(ms, leaveOpen: true, Limits with { Csv = CsvReaderOptions.Default.WithDialect(dialect) });
                 DrainRows(reader.FirstSheet);
             });
         }
@@ -396,7 +396,7 @@ namespace ExcelReader.Fuzz
 
         private static List<string> ParseSequential(byte[] bytes)
         {
-            using CsvReader reader = Excel.FromCsv(bytes, CsvLimits);
+            using CsvReader reader = Excel.FromCsv(bytes, Limits);
             var rows = new List<string>();
             foreach (FuzzRow row in ExcelParser.FromAttributes<FuzzRow>().Parse(reader.FirstSheet))
             {

@@ -96,7 +96,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = latin1.GetBytes("Name,Age\nJosé,30\nRenée,41\n");
             var options = new CsvReaderOptions { Encoding = latin1 };
 
-            using CsvReader source = Excel.FromCsv(csv, options);
+            using CsvReader source = Excel.FromCsv(csv, new ExcelReaderOptions { Csv = options });
 
             List<Row> actual = await DrainAsync(
                 SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));

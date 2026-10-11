@@ -3,7 +3,7 @@ using ExcelReader.Core.Reader.Csv;
 namespace ExcelReader.Core.Reader
 {
     /// <summary>
-    /// Resource limits and behavior toggles applied when opening and reading an Excel workbook (XLSX/XLSB/XLS).
+    /// Resource limits and behavior toggles applied when opening and reading a workbook or a CSV source.
     /// Exceeding a byte or entry-count limit throws <see cref="ExcelLimitExceededException"/>.
     /// </summary>
     public sealed record ExcelReaderOptions
@@ -15,7 +15,7 @@ namespace ExcelReader.Core.Reader
         /// materialize.</remarks>
         public long MaxTotalDecompressedBytes { get; init; } = 512L * 1024 * 1024;
 
-        /// <summary>Gets the maximum byte length allowed for a single cell's value. Defaults to 32 MiB.</summary>
+        /// <summary>Gets the maximum byte length allowed for a single cell's value, or a single buffered CSV record. Defaults to 32 MiB.</summary>
         public int MaxCellBytes { get; init; } = 32 * 1024 * 1024;
 
         /// <summary>Gets the maximum total byte size allowed for the shared string table. Defaults to 128 MiB.</summary>
@@ -34,15 +34,15 @@ namespace ExcelReader.Core.Reader
         public bool PrefetchDecompression { get; init; }
 
         /// <summary>
-        /// Gets a value indicating whether inline/formula-string text cells (cells not served by the
-        /// workbook's shared-string table) are deduplicated through a small content-keyed cache when
-        /// materialized via <see cref="Cell.GetString"/>. Defaults to <see langword="false"/>.
+        /// Gets a value indicating whether text cells not served by a shared-string table (inline and
+        /// formula-string cells, and every CSV field) are deduplicated through a small content-keyed cache
+        /// when materialized via <see cref="Cell.GetString"/>. Defaults to <see langword="false"/>.
         /// Has no effect on shared-string cells, which already dedup through the shared-string table's
         /// own index-keyed cache, nor on the zero-copy <see cref="Cell.Value"/> span path —
-        /// only <c>GetString()</c> consults this cache. Worth enabling only when inline/formula-string
-        /// cells are known to repeat; for mostly-unique text the per-call hashing cost has no dedup
-        /// benefit to offset it (see <see cref="CsvReaderOptions.InternStrings"/> for measurements
-        /// against a real-world corpus — the risk is the same shape here).
+        /// only <c>GetString()</c> consults this cache. Worth enabling only for genuinely categorical
+        /// (low-cardinality, repeated) text; for high-cardinality data every lookup is a cache miss, so the
+        /// per-call hashing cost is pure overhead — measured roughly doubling wall-clock time on a
+        /// real-world, mixed-cardinality CSV corpus.
         /// </summary>
         public bool InternStrings { get; init; }
 
@@ -77,11 +77,9 @@ namespace ExcelReader.Core.Reader
         /// <summary>Gets the delimited-text settings used when a source is opened as
         /// <see cref="ExcelFileFormat.Csv"/>. Defaults to <see langword="null"/>, meaning
         /// <see cref="CsvReaderOptions.Default"/>.</summary>
-        /// <remarks>Lets one options object carry both format families, so a caller that does not know
-        /// which one it will get — <see cref="Excel.Open(string,ExcelFileFormat,ExcelReaderOptions?)"/>,
-        /// or the <c>xl_open_options</c> struct the native ABI passes through — configures both in one
-        /// place. The other properties on this record cover the Excel formats only and are ignored on the
-        /// CSV path, as this one is on every other path.</remarks>
+        /// <remarks>Ignored for the Excel formats. On the CSV path, <see cref="MaxCellBytes"/> and
+        /// <see cref="InternStrings"/> still apply; the ZIP, shared-string, encryption and prefetch
+        /// settings have nothing to act on.</remarks>
         public CsvReaderOptions? Csv { get; init; }
 
         /// <summary>Gets the default options instance, used whenever a reader is opened without explicit options.</summary>

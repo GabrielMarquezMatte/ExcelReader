@@ -48,9 +48,9 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             if (IsMemory)
             {
-                return Excel.FromCsv(SliceAt(0), options);
+                return Excel.OpenCsv(SliceAt(0), options);
             }
-            return Excel.FromCsv(OpenAt(0), leaveOpen: false, options);
+            return Excel.OpenCsv(OpenAt(0), leaveOpen: false, options);
         }
 
         internal int ReadWindow(long offset, Span<byte> buffer)

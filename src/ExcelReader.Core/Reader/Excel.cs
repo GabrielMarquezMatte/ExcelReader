@@ -199,13 +199,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the CSV file.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static CsvReader FromCsvFile(string path, CsvReaderOptions? options = null)
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsvFile(string path, ExcelReaderOptions? options = null)
         {
             FileStream stream = File.OpenRead(path);
             try
             {
-                return new CsvReader(stream, leaveOpen: false, CsvDialectResolver.Resolve(stream, options ?? CsvReaderOptions.Default));
+                return new CsvReader(stream, leaveOpen: false, CsvDialectResolver.Resolve(stream, CsvOf(options)));
             }
             catch
             {
@@ -217,33 +217,46 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            CsvReaderOptions effective = CsvDialectResolver.Resolve(stream, options ?? CsvReaderOptions.Default);
-            return new CsvReader(stream, leaveOpen, effective);
+            return OpenCsv(stream, leaveOpen, CsvOf(options));
+        }
+
+        internal static CsvReader OpenCsv(Stream stream, bool leaveOpen, CsvReaderOptions options)
+        {
+            return new CsvReader(stream, leaveOpen, CsvDialectResolver.Resolve(stream, options));
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source directly from an in-memory buffer.</summary>
         /// <param name="data">The whole CSV source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static CsvReader FromCsv(ReadOnlyMemory<byte> data, CsvReaderOptions? options = null)
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsv(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            CsvReaderOptions effective = CsvDialectResolver.Resolve(data, options ?? CsvReaderOptions.Default);
-            return new CsvReader(data, effective);
+            return OpenCsv(data, CsvOf(options));
+        }
+
+        internal static CsvReader OpenCsv(ReadOnlyMemory<byte> data, CsvReaderOptions options)
+        {
+            return new CsvReader(data, CsvDialectResolver.Resolve(data, options));
         }
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the CSV file.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static async ValueTask<CsvReader> FromCsvFileAsync(string path, CsvReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<CsvReader> FromCsvFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        {
+            return OpenCsvFileAsync(path, CsvOf(options), ct);
+        }
+
+        internal static async ValueTask<CsvReader> OpenCsvFileAsync(string path, CsvReaderOptions options, CancellationToken ct)
         {
             FileStream stream = OpenAsyncFile(path);
             try
             {
-                CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, options ?? CsvReaderOptions.Default, ct).ConfigureAwait(false);
+                CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, options, ct).ConfigureAwait(false);
                 return await CsvReader.CreateAsync(stream, leaveOpen: false, effective, ct).ConfigureAwait(false);
             }
             catch
@@ -256,12 +269,12 @@ namespace ExcelReader.Core.Reader
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static async ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
+        public static async ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, options ?? CsvReaderOptions.Default, ct).ConfigureAwait(false);
+            CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, CsvOf(options), ct).ConfigureAwait(false);
             return await CsvReader.CreateAsync(stream, leaveOpen, effective, ct).ConfigureAwait(false);
         }
 
@@ -453,7 +466,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => FromCsvFile(path, CsvOf(options)),
+                ExcelFileFormat.Csv => FromCsvFile(path, options),
                 ExcelFileFormat.Xlsx => FromXlsxFile(path, options),
                 ExcelFileFormat.Xlsb => FromXlsbFile(path, options),
                 ExcelFileFormat.Xls => FromXlsFile(path, options),
@@ -483,7 +496,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => FromCsv(stream, leaveOpen, CsvOf(options)),
+                ExcelFileFormat.Csv => FromCsv(stream, leaveOpen, options),
                 ExcelFileFormat.Xlsx => FromXlsx(stream, leaveOpen, options),
                 ExcelFileFormat.Xlsb => FromXlsb(stream, leaveOpen, options),
                 ExcelFileFormat.Xls => FromXls(stream, leaveOpen, options),
@@ -508,7 +521,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => FromCsv(data, CsvOf(options)),
+                ExcelFileFormat.Csv => FromCsv(data, options),
                 ExcelFileFormat.Xlsx => FromXlsx(data, options),
                 ExcelFileFormat.Xlsb => FromXlsb(data, options),
                 ExcelFileFormat.Xls => FromXls(data, options),
@@ -536,7 +549,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvFileAsync(path, CsvOf(options), ct)),
+                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvFileAsync(path, options, ct)),
                 ExcelFileFormat.Xlsx => AsWorkbookAsync(FromXlsxFileAsync(path, options, ct)),
                 ExcelFileFormat.Xlsb => AsWorkbookAsync(FromXlsbFileAsync(path, options, ct)),
                 ExcelFileFormat.Xls => AsWorkbookAsync(FromXlsFileAsync(path, options, ct)),
@@ -567,7 +580,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvAsync(stream, leaveOpen, CsvOf(options), ct)),
+                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvAsync(stream, leaveOpen, options, ct)),
                 ExcelFileFormat.Xlsx => AsWorkbookAsync(FromXlsxAsync(stream, leaveOpen, options, ct)),
                 ExcelFileFormat.Xlsb => AsWorkbookAsync(FromXlsbAsync(stream, leaveOpen, options, ct)),
                 ExcelFileFormat.Xls => AsWorkbookAsync(FromXlsAsync(stream, leaveOpen, options, ct)),
@@ -577,7 +590,13 @@ namespace ExcelReader.Core.Reader
 
         private static CsvReaderOptions CsvOf(ExcelReaderOptions? options)
         {
-            return options?.Csv ?? CsvReaderOptions.Default;
+            options ??= ExcelReaderOptions.Default;
+            CsvReaderOptions csv = options.Csv ?? CsvReaderOptions.Default;
+            return csv with
+            {
+                MaxCellBytes = csv.MaxCellBytesOverride ?? options.MaxCellBytes,
+                InternStrings = csv.InternStringsOverride ?? options.InternStrings,
+            };
         }
 
         private static async ValueTask<IExcelWorkbook> AsWorkbookAsync<TWorkbook>(ValueTask<TWorkbook> pending)

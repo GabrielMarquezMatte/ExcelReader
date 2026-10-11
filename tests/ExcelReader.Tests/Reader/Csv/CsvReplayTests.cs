@@ -71,7 +71,7 @@ namespace ExcelReader.Tests.Reader.Csv
             using NonSeekableStream stream = new(BuildCsv(rows, Encoding.Unicode));
             using CsvReader reader = Excel.FromCsv(
                 stream, leaveOpen: false,
-                new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false });
+                new ExcelReaderOptions { Csv = new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false } });
 
             Excel.InferSchema(reader.FirstSheet);
 

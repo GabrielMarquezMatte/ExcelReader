@@ -292,24 +292,32 @@ namespace ExcelReader.Tests.Reader.Csv
         public void FieldExceedingMaxCellBytesThrows()
         {
             using var ms = Csv("a," + new string('x', 128 * 1024) + ",c\n");
-            var options = new CsvReaderOptions { MaxCellBytes = 1024 };
-            using var reader = Excel.FromCsv(ms, options: options);
+            using var reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { MaxCellBytes = 1024 });
             using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => e.MoveNext());
-            Assert.Equal(nameof(CsvReaderOptions.MaxCellBytes), ex.LimitName);
+            Assert.Equal(nameof(ExcelReaderOptions.MaxCellBytes), ex.LimitName);
+        }
+
+        [Fact]
+        public void OpenAppliesTheReaderLimitsToCsv()
+        {
+            using var ms = Csv("a," + new string('x', 128 * 1024) + ",c\n");
+            using IExcelWorkbook reader = Excel.Open(ms, ExcelFileFormat.Csv, options: new ExcelReaderOptions { MaxCellBytes = 1024 });
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
+
+            Assert.Throws<ExcelLimitExceededException>(() => e.MoveNext());
         }
 
         [Fact]
         public void EmptyFieldsExceedingMaxCellBytesThrows()
         {
             using var ms = Csv(new string(',', 32));
-            var options = new CsvReaderOptions { MaxCellBytes = 1024 };
-            using var reader = Excel.FromCsv(ms, options: options);
+            using var reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { MaxCellBytes = 1024 });
             using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => e.MoveNext());
-            Assert.Equal(nameof(CsvReaderOptions.MaxCellBytes), ex.LimitName);
+            Assert.Equal(nameof(ExcelReaderOptions.MaxCellBytes), ex.LimitName);
         }
 
         [Fact]
@@ -317,7 +325,7 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             using var ms = Csv("a;b;c\n");
             var options = new CsvReaderOptions { Delimiter = (byte)';' };
-            using var reader = Excel.FromCsv(ms, options: options);
+            using var reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options });
 
             var rows = ReadAll(reader);
 
@@ -329,7 +337,7 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             using var ms = Csv("a\tb\tc\n");
             var options = new CsvReaderOptions { Delimiter = (byte)'\t' };
-            using var reader = Excel.FromCsv(ms, options: options);
+            using var reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options });
 
             var rows = ReadAll(reader);
 
@@ -375,7 +383,7 @@ namespace ExcelReader.Tests.Reader.Csv
             using var ms = Csv("a,b\n");
             var options = new CsvReaderOptions { Delimiter = (byte)'"' };
 
-            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options }));
         }
 
         [Fact]
@@ -487,7 +495,7 @@ namespace ExcelReader.Tests.Reader.Csv
             byte[] body = Encoding.UTF8.GetBytes("a,b\n");
             using var ms = new MemoryStream([.. bom, .. body]);
             var options = new CsvReaderOptions { DetectEncodingFromByteOrderMark = false };
-            using var reader = Excel.FromCsv(ms, options: options);
+            using var reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options });
 
             var rows = ReadAll(reader);
 
@@ -501,7 +509,7 @@ namespace ExcelReader.Tests.Reader.Csv
             byte[] body = Encoding.UTF8.GetBytes("a,b\n");
             using var ms = new MemoryStream([.. bom, .. body]);
             var options = new CsvReaderOptions { DetectEncodingFromByteOrderMark = false };
-            using var reader = Excel.FromCsv(ms, options: options);
+            using var reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options });
 
             var rows = await ReadAllAsync(reader);
 
@@ -514,7 +522,7 @@ namespace ExcelReader.Tests.Reader.Csv
             byte[] latin1Bytes = Encoding.Latin1.GetBytes("nome,cidade\nGabriel,São Paulo\n");
             using var ms = new MemoryStream(latin1Bytes);
             var options = new CsvReaderOptions { Encoding = Encoding.Latin1 };
-            using var reader = Excel.FromCsv(ms, options: options);
+            using var reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options });
 
             var rows = ReadAll(reader);
 
@@ -529,7 +537,7 @@ namespace ExcelReader.Tests.Reader.Csv
             using var ms = Csv("a,b\n");
             var options = new CsvReaderOptions { Delimiter = delimiter };
 
-            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options }));
         }
 
         [Theory]
@@ -540,7 +548,7 @@ namespace ExcelReader.Tests.Reader.Csv
             using var ms = Csv("a,b\n");
             var options = new CsvReaderOptions { Quote = quote };
 
-            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options }));
         }
 
 

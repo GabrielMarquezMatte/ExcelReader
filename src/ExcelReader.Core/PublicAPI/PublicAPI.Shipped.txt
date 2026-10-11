@@ -152,10 +152,6 @@ ExcelReader.Core.Reader.Csv.CsvReaderOptions.DetectEncodingFromByteOrderMark.ini
 ExcelReader.Core.Reader.Csv.CsvReaderOptions.Encoding.get -> System.Text.Encoding?
 ExcelReader.Core.Reader.Csv.CsvReaderOptions.Encoding.init -> void
 ExcelReader.Core.Reader.Csv.CsvReaderOptions.Equals(ExcelReader.Core.Reader.Csv.CsvReaderOptions? other) -> bool
-ExcelReader.Core.Reader.Csv.CsvReaderOptions.InternStrings.get -> bool
-ExcelReader.Core.Reader.Csv.CsvReaderOptions.InternStrings.init -> void
-ExcelReader.Core.Reader.Csv.CsvReaderOptions.MaxCellBytes.get -> int
-ExcelReader.Core.Reader.Csv.CsvReaderOptions.MaxCellBytes.init -> void
 ExcelReader.Core.Reader.Csv.CsvReaderOptions.Quote.get -> byte
 ExcelReader.Core.Reader.Csv.CsvReaderOptions.Quote.init -> void
 ExcelReader.Core.Reader.Csv.CsvReaderOptions.SniffDialect.get -> bool
@@ -705,11 +701,6 @@ static ExcelReader.Core.Reader.Excel.EncryptPackage(System.IO.Stream! package, S
 static ExcelReader.Core.Reader.Excel.EncryptPackage(string! packagePath, string! destinationPath, ExcelReader.Core.Reader.ExcelPassword! password) -> void
 static ExcelReader.Core.Reader.Excel.EncryptPackageAsync(System.IO.Stream! package, System.IO.Stream! destination, ExcelReader.Core.Reader.ExcelPassword! password, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 static ExcelReader.Core.Reader.Excel.EncryptPackageAsync(string! packagePath, string! destinationPath, ExcelReader.Core.Reader.ExcelPassword! password, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-static ExcelReader.Core.Reader.Excel.FromCsv(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.Csv.CsvReaderOptions? options = null) -> ExcelReader.Core.Reader.Csv.CsvReader!
-static ExcelReader.Core.Reader.Excel.FromCsv(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.Csv.CsvReaderOptions? options = null) -> ExcelReader.Core.Reader.Csv.CsvReader!
-static ExcelReader.Core.Reader.Excel.FromCsvAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.Csv.CsvReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Csv.CsvReader!>
-static ExcelReader.Core.Reader.Excel.FromCsvFile(string! path, ExcelReader.Core.Reader.Csv.CsvReaderOptions? options = null) -> ExcelReader.Core.Reader.Csv.CsvReader!
-static ExcelReader.Core.Reader.Excel.FromCsvFileAsync(string! path, ExcelReader.Core.Reader.Csv.CsvReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Csv.CsvReader!>
 static ExcelReader.Core.Reader.Excel.FromXls(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsWorkbook!
 static ExcelReader.Core.Reader.Excel.FromXls(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Xls.XlsWorkbook!
 static ExcelReader.Core.Reader.Excel.FromXlsAsync(System.IO.Stream! stream, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Xls.XlsWorkbook!>

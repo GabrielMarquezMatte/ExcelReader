@@ -25,10 +25,10 @@ foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(csv.FirstShee
 }
 ```
 
-`Excel.FromCsv`/`FromCsvFile`/`FromCsvAsync`/`FromCsvFileAsync` mirror the other formats' factory shape. Pass `CsvReaderOptions` to change the delimiter/quote character, supply a non-UTF-8 `Encoding` (transcoded to UTF-8 internally), or turn off BOM detection:
+`Excel.FromCsv`/`FromCsvFile`/`FromCsvAsync`/`FromCsvFileAsync` mirror the other formats' factory shape and take the same `ExcelReaderOptions`. Its `Csv` property, a `CsvReaderOptions`, changes the delimiter/quote character, supplies a non-UTF-8 `Encoding` (transcoded to UTF-8 internally), or turns off BOM detection; `MaxCellBytes` and `InternStrings` stay on `ExcelReaderOptions`, as for every format:
 
 ```csharp
-var options = new CsvReaderOptions { Delimiter = (byte)';' };
+var options = new ExcelReaderOptions { Csv = new CsvReaderOptions { Delimiter = (byte)';' } };
 using var csv = Excel.FromCsvFile("relatorio.csv", options);
 ```
 
@@ -59,7 +59,7 @@ using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
 CsvDialect dialect = CsvSniffer.DetectFile("export.csv");
-using var csv = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.WithDialect(dialect));
+using var csv = Excel.FromCsvFile("export.csv", new ExcelReaderOptions { Csv = CsvReaderOptions.Default.WithDialect(dialect) });
 ```
 
 `CsvSniffer.Detect` takes a span of bytes or a seekable `Stream`, `DetectFile` takes a path, and `DetectAsync`/`DetectFileAsync` are the async siblings; only the first 64 KiB are examined. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as a span instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
@@ -67,7 +67,7 @@ using var csv = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.WithDia
 `CsvReaderOptions.SniffDialect` does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, and `Excel.Open` with `ExcelFileFormat.Csv`. The dialect of a parallel read is the one the CSV workbook was opened with:
 
 ```csharp
-using var csv = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default with { SniffDialect = true });
+using var csv = Excel.FromCsvFile("export.csv", new ExcelReaderOptions { Csv = CsvReaderOptions.Default with { SniffDialect = true } });
 ```
 
 An explicitly set `Encoding` survives sniffing unless the source carries a byte-order mark naming a different one — a sniffed encoding only ever comes from a BOM, so it never silently overrides a caller who knows their file is Windows-1252.
@@ -101,7 +101,7 @@ using (CsvRowWriter row = writer.StartRow())
 
 Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime`/`DateOnly` as round-trip ISO 8601 (`"O"`); `TimeOnly` as a time-of-day fraction — all matching what `ExcelParser<T>.Parse(CsvSheet)` expects, so a file written by `CsvWorkbookWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept).
 
-`CsvWriterOptions` mirrors `CsvReaderOptions` property for property, so a file written with one set of settings reads back with the matching set:
+`CsvWriterOptions` mirrors `CsvReaderOptions`'s delimiter, quote and encoding, so a file written with one set of settings reads back with the matching set:
 
 ```csharp
 using var workbook = CsvWorkbookWriter.Create(stream, leaveOpen: false, new CsvWriterOptions
