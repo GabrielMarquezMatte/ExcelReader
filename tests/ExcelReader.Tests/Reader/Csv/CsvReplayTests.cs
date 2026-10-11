@@ -44,7 +44,7 @@ namespace ExcelReader.Tests.Reader.Csv
             using NonSeekableStream stream = new(BuildCsv(rows));
             using CsvReader reader = Excel.FromCsv(stream);
 
-            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet, headerRow: 1, sampleSize: 100, parseText: true);
+            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet, new SchemaInferenceOptions { ParseText = true });
 
             Assert.Equal(["name", "value"], schema.Select(c => c.Name), StringComparer.Ordinal);
             Assert.Equal(ExcelColumnType.Int64Column, schema[1].Type);

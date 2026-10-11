@@ -195,7 +195,7 @@ namespace ExcelReader.Cli
             {
                 using IExcelWorkbook workbook = Open(path, sheet, out IExcelSheet selected, password, inputDelimiter);
 
-                foreach (ExcelColumnSchema column in Excel.InferSchema(selected, headerRow, sampleSize))
+                foreach (ExcelColumnSchema column in Excel.InferSchema(selected, new SchemaInferenceOptions { HeaderRow = headerRow, SampleSize = sampleSize }))
                 {
                     stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
                     stdout.Write('\t');

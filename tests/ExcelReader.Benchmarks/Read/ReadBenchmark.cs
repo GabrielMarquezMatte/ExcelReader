@@ -78,7 +78,7 @@ namespace ExcelReader.Benchmarks
         public long Sylvan()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = global::Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            using var reader = global::Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 

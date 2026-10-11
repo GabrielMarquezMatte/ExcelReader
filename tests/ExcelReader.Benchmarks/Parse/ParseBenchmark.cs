@@ -155,7 +155,7 @@ namespace ExcelReader.Benchmarks
         public long Sylvan()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = global::Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            using var reader = global::Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             long acc = 0;
             foreach (Record rec in reader.GetRecords<Record>())
             {
@@ -168,7 +168,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> SylvanAsync()
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
-            await using var reader = await global::Sylvan.Data.Excel.ExcelDataReader.CreateAsync(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions()).ConfigureAwait(false);
+            await using var reader = await global::Sylvan.Data.Excel.ExcelDataReader.CreateAsync(ms, ExcelWorkbookType.ExcelXml, new global::Sylvan.Data.Excel.ExcelDataReaderOptions()).ConfigureAwait(false);
             long acc = 0;
             await foreach (Record rec in reader.GetRecordsAsync<Record>())
             {

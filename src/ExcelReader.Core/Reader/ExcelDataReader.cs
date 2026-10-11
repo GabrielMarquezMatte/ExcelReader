@@ -15,7 +15,7 @@ namespace ExcelReader.Core.Reader
     /// </summary>
     /// <remarks>
     /// The column shape is fixed once, at construction time, from the header row (or from the first data
-    /// row when <c>headerRow</c> is 0) — it never grows as later, wider rows come in. There is no schema
+    /// row when <see cref="ExcelDataReaderOptions.HeaderRow"/> is 0) — it never grows as later, wider rows come in. There is no schema
     /// pass, so <see cref="GetFieldType"/>, <see cref="GetValue"/>, and the typed getters all read the
     /// <em>current</em> row's own cell type; a consumer that builds a schema from the first
     /// <see cref="Read"/> (e.g. <c>DataTable.Load</c>) locks in that row's types for the whole load.
@@ -45,17 +45,15 @@ namespace ExcelReader.Core.Reader
         /// Wraps <paramref name="sheet"/>.
         /// </summary>
         /// <param name="sheet">The sheet to read. Its workbook stays owned by the caller.</param>
-        /// <param name="headerRow">
-        /// The 1-based row holding column names. Pass 0 for a header-less sheet, whose columns come back
-        /// named <c>"Column0"</c>, <c>"Column1"</c>, ... and whose count is taken from the first data row.
-        /// </param>
+        /// <param name="options">The header row; <see cref="ExcelDataReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
-        public ExcelDataReader(IExcelSheet sheet, int headerRow = 1)
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="ExcelDataReaderOptions.HeaderRow"/> is negative.</exception>
+        /// <exception cref="InvalidOperationException"><see cref="ExcelDataReaderOptions.HeaderRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
+        public ExcelDataReader(IExcelSheet sheet, ExcelDataReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(sheet);
-            ArgumentOutOfRangeException.ThrowIfNegative(headerRow);
+            int headerRow = (options ?? ExcelDataReaderOptions.Default).HeaderRow;
+            ArgumentOutOfRangeException.ThrowIfNegative(headerRow, nameof(options));
             if (headerRow > 0)
             {
                 ExcelTableSheet.ThrowIfHeaderless(sheet);

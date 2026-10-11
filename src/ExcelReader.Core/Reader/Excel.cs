@@ -267,58 +267,31 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Guesses a column schema for <paramref name="sheet"/> by sampling it from the first row.</summary>
         /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
-        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
-        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
-        /// <param name="sampleSize">How many rows after the header to inspect.</param>
+        /// <param name="options">Header row, sample size and text parsing; <see cref="SchemaInferenceOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
         /// <remarks>
         /// This is a guess over a bounded sample, not a guarantee about the whole sheet — a column
-        /// whose first <paramref name="sampleSize"/> rows are all integers is reported as
+        /// whose first <see cref="SchemaInferenceOptions.SampleSize"/> rows are all integers is reported as
         /// <see cref="ExcelColumnType.Int64Column"/> even if row 10,000 holds text. Verify it fits
         /// before trusting it, and feed the result into <see cref="ExcelParser.Build{T}"/> to
         /// build a real map.
         /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
-        /// <paramref name="sampleSize"/> is not positive.</exception>
-        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow, int sampleSize)
-        {
-            return InferSchema(sheet, headerRow, sampleSize, parseText: false);
-        }
-
-        /// <summary>
-        /// Guesses a column schema by sampling the sheet's rows, as
-        /// <see cref="InferSchema(IExcelSheet, int, int)"/> does, and can also type cells that hold text.
-        /// </summary>
-        /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
-        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
-        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
-        /// <param name="sampleSize">How many rows after the header to inspect.</param>
-        /// <param name="parseText">When <see langword="true"/>, a text cell (every CSV field, or a number
-        /// stored as text) counts as an integer, a decimal, <c>true</c>/<c>false</c>, or an ISO-8601 date or
-        /// date-time when its text has exactly that shape. Numbers with a leading zero (<c>00123</c>), scientific
-        /// notation (<c>12E4</c>), padded or culture-formatted numbers, and non-ISO dates stay text. A column only gets a non-text type when
-        /// every sampled value converts to it.</param>
-        /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
-        /// <remarks>Still a guess over a bounded sample: a value past the sample can still fail to convert.
-        /// See <see cref="InferSchema(IExcelSheet, int, int)"/>.</remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
-        /// <paramref name="sampleSize"/> is not positive.</exception>
-        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        /// <exception cref="InvalidOperationException"><paramref name="headerRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow = 1, int sampleSize = 100, bool parseText = false)
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="SchemaInferenceOptions.HeaderRow"/> is negative, or
+        /// <see cref="SchemaInferenceOptions.SampleSize"/> is not positive.</exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <see cref="SchemaInferenceOptions.HeaderRow"/>.</exception>
+        /// <exception cref="InvalidOperationException"><see cref="SchemaInferenceOptions.HeaderRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
+        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, SchemaInferenceOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(sheet);
-            if (headerRow > 0)
+            options ??= SchemaInferenceOptions.Default;
+            if (options.HeaderRow > 0)
             {
                 ExcelTableSheet.ThrowIfHeaderless(sheet);
             }
 
             using IExcelRowEnumerator rows = sheet.GetEnumerator();
-            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText, ExcelTableSheet.FirstColumnOf(sheet));
+            return SchemaInference.Infer(rows, sheet.IsDate1904, options.HeaderRow, options.SampleSize, options.ParseText, ExcelTableSheet.FirstColumnOf(sheet));
         }
 
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];

@@ -50,7 +50,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsx_Sylvan()
         {
             using MemoryStream ms = new(_xlsx, writable: false);
-            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 
@@ -107,7 +107,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsm_Sylvan()
         {
             using MemoryStream ms = new(_xlsm, writable: false);
-            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 
@@ -164,7 +164,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsb_Sylvan()
         {
             using MemoryStream ms = new(_xlsb, writable: false);
-            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new ExcelDataReaderOptions());
+            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 
@@ -221,7 +221,7 @@ namespace ExcelReader.Benchmarks
         public long Xls_Sylvan()
         {
             using MemoryStream ms = new(_xls, writable: false);
-            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.Excel, new ExcelDataReaderOptions());
+            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.Excel, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 

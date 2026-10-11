@@ -69,7 +69,7 @@ namespace ExcelReader.Tests.Reader
         {
             await using var ms = await TypedWorkbook.BuildAsync([1, 2, 3]);
             await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader.FirstSheet, headerRow: 0);
+            using var data = new ExcelDataReader(reader.FirstSheet, new ExcelDataReaderOptions { HeaderRow = 0 });
 
             Assert.Equal(3, data.FieldCount);
             Assert.Equal("Column0", data.GetName(0));
@@ -83,7 +83,7 @@ namespace ExcelReader.Tests.Reader
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id"]);
             await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader.FirstSheet, headerRow: 5);
+            using var data = new ExcelDataReader(reader.FirstSheet, new ExcelDataReaderOptions { HeaderRow = 5 });
 
             Assert.Equal(0, data.FieldCount);
             Assert.False(data.Read());

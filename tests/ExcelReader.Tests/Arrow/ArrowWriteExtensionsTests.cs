@@ -117,7 +117,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
-            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(ReadBackSchema());
+            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = ReadBackSchema() });
 
             AssertRoundTrips(roundTripped);
         }
@@ -133,7 +133,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using var reader = Excel.FromXlsb(ms.ToArray());
-            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(ReadBackSchema());
+            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = ReadBackSchema() });
 
             AssertRoundTrips(roundTripped);
         }
@@ -202,7 +202,7 @@ namespace ExcelReader.Tests.Arrow
             using var ms = new MemoryStream();
             using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                workbook.WriteRecordBatch(batch, writeHeader: false);
+                workbook.WriteRecordBatch(batch, new ArrowWriteOptions { WriteHeader = false });
             }
             ms.Position = 0;
 
@@ -300,7 +300,7 @@ namespace ExcelReader.Tests.Arrow
             {
                 schema[i] = new() { Index = i, Name = "c" + i, Type = types[i], IsNullable = true };
             }
-            RecordBatch batch = sheet.ToArrowRecordBatch(schema);
+            RecordBatch batch = sheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = schema });
 
             Assert.Equal(2, batch.Length);
             long[] integers = [-8, -16, -32, 8, 16, 32, 64];
@@ -375,7 +375,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
-            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(ReadBackSchema());
+            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = ReadBackSchema() });
 
             AssertRoundTrips(roundTripped);
         }

@@ -162,7 +162,7 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal(2, schema.Length);
             Assert.Equal("Name", schema[0].Name);
             Assert.Equal(ExcelColumnType.Int64Column, schema[1].Type);
-            Assert.Equal(schema.Length, Excel.InferSchema(workbook.Sheets[1], 1, 5).Length);
+            Assert.Equal(schema.Length, Excel.InferSchema(workbook.Sheets[1], new SchemaInferenceOptions { SampleSize = 5 }).Length);
             Assert.Throws<ArgumentNullException>(() => Excel.InferSchema((IExcelSheet)null!));
         }
 

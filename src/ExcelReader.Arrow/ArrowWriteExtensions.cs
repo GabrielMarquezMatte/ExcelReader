@@ -11,7 +11,7 @@ namespace ExcelReader.Arrow
 {
     /// <summary>
     /// Writes an Apache Arrow <see cref="RecordBatch"/> to a workbook as one sheet — the write-side
-    /// mirror of <see cref="ArrowConversionExtensions.ToArrowRecordBatch(Core.Reader.IExcelSheet, Core.Reader.Schema.ExcelColumnSchema[], int)"/>.
+    /// mirror of <see cref="ArrowConversionExtensions.ToArrowRecordBatch(Core.Reader.IExcelSheet, ArrowReadOptions)"/>.
     /// </summary>
     public static class ArrowWriteExtensions
     {
@@ -20,7 +20,7 @@ namespace ExcelReader.Arrow
 
         /// <summary>
         /// Writes <paramref name="batch"/> to <paramref name="workbook"/> as one XLSX sheet, in a single
-        /// call: adds the sheet, writes the header row (unless <paramref name="writeHeader"/> is false)
+        /// call: adds the sheet, writes the header row (unless <see cref="ArrowWriteOptions.WriteHeader"/> is false)
         /// and every data row, then ends the sheet and the workbook.
         /// </summary>
         /// <param name="workbook">A freshly created, not-yet-started workbook writer.</param>
@@ -29,78 +29,78 @@ namespace ExcelReader.Arrow
         /// width (signed and unsigned), half float, float, double, decimal128, decimal256, boolean,
         /// date32, date64, time32, time64, timestamp and null.
         /// </param>
-        /// <param name="sheetName">The sheet's name.</param>
-        /// <param name="writeHeader">Whether to write a header row of column names first.</param>
+        /// <param name="options">The sheet name and whether to write a header row; <see cref="ArrowWriteOptions.Default"/> when <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
         /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
-        public static void WriteRecordBatch(this XlsxWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true)
+        public static void WriteRecordBatch(this XlsxWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null)
         {
-            WriteRecordBatchCore<XlsxSheetWriter, XlsxRowWriter>(workbook, batch, sheetName, writeHeader);
+            WriteRecordBatchCore<XlsxSheetWriter, XlsxRowWriter>(workbook, batch, options);
         }
 
-        /// <summary>Same as <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, string, bool)"/>, for an XLSB workbook.</summary>
+        /// <summary>Same as <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, ArrowWriteOptions)"/>, for an XLSB workbook.</summary>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
         /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
-        public static void WriteRecordBatch(this XlsbWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true)
+        public static void WriteRecordBatch(this XlsbWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null)
         {
-            WriteRecordBatchCore<XlsbSheetWriter, XlsbRowWriter>(workbook, batch, sheetName, writeHeader);
+            WriteRecordBatchCore<XlsbSheetWriter, XlsbRowWriter>(workbook, batch, options);
         }
 
-        /// <summary>Same as <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, string, bool)"/>, for a legacy XLS workbook.</summary>
+        /// <summary>Same as <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, ArrowWriteOptions)"/>, for a legacy XLS workbook.</summary>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
         /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
-        public static void WriteRecordBatch(this XlsWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true)
+        public static void WriteRecordBatch(this XlsWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null)
         {
-            WriteRecordBatchCore<XlsSheetWriter, XlsRowWriter>(workbook, batch, sheetName, writeHeader);
+            WriteRecordBatchCore<XlsSheetWriter, XlsRowWriter>(workbook, batch, options);
         }
 
         /// <summary>
         /// Writes <paramref name="batch"/> to <paramref name="workbook"/> as CSV's single unnamed sheet,
-        /// in a single call.
+        /// in a single call. <see cref="ArrowWriteOptions.SheetName"/> is ignored.
         /// </summary>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
         /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
-        public static void WriteRecordBatch(this CsvWorkbookWriter workbook, RecordBatch batch, bool writeHeader = true)
+        public static void WriteRecordBatch(this CsvWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null)
         {
-            WriteRecordBatchCore<CsvSheetWriter, CsvRowWriter>(workbook, batch, sheetName: "Sheet1", writeHeader);
+            WriteRecordBatchCore<CsvSheetWriter, CsvRowWriter>(workbook, batch, options);
         }
 
-        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, string, bool)"/>.</summary>
-        public static ValueTask WriteRecordBatchAsync(this XlsxWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true, CancellationToken ct = default)
+        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, ArrowWriteOptions)"/>.</summary>
+        public static ValueTask WriteRecordBatchAsync(this XlsxWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null, CancellationToken ct = default)
         {
-            return WriteRecordBatchCoreAsync<XlsxSheetWriter, XlsxRowWriter>(workbook, batch, sheetName, writeHeader, ct);
+            return WriteRecordBatchCoreAsync<XlsxSheetWriter, XlsxRowWriter>(workbook, batch, options, ct);
         }
 
-        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(XlsbWorkbookWriter, RecordBatch, string, bool)"/>.</summary>
-        public static ValueTask WriteRecordBatchAsync(this XlsbWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true, CancellationToken ct = default)
+        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(XlsbWorkbookWriter, RecordBatch, ArrowWriteOptions)"/>.</summary>
+        public static ValueTask WriteRecordBatchAsync(this XlsbWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null, CancellationToken ct = default)
         {
-            return WriteRecordBatchCoreAsync<XlsbSheetWriter, XlsbRowWriter>(workbook, batch, sheetName, writeHeader, ct);
+            return WriteRecordBatchCoreAsync<XlsbSheetWriter, XlsbRowWriter>(workbook, batch, options, ct);
         }
 
-        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(XlsWorkbookWriter, RecordBatch, string, bool)"/>.</summary>
-        public static ValueTask WriteRecordBatchAsync(this XlsWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true, CancellationToken ct = default)
+        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(XlsWorkbookWriter, RecordBatch, ArrowWriteOptions)"/>.</summary>
+        public static ValueTask WriteRecordBatchAsync(this XlsWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null, CancellationToken ct = default)
         {
-            return WriteRecordBatchCoreAsync<XlsSheetWriter, XlsRowWriter>(workbook, batch, sheetName, writeHeader, ct);
+            return WriteRecordBatchCoreAsync<XlsSheetWriter, XlsRowWriter>(workbook, batch, options, ct);
         }
 
-        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(CsvWorkbookWriter, RecordBatch, bool)"/>.</summary>
-        public static ValueTask WriteRecordBatchAsync(this CsvWorkbookWriter workbook, RecordBatch batch, bool writeHeader = true, CancellationToken ct = default)
+        /// <summary>Asynchronous counterpart to <see cref="WriteRecordBatch(CsvWorkbookWriter, RecordBatch, ArrowWriteOptions)"/>.</summary>
+        public static ValueTask WriteRecordBatchAsync(this CsvWorkbookWriter workbook, RecordBatch batch, ArrowWriteOptions? options = null, CancellationToken ct = default)
         {
-            return WriteRecordBatchCoreAsync<CsvSheetWriter, CsvRowWriter>(workbook, batch, sheetName: "Sheet1", writeHeader, ct);
+            return WriteRecordBatchCoreAsync<CsvSheetWriter, CsvRowWriter>(workbook, batch, options, ct);
         }
 
-        private static void WriteRecordBatchCore<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, RecordBatch batch, string sheetName, bool writeHeader)
+        private static void WriteRecordBatchCore<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, RecordBatch batch, ArrowWriteOptions? options)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
             ArgumentNullException.ThrowIfNull(workbook);
             ArgumentNullException.ThrowIfNull(batch);
+            options ??= ArrowWriteOptions.Default;
             IReadOnlyList<Field> fields = batch.Schema.FieldsList;
 
-            TSheet sheet = workbook.AddSheet(sheetName);
+            TSheet sheet = workbook.AddSheet(options.SheetName);
             ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, fields);
 
-            if (writeHeader)
+            if (options.WriteHeader)
             {
                 using TRow header = sheet.StartRow();
                 foreach (Field field in fields)
@@ -122,18 +122,19 @@ namespace ExcelReader.Arrow
             workbook.End();
         }
 
-        private static async ValueTask WriteRecordBatchCoreAsync<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, RecordBatch batch, string sheetName, bool writeHeader, CancellationToken ct)
+        private static async ValueTask WriteRecordBatchCoreAsync<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, RecordBatch batch, ArrowWriteOptions? options, CancellationToken ct)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
             ArgumentNullException.ThrowIfNull(workbook);
             ArgumentNullException.ThrowIfNull(batch);
+            options ??= ArrowWriteOptions.Default;
             IReadOnlyList<Field> fields = batch.Schema.FieldsList;
 
-            TSheet sheet = workbook.AddSheet(sheetName);
+            TSheet sheet = workbook.AddSheet(options.SheetName);
             ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, fields);
 
-            if (writeHeader)
+            if (options.WriteHeader)
             {
                 TRow header = await sheet.StartRowAsync(ct).ConfigureAwait(false);
                 foreach (Field field in fields)
