@@ -51,6 +51,11 @@ namespace ExcelReader.NativePgoTrainer
                     {
                         status = TypedApi.ParseTyped(handle, 0, Specs, headerRow: 1, out NativeTable table);
                         TypedApi.FreeTable(ref table);
+                        if (status == NativeStatus.Ok && format != NativeFormat.Csv)
+                        {
+                            status = TypedApi.ParseTypedTable(handle, 0, Specs, headerRow: 1, degreeOfParallelism: 0, out table);
+                            TypedApi.FreeTable(ref table);
+                        }
                         ReadApi.Close(handle);
                     }
                     if (status == NativeStatus.Ok && (status = ReadApi.OpenMemory(bytes, format, out handle)) == NativeStatus.Ok)
