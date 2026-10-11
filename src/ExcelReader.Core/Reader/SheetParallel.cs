@@ -19,8 +19,8 @@ namespace ExcelReader.Core.Reader
     /// <para>
     /// A read falls back to one sequential pass, with the same results and no error, when
     /// <see cref="SheetParallelOptions.DegreeOfParallelism"/> is 1, the sheet is too small to partition
-    /// usefully, the sheet is an XLS sheet or a table view, or a CSV cannot be partitioned (a non-seekable
-    /// stream or a non-UTF-8 encoding).
+    /// usefully, the sheet is an XLS sheet or a table view, or a CSV cannot be partitioned (a stream that is not a file
+    /// or a non-UTF-8 encoding).
     /// </para>
     /// <para>
     /// Delivery guarantees. The general contract is the weaker CSV one: <c>ForEachAsync</c> is at-least-once,

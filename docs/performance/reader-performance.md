@@ -549,9 +549,9 @@ were pre-touched, so those numbers are the shape of the gain, not a promise. Mea
 | prefetched sequential read | 28.35 ms | 15.65 ms |
 | pipeline, dop 3 to 16 | 17.6 ms (1.61x) | 13.3 ms (1.18x) |
 | typed `ParseAsync`, sequential / dop 4 | 55.4 / 18.9 ms | 37.6 / 14.4 ms |
-| `xl_parse_typed` over the published NativeAOT DLL, dop 1 / dop 0 | 54.1 / 20.3 ms (2.6x) | 28.1 / 15.2 ms (1.8x) |
+| `xl_parse_typed` over the published NativeAOT DLL, dop 1 / dop 0 | 54.1 / 20.3 ms (2.6x) | 28.2 / 15.2 ms (1.85x) |
 
-It saturates at dop 3, one producer plus two workers: dop 2 is a plain overlap of inflate and parse and gains
+Under the JIT the sheet stage stops scaling at dop 3, one producer plus two workers: dop 2 is a plain overlap of inflate and parse and gains
 nothing. The chunk size defaults to 256 KB, down from 1 MB: it removes ~0.5 ms of serial tail, and 4 MB adds
 ~3.7 ms. XLSB stops at ~13 ms against a 9.6 ms inflate floor because the producer walks every BIFF12 record
 (~2.2 ms) and `InflateStream.Read` adds a copy (~0.7 ms). Only parallel inflate moves that. The
@@ -1153,8 +1153,7 @@ used to yield a silent prefix of its rows. `InflateStream` throws `InvalidDataEx
   queue, workers and merge stay. The oracle ceilings at 8 threads, parallel inflate plus parse, are 7.7 ms for
   XLSX and 3.6 ms for XLSB, against 17.6 and 13.3 ms for the shipped pipeline. A deflate block finder costs
   0.4–1 ms per split point, with no false positives in 14 hits. The marker finding: XLSX back-references stop
-  depending on the unknown window after about 1 MB, but XLSB ones never do, so about 65–70% of XLSB bytes need
-  a second resolution pass. The cost of the 16-bit marker decode loop is unmeasured, and it decides whether
+  depending on the unknown window after about 1 MB, but XLSB ones never do, so about 65–70% of XLSB output bytes depend on the unknown window. The cost of the 16-bit marker decode loop is unmeasured, and it decides whether
   XLSB gains much.
 - `InflateStream` reaches about three quarters of libdeflate's inflate speed on XLSX. The Tier1
   disassembly shows no spills and 88% of the time in `FastLoop` itself (see "The decode loop's Tier1

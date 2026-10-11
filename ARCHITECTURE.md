@@ -59,8 +59,8 @@ opt-in, takes any `IExcelSheet`, validates its arguments and dispatches on the s
 | anything else, and every fallback case | one sequential runner over `IExcelRowEnumerator` |
 
 The fallback cases give the same results with no error: a degree of parallelism of 1, a sheet under 256 KB
-uncompressed, XLS, a table view (`ExcelTable.AsSheet`), and a CSV that cannot be partitioned (a non-seekable
-stream or a non-UTF-8 encoding). The caller owns the workbook; the engine holds a `ReaderLifetime` lease
+uncompressed, XLS, a table view (`ExcelTable.AsSheet`), and a CSV that cannot be partitioned (a stream that is not a file
+or a non-UTF-8 encoding). The caller owns the workbook; the engine holds a `ReaderLifetime` lease
 until the task completes or the enumeration ends.
 
 The CSV engine is not folded into a shared partition abstraction. It is tuned, and its model, a static
