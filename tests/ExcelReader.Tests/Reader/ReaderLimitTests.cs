@@ -395,7 +395,7 @@ namespace ExcelReader.Tests.Reader
         public async Task LimitedReadStreamCoversUnsupportedOperationsAndByteArrayAsyncRead()
         {
             await using MemoryStream inner = new([1, 2, 3, 4, 5]);
-            await using LimitedReadStream limited = new(inner, new DecompressedByteCounter(limit: 10));
+            await using LimitedReadStream limited = new(inner, declaredLength: 5, new DecompressedByteCounter(limit: 10));
 
             Assert.True(limited.CanRead);
             Assert.False(limited.CanSeek);
@@ -421,6 +421,7 @@ namespace ExcelReader.Tests.Reader
             using MemoryStream inner = new([1, 2, 3, 4]);
             using LimitedReadStream limited = new(
                 inner,
+                declaredLength: 4,
                 totalCounter: null,
                 entryLimitName: nameof(ExcelReaderOptions.MaxCellBytes),
                 entryLimit: 2);
