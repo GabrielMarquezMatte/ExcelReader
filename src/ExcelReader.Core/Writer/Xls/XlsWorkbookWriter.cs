@@ -39,11 +39,11 @@ namespace ExcelReader.Core.Writer.Xls
         /// </summary>
         /// <param name="stream">The destination stream.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, the stream is left open when the writer is disposed.</param>
-        /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 epoch instead of the default 1900 epoch.</param>
-        public static XlsWorkbookWriter Create(Stream stream, bool leaveOpen = false, bool date1904 = false)
+        /// <param name="options">The date system; <see cref="XlsWriterOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsWorkbookWriter Create(Stream stream, bool leaveOpen = false, XlsWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return new XlsWorkbookWriter(stream, leaveOpen, date1904);
+            return new XlsWorkbookWriter(stream, leaveOpen, (options ?? XlsWriterOptions.Default).Date1904);
         }
 
         /// <inheritdoc/>

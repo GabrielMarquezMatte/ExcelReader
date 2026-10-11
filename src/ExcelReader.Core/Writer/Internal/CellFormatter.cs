@@ -111,11 +111,11 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference, int styleId)
+        internal static void WriteDateTime(BiffBuffer xml, DateTime value, bool date1904, int columnIndex, int rowNumber, bool includeReference, int styleId)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
             xml.Write("<v>"u8);
-            WriteValue(xml, ExcelEpoch.OADateToSerial(value.ToOADate(), date1904: false), sizeHint: 32);
+            WriteValue(xml, ExcelEpoch.OADateToSerial(value.ToOADate(), date1904), sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 

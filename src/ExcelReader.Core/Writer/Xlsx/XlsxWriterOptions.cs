@@ -5,6 +5,9 @@ namespace ExcelReader.Core.Writer.Xlsx
     /// <summary>Configures how an XLSX package is written.</summary>
     public sealed record XlsxWriterOptions
     {
+        /// <summary>Whether the workbook uses the 1904 date system instead of the default 1900 system. Defaults to <see langword="false"/>.</summary>
+        public bool Date1904 { get; init; }
+
         /// <summary>The compression level applied to each ZIP entry. Defaults to <see cref="CompressionLevel.Fastest"/>.</summary>
         public CompressionLevel Compression { get; init; } = CompressionLevel.Fastest;
 
@@ -23,7 +26,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         /// </remarks>
         public bool PrefetchWrite { get; init; }
 
-        /// <summary>The default options: fastest compression, inline strings, no background deflate.</summary>
+        /// <summary>The default options: 1900 date system, fastest compression, inline strings, no background deflate.</summary>
         public static XlsxWriterOptions Default { get; } = new();
     }
 }

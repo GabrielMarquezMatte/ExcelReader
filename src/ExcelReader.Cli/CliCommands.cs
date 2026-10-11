@@ -120,7 +120,7 @@ namespace ExcelReader.Cli
 
         private static void WriteXlsx(IExcelSheet sheet, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
-            using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(target, leaveOpen);
+            using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(target, leaveOpen, new XlsxWriterOptions { Date1904 = sheet.IsDate1904 });
             WriteRows<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, sheet, onProgress);
         }
 
@@ -132,7 +132,7 @@ namespace ExcelReader.Cli
 
         private static void WriteXls(IExcelSheet sheet, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
-            using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, date1904: sheet.IsDate1904);
+            using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, new XlsWriterOptions { Date1904 = sheet.IsDate1904 });
             WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, sheet, onProgress);
         }
 

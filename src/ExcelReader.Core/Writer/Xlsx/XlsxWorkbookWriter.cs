@@ -34,6 +34,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             _stream = stream;
             _leaveOpen = leaveOpen;
             UseSharedStrings = options.UseSharedStrings;
+            Date1904 = options.Date1904;
             _compression = options.Compression;
             _prefetchWrite = options.PrefetchWrite;
             _sharedStrings = options.UseSharedStrings ? new SharedStringTable() : null;
@@ -131,6 +132,8 @@ namespace ExcelReader.Core.Writer.Xlsx
         }
 
         internal bool UseSharedStrings { get; }
+
+        internal bool Date1904 { get; }
 
         internal int GetSharedStringIndex(string value)
         {
@@ -488,6 +491,10 @@ namespace ExcelReader.Core.Writer.Xlsx
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append($"<workbook xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">");
+            if (Date1904)
+            {
+                sb.Append("<workbookPr date1904=\"1\"/>");
+            }
             sb.Append("<sheets>");
             bool anyVisible = false;
             foreach ((string name, int sheetId, ExcelSheetVisibility visibility) in _sheets)

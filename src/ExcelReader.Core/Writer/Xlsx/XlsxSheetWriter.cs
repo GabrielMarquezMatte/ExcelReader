@@ -45,6 +45,8 @@ namespace ExcelReader.Core.Writer.Xlsx
         internal int SheetId { get; }
         internal ExcelSheetVisibility Visibility { get; }
         internal bool UseSharedStrings => _owner.UseSharedStrings;
+
+        internal bool Date1904 => _owner.Date1904;
         internal bool ResourcesReleased => _stream is null && _rowBuffer.IsReleased;
 
         internal int GetSharedStringIndex(string value)
