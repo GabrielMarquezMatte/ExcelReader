@@ -135,11 +135,11 @@ namespace ExcelReader.Tests.Reader
             var row = e.Current;
 
             Assert.Equal(CellType.Date, row[0].Type);
-            Assert.True(row[0].TryGetDateTime(out var d0));
+            Assert.True(row[0].TryGetDateTime(isDate1904: false, out var d0));
             Assert.Equal(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), d0);
 
             Assert.Equal(CellType.Date, row[1].Type);
-            Assert.True(row[1].TryGetDateTime(out var d1));
+            Assert.True(row[1].TryGetDateTime(isDate1904: false, out var d1));
             Assert.Equal(new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Unspecified), d1);
 
             Assert.Equal(CellType.Number, row[2].Type);
@@ -188,7 +188,7 @@ namespace ExcelReader.Tests.Reader
 
             Assert.True(await e.MoveNextAsync());
             Assert.Equal(CellType.Date, e.Current[0].Type);
-            Assert.True(e.Current[0].TryGetDateTime(out var d));
+            Assert.True(e.Current[0].TryGetDateTime(isDate1904: false, out var d));
             Assert.Equal(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), d);
 
             Assert.True(await e.MoveNextAsync());

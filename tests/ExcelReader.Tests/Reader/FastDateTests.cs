@@ -146,7 +146,7 @@ namespace ExcelReader.Tests.Reader
                 {
                     if (col == 1)
                     {
-                        Assert.True(rowCell.Value.TryGetDateTime(out DateTime d));
+                        Assert.True(rowCell.Value.TryGetDateTime(isDate1904: false, out DateTime d));
                         dates.Add(d);
                     }
                     col++;
@@ -165,7 +165,7 @@ namespace ExcelReader.Tests.Reader
 
             foreach (Row row in reader.FirstSheet)
             {
-                Assert.True(row[1].TryGetDateTime(out DateTime d));
+                Assert.True(row[1].TryGetDateTime(isDate1904: false, out DateTime d));
                 Assert.Equal(new DateTime(2024, 3, 15), d);
             }
         }

@@ -98,7 +98,6 @@ ExcelReader.Core.Reader.Cell.GetString() -> string!
 ExcelReader.Core.Reader.Cell.StyleIndex.get -> int
 ExcelReader.Core.Reader.Cell.TryFormat(System.Span<byte> destination, out int bytesWritten) -> bool
 ExcelReader.Core.Reader.Cell.TryGetDateTime(bool isDate1904, out System.DateTime result) -> bool
-ExcelReader.Core.Reader.Cell.TryGetDateTime(out System.DateTime result) -> bool
 ExcelReader.Core.Reader.Cell.TryGetDouble(out double value) -> bool
 ExcelReader.Core.Reader.Cell.TryParse<T>(System.IFormatProvider? provider, out T result) -> bool
 ExcelReader.Core.Reader.Cell.Type.get -> ExcelReader.Core.Reader.CellType

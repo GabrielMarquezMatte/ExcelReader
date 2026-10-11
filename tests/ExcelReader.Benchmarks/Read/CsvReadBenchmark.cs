@@ -76,7 +76,7 @@ namespace ExcelReader.Benchmarks
             {
                 acc += id;
             }
-            if (row[2].TryGetDateTime(out DateTime date))
+            if (row[2].TryGetDateTime(isDate1904: false, out DateTime date))
             {
                 acc += date.Ticks;
             }
