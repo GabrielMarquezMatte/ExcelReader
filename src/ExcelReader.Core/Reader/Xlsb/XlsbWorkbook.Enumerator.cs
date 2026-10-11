@@ -52,6 +52,16 @@ namespace ExcelReader.Core.Reader.Xlsb
                 _lease = reader.Lifetime;
             }
 
+            internal Enumerator(XlsbWorkbook reader, ReadOnlyMemory<byte> chunk, bool rowOpen, CancellationToken ct)
+                : base(chunk, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), ct)
+            {
+                _reader = reader;
+                _styleIsDate = reader._styleIsDate;
+                _sharedOffsets = reader._sharedOffsets;
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _pendingRowHdr = rowOpen;
+            }
+
             private protected override Stream OpenSource()
             {
                 return _reader._zip!.OpenEntryStream(_entry, _reader._decompressedBytes, _reader._options);
@@ -65,6 +75,13 @@ namespace ExcelReader.Core.Reader.Xlsb
             /// <inheritdoc/>
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache, _contentCache);
+
+            internal long Offset => _io.BaseOffset + _pos;
+
+            // The last MoveNext stopped just past the next row's header record, so that row is already open.
+            internal bool RowOpen => _pendingRowHdr;
+
+            internal bool Ended => _ended;
 
             int IRowIndexedEnumerator.RowIndex
             {

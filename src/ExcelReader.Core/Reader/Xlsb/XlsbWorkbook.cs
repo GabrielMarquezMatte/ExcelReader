@@ -287,6 +287,37 @@ namespace ExcelReader.Core.Reader.Xlsb
             }
         }
 
+        internal int MaxCellBytes => _options.MaxCellBytes;
+
+        private ExcelReaderOptions WithoutPrefetch => _options.PrefetchDecompression ? _options with { PrefetchDecompression = false } : _options;
+
+        internal long SheetUncompressedSize(int index)
+        {
+            Lifetime.ThrowIfClosed(this);
+            return WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![index].Path).UncompressedSize;
+        }
+
+        internal Enumerator OpenSheetWithoutPrefetch(int index)
+        {
+            Lifetime.Acquire(this);
+            try
+            {
+                ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![index].Path);
+                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes, WithoutPrefetch), entry.UncompressedSize);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
+        }
+
+        internal Stream OpenSheetStream(int index)
+        {
+            ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![index].Path);
+            return _zip!.OpenEntryStream(entry, _decompressedBytes, WithoutPrefetch);
+        }
+
         internal Enumerator OpenSheetAsync(int index, CancellationToken ct)
         {
             if (_zip!.HasMemory)
