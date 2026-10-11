@@ -8,6 +8,9 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
 {
     internal sealed partial class InflateDecoder
     {
+        private const int OffsetRefill = 21 + InflateFormat.LitlenTableBits - 1;
+        private const int SubtableOffsetRefill = 28 + InflateFormat.LitlenTableBits - 1;
+
         private enum LoopStatus
         {
             BlockDone,
@@ -35,8 +38,10 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         // base length or offset, or the subtable start. Bits 12-15 are clear on length and offset
         // entries, so `entry >> 8` needs no mask before it shifts out the extra bits.
         //
-        // Bit budget: a refill leaves at least 56 bits. Three literals from the main table take at
-        // most 33; a length takes at most 20 and an offset at most 28, hence the refill between them.
+        // Bit budget: a refill leaves at least 56 bits, and the buffer holds one valid bit beyond
+        // `bitsleft`. Two literals and a length take at most 42. The refill before an offset (21
+        // bits, 28 through a subtable) keeps 11 bits behind it, so the next litlen entry is loaded
+        // before the refill that follows the match rather than after it.
         //
         // Only the low byte of `bitsleft` is meaningful: it subtracts whole entries, as libdeflate does.
         [SuppressMessage("Design", "MA0051:Method is too long",
@@ -125,18 +130,24 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
 
                 uint length = (entry >> 16) + (uint)(LowBits(saved, entry & 0xFF) >> (int)(entry >> 8));
 
-                if ((byte)bitsleft < 30)
+                uint offsetEntry = tables[InflateFormat.LitlenTableSize + (bitbuf & ((1 << InflateFormat.OffsetTableBits) - 1))];
+                if ((offsetEntry & InflateFormat.Exceptional) != 0)
+                {
+                    if ((byte)bitsleft < SubtableOffsetRefill)
+                    {
+                        bitbuf |= LoadWord(inNext) << (int)bitsleft;
+                        inNext += 7 - ((bitsleft >> 3) & 7);
+                        bitsleft |= 56;
+                    }
+                    bitbuf >>= InflateFormat.OffsetTableBits;
+                    bitsleft -= InflateFormat.OffsetTableBits;
+                    offsetEntry = tables[InflateFormat.LitlenTableSize + (offsetEntry >> 16) + (uint)LowBits(bitbuf, (offsetEntry >> 8) & 0x3F)];
+                }
+                else if ((byte)bitsleft < OffsetRefill)
                 {
                     bitbuf |= LoadWord(inNext) << (int)bitsleft;
                     inNext += 7 - ((bitsleft >> 3) & 7);
                     bitsleft |= 56;
-                }
-                uint offsetEntry = tables[InflateFormat.LitlenTableSize + (bitbuf & ((1 << InflateFormat.OffsetTableBits) - 1))];
-                if ((offsetEntry & InflateFormat.Exceptional) != 0)
-                {
-                    bitbuf >>= InflateFormat.OffsetTableBits;
-                    bitsleft -= InflateFormat.OffsetTableBits;
-                    offsetEntry = tables[InflateFormat.LitlenTableSize + (offsetEntry >> 16) + (uint)LowBits(bitbuf, (offsetEntry >> 8) & 0x3F)];
                 }
                 saved = bitbuf;
                 bitbuf >>= (int)offsetEntry;
@@ -152,10 +163,10 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                 byte* destination = outNext;
                 outNext += length;
 
+                entry = tables[bitbuf & mask];
                 bitbuf |= LoadWord(inNext) << (int)bitsleft;
                 inNext += 7 - ((bitsleft >> 3) & 7);
                 bitsleft |= 56;
-                entry = tables[bitbuf & mask];
 
                 CopyMatch(source, destination, outNext, offset);
             }
