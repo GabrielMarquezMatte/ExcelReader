@@ -107,7 +107,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
                 MappedAggregation<PeopleLog, Person>.Unbound,
-                MappedAggregation<PeopleLog, Person>.Binder(map, headerRow),
+                MappedAggregation<PeopleLog, Person>.Binder(map, map.CsvInfo, false, headerRow),
                 new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = headerRow },
                 chunkSize,
                 TestContext.Current.CancellationToken);
@@ -118,7 +118,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
                 MappedAggregation<PeopleLog, IdOnly>.Unbound,
-                MappedAggregation<PeopleLog, IdOnly>.Binder(map, headerRow),
+                MappedAggregation<PeopleLog, IdOnly>.Binder(map, map.CsvInfo, false, headerRow),
                 new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = headerRow },
                 chunkSize,
                 TestContext.Current.CancellationToken);

@@ -304,10 +304,11 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
         private static Task<byte> ChunkedMapped(byte[] csv, Action<Order> body, ChunkProbe probe, int dop, int chunkSize)
         {
+            ExcelParser<Order> order = ExcelParser.FromAttributes<Order>();
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
                 probe.Wrap(MappedCallback<Order>.Unbound),
-                MappedCallback<Order>.Binder(ExcelParser.FromAttributes<Order>(), 1, body),
+                MappedCallback<Order>.Binder(order, order.CsvInfo, false, 1, body),
                 new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
                 chunkSize,
                 TestContext.Current.CancellationToken);

@@ -39,6 +39,8 @@ namespace ExcelReader.Core.Parser
 
         internal TypeMapInfo<T> CsvInfo => _csvInfo();
 
+        internal TypeMapInfo<T> Info => _info();
+
         /// <summary>Parses the rows of an XLSX sheet into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
         /// <param name="sheet">The sheet to pull rows from. Each enumeration of the result starts a new read of it.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>

@@ -494,7 +494,7 @@ namespace ExcelReader.Core.Reader.Csv
             {
                 throw new ArgumentException("A parser that binds columns by header name needs CsvParallelOptions.HeaderRow of at least 1.", nameof(parser));
             }
-            return MappedAggregation<TAccumulator, TModel>.Binder(parser, options.HeaderRow);
+            return MappedAggregation<TAccumulator, TModel>.Binder(parser, parser.CsvInfo, false, options.HeaderRow);
         }
 
         private static RowActionFactory<byte> BoundCallback<TModel>(
@@ -507,7 +507,7 @@ namespace ExcelReader.Core.Reader.Csv
             {
                 throw new ArgumentException("A parser that binds columns by header name needs CsvParallelOptions.HeaderRow of at least 1.", nameof(parser));
             }
-            return MappedCallback<TModel>.Binder(parser, options.HeaderRow, body);
+            return MappedCallback<TModel>.Binder(parser, parser.CsvInfo, false, options.HeaderRow, body);
         }
 
         /// <summary>
