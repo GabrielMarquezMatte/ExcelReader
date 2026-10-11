@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.ParallelCsv;
+using ExcelReader.Core.Parser.SheetPipeline;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Xls;
@@ -98,6 +99,89 @@ namespace ExcelReader.Fuzz
                 static b => Excel.FromXlsb(new ReadOnlyMemory<byte>(b), Limits),
                 "stream",
                 "memory"));
+        }
+
+        internal static void XlsxPipeline(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() => ComparePipeline(bytes, static b => Excel.FromXlsx(new ReadOnlyMemory<byte>(b), Limits)));
+        }
+
+        internal static void XlsbPipeline(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() => ComparePipeline(bytes, static b => Excel.FromXlsb(new ReadOnlyMemory<byte>(b), Limits)));
+        }
+
+        private static void ComparePipeline(byte[] bytes, Func<byte[], IExcelWorkbook> open)
+        {
+            int chunkBytes = 48 + ((bytes.Length > 0 ? bytes[^1] : 0) * 8);
+            List<string>? sequential = null;
+            Exception? sequentialFailure = null;
+            try
+            {
+                sequential = RenderAllSheets(open(bytes));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                sequentialFailure = ex;
+            }
+
+            List<string>? pipeline = null;
+            Exception? pipelineFailure = null;
+            try
+            {
+                pipeline = RenderAllSheetsThroughPipeline(open(bytes), chunkBytes);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                pipelineFailure = ex;
+            }
+
+            // The two paths count limits at the same seam but not at the same byte, so a limit hit on either proves nothing.
+            if (sequentialFailure is ExcelLimitExceededException || pipelineFailure is ExcelLimitExceededException)
+            {
+                return;
+            }
+            if (sequentialFailure is not null || pipelineFailure is not null)
+            {
+                if (sequentialFailure?.GetType() != pipelineFailure?.GetType())
+                {
+                    throw new InvalidOperationException(
+                        $"Oracle divergence: sequential threw {sequentialFailure?.GetType().Name ?? "nothing"}, " +
+                        $"pipeline threw {pipelineFailure?.GetType().Name ?? "nothing"}.");
+                }
+                return;
+            }
+            AssertSameRows(sequential!, pipeline!, "sequential", "pipeline");
+        }
+
+        private static List<string> RenderAllSheetsThroughPipeline(IExcelWorkbook reader, int chunkBytes)
+        {
+            using (reader)
+            {
+                bool isDate1904 = reader.IsDate1904;
+                RowAggregation<List<string>> collect = new()
+                {
+                    Seed = static () => [],
+                    Accumulate = (ref List<string> list, Row row) => list.Add(RenderRow(row, isDate1904)),
+                    Combine = static (left, right) =>
+                    {
+                        left.AddRange(right);
+                        return left;
+                    },
+                };
+                var rows = new List<string>();
+                int sheets = reader.SheetCount;
+                for (int i = 0; i < sheets; i++)
+                {
+                    rows.Add(string.Create(CultureInfo.InvariantCulture, $"#sheet{i}"));
+                    SheetPipelineSource source = SheetPipelineSource.Create(reader.SheetAt(i))
+                        ?? throw new InvalidOperationException("The fuzzed workbook's sheet has no pipeline source.");
+                    rows.AddRange(SheetPipelineRunner.AggregateAsync(source, collect, null, 0, 4, chunkBytes, CancellationToken.None).GetAwaiter().GetResult());
+                }
+                return rows;
+            }
         }
 
         internal static void Xls(ReadOnlySpan<byte> data)
