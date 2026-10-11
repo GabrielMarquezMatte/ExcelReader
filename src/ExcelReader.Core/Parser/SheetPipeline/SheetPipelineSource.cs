@@ -25,7 +25,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
     internal abstract class SheetPipelineSource
     {
         internal const long MinBytes = 256 * 1024;
-        internal const int DefaultChunkBytes = 1024 * 1024;
+        internal const int DefaultChunkBytes = 256 * 1024;
         private protected const int RowsPerCancellationCheck = 4096;
 
         internal abstract object Owner { get; }
