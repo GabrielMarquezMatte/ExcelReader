@@ -28,23 +28,34 @@ foreach (var row in workbook.FirstSheet)
 
 An opened workbook (`XlsxWorkbook`, `XlsbWorkbook`, `XlsWorkbook`, `CsvReader`) hands out its sheets: `FirstSheet` is the first one, `Sheets[i]` any of them. A sheet holds no resources of its own; iterating it starts a new, independent read. Dispose the workbook, not the sheets.
 
-### Parallel CSV parsing (opt-in)
+### Parallel reading (opt-in)
+
+`SheetParallel` reads one sheet on several threads. It takes any sheet, so it works the same on XLSX, XLSB and CSV:
 
 ```csharp
-await foreach (var row in CsvParallel.ParseAsync("big.csv", ExcelParser.FromAttributes<SalesRow>(), new CsvParallelOptions { DegreeOfParallelism = 8 }))
+using XlsxWorkbook workbook = Excel.FromXlsxFile("big.xlsx");
+
+await foreach (var row in SheetParallel.ParseAsync(workbook.FirstSheet, ExcelParser.FromAttributes<SalesRow>(), new SheetParallelOptions { DegreeOfParallelism = 8 }))
 {
     Total += row.Revenue;
 }
 ```
 
-Rows arrive in file order, identical to the sequential parser. Parsing and type conversion run across
-threads; whatever your loop body does per row does not — if that dominates, raising the degree will
-not help. Sources that cannot be partitioned (non-seekable streams, non-UTF-8 encodings, small files)
-fall back to sequential parsing with the same results.
+You own the workbook: keep it open until the task completes or the enumeration ends. For CSV, give the dialect when you open it (`Excel.FromCsvFile(path, dialect)`), not in the options. `DegreeOfParallelism` of `0` (the default) uses every processor; `1` reads sequentially.
 
-For a fold or a per-row side effect, `CsvParallel.ForEachAsync` accepts a `ref struct` row type, so text
-columns stay as `ReadOnlySpan<byte>` and the per-row model allocation disappears entirely — a class
-model still costs one instance per row:
+There are three families, each over a sheet:
+
+| Family | Result | Order |
+|---|---|---|
+| `ParseAsync<T>` | an `IAsyncEnumerable<T>` | the sheet's own order, identical to `parser.Parse(sheet)` |
+| `ForEachAsync` | calls your callback on the worker threads | none |
+| `AggregateAsync` | folds one accumulator per partition into a result | the same result as a single-threaded run |
+
+Parsing and type conversion run across threads; whatever your loop body does per row does not, so if that dominates, raising the degree will not help.
+
+Both of the next two examples read a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and the per-row model allocation disappears; a class model still costs one instance per row.
+
+A fold over an XLSX sheet, with one accumulator per partition merged in sheet order:
 
 ```csharp
 public ref struct SaleRow
@@ -53,32 +64,66 @@ public ref struct SaleRow
     [ExcelColumn("Units")]  public int Units { get; set; }
 }
 
-long total = 0;
-await CsvParallel.ForEachAsync(
-    "big.csv",
+public sealed class UnitTotal : IRowAccumulator<UnitTotal, SaleRow>
+{
+    public long Units;
+
+    public void Add(SaleRow model) => Units += model.Units;
+
+    public void Merge(UnitTotal following) => Units += following.Units;
+}
+
+using XlsxWorkbook workbook = Excel.FromXlsxFile("big.xlsx");
+
+UnitTotal total = await SheetParallel.AggregateAsync<UnitTotal, SaleRow>(
+    workbook.FirstSheet,
     ExcelParser.FromAttributes<SaleRow>(),
-    row => Interlocked.Add(ref total, row.Units),
-    new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
+    new SheetParallelOptions { HeaderRow = 1 });
 ```
 
-Unlike `CsvParallel.ParseAsync`, the callback runs on the worker threads, so records arrive in no
-particular order and the callback must be safe to call from several threads at once. Spans are valid
-only for the duration of the call.
+The same call takes a `RowAggregation<TState>` when you would rather pass delegates than write a type, and an `IRowRecord<TRecord>` type in place of the parser.
 
-Delivery is at least once, not exactly once: the callback may be invoked more than once for the same
-record. A partition whose start offset was guessed wrongly is read again from the confirmed offset, and
-the discarded pass may already have delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not just a few near the seam.
-On a source with quoted fields those records may also be misparsed, carrying values that appear nowhere
-in the file, and an exception the callback threw during a discarded pass is discarded with it. A start
-is only guessed wrongly inside a quoted field, so a source in which the quote character never appears
-delivers every record exactly once; for that guarantee on any source, use `CsvParallel.AggregateAsync`,
-where the discarded partition's accumulator is thrown away, and apply side effects once it returns.
-A callback that writes to a database or sends messages must be idempotent and must also tolerate
-records that do not exist — deduplicating on a key does not filter those out.
+A per-row callback:
 
-See the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. Those figures are
-`CsvParallel.AggregateAsync`'s, measured over the same projection path this shares: at dop 16 it is
-~2.8x faster than the typed path while allocating ~410x less, with zero garbage collections.
+```csharp
+using XlsxWorkbook workbook = Excel.FromXlsxFile("big.xlsx");
+
+long total = 0;
+await SheetParallel.ForEachAsync(
+    workbook.FirstSheet,
+    ExcelParser.FromAttributes<SaleRow>(),
+    row => Interlocked.Add(ref total, row.Units),
+    new SheetParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
+```
+
+Unlike `ParseAsync`, the callback runs on the worker threads, so records arrive in no particular order and the callback must be safe to call from several threads at once. Spans are valid only for the duration of the call.
+
+`HeaderRow` follows the same rule as before: `ParseAsync` takes the header from the parser's `ExcelParserConfig.HeaderRow` and rejects a non-zero `SheetParallelOptions.HeaderRow`, while the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
+
+#### When it reads sequentially
+
+These cases read on one thread with the same results and no error:
+
+- `DegreeOfParallelism` of 1.
+- A sheet under 256 KB uncompressed.
+- XLS.
+- A table view (`ExcelTable.AsSheet()`).
+- A CSV that cannot be partitioned: a non-seekable stream or a non-UTF-8 encoding. A CSV over a `MemoryStream` is one of them; pass the bytes as `ReadOnlyMemory<byte>` to partition it.
+
+`PrefetchDecompression` does not apply on this path: XLSX and XLSB go through a pipeline that already overlaps inflate and parse.
+
+#### Delivery guarantees
+
+- **`ParseAsync` and `AggregateAsync`** are exact on every format. `ParseAsync` yields the same items in the same order as the sequential parse; `AggregateAsync` equals its own single-threaded run.
+- **XLSB** delivers every row exactly once, in `ForEachAsync` too.
+- **XLSX** delivers exactly once for a well-formed sheet. The pipeline cuts the inflated sheet at what looks like a row start; on a sheet where those bytes sit inside cell content (a CDATA run, a comment) or the file is truncated, a worker detects it, and the read recovers by reading the rest sequentially. `ParseAsync` and `AggregateAsync` stay exact. In `ForEachAsync`, workers may already have called the callback for chunks that are then dropped, so on such a sheet rows can be delivered twice, or be rows the sequential reader would not produce.
+- **CSV** is at least once in `ForEachAsync`, unchanged from v6: the callback may be invoked more than once for the same record. A partition whose start offset was guessed wrongly is read again from the confirmed offset, and the discarded pass may already have delivered a whole partition's worth of records, 1 MiB to 64 MiB of them, not just a few near the seam. On a source with quoted fields those records may also be misparsed, carrying values that appear nowhere in the file, and an exception the callback threw during a discarded pass is discarded with it. A start is only guessed wrongly inside a quoted field, so a source in which the quote character never appears delivers every record exactly once. For that guarantee on any source, use `AggregateAsync`, where the discarded partition's accumulator is thrown away, and apply side effects once it returns.
+
+A callback that writes to a database or sends messages must be idempotent on CSV, and on XLSX if the sheet may be malformed, and must also tolerate records that do not exist: deduplicating on a key does not filter those out.
+
+`ExcelParseException.Row` on `ParseAsync` counts the rows emitted so far. On `ForEachAsync` and `AggregateAsync` it is the exact row when the read is sequential and `0` when it was partitioned.
+
+See the [parallel sheet benchmarks](../performance/benchmarks.md#parallel-sheet-reading) and the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. On a real-data XLSX the sheet stage drops from 29 ms (prefetched, sequential) to about 18 ms, and on XLSB from 16 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its `AggregateAsync` at dop 16 is ~2.8x faster than the typed path while allocating ~410x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.
 
@@ -216,7 +261,7 @@ if (workbook.TryGetTable("Sales", out ExcelTable? sales))
 
 ## Reading sheets in parallel
 
-Each sheet of a workbook can be read on its own thread:
+This is one thread per sheet. To read a single sheet on several threads, see [Parallel reading](#parallel-reading-opt-in). Each sheet of a workbook can be read on its own thread:
 
 ```csharp
 using XlsxWorkbook workbook = Excel.FromXlsxFile(path);

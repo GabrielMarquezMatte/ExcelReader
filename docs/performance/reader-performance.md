@@ -488,9 +488,12 @@ starts. Typed models, allocating, own interleave:
 | dop 6 | 5.068 ms (2.80x) |
 | dop 12 | 4.107 ms (3.46x) |
 
-This is the one place in the library where parallelism converts, and it converts because CSV has no
-inflate floor. It is only available on the typed path: `Row` and `Cell` are `ref struct`s and cannot
-cross a thread boundary, so raw row enumeration hits the same wall as XLSX.
+This was the one place in the library where parallelism converted, and it converted because CSV has no
+inflate floor. Since v7 `SheetParallel` also reads XLSX and XLSB on several threads (see "Parallel intra-sheet
+parsing" below), with a smaller gain because inflate is still sequential. Parallel reading is only available on
+the typed path: `Row` and `Cell` are `ref struct`s and cannot cross a thread boundary, so raw row enumeration
+hits the same wall. `CsvParallel` is named `SheetParallel` in v7; the entries in this file keep the names they
+were measured under.
 
 ## Approaches measured and rejected
 
@@ -523,6 +526,37 @@ because inflate is then all that is left.
 
 It would also only ever serve the typed-parsing layer: `Row`/`Cell` are `ref struct` and cannot cross
 a thread boundary.
+
+**Update 2026-10-10: built.** `InflateStream` moved the inflate floor, so the prefetched XLSX read became
+parse-bound and the reasoning above no longer holds. A spike (Ryzen 7 5700X, real-data 65K corpus, min of 30
+interleaved rounds, sheet stage only, outputs identical to sequential) measured:
+
+| | XLSX (6.7 → 34.4 MB) | XLSB (3.7 → 15.9 MB) |
+|---|---|---|
+| read today, no prefetch / prefetch | 44.6 / 29.2 ms | 26.5 / 15.8 ms |
+| inflate only, whole buffer | 14.9 ms | 9.5 ms |
+| parse only, dop 1 / 2 / 4 / 8 | 29.0 / 14.8 / 7.8 / 4.2 ms | 15.4 / 7.8 / 4.0 / 2.3 ms |
+| A: 1 inflate thread + N parse workers (N ≥ 2) | 16.0 ms (1.8x) | 12.5 ms (1.25x) |
+| B oracle: parallel inflate + parse, 8 threads | 7.7 ms | 3.6 ms |
+
+A is what shipped: `SheetParallel` over XLSX and XLSB, one producer that inflates and cuts row-aligned chunks,
+`dop - 1` parse workers, an ordered merge (see ARCHITECTURE.md). The spike's consumer was light and its buffers
+were pre-touched, so those numbers are the shape of the gain, not a promise. Measured on the built pipeline
+(JIT harness, same corpus and method, light consumer, 256 KB chunks):
+
+| | XLSX | XLSB |
+|---|---|---|
+| prefetched sequential read | 28.35 ms | 15.65 ms |
+| pipeline, dop 3 to 16 | 17.6 ms (1.61x) | 13.3 ms (1.18x) |
+| typed `ParseAsync`, sequential / dop 4 | 55.4 / 18.9 ms | 37.6 / 14.4 ms |
+| `xl_parse_typed` over the published NativeAOT DLL, dop 1 / dop 0 | 54.1 / 20.3 ms (2.6x) | 28.1 / 15.2 ms (1.8x) |
+
+It saturates at dop 3, one producer plus two workers: dop 2 is a plain overlap of inflate and parse and gains
+nothing. The chunk size defaults to 256 KB, down from 1 MB: it removes ~0.5 ms of serial tail, and 4 MB adds
+~3.7 ms. XLSB stops at ~13 ms against a 9.6 ms inflate floor because the producer walks every BIFF12 record
+(~2.2 ms) and `InflateStream.Read` adds a copy (~0.7 ms). Only parallel inflate moves that. The
+BenchmarkDotNet tables for this are in `benchmarks.md`; they were taken on a loaded machine and are pending an
+idle rerun.
 
 ### Faster inflate — measured separately, no gain
 
@@ -1115,6 +1149,13 @@ used to yield a silent prefix of its rows. `InflateStream` throws `InvalidDataEx
 
 ## Known open items
 
+- **Parallel inflate is the open lead (spec B, not built).** It replaces the pipeline's producer only; the
+  queue, workers and merge stay. The oracle ceilings at 8 threads, parallel inflate plus parse, are 7.7 ms for
+  XLSX and 3.6 ms for XLSB, against 17.6 and 13.3 ms for the shipped pipeline. A deflate block finder costs
+  0.4–1 ms per split point, with no false positives in 14 hits. The marker finding: XLSX back-references stop
+  depending on the unknown window after about 1 MB, but XLSB ones never do, so about 65–70% of XLSB bytes need
+  a second resolution pass. The cost of the 16-bit marker decode loop is unmeasured, and it decides whether
+  XLSB gains much.
 - `InflateStream` reaches about three quarters of libdeflate's inflate speed on XLSX. The Tier1
   disassembly shows no spills and 88% of the time in `FastLoop` itself (see "The decode loop's Tier1
   disassembly"); the remainder is JIT codegen. A `uint bitsleft` is worth ~1.5% if anyone wants it.

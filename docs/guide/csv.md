@@ -1,7 +1,7 @@
 # CSV
 
 Reading, dialect sniffing and writing delimited text.
-Parallel CSV parsing is covered in [parsing.md](parsing.md).
+Parallel CSV parsing is covered in [reading.md](reading.md#parallel-reading-opt-in).
 
 ## Read CSV
 
@@ -64,7 +64,7 @@ using var csv = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.WithDia
 
 `CsvSniffer.Detect` takes a span of bytes or a seekable `Stream`, `DetectFile` takes a path, and `DetectAsync`/`DetectFileAsync` are the async siblings; only the first 64 KiB are examined. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as a span instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
 
-`CsvReaderOptions.SniffDialect` does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, `Excel.Open` with `ExcelFileFormat.Csv`, and the parallel CSV entry points:
+`CsvReaderOptions.SniffDialect` does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, and `Excel.Open` with `ExcelFileFormat.Csv`. The dialect of a parallel read is the one the CSV workbook was opened with:
 
 ```csharp
 using var csv = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default with { SniffDialect = true });

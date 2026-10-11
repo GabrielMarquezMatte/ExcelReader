@@ -177,11 +177,11 @@ once, typed or Arrow (see [Arrow](#arrow) below), and none disturbs another.
 Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
 `batch_size` is only raised there, not at the call.
 
-#### Reading a large CSV on several threads
+#### Reading a large sheet on several threads
 
 `parse_typed()`, `to_arrow()`, `to_record_batch()` and `to_polars()` take `parallelism`: `1` (the
-default) reads on one thread, `0` uses every core, `n` up to n threads. Only CSV is split. Any other
-format, or a CSV under 256 KiB, is read on one thread with the same result. The table is identical
+default) reads on one thread, `0` uses every core, `n` up to n threads. XLSX, XLSB and CSV are split. XLS, or a
+sheet under 256 KiB, is read on one thread with the same result. The table is identical
 either way. Every partition's columns are held until they are merged, so the peak memory is higher
 than a sequential read of the same file. `to_polars()` with `parallelism` other than 1 parses the whole
 file instead of streaming it in batches.
@@ -192,6 +192,11 @@ file instead of streaming it in batches.
 |---|---:|---:|---:|
 | `65K_Records_Data.csv` (8 MB, 65,535 rows) | 21.4 ms | 5.8 ms | 3.7x |
 | the same rows ×20 (160 MB, 1.3M rows) | 425.9 ms | 117.5 ms | 3.6x |
+
+The same call on the real-data workbooks (XLSX 6.7 MB compressed, XLSB 3.7 MB; measured with the
+published NativeAOT library): XLSX 54.1 ms at
+`parallelism=1` against 20.3 ms at `0` (2.6x), XLSB 28.1 ms against 15.2 ms (1.8x). Inflate runs on
+one thread, so these formats stop scaling at about three threads.
 
 Peak working set on the 160 MB file, above the interpreter's own, went from 470 MiB to 503 MiB (both
 include the file's bytes and the handle's copy of them).
@@ -553,8 +558,8 @@ CSV, from `65K_Records_Data.csv` (8.2 MB), same 14 typed columns:
 
 polars' CSV reader is ahead (multithreaded, and it infers types from the text without our schema
 step); ExcelReader is ~10x faster than pandas on either engine. These include opening the file, so
-they are above the in-memory `xl_parse_typed` figures in [Reading a large CSV on several
-threads](#reading-a-large-csv-on-several-threads).
+they are above the in-memory `xl_parse_typed` figures in [Reading a large sheet on several
+threads](#reading-a-large-sheet-on-several-threads).
 
 ### Writing
 

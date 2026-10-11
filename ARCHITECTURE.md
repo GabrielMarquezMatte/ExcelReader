@@ -47,13 +47,73 @@ source-generated map) or `ExcelParser.Build` (a runtime-configured map). Its mod
 a `ref struct` model binds directly to `Cell.Value` spans — zero allocation for the container and,
 for span-typed columns, for the values too. It consumes `Row`/`Cell` from any sheet uniformly.
 
-## Parallel CSV parsing
+## Parallel sheet reading
 
-`CsvParallel.ParseAsync<T>` (`src/ExcelReader.Core/Parser/ParallelCsv/ParallelCsv*.cs`) is an opt-in
-alternate path over the same typed-parsing machinery, for sources large enough that partitioning
-pays for itself. `ParallelCsvFactory` decides eligibility — a seekable, UTF-8, large-enough source —
-and falls back to the ordinary sequential `ExcelParser<T>` otherwise, so callers get identical output
-either way.
+`SheetParallel` (`src/ExcelReader.Core/Reader/SheetParallel.cs`) reads one sheet on several threads. It is
+opt-in, takes any `IExcelSheet`, validates its arguments and dispatches on the sheet's concrete type:
+
+| sheet | engine |
+|---|---|
+| `CsvSheet` | the CSV engine (`ParallelCsvProcessor`, `ParallelCsvEnumerable`), described below. Its source comes from `CsvReader.TryGetChunkSource`, which the native layer also uses. |
+| `XlsxSheet`, `XlsbSheet` | the pipeline engine (`src/ExcelReader.Core/Parser/SheetPipeline`) |
+| anything else, and every fallback case | one sequential runner over `IExcelRowEnumerator` |
+
+The fallback cases give the same results with no error: a degree of parallelism of 1, a sheet under 256 KB
+uncompressed, XLS, a table view (`ExcelTable.AsSheet`), and a CSV that cannot be partitioned (a non-seekable
+stream or a non-UTF-8 encoding). The caller owns the workbook; the engine holds a `ReaderLifetime` lease
+until the task completes or the enumeration ends.
+
+The CSV engine is not folded into a shared partition abstraction. It is tuned, and its model, a static
+byte-range plan with speculative starts and re-reads, differs from the pipeline's dynamic, exact chunks. What
+the two share is the contract types (`IRowRecord`, `IRowAccumulator`, `RowAggregation`, `RowAction`) and the
+binders in `Parser/ParallelCsv` (`MappedProjection`, `MappedAggregation`, `MappedCallback`, `RecordAggregation`,
+`RecordCallback`), which pick the parser's CSV type map for a `CsvSheet` and the general one otherwise.
+
+### The pipeline engine
+
+```
+zip entry -> producer (1 thread) -> bounded queue -> N workers -> ordered merge
+             inflate, cut at the     row-aligned      parse +      by chunk index
+             last row boundary       chunks, indexed  row action
+```
+
+Inflate is sequential, so the engine splits the work around it instead of through it. One producer thread
+owns the entry stream, opened through `ZipIndex.OpenEntryStream` so the decompressed-byte limits count where
+they do on the sequential path. It inflates into pooled buffers and cuts each at the last row boundary,
+copying the partial tail into the next buffer; chunks default to 256 KB (`SheetPipelineSource.DefaultChunkBytes`).
+In XLSX the boundary is the last `<row` followed by a name boundary, and the producer stops at the sheet-data
+end tag, so the rest of the part is neither inflated nor buffered. XLSB has no sync marker, so the producer walks
+every record with `Biff12RecordReader` and remembers the last `BrtRowHdr`; it stops at `BrtEndSheetData`.
+
+Chunks go through a bounded `System.Threading.Channels` queue, about twice the worker count, so a full queue
+blocks the producer and peak memory is roughly capacity times chunk size whatever the sheet's size. `dop - 1`
+workers (at least one) each parse a chunk in place with the format's own enumerator over `ReadOnlyMemory<byte>`,
+call `Seed()`, then run the row action for each row. Shared strings are loaded before the pipeline starts, and a
+prologue reads up to `HeaderRow` with an ordinary enumerator, so header rows never reach a chunk. The engine's
+one primitive is an async stream of `(index, state, failure)` in chunk order, reordered through a ring of slots as
+`ParallelCsvEnumerable` does; `AggregateAsync` folds the states with `Combine`, `ForEachAsync` ignores them, and
+`ParseAsync` uses a `List<T>` per chunk and yields its items.
+
+The XLSX row boundary is a candidate, not a proof: the same bytes can sit in CDATA, a comment or malformed
+markup. So every chunk enumerator reports whether it ended cleanly, on a row boundary with no row or tag cut
+short. A run of clean chunks equals the sequential read by induction. A chunk that does not end cleanly stops
+before delivering its cut-short row; the merge keeps that chunk's rows, cancels the pipeline and reads the rest
+with one sequential enumerator, skipping the rows already delivered, and later chunks' results are dropped.
+This recovery re-inflates the sheet and only happens on such sheets. It leaves `ParseAsync` and `AggregateAsync`
+exact, but `ForEachAsync` may already have called back for dropped chunks, so it is exactly once only for a
+well-formed XLSX sheet. XLSB frames records from the first byte as the sequential reader does, so it has no
+such case.
+
+The measured gain is bounded by inflate, which stays on one thread: see "Parallel intra-sheet parsing" in
+[reader-performance.md](docs/performance/reader-performance.md). Parallel inflate would replace the producer
+only; the queue, workers and merge stay.
+
+### The CSV engine
+
+`CsvSheet` takes the older path (`src/ExcelReader.Core/Parser/ParallelCsv/ParallelCsv*.cs`), over the same
+typed-parsing machinery, for sources large enough that partitioning pays for itself. `ParallelCsvFactory`
+decides eligibility, a seekable, UTF-8, large-enough source, and falls back to the ordinary sequential
+`ExcelParser<T>` otherwise, so callers get identical output either way.
 
 When it partitions, `CsvChunkPlan` slices the data range into four chunks per worker (not one — see
 the file's comments on why one-per-worker would buffer up to the whole output) and hands them out
@@ -96,8 +156,8 @@ Still unresolved, and untested by any of the above: whether true unordered emiss
 differently. The ordered merge is the safer default and the only mode either public overload can
 reach, so it stays absent a specific reason to revisit.
 
-`CsvParallel.ForEachAsync` exposes the same partitioning to a per-row callback rather than an
-accumulator type. It accepts a `ref struct` row, which the enumerating `CsvParallel.ParseAsync` cannot —
+`SheetParallel.ForEachAsync` exposes the same partitioning to a per-row callback rather than an
+accumulator type. It accepts a `ref struct` row, which the enumerating `SheetParallel.ParseAsync` cannot —
 not because of the interface (`IAsyncEnumerable<T>`'s `T` is declared `allows ref struct` on net9.0+),
 but because a row holding spans into a worker's buffer cannot cross to the consumer thread at all.
 

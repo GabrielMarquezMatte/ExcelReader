@@ -37,7 +37,7 @@ trace (needs `dotnet-trace` and `dotnet-pgo`):
 
 The XLSB methods are excluded on purpose: with their profile the XLSB parse got 3% slower, and
 without it 1.12x faster. Re-measured with the regenerated profile: including them makes XLSB typed
-parsing ~16% slower. Measure every format before and after replacing the profile. Some formats
+parsing ~22% slower. Measure every format before and after replacing the profile. Some formats
 may get worse, not only better.
 
 ## Layout
