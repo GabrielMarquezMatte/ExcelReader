@@ -14,11 +14,23 @@ namespace ExcelReader.Core.Parser.SheetPipeline
         }
     }
 
-    internal sealed class XlsxRowCutter(byte[] rowOpen) : RowCutter
+    internal sealed class XlsxRowCutter(byte[] rowOpen, byte[] sheetDataEnd) : RowCutter
     {
         internal override int Cut(ReadOnlySpan<byte> data, out bool ended)
         {
+            int at = LastRowStart(data);
+            int end = data[Math.Max(at, 0)..].IndexOf(sheetDataEnd);
+            if (end >= 0)
+            {
+                ended = true;
+                return Math.Max(at, 0) + end + sheetDataEnd.Length;
+            }
             ended = false;
+            return at;
+        }
+
+        private int LastRowStart(ReadOnlySpan<byte> data)
+        {
             ReadOnlySpan<byte> search = data;
             while (true)
             {
