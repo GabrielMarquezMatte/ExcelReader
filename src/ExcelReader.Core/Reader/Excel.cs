@@ -294,7 +294,7 @@ namespace ExcelReader.Core.Reader
         /// <see cref="SchemaInferenceOptions.SampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <see cref="SchemaInferenceOptions.HeaderRow"/>.</exception>
         /// <exception cref="InvalidOperationException"><see cref="SchemaInferenceOptions.HeaderRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, SchemaInferenceOptions? options = null)
+        public static IReadOnlyList<ExcelColumnSchema> InferSchema(IExcelSheet sheet, SchemaInferenceOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(sheet);
             options ??= SchemaInferenceOptions.Default;

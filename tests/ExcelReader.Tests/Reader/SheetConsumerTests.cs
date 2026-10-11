@@ -158,11 +158,11 @@ namespace ExcelReader.Tests.Reader
         public void InferSchema_Samples_The_Sheet_It_Is_Given()
         {
             using XlsxWorkbook workbook = Excel.FromXlsx(BuildXlsx());
-            ExcelColumnSchema[] schema = Excel.InferSchema(workbook.Sheets[1]);
-            Assert.Equal(2, schema.Length);
+            IReadOnlyList<ExcelColumnSchema> schema = Excel.InferSchema(workbook.Sheets[1]);
+            Assert.Equal(2, schema.Count);
             Assert.Equal("Name", schema[0].Name);
             Assert.Equal(ExcelColumnType.Int64Column, schema[1].Type);
-            Assert.Equal(schema.Length, Excel.InferSchema(workbook.Sheets[1], new SchemaInferenceOptions { SampleSize = 5 }).Length);
+            Assert.Equal(schema.Count, Excel.InferSchema(workbook.Sheets[1], new SchemaInferenceOptions { SampleSize = 5 }).Count);
             Assert.Throws<ArgumentNullException>(() => Excel.InferSchema((IExcelSheet)null!));
         }
 

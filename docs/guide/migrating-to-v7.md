@@ -101,7 +101,7 @@ These changes replace positional parameters and loose arguments with types that 
 | `ExcelParserConfig` | `ExcelParserOptions`; the `ExcelParser` factories' parameter is `options` |
 | `IExcelCellConverter<T>.TryConvert(in Cell, bool isDate1904, IFormatProvider provider, out T)` | `TryConvert(in Cell, in ExcelRowContext context, out T)` |
 | `ExcelCellReader<T>`, `ExcelRowParser<T>`, `ExcelCellReaders.*`: `(…, bool isDate1904, IFormatProvider provider, …)` | `(…, in ExcelRowContext context, …)` |
-| `Excel.InferSchema(sheet, headerRow, sampleSize, parseText)` | `Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = …, SampleSize = …, ParseText = … })` |
+| `Excel.InferSchema(sheet, headerRow, sampleSize, parseText)` returning `ExcelColumnSchema[]` | `Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = …, SampleSize = …, ParseText = … })` returning `IReadOnlyList<ExcelColumnSchema>` |
 | `new ExcelDataReader(sheet, headerRow)` | `new ExcelDataReader(sheet, new ExcelDataReaderOptions { HeaderRow = … })` |
 | `sheet.ToArrowRecordBatch(schema, headerRow)` | `sheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = schema, HeaderRow = … })` |
 | `WriteRecordBatch(batch, sheetName, writeHeader)` and the async form | `WriteRecordBatch(batch, new ArrowWriteOptions { SheetName = …, WriteHeader = … })` |
