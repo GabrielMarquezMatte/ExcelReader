@@ -183,40 +183,6 @@ ExcelReader.Core.Reader.IRowAccumulator<TSelf, TModel>.Merge(TSelf following) ->
 ExcelReader.Core.Reader.IRowRecord<TSelf>
 ExcelReader.Core.Reader.IRowRecord<TSelf>.TryParse(ExcelReader.Core.Reader.Row row, out TSelf record) -> bool
 ExcelReader.Core.Reader.Excel
-ExcelReader.Core.Reader.ExcelDataReader
-ExcelReader.Core.Reader.ExcelDataReader.Close() -> void
-ExcelReader.Core.Reader.ExcelDataReader.Depth.get -> int
-ExcelReader.Core.Reader.ExcelDataReader.Dispose() -> void
-ExcelReader.Core.Reader.ExcelDataReader.FieldCount.get -> int
-ExcelReader.Core.Reader.ExcelDataReader.GetBoolean(int i) -> bool
-ExcelReader.Core.Reader.ExcelDataReader.GetByte(int i) -> byte
-ExcelReader.Core.Reader.ExcelDataReader.GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) -> long
-ExcelReader.Core.Reader.ExcelDataReader.GetChar(int i) -> char
-ExcelReader.Core.Reader.ExcelDataReader.GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) -> long
-ExcelReader.Core.Reader.ExcelDataReader.GetData(int i) -> System.Data.IDataReader!
-ExcelReader.Core.Reader.ExcelDataReader.GetDataTypeName(int i) -> string!
-ExcelReader.Core.Reader.ExcelDataReader.GetDateTime(int i) -> System.DateTime
-ExcelReader.Core.Reader.ExcelDataReader.GetDecimal(int i) -> decimal
-ExcelReader.Core.Reader.ExcelDataReader.GetDouble(int i) -> double
-ExcelReader.Core.Reader.ExcelDataReader.GetFieldType(int i) -> System.Type!
-ExcelReader.Core.Reader.ExcelDataReader.GetFloat(int i) -> float
-ExcelReader.Core.Reader.ExcelDataReader.GetGuid(int i) -> System.Guid
-ExcelReader.Core.Reader.ExcelDataReader.GetInt16(int i) -> short
-ExcelReader.Core.Reader.ExcelDataReader.GetInt32(int i) -> int
-ExcelReader.Core.Reader.ExcelDataReader.GetInt64(int i) -> long
-ExcelReader.Core.Reader.ExcelDataReader.GetName(int i) -> string!
-ExcelReader.Core.Reader.ExcelDataReader.GetOrdinal(string! name) -> int
-ExcelReader.Core.Reader.ExcelDataReader.GetSchemaTable() -> System.Data.DataTable!
-ExcelReader.Core.Reader.ExcelDataReader.GetString(int i) -> string!
-ExcelReader.Core.Reader.ExcelDataReader.GetValue(int i) -> object!
-ExcelReader.Core.Reader.ExcelDataReader.GetValues(object![]! values) -> int
-ExcelReader.Core.Reader.ExcelDataReader.IsClosed.get -> bool
-ExcelReader.Core.Reader.ExcelDataReader.IsDBNull(int i) -> bool
-ExcelReader.Core.Reader.ExcelDataReader.NextResult() -> bool
-ExcelReader.Core.Reader.ExcelDataReader.Read() -> bool
-ExcelReader.Core.Reader.ExcelDataReader.RecordsAffected.get -> int
-ExcelReader.Core.Reader.ExcelDataReader.this[int i].get -> object!
-ExcelReader.Core.Reader.ExcelDataReader.this[string! name].get -> object!
 ExcelReader.Core.Reader.ExcelEncryptionException
 ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException() -> void
 ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException(ExcelReader.Core.Reader.ExcelEncryptionReason reason, string! message) -> void

@@ -70,11 +70,6 @@ static ExcelReader.Core.Reader.SheetParallel.ForEachAsync<TModel>(ExcelReader.Co
 static ExcelReader.Core.Reader.SheetParallel.ForEachAsync<TRecord>(ExcelReader.Core.Reader.IExcelSheet! sheet, System.Action<TRecord>! body, ExcelReader.Core.Reader.SheetParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 static ExcelReader.Core.Reader.SheetParallel.ParseAsync<T>(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Parser.ExcelParser<T>! parser, ExcelReader.Core.Reader.SheetParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<T>!
 static ExcelReader.Core.Reader.SheetParallelOptions.Default.get -> ExcelReader.Core.Reader.SheetParallelOptions!
-ExcelReader.Core.Reader.ExcelDataReader.ExcelDataReader(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.ExcelDataReaderOptions? options = null) -> void
-ExcelReader.Core.Reader.ExcelDataReaderOptions
-ExcelReader.Core.Reader.ExcelDataReaderOptions.ExcelDataReaderOptions() -> void
-ExcelReader.Core.Reader.ExcelDataReaderOptions.HeaderRow.get -> int
-ExcelReader.Core.Reader.ExcelDataReaderOptions.HeaderRow.init -> void
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.HeaderRow.get -> int
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.HeaderRow.init -> void
@@ -83,7 +78,6 @@ ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.ParseText.init -> void
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SampleSize.get -> int
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SampleSize.init -> void
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.SchemaInferenceOptions() -> void
-static ExcelReader.Core.Reader.ExcelDataReaderOptions.Default.get -> ExcelReader.Core.Reader.ExcelDataReaderOptions!
 static ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.Default.get -> ExcelReader.Core.Reader.Schema.SchemaInferenceOptions!
 ExcelReader.Core.Writer.Xls.XlsWriterOptions
 ExcelReader.Core.Writer.Xls.XlsWriterOptions.<Clone>$() -> ExcelReader.Core.Writer.Xls.XlsWriterOptions!
@@ -106,3 +100,43 @@ static ExcelReader.Core.Reader.Excel.FromCsvAsync(System.IO.Stream! stream, bool
 static ExcelReader.Core.Reader.Excel.FromCsvFile(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.Csv.CsvReader!
 static ExcelReader.Core.Reader.Excel.FromCsvFileAsync(string! path, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.Csv.CsvReader!>
 static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.Schema.SchemaInferenceOptions? options = null) -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.Schema.ExcelColumnSchema>!
+ExcelReader.Core.Reader.SheetDataReader
+ExcelReader.Core.Reader.SheetDataReader.Close() -> void
+ExcelReader.Core.Reader.SheetDataReader.Depth.get -> int
+ExcelReader.Core.Reader.SheetDataReader.Dispose() -> void
+ExcelReader.Core.Reader.SheetDataReader.FieldCount.get -> int
+ExcelReader.Core.Reader.SheetDataReader.GetBoolean(int i) -> bool
+ExcelReader.Core.Reader.SheetDataReader.GetByte(int i) -> byte
+ExcelReader.Core.Reader.SheetDataReader.GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) -> long
+ExcelReader.Core.Reader.SheetDataReader.GetChar(int i) -> char
+ExcelReader.Core.Reader.SheetDataReader.GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) -> long
+ExcelReader.Core.Reader.SheetDataReader.GetData(int i) -> System.Data.IDataReader!
+ExcelReader.Core.Reader.SheetDataReader.GetDataTypeName(int i) -> string!
+ExcelReader.Core.Reader.SheetDataReader.GetDateTime(int i) -> System.DateTime
+ExcelReader.Core.Reader.SheetDataReader.GetDecimal(int i) -> decimal
+ExcelReader.Core.Reader.SheetDataReader.GetDouble(int i) -> double
+ExcelReader.Core.Reader.SheetDataReader.GetFieldType(int i) -> System.Type!
+ExcelReader.Core.Reader.SheetDataReader.GetFloat(int i) -> float
+ExcelReader.Core.Reader.SheetDataReader.GetGuid(int i) -> System.Guid
+ExcelReader.Core.Reader.SheetDataReader.GetInt16(int i) -> short
+ExcelReader.Core.Reader.SheetDataReader.GetInt32(int i) -> int
+ExcelReader.Core.Reader.SheetDataReader.GetInt64(int i) -> long
+ExcelReader.Core.Reader.SheetDataReader.GetName(int i) -> string!
+ExcelReader.Core.Reader.SheetDataReader.GetOrdinal(string! name) -> int
+ExcelReader.Core.Reader.SheetDataReader.GetSchemaTable() -> System.Data.DataTable!
+ExcelReader.Core.Reader.SheetDataReader.GetString(int i) -> string!
+ExcelReader.Core.Reader.SheetDataReader.GetValue(int i) -> object!
+ExcelReader.Core.Reader.SheetDataReader.GetValues(object![]! values) -> int
+ExcelReader.Core.Reader.SheetDataReader.IsClosed.get -> bool
+ExcelReader.Core.Reader.SheetDataReader.IsDBNull(int i) -> bool
+ExcelReader.Core.Reader.SheetDataReader.NextResult() -> bool
+ExcelReader.Core.Reader.SheetDataReader.Read() -> bool
+ExcelReader.Core.Reader.SheetDataReader.RecordsAffected.get -> int
+ExcelReader.Core.Reader.SheetDataReader.SheetDataReader(ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.SheetDataReaderOptions? options = null) -> void
+ExcelReader.Core.Reader.SheetDataReader.this[int i].get -> object!
+ExcelReader.Core.Reader.SheetDataReader.this[string! name].get -> object!
+ExcelReader.Core.Reader.SheetDataReaderOptions
+ExcelReader.Core.Reader.SheetDataReaderOptions.HeaderRow.get -> int
+ExcelReader.Core.Reader.SheetDataReaderOptions.HeaderRow.init -> void
+ExcelReader.Core.Reader.SheetDataReaderOptions.SheetDataReaderOptions() -> void
+static ExcelReader.Core.Reader.SheetDataReaderOptions.Default.get -> ExcelReader.Core.Reader.SheetDataReaderOptions!

@@ -15,12 +15,12 @@ namespace ExcelReader.Core.Reader
     /// </summary>
     /// <remarks>
     /// The column shape is fixed once, at construction time, from the header row (or from the first data
-    /// row when <see cref="ExcelDataReaderOptions.HeaderRow"/> is 0) — it never grows as later, wider rows come in. There is no schema
+    /// row when <see cref="SheetDataReaderOptions.HeaderRow"/> is 0) — it never grows as later, wider rows come in. There is no schema
     /// pass, so <see cref="GetFieldType"/>, <see cref="GetValue"/>, and the typed getters all read the
     /// <em>current</em> row's own cell type; a consumer that builds a schema from the first
     /// <see cref="Read"/> (e.g. <c>DataTable.Load</c>) locks in that row's types for the whole load.
     /// <para>
-    /// One <see cref="ExcelDataReader"/> reads one sheet: <see cref="NextResult"/> always returns
+    /// One <see cref="SheetDataReader"/> reads one sheet: <see cref="NextResult"/> always returns
     /// <see langword="false"/>. To read every sheet, construct one per <see cref="IExcelWorkbook.SheetAt"/>.
     /// </para>
     /// <para>
@@ -28,7 +28,7 @@ namespace ExcelReader.Core.Reader
     /// from — the caller still owns that.
     /// </para>
     /// </remarks>
-    public sealed class ExcelDataReader : IDataReader
+    public sealed class SheetDataReader : IDataReader
     {
         private readonly IExcelRowEnumerator _rows;
         private readonly bool _isDate1904;
@@ -45,14 +45,14 @@ namespace ExcelReader.Core.Reader
         /// Wraps <paramref name="sheet"/>.
         /// </summary>
         /// <param name="sheet">The sheet to read. Its workbook stays owned by the caller.</param>
-        /// <param name="options">The header row; <see cref="ExcelDataReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="options">The header row; <see cref="SheetDataReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><see cref="ExcelDataReaderOptions.HeaderRow"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException"><see cref="ExcelDataReaderOptions.HeaderRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
-        public ExcelDataReader(IExcelSheet sheet, ExcelDataReaderOptions? options = null)
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="SheetDataReaderOptions.HeaderRow"/> is negative.</exception>
+        /// <exception cref="InvalidOperationException"><see cref="SheetDataReaderOptions.HeaderRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
+        public SheetDataReader(IExcelSheet sheet, SheetDataReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(sheet);
-            int headerRow = (options ?? ExcelDataReaderOptions.Default).HeaderRow;
+            int headerRow = (options ?? SheetDataReaderOptions.Default).HeaderRow;
             ArgumentOutOfRangeException.ThrowIfNegative(headerRow, nameof(options));
             if (headerRow > 0)
             {
@@ -364,7 +364,7 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public IDataReader GetData(int i)
         {
-            throw new NotSupportedException("ExcelDataReader has no nested result sets.");
+            throw new NotSupportedException("SheetDataReader has no nested result sets.");
         }
 
         /// <inheritdoc/>

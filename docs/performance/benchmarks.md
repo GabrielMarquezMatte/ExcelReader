@@ -253,7 +253,7 @@ Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes esse
 
 ### ADO.NET bridge (`IDataReader`)
 
-`DataReaderBenchmark`: the generated 50,000-row XLSX workbook (header plus four columns) read through [`ExcelDataReader`](../guide/reading.md#bridge-to-adonet-idatareader), against iterating the same rows directly. The reader is held as `IDataReader`, the way `SqlBulkCopy`, `DataTable.Load` and Dapper hold it.
+`DataReaderBenchmark`: the generated 50,000-row XLSX workbook (header plus four columns) read through [`SheetDataReader`](../guide/reading.md#bridge-to-adonet-idatareader), against iterating the same rows directly. The reader is held as `IDataReader`, the way `SqlBulkCopy`, `DataTable.Load` and Dapper hold it.
 
 | Access | Mean | Ratio | Allocated |
 |---|---:|---:|---:|
