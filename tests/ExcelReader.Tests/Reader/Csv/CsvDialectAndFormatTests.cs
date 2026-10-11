@@ -173,14 +173,11 @@ namespace ExcelReader.Tests.Reader.Csv
             string path = WriteTemp(sb.ToString());
             try
             {
-                var options = new CsvParallelOptions
-                {
-                    DegreeOfParallelism = 4,
-                    Reader = CsvReaderOptions.Default with { SniffDialect = true },
-                };
+                var options = new SheetParallelOptions { DegreeOfParallelism = 4 };
+                using CsvReader reader = Excel.FromCsvFile(path, CsvReaderOptions.Default with { SniffDialect = true });
 
                 var rows = new List<Person>();
-                await foreach (Person person in CsvParallel.ParseAsync(path, ExcelParser.FromAttributes<Person>(), options, ct: TestContext.Current.CancellationToken))
+                await foreach (Person person in SheetParallel.ParseAsync(reader.FirstSheet, ExcelParser.FromAttributes<Person>(), options, ct: TestContext.Current.CancellationToken))
                 {
                     rows.Add(person);
                 }

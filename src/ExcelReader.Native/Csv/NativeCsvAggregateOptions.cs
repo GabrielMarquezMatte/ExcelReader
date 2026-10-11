@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
 namespace ExcelReader.Native.Csv
@@ -30,9 +31,10 @@ namespace ExcelReader.Native.Csv
     {
         private const string OptionsName = "csv_parallel_options";
 
-        internal static int Translate(NativeCsvParallelOptionsRaw? raw, out CsvParallelOptions options)
+        internal static int Translate(NativeCsvParallelOptionsRaw? raw, out SheetParallelOptions options, out CsvReaderOptions reader)
         {
-            options = CsvParallelOptions.Default;
+            options = SheetParallelOptions.Default;
+            reader = CsvReaderOptions.Default;
             if (raw is null)
             {
                 return NativeStatus.Ok;
@@ -69,7 +71,6 @@ namespace ExcelReader.Native.Csv
                 return NativeStatus.InvalidArgument;
             }
 
-            CsvReaderOptions reader = CsvReaderOptions.Default;
             if (delimiter is byte d)
             {
                 reader = reader with { Delimiter = d };
@@ -87,11 +88,10 @@ namespace ExcelReader.Native.Csv
                 reader = reader with { MaxCellBytes = value.MaxCellBytes };
             }
 
-            options = new CsvParallelOptions
+            options = new SheetParallelOptions
             {
                 DegreeOfParallelism = value.DegreeOfParallelism,
                 HeaderRow = value.HeaderRow,
-                Reader = reader,
             };
             return NativeStatus.Ok;
         }
