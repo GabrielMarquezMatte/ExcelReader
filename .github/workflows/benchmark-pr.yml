@@ -67,7 +67,7 @@ jobs:
           cache-dependency-path: '**/*.csproj'
 
       - name: Build (Release)
-        run: dotnet build tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release
+        run: dotnet build tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release -p:RunAnalyzers=false
 
       - name: Check group coverage
         run: bash tests/ExcelReader.Benchmarks/check-benchmark-groups.sh
@@ -95,7 +95,7 @@ jobs:
         run: dotnet restore tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj
 
       - name: Build (Release)
-        run: dotnet build tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release --no-restore
+        run: dotnet build tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release --no-restore -p:RunAnalyzers=false
 
       - name: Run benchmarks
         run: |

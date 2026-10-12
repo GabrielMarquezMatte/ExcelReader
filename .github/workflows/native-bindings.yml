@@ -77,6 +77,8 @@ jobs:
 
       - name: Build the native library
         shell: bash
+        env:
+          RunAnalyzers: 'false'
         run: python python/scripts/build_native.py
 
       - name: Upload native library

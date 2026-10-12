@@ -76,7 +76,7 @@ jobs:
 
       - name: Publish harness
         run: |
-          dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out
+          dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out -p:RunAnalyzers=false
           chmod +x fuzz-out/ExcelReader.Fuzz
 
       - name: Generate seed corpus
@@ -159,7 +159,7 @@ jobs:
 
       - name: Build
         if: env.RUN == 'true'
-        run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release
+        run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -p:RunAnalyzers=false
 
       - name: Generate corpus
         if: env.RUN == 'true'

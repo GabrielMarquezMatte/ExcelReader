@@ -96,7 +96,7 @@ jobs:
         if: matrix.language == 'csharp'
         run: |
           for project in src/*/*.csproj; do
-            dotnet build "$project" --configuration Release
+            dotnet build "$project" --configuration Release -p:RunAnalyzers=false
           done
 
       - name: Perform CodeQL Analysis
