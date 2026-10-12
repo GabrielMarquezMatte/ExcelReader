@@ -44,4 +44,4 @@ invariant) without restating the evidence for it.
   Sep, Sylvan, OfficeIMO and SpreadCheetah.
 - `guide/` — usage documentation: [reading](./guide/reading.md),
   [parsing](./guide/parsing.md), [writing](./guide/writing.md), [csv](./guide/csv.md),
-  [encryption](./guide/encryption.md).
+  [encryption](./guide/encryption.md), [errors](./guide/errors.md).
