@@ -32,6 +32,14 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
   [STYLEGUIDE.md § Untrusted Input](STYLEGUIDE.md#untrusted-input) before touching a parser: every
   length, offset, and size read from the file must be bounded before it drives an allocation.
 
+- **Guide examples compile.** A C# block in `docs/guide` marked `<!-- snippet: name -->` is copied
+  from `#region name` in `docs/snippets`, which builds with the solution. Edit the region, then
+  rewrite the guides; CI fails if they differ:
+
+  ```bash
+  python docs/snippets/sync.py
+  ```
+
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`, imperative

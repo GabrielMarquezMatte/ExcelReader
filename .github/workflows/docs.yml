@@ -38,6 +38,10 @@ jobs:
         with:
           global-json-file: global.json
 
+      # The snippets themselves are compiled by ci.yml, which builds the whole solution.
+      - name: Check guide examples match docs/snippets
+        run: python3 docs/snippets/sync.py --check
+
       # Importing excelreader loads the native library lazily, so this needs only the sources.
       - name: Build Python API reference
         run: python3 python/scripts/api_markdown.py

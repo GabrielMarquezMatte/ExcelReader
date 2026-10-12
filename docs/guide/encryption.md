@@ -7,6 +7,7 @@ Reading and writing password-protected packages.
 Password-protected `.xlsx`/`.xlsb`/`.xlsm` files open through the same entry points — the password
 goes on the options, so every overload supports it:
 
+<!-- snippet: encryption-open -->
 ```csharp
 var options = new ExcelReaderOptions { Password = "hunter2" };
 using IExcelWorkbook workbook = Excel.Open("protected.xlsx", options);
@@ -16,6 +17,7 @@ foreach (Row row in workbook.FirstSheet) { /* ... */ }
 [`ExcelEncryptionException.Reason`](xref:ExcelReader.Core.Reader.ExcelEncryptionException.Reason) tells you what to do about a failure — only `PasswordRequired` and
 `PasswordIncorrect` are worth re-prompting for:
 
+<!-- snippet: encryption-reason -->
 ```csharp
 try
 {
@@ -44,6 +46,7 @@ fails loudly on corrupt ciphertext (the plaintext stops being a valid ZIP), but 
 by someone who can modify the file is not detected. Set it to `true` whenever the workbook comes from
 somewhere you do not control and you care that it was not altered:
 
+<!-- snippet: encryption-verify-integrity -->
 ```csharp
 var options = new ExcelReaderOptions
 {
@@ -64,6 +67,7 @@ Writing an encrypted workbook is a second step: build the package with any write
 [`Excel.EncryptPackage`](xref:ExcelReader.Core.Reader.Excel.EncryptPackage*), which produces an agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC,
 SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC.
 
+<!-- snippet: encryption-write -->
 ```csharp
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;

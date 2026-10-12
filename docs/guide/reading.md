@@ -5,6 +5,7 @@ See also [parsing.md](parsing.md) for binding rows to types, and [csv.md](csv.md
 
 ## Read rows
 
+<!-- snippet: reading-read-rows -->
 ```csharp
 using ExcelReader.Core.Reader;
 
@@ -32,6 +33,7 @@ An opened workbook ([`XlsxWorkbook`](xref:ExcelReader.Core.Reader.Xlsx.XlsxWorkb
 
 [`SheetParallel`](xref:ExcelReader.Core.Reader.SheetParallel) reads one sheet on several threads. It takes any sheet, so it works the same on XLSX, XLSB and CSV:
 
+<!-- snippet: reading-parallel-parse -->
 ```csharp
 using XlsxWorkbook workbook = Excel.FromXlsxFile("big.xlsx");
 
@@ -57,11 +59,12 @@ Both of the next two examples read a `ref struct` model, so text columns stay as
 
 A fold over an XLSX sheet, with one accumulator per partition merged in sheet order:
 
+<!-- snippet: reading-parallel-aggregate -->
 ```csharp
 public ref struct SaleRow
 {
     [ExcelColumn("Region")] public ReadOnlySpan<byte> Region { get; set; }
-    [ExcelColumn("Units")]  public int Units { get; set; }
+    [ExcelColumn("Units")] public int Units { get; set; }
 }
 
 public sealed class UnitTotal : IRowAccumulator<UnitTotal, SaleRow>
@@ -85,6 +88,7 @@ The same call takes a [`RowAggregation<TState>`](xref:ExcelReader.Core.Reader.Ro
 
 A per-row callback:
 
+<!-- snippet: reading-parallel-foreach -->
 ```csharp
 using XlsxWorkbook workbook = Excel.FromXlsxFile("big.xlsx");
 
@@ -133,6 +137,7 @@ Properties need setters. A get-only property is skipped during binding and silen
 dotnet add package ExcelReader.Arrow
 ```
 
+<!-- snippet: reading-arrow-read -->
 ```csharp
 using ExcelReader.Arrow;
 using ExcelReader.Core.Reader;
@@ -145,6 +150,7 @@ The schema defaults to [`Excel.InferSchema`](xref:ExcelReader.Core.Reader.Excel.
 
 `WriteRecordBatch`/`WriteRecordBatchAsync` are the write-side mirror — one call from a `RecordBatch` to a sheet, for XLSX, XLSB, XLS, and CSV:
 
+<!-- snippet: reading-arrow-write -->
 ```csharp
 using ExcelReader.Arrow;
 using ExcelReader.Core.Writer;
@@ -160,6 +166,7 @@ Supports string, large string, string view, every integer width (signed and unsi
 
 [`Excel.Open`](xref:ExcelReader.Core.Reader.Excel.Open*) picks the workbook type from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an [`IExcelWorkbook`](xref:ExcelReader.Core.Reader.IExcelWorkbook). `FirstSheet` gives the first sheet, and a sheet iterates its rows directly, so no pattern-match is needed for basic row iteration.
 
+<!-- snippet: reading-open -->
 ```csharp
 using ExcelReader.Core.Reader;
 
@@ -173,6 +180,7 @@ foreach (var row in workbook.FirstSheet)
 
 `SheetCount`, `SheetAt(index)` and `TryGetSheet(name)` are on `IExcelWorkbook` itself, so you can walk every sheet without knowing the format. Each [`IExcelSheet`](xref:ExcelReader.Core.Reader.IExcelSheet) carries its own `Index`, `Name` and `Visibility`:
 
+<!-- snippet: reading-open-every-sheet -->
 ```csharp
 using IExcelWorkbook workbook = Excel.Open("report.xlsx");
 
@@ -189,6 +197,7 @@ for (int i = 0; i < workbook.SheetCount; i++)
 
 `TryGetSheet` matches a name ignoring case and opens nothing:
 
+<!-- snippet: reading-open-try-get-sheet -->
 ```csharp
 if (workbook.TryGetSheet("Totals", out var totals))
 {
@@ -203,6 +212,7 @@ When you open a format directly ([`Excel.FromXlsxFile`](xref:ExcelReader.Core.Re
 
 `Visibility` reports whether a sheet is shown in the workbook's tab bar, read from the format's own encoding of it (XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState`). It is reported, never enforced — a hidden sheet enumerates its rows like any other, so converters and exporters filter on it themselves:
 
+<!-- snippet: reading-open-visibility -->
 ```csharp
 using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
 
@@ -225,6 +235,7 @@ CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `Name == ""`, alwa
 
 Detection covers the signed formats only. To open a source whose format you already know — including CSV, which has no signature to detect — pass an [`ExcelFileFormat`](xref:ExcelReader.Core.Reader.ExcelFileFormat) and let [`ExcelReaderOptions.Csv`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.Csv) carry the dialect; see [CSV](csv.md#read-csv).
 
+<!-- snippet: reading-open-csv -->
 ```csharp
 using IExcelWorkbook workbook = Excel.Open("report.csv", ExcelFileFormat.Csv);
 ```
@@ -236,11 +247,12 @@ and creation, and found by name with `TryGetTable`, ignoring case. XLSX/XLSM and
 and CSV always report none. `AsSheet()` reads only the table: its header row first, then its data rows
 without the totals row, each cut to the table's columns, so it plugs into anything that takes a sheet.
 
+<!-- snippet: reading-table -->
 ```csharp
 using IExcelWorkbook workbook = Excel.Open("sales.xlsx");
 if (workbook.TryGetTable("Sales", out ExcelTable? sales))
 {
-    foreach (SaleRow row in ExcelParser.FromAttributes<SaleRow>().Parse(sales.AsSheet()))
+    foreach (ProductRow row in ExcelParser.FromAttributes<ProductRow>().Parse(sales.AsSheet()))
     {
         Console.WriteLine($"{row.Product}: {row.Qty}");
     }
@@ -263,6 +275,7 @@ if (workbook.TryGetTable("Sales", out ExcelTable? sales))
 
 This is one thread per sheet. To read a single sheet on several threads, see [Parallel reading](#parallel-reading-opt-in). Each sheet of a workbook can be read on its own thread:
 
+<!-- snippet: reading-sheets-in-parallel -->
 ```csharp
 using XlsxWorkbook workbook = Excel.FromXlsxFile(path);
 
@@ -288,6 +301,7 @@ Disposing the workbook closes it to new sheets and enumerators; its file or stre
 
 Every sheet supports `await foreach`. For XLSX files, the async enumerator buffers one row at a time and uses the same row parser as the synchronous enumerator, so sync and async reads stay behaviorally aligned while awaits happen only when more bytes are needed.
 
+<!-- snippet: reading-async -->
 ```csharp
 using ExcelReader.Core.Reader;
 
@@ -303,6 +317,7 @@ await foreach (var row in workbook.FirstSheet)
 
 `await foreach` does not accept `.WithCancellation(ct)`: `Row` being a `ref struct` rules out `IAsyncEnumerable<Row>`, so the loop binds to the pattern rather than the interface. To pass a token, or to `await` while a row is in scope, drive the enumerator manually:
 
+<!-- snippet: reading-async-enumerator -->
 ```csharp
 await using var workbook = await Excel.FromXlsxFileAsync("report.xlsx", ct: cancellationToken);
 await using var rows = workbook.FirstSheet.GetAsyncEnumerator(cancellationToken);
@@ -324,6 +339,7 @@ two: a background thread inflates ahead while the calling thread parses. It is *
 defaults to `false`**, and only affects XLSX/XLSB — XLS and CSV have nothing to
 decompress, so the option is silently ignored for them.
 
+<!-- snippet: reading-prefetch -->
 ```csharp
 var options = new ExcelReaderOptions { PrefetchDecompression = true };
 using var workbook = Excel.FromXlsxFile("report.xlsx", options);
@@ -361,6 +377,7 @@ Writing has the same option, under a different name: see
 
 `SheetDataReader` adapts one `IExcelSheet` to `System.Data.IDataReader`, so it drops straight into `SqlBulkCopy`, `DataTable.Load`, Dapper, or any other ADO.NET consumer:
 
+<!-- snippet: reading-data-reader -->
 ```csharp
 using System.Data;
 using ExcelReader.Core.Reader;

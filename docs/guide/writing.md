@@ -5,6 +5,7 @@ typed records, and prefetch compression. See [csv.md](csv.md) for CSV output.
 
 ## Write XLSX workbooks
 
+<!-- snippet: writing-xlsx -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
@@ -35,6 +36,7 @@ await workbook.EndAsync();
 By default, the XLSX writer emits inline strings to keep memory usage flat while rows stream out.
 If your workbook repeats many strings and smaller files matter more than the extra lookup table, opt in to shared strings:
 
+<!-- snippet: writing-xlsx-shared-strings -->
 ```csharp
 await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = true });
 ```
@@ -43,12 +45,13 @@ await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWr
 
 Every [`IWorkbookWriter<TSheet>`](xref:ExcelReader.Core.Writer.IWorkbookWriter%601) takes an optional [`ExcelSheetVisibility`](xref:ExcelReader.Core.ExcelSheetVisibility) alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`IExcelSheet.Visibility`](reading.md#open-by-auto-detecting-the-format):
 
+<!-- snippet: writing-hidden-sheets -->
 ```csharp
 using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
 
-await using var data = workbook.AddSheet("Data");                                 // visible
-await using var lookups = workbook.AddSheet("Lookups", ExcelSheetVisibility.Hidden);
-await using var audit = workbook.AddSheet("Audit", ExcelSheetVisibility.VeryHidden); // not in Excel's unhide dialog
+await using (var data = workbook.AddSheet("Data")) { /* rows */ } // visible
+await using (var lookups = workbook.AddSheet("Lookups", ExcelSheetVisibility.Hidden)) { /* rows */ }
+await using (var audit = workbook.AddSheet("Audit", ExcelSheetVisibility.VeryHidden)) { /* rows */ } // not in Excel's unhide dialog
 ```
 
 A workbook whose sheets are *all* hidden is rejected when it is ended (`InvalidOperationException`): the formats allow it, but Excel reports such a file as damaged, so it is caught at write time rather than shipped to a user. CSV accepts the argument and ignores it — delimited text has no tab bar to hide from.
@@ -57,6 +60,7 @@ A workbook whose sheets are *all* hidden is rejected when it is ended (`InvalidO
 
 Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a [`CellStyle`](xref:ExcelReader.Core.Writer.CellStyle) once with `AddStyle` and apply its returned index to a column (before the first row) or to a whole row (when starting it):
 
+<!-- snippet: writing-styles -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
@@ -92,6 +96,7 @@ Cell-level styling (one specific cell rather than a whole column or row) is out 
 
 Use [`Excel.FromXlsbFile`](xref:ExcelReader.Core.Reader.Excel.FromXlsbFile*), [`Excel.FromXlsb`](xref:ExcelReader.Core.Reader.Excel.FromXlsb*), [`Excel.FromXlsbFileAsync`](xref:ExcelReader.Core.Reader.Excel.FromXlsbFileAsync*), or [`Excel.FromXlsbAsync`](xref:ExcelReader.Core.Reader.Excel.FromXlsbAsync*) to open XLSB directly. For writing, use [`XlsbWorkbookWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter), [`XlsbSheetWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter), and [`XlsbRowWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbRowWriter).
 
+<!-- snippet: writing-xlsb -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsb;
@@ -118,6 +123,7 @@ The XLSB writer also defaults to inline string cells. Set [`XlsbWriterOptions.Us
 
 [`XlsWorkbookWriter`](xref:ExcelReader.Core.Writer.Xls.XlsWorkbookWriter) emits a binary BIFF8 `.xls` file. The sheet and row APIs are synchronous; only the final `EndAsync` (which assembles and flushes the OLE container) is async. BIFF8 is capped at 65,536 rows × 256 columns per sheet.
 
+<!-- snippet: writing-xls -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xls;
@@ -149,6 +155,7 @@ await workbook.EndAsync();
 
 The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `sheet.WriteRecordsAsync(records, layout)` writes a header row followed by one row per record, with the columns coming from an [`ExcelRecordLayout<T>`](xref:ExcelReader.Core.Writer.ExcelRecordLayout%601). `ExcelRecordLayout.FromAttributes<T>()` maps each public readable property to a column by reflection. It is an extension on [`ISheetWriter<TRow>`](xref:ExcelReader.Core.Writer.ISheetWriter%601), so the same call works on a sheet from any of the writers above — XLSX, XLSB, XLS, and CSV.
 
+<!-- snippet: writing-records -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
@@ -194,22 +201,24 @@ and opens a table there; every row written until `EndTable` (or the end of the s
 file opens in Excel already formatted as a table, with filter buttons and the chosen built-in style, and
 reads back through [`IExcelWorkbook.Tables`](xref:ExcelReader.Core.Reader.IExcelWorkbook.Tables).
 
+<!-- snippet: writing-table -->
 ```csharp
 using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("report.xlsx"));
 XlsxSheetWriter sheet = workbook.AddSheet("Report");
-sheet.BeginTable("Sales", ["Product", "Qty", "Price"]);
+sheet.BeginTable("Sales", ["Region", "Units", "Revenue"]);
 foreach (Sale s in sales)
 {
     using XlsxRowWriter row = sheet.StartRow();
-    row.Write(s.Product);
-    row.Write(s.Qty);
-    row.Write(s.Price);
+    row.Write(s.Region);
+    row.Write(s.Units);
+    row.Write(s.Revenue);
 }
 sheet.EndTable();
 ```
 
 For records, `WriteTableAsync` does all three steps with the same layouts as `WriteRecordsAsync`:
 
+<!-- snippet: writing-table-records -->
 ```csharp
 await sheet.WriteTableAsync(sales, "Sales", ExcelRecordLayout.FromAttributes<Sale>());
 ```
@@ -232,6 +241,7 @@ and by default that happens on the calling thread. Set `PrefetchWrite` on the wr
 onto a background thread, so the caller keeps building the next batch of rows while the previous one
 compresses:
 
+<!-- snippet: writing-prefetch -->
 ```csharp
 await using var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true });
 XlsxSheetWriter sheet = wb.AddSheet("S1");
