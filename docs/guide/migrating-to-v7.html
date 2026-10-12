@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Migrating from v6 to v7 | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Migrating from v6 to v7 | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/migrating-to-v7.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="migrating-from-v6-to-v7">Migrating from v6 to v7</h1>
+
+<p>What changed in parallel reading and in the rest of the public API, and how to port v6 code.
+See also <a href="reading.html#parallel-reading-opt-in">reading.md</a> for the full guide.</p>
+<h2 id="what-changed">What changed</h2>
+<p>Parallel reading now takes a sheet, and it works on XLSX and XLSB as well as CSV. <code>CsvParallel</code> is gone: its eighteen path, memory and stream methods became six <a class="xref" href="../../api/ExcelReader.Core.Reader.SheetParallel.html"><code>SheetParallel</code></a> methods that take any <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet.html"><code>IExcelSheet</code></a>. You open the workbook yourself, pass its sheet, and the library parallelises as far as the format allows. The contract types lost their <code>Csv</code> prefix because they now serve every format.</p>
+<h2 id="types">Types</h2>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CsvParallel</code></td>
+<td><code>SheetParallel</code></td>
+</tr>
+<tr>
+<td><code>CsvParallelOptions</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.SheetParallelOptions.html"><code>SheetParallelOptions</code></a> (no <code>Reader</code> property)</td>
+</tr>
+<tr>
+<td><code>ICsvRecord&lt;TSelf&gt;</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.IRowRecord-1.html"><code>IRowRecord&lt;TSelf&gt;</code></a></td>
+</tr>
+<tr>
+<td><code>ICsvAccumulator&lt;TSelf, TModel&gt;</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.IRowAccumulator-2.html"><code>IRowAccumulator&lt;TSelf, TModel&gt;</code></a></td>
+</tr>
+<tr>
+<td><code>CsvAggregation&lt;TState&gt;</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.RowAggregation-1.html"><code>RowAggregation&lt;TState&gt;</code></a></td>
+</tr>
+<tr>
+<td><code>CsvRowAction&lt;TState&gt;</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.RowAction-1.html"><code>RowAction&lt;TState&gt;</code></a></td>
+</tr>
+</tbody>
+</table>
+<p>The old names are removed, with no <code>[Obsolete]</code> forwarders. Members, contracts and results are unchanged.</p>
+<h2 id="before-and-after">Before and after</h2>
+<p>A CSV file:</p>
+<pre><code class="lang-csharp">// v6
+await foreach (Sale s in CsvParallel.ParseAsync(path, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }))
+{
+    Total += s.Revenue;
+}
+
+// v7
+using CsvReader csv = Excel.FromCsvFile(path, new ExcelReaderOptions { Csv = options });
+await foreach (Sale s in SheetParallel.ParseAsync(csv.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 8 }))
+{
+    Total += s.Revenue;
+}
+</code></pre>
+<p>CSV bytes in memory:</p>
+<pre><code class="lang-csharp">// v6
+await foreach (Sale s in CsvParallel.ParseAsync(data, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }))
+{
+    Total += s.Revenue;
+}
+
+// v7
+using CsvReader csv = Excel.FromCsv(data, new ExcelReaderOptions { Csv = options });
+await foreach (Sale s in SheetParallel.ParseAsync(csv.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 8 }))
+{
+    Total += s.Revenue;
+}
+</code></pre>
+<p>A stream:</p>
+<pre><code class="lang-csharp">// v6
+await foreach (Sale s in CsvParallel.ParseAsync(stream, parser, new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }))
+{
+    Total += s.Revenue;
+}
+
+// v7
+using CsvReader csv = Excel.FromCsv(stream, leaveOpen: true, new ExcelReaderOptions { Csv = options });
+await foreach (Sale s in SheetParallel.ParseAsync(csv.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 8 }))
+{
+    Total += s.Revenue;
+}
+</code></pre>
+<p>The other five methods port the same way: open a workbook, pass <code>csv.FirstSheet</code> (or any sheet) in place of the path, bytes or stream, and drop <code>Reader</code> from the options. XLSX and XLSB need no other change:</p>
+<pre><code class="lang-csharp">using XlsxWorkbook workbook = Excel.FromXlsxFile(&quot;big.xlsx&quot;);
+await foreach (Sale s in SheetParallel.ParseAsync(workbook.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 8 }))
+{
+    Total += s.Revenue;
+}
+</code></pre>
+<h2 id="behavior-changes">Behavior changes</h2>
+<ul>
+<li>The caller owns the workbook and keeps it open until the task completes or the enumeration ends. v6 opened and closed its own source.</li>
+<li>The CSV dialect is given when the workbook is opened (<a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv"><code>ExcelReaderOptions.Csv</code></a>), not in the parallel options.</li>
+<li>A CSV in a <code>MemoryStream</code> is no longer partitioned: the stream overload of <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromCsv_"><code>Excel.FromCsv</code></a> reads it sequentially. Pass the bytes as <code>ReadOnlyMemory&lt;byte&gt;</code> to keep partitioning.</li>
+<li><code>HeaderRow</code> rules are the same as v6. <code>ParseAsync</code> takes the header from <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_HeaderRow"><code>ExcelParserOptions.HeaderRow</code></a> and rejects a non-zero <a class="xref" href="../../api/ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow"><code>SheetParallelOptions.HeaderRow</code></a>; the parser-based <code>ForEachAsync</code> and <code>AggregateAsync</code> use <code>SheetParallelOptions.HeaderRow</code>.</li>
+<li>XLSX and XLSB sheets are now read on several threads when <code>DegreeOfParallelism</code> allows it. XLS, a table view (<code>ExcelTable.AsSheet()</code>), a sheet under 256 KB uncompressed and a CSV that cannot be partitioned still read sequentially with the same results.</li>
+<li><code>PrefetchDecompression</code> does not apply to a parallel XLSX or XLSB read; the pipeline already overlaps inflate and parse.</li>
+</ul>
+<h2 id="other-breaking-changes">Other breaking changes</h2>
+<p>These changes replace positional parameters and loose arguments with types that can grow without another break.</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ExcelParserConfig</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParserOptions.html"><code>ExcelParserOptions</code></a>; the <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParser.html"><code>ExcelParser</code></a> factories' parameter is <code>options</code></td>
+</tr>
+<tr>
+<td><code>IExcelCellConverter&lt;T&gt;.TryConvert(in Cell, bool isDate1904, IFormatProvider provider, out T)</code></td>
+<td><code>TryConvert(in Cell, in ExcelRowContext context, out T)</code></td>
+</tr>
+<tr>
+<td><code>ExcelCellReader&lt;T&gt;</code>, <code>ExcelRowParser&lt;T&gt;</code>, <code>ExcelCellReaders.*</code>: <code>(…, bool isDate1904, IFormatProvider provider, …)</code></td>
+<td><code>(…, in ExcelRowContext context, …)</code></td>
+</tr>
+<tr>
+<td><code>Excel.InferSchema(sheet, headerRow, sampleSize, parseText)</code> returning <code>ExcelColumnSchema[]</code></td>
+<td><code>Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = …, SampleSize = …, ParseText = … })</code> returning <code>IReadOnlyList&lt;ExcelColumnSchema&gt;</code></td>
+</tr>
+<tr>
+<td><code>new ExcelDataReader(sheet, headerRow)</code></td>
+<td><code>new SheetDataReader(sheet, new SheetDataReaderOptions { HeaderRow = … })</code></td>
+</tr>
+<tr>
+<td><code>sheet.ToArrowRecordBatch(schema, headerRow)</code></td>
+<td><code>sheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = schema, HeaderRow = … })</code></td>
+</tr>
+<tr>
+<td><code>WriteRecordBatch(batch, sheetName, writeHeader)</code> and the async form</td>
+<td><code>WriteRecordBatch(batch, new ArrowWriteOptions { SheetName = …, WriteHeader = … })</code></td>
+</tr>
+<tr>
+<td><code>XlsWorkbookWriter.Create(stream, leaveOpen, date1904)</code></td>
+<td><code>XlsWorkbookWriter.Create(stream, leaveOpen, new XlsWriterOptions { Date1904 = … })</code></td>
+</tr>
+<tr>
+<td><code>Excel.FromCsv*(…, CsvReaderOptions options)</code></td>
+<td><code>Excel.FromCsv*(…, new ExcelReaderOptions { Csv = options })</code></td>
+</tr>
+<tr>
+<td><code>CsvReaderOptions.MaxCellBytes</code>, <code>CsvReaderOptions.InternStrings</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_MaxCellBytes"><code>ExcelReaderOptions.MaxCellBytes</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_InternStrings"><code>ExcelReaderOptions.InternStrings</code></a></td>
+</tr>
+<tr>
+<td><code>CellType.Formula</code></td>
+<td>Removed. A formula cell reports its cached result's type: <code>Number</code>, <code>Date</code>, <code>ExcelString</code>, <code>Boolean</code> or <code>Error</code></td>
+</tr>
+<tr>
+<td><code>ExcelDataReader</code> (its name collided with Sylvan.Data.Excel and the ExcelDataReader package)</td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.SheetDataReader.html"><code>SheetDataReader</code></a></td>
+</tr>
+<tr>
+<td><code>Cell.TryGetDateTime(out DateTime)</code>, which silently assumed the 1900 date system</td>
+<td><code>Cell.TryGetDateTime(workbook.IsDate1904, out DateTime)</code></td>
+</tr>
+</tbody>
+</table>
+<p>A converter reads the date system and culture from the context:</p>
+<pre><code class="lang-csharp">// v6
+public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out decimal value)
+    =&gt; decimal.TryParse(cell.GetString(), NumberStyles.Currency, provider, out value);
+
+// v7
+public bool TryConvert(in Cell cell, in ExcelRowContext context, out decimal value)
+    =&gt; decimal.TryParse(cell.GetString(), NumberStyles.Currency, context.FormatProvider, out value);
+</code></pre>
+<p>To unit-test a converter, build the context with an initializer: <code>new ExcelRowContext { IsDate1904 = false, FormatProvider = CultureInfo.InvariantCulture }</code>.</p>
+<p>Two behavior changes come with them:</p>
+<ul>
+<li><a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_"><code>Excel.Open</code></a> with <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv"><code>ExcelFileFormat.Csv</code></a> now applies <code>ExcelReaderOptions.MaxCellBytes</code> and <code>InternStrings</code>. v6 ignored both and used the CSV defaults.</li>
+<li>Formula cells are typed by their cached result in every format. v6 reported an XLSX text result and an XLS numeric result as <code>Formula</code>, so an XLS formula with a date style lost its <code>Date</code> type, and XLSB never used <code>Formula</code>.</li>
+<li>The CLI <code>convert</code> command no longer shifts dates by four years when the source workbook uses the 1904 date system.</li>
+<li><a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.html"><code>XlsxWriterOptions</code></a> gains <code>Date1904</code>, which v6 lacked. It defaults to <code>false</code>, so existing output is unchanged.</li>
+</ul>
+<h2 id="native-bindings">Native bindings</h2>
+<p>The C ABI is unchanged: no signature moved, and <code>XL_ABI_VERSION</code> stays 6. Behavior changed. <code>degree_of_parallelism</code> of <code>0</code> on <code>xl_parse_typed</code> and the Arrow exports now parallelises XLSX and XLSB as well as CSV, using every processor. Pass <code>1</code> for the old sequential behavior. The Rust, Python and C++ bindings take the same value (<code>degree_of_parallelism</code>, <code>parallelism</code>) and need no code change; a <code>parallelism=0</code> call on an XLSX or XLSB sheet is now faster, and holds every partition's columns until they merge, so its peak memory is higher.</p>
+<p><code>XL_CELL_FORMULA</code> (5) is no longer produced; formula cells come back with their result's cell type. The constant stays defined in the header and in the bindings.</p>
+<p><code>xl_write_options.date1904</code> now applies to XLSX as well as XLSB and XLS; v6 ignored it for XLSX.</p>
+<p><code>xl_csv_aggregate</code> keeps its signature. Inside, it opens a <a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvReader.html"><code>CsvReader</code></a> with the dialect from the native struct and calls <code>SheetParallel</code>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/migrating-to-v7.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

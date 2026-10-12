@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Typed parsing | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Typed parsing | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/parsing.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="typed-parsing">Typed parsing</h1>
+
+<p>Binding worksheet or CSV rows to your own types: attributes, the compile-time
+generator, the fluent API, converters, and the zero-copy <code>ref struct</code> path.</p>
+<h2 id="parse-typed-rows">Parse typed rows</h2>
+<p><code>ExcelParser.FromAttributes&lt;T&gt;()</code> maps worksheet columns to the public settable properties of <code>T</code>. Columns match on the property name, or on <code>[ExcelColumn(&quot;header&quot;)]</code> aliases — repeat the attribute to accept several headers. The first row is the header by default.</p>
+<!-- snippet: parsing-attributes -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+public sealed class ChangeRow
+{
+    [ExcelColumn(&quot;file&quot;)]
+    public string File { get; set; } = &quot;&quot;;
+
+    [ExcelColumn(&quot;lines_added&quot;)]
+    public int LinesAdded { get; set; }
+}
+
+using var workbook = Excel.FromXlsxFile(&quot;changes.xlsx&quot;);
+var parser = ExcelParser.FromAttributes&lt;ChangeRow&gt;();
+
+foreach (var item in parser.Parse(workbook.FirstSheet))
+{
+    Console.WriteLine($&quot;{item.File}: +{item.LinesAdded}&quot;);
+}
+</code></pre>
+<p>Built-in property types: <code>string</code>, <code>bool</code>, <code>DateTime</code>, <code>DateOnly</code>, <code>TimeOnly</code>, <code>TimeSpan</code>, <code>DateTimeOffset</code>, <code>Guid</code>, <code>char</code>, every integral and floating type plus <code>decimal</code>, and <code>enum</code>s (matched by member name or numeric value). Each also works as a <code>Nullable&lt;T&gt;</code>. Empty cells leave the property at its default; an unparseable cell is skipped (keeps the default) unless the column is required. <code>T</code> needs no parameterless-constructor constraint, so models with <code>required</code> members are supported, through both <code>FromAttributes</code> and the source generator. <code>required</code> alone does not make a column mandatory; that is what <code>[ExcelRequired]</code> does.</p>
+<p><code>Parse</code> also accepts the <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet.html"><code>IExcelSheet</code></a> of the <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelWorkbook.html"><code>IExcelWorkbook</code></a> from <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_"><code>Excel.Open</code></a>, so you can parse without knowing the concrete format:</p>
+<!-- snippet: parsing-attributes-open -->
+<pre><code class="lang-csharp">using IExcelWorkbook workbook = Excel.Open(&quot;changes.xlsx&quot;); // or .xlsb / .xls
+foreach (var item in ExcelParser.FromAttributes&lt;ChangeRow&gt;().Parse(workbook.FirstSheet)) { /* ... */ }
+</code></pre>
+<h2 id="generate-typed-maps-at-compile-time-native-aot--trimming">Generate typed maps at compile time (Native AOT / trimming)</h2>
+<p><a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_FromAttributes_"><code>ExcelParser.FromAttributes&lt;T&gt;</code></a> and <a class="xref" href="../../api/ExcelReader.Core.Writer.ExcelRecordLayout.html#ExcelReader_Core_Writer_ExcelRecordLayout_FromAttributes_"><code>ExcelRecordLayout.FromAttributes&lt;T&gt;</code></a> reflect over <code>T</code> (<code>GetProperties</code>, <code>MakeGenericMethod</code>), which trimming can break and Native AOT cannot run at all. The raw <code>Excel.From*</code> readers already use no reflection; mark a model <code>[ExcelSerializable]</code> to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own <code>[ExcelColumn]</code>/<code>[ExcelRequired]</code>/<code>[ExcelConverter]</code>/<code>[ExcelIgnore]</code> attributes, and <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Generated_"><code>ExcelParser.Generated&lt;T&gt;</code></a>/<a class="xref" href="../../api/ExcelReader.Core.Writer.ExcelRecordLayout.html#ExcelReader_Core_Writer_ExcelRecordLayout_Generated_"><code>ExcelRecordLayout.Generated&lt;T&gt;</code></a> read and write through that map instead of reflection:</p>
+<!-- snippet: parsing-generated -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
+
+[ExcelSerializable]                       // the model must be declared partial
+public partial class ChangeRow
+{
+    [ExcelColumn(&quot;file&quot;)]
+    public string File { get; set; } = &quot;&quot;;
+
+    [ExcelColumn(&quot;lines_added&quot;)]
+    public int LinesAdded { get; set; }
+}
+
+using var workbook = Excel.FromXlsxFile(&quot;changes.xlsx&quot;);
+foreach (var item in ExcelParser.Generated&lt;ChangeRow&gt;().Parse(workbook.FirstSheet))
+{
+    Console.WriteLine($&quot;{item.File}: +{item.LinesAdded}&quot;);
+}
+
+var changes = new[] { new ChangeRow { File = &quot;README.md&quot;, LinesAdded = 12 } };
+await using var stream = File.Create(&quot;changes.xlsx&quot;);
+await using var writer = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
+await using (var sheet = writer.AddSheet(&quot;Changes&quot;))
+{
+    await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated&lt;ChangeRow&gt;());
+}
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>[ExcelSerializable]</code> requires the model — and every type it's nested inside, if any — to be <code>partial</code>; the generator emits into an additional part of the same declaration. A compile error (<code>EXR001</code>/<code>EXR002</code>) names exactly what to fix.</li>
+<li>Supported property types match <code>ExcelParser.FromAttributes&lt;T&gt;</code>'s: <code>string</code>, <code>bool</code>, <code>DateTime</code>, <code>DateOnly</code>, <code>TimeOnly</code>, <code>TimeSpan</code>, <code>DateTimeOffset</code>, <code>Guid</code>, <code>char</code>, every integral and floating type plus <code>decimal</code>, <code>enum</code>s, and <code>Nullable&lt;T&gt;</code> of each — plus <code>ReadOnlySpan&lt;byte&gt;</code>, which binds zero-copy through <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelCellReaders.html#ExcelReader_Core_Parser_ExcelCellReaders_Utf8_"><code>ExcelCellReaders.Utf8</code></a>. The model may be a <code>ref struct</code>: mark it <code>ref partial struct</code> and the generator emits <a class="xref" href="../../api/ExcelReader.Core.Parser.IExcelRowMap-1.html"><code>IExcelRowMap&lt;T&gt;</code></a> on it like any other shape, so <code>ExcelParser.Generated&lt;T&gt;</code> and <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Build_"><code>ExcelParser.Build&lt;T&gt;</code></a> read it AOT-clean, as do the map-driven <a class="xref" href="../../api/ExcelReader.Core.Reader.SheetParallel.html#ExcelReader_Core_Reader_SheetParallel_ForEachAsync_"><code>SheetParallel.ForEachAsync</code></a>/<a class="xref" href="../../api/ExcelReader.Core.Reader.SheetParallel.html#ExcelReader_Core_Reader_SheetParallel_AggregateAsync_"><code>SheetParallel.AggregateAsync</code></a> overloads.</li>
+<li>The generator requires a build via <code>dotnet build</code>/the .NET SDK. Visual Studio's or <code>MSBuild.exe</code>'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to <code>ExcelParser.FromAttributes&lt;T&gt;</code>/<code>ExcelRecordLayout.FromAttributes&lt;T&gt;</code> for that build path.</li>
+<li><code>ExcelParser.Generated&lt;T&gt;</code> builds one map per model and reuses it for every reader, including CSV — unlike <code>ExcelParser.FromAttributes&lt;T&gt;</code>, which swaps in a text-based date reader specifically for CSV. A <code>[ExcelSerializable]</code> model reads <code>DateTime</code>/<code>DateOnly</code>/<code>TimeOnly</code> via <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelCellReaders.html#ExcelReader_Core_Parser_ExcelCellReaders_DateTimeAuto"><code>ExcelCellReaders.DateTimeAuto</code></a>/<code>DateOnlyAuto</code>/<code>TimeOnlyAuto</code>: an Excel serial number first, falling back to date/time text when the cell isn't numeric — so a CSV column round-trips through the library's own writer either way. The one edge case this can't distinguish: a CSV cell that's only digits (e.g. an Excel serial number typed as plain text) is always read as a serial number, never as date text.</li>
+<li>The attribute-based reflection path keeps working unchanged; <code>[ExcelSerializable]</code> is an additive, opt-in alternative for the same model shape, not a replacement.</li>
+</ul>
+<h2 id="map-columns-at-runtime-fluent-api">Map columns at runtime (fluent API)</h2>
+<p><code>[ExcelColumn]</code>/<code>[ExcelRequired]</code> fix the mapping at compile time. When the mapping itself is a runtime decision — loaded from a config file, chosen by a user in a UI, or different per input file — build it with <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html"><code>ExcelRowMapBuilder&lt;T&gt;</code></a> through <code>ExcelParser.Build&lt;T&gt;</code> instead:</p>
+<!-- snippet: parsing-fluent -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+public sealed class ChangeRow
+{
+    public string File { get; set; } = &quot;&quot;;
+    public int LinesAdded { get; set; }
+}
+
+var parser = ExcelParser.Build&lt;ChangeRow&gt;(builder =&gt; builder
+    .Factory(() =&gt; new ChangeRow())
+    .Property([&quot;file&quot;], ExcelCellReaders.String, (ref ChangeRow r, string v) =&gt; r.File = v)
+    .Property([&quot;lines_added&quot;], ExcelCellReaders.Parsable, (ref ChangeRow r, int v) =&gt; r.LinesAdded = v));
+
+using var workbook = Excel.FromXlsxFile(&quot;changes.xlsx&quot;);
+foreach (var item in parser.Parse(workbook.FirstSheet))
+{
+    Console.WriteLine($&quot;{item.File}: +{item.LinesAdded}&quot;);
+}
+</code></pre>
+<p>The map is built once, when <code>Build</code> is called, from a fresh builder instance — never from a static per-type cache, so two parsers configured differently for the same <code>T</code> give different, correct results in the same process.</p>
+<p>Bind a fixed column index instead of a header name with <code>PropertyAt</code> — for files with no header row at all:</p>
+<!-- snippet: parsing-fluent-index -->
+<pre><code class="lang-csharp">var parser = ExcelParser.Build&lt;ChangeRow&gt;(builder =&gt; builder
+    .Factory(() =&gt; new ChangeRow())
+    .PropertyAt(0, ExcelCellReaders.String, (ref ChangeRow r, string v) =&gt; r.File = v)
+    .PropertyAt(1, ExcelCellReaders.Parsable, (ref ChangeRow r, int v) =&gt; r.LinesAdded = v));
+</code></pre>
+<p>A builder that uses <code>PropertyAt</code> skips the header-row step entirely — the first row is already data. Mixing <code>PropertyAt</code> with <code>Property</code>/<code>PropertyNullable</code>/<code>Converted</code> on the same builder throws, since one map can't both wait for a header row and skip it.</p>
+<p><a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_BuildWithAttributeFallback_"><code>ExcelParser.BuildWithAttributeFallback&lt;T&gt;</code></a> merges the builder's bindings with <code>[ExcelColumn]</code>/<code>[ExcelRequired]</code>-driven ones reflected from <code>T</code>: a builder binding replaces every attribute-driven property that shares one of its header names; a property whose header names none of the builder's bindings mention keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model — reuse one of the property's existing <code>[ExcelColumn]</code> names in the builder:</p>
+<!-- snippet: parsing-fluent-fallback -->
+<pre><code class="lang-csharp">var parser = ExcelParser.BuildWithAttributeFallback&lt;ChangeRow&gt;(builder =&gt; builder
+    .Property([&quot;file&quot;], ExcelCellReaders.String, (ref ChangeRow r, string v) =&gt; r.File = v.ToUpperInvariant()));
+</code></pre>
+<p>The match is by header name, not by property identity: configuring a <em>different</em> header name for <code>File</code> would not override its attribute — both bindings would survive and <code>File</code> would be assigned twice on the same row.</p>
+<p><code>Build</code> is AOT-clean — <code>configure</code> is caller-written code wiring hand-picked readers and setters, no reflection. <code>BuildWithAttributeFallback</code> also reflects over <code>T</code> for the fallback half, so it carries the same <code>[RequiresUnreferencedCode]</code>/<code>[RequiresDynamicCode]</code> annotations as <code>FromAttributes</code>.</p>
+<h2 id="parser-configuration">Parser configuration</h2>
+<p>Pass an <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParserOptions.html"><code>ExcelParserOptions</code></a> to control header handling and culture:</p>
+<!-- snippet: parsing-options -->
+<pre><code class="lang-csharp">using System.Globalization;
+using ExcelReader.Core.Parser;
+
+var options = new ExcelParserOptions
+{
+    HeaderRow = 1,                                   // 1-based row holding the headers
+    ColumnNameComparer = StringComparer.OrdinalIgnoreCase,
+    HeaderNormalization = HeaderNormalization.Trim | HeaderNormalization.CollapseSpaces,
+    Culture = CultureInfo.GetCultureInfo(&quot;pt-BR&quot;),   // parse &quot;1.234,56&quot; as 1234.56m
+};
+
+var parser = ExcelParser.FromAttributes&lt;ChangeRow&gt;(options);
+</code></pre>
+<p><code>Culture</code> applies when parsing text-backed numeric/<code>Guid</code> cells (XLSX inline and shared strings); binary numeric cells (XLS/XLSB) carry a raw value and ignore it. <a class="xref" href="../../api/ExcelReader.Core.Parser.HeaderNormalization.html"><code>HeaderNormalization</code></a> flags (<code>Trim</code>, <code>CollapseSpaces</code>, <code>RemoveDiacritics</code>) are applied to both the sheet headers and the property names before matching.</p>
+<h2 id="required-columns">Required columns</h2>
+<p>Mark a property <code>[ExcelRequired]</code> to assert its column exists and carries a value:</p>
+<!-- snippet: parsing-required -->
+<pre><code class="lang-csharp">public sealed class Order
+{
+    [ExcelRequired]
+    public int Id { get; set; }
+
+    [ExcelRequired(AllowEmpty = true)]   // column must exist; blank cells allowed
+    public string? Note { get; set; }
+}
+</code></pre>
+<ul>
+<li>A missing required header throws when the header row is read, listing every missing column.</li>
+<li>By default each data row must have a non-empty cell; the first blank throws, naming the column and row number. <code>AllowEmpty = true</code> relaxes this to column presence only.</li>
+<li>The check covers presence, not parseability — a present-but-malformed value does not throw here.</li>
+</ul>
+<h2 id="custom-converters">Custom converters</h2>
+<p>For types the built-in parsers do not handle — money strings, custom formats, domain value objects — implement <a class="xref" href="../../api/ExcelReader.Core.Parser.IExcelCellConverter-1.html"><code>IExcelCellConverter&lt;T&gt;</code></a> and attach it with <code>[ExcelConverter]</code>. <code>T</code> must be the property's exact type. One instance is created and reused across all rows, so converters must be stateless.</p>
+<!-- snippet: parsing-converter -->
+<pre><code class="lang-csharp">using System.Globalization;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+public sealed class BrlMoneyConverter : IExcelCellConverter&lt;decimal&gt;
+{
+    public bool TryConvert(in Cell cell, in ExcelRowContext context, out decimal value)
+    {
+        string text = cell.GetString().Replace(&quot;R$&quot;, &quot;&quot;, StringComparison.Ordinal).Trim();
+        return decimal.TryParse(text, NumberStyles.Currency, CultureInfo.GetCultureInfo(&quot;pt-BR&quot;), out value);
+    }
+}
+
+public sealed class Invoice
+{
+    [ExcelConverter(typeof(BrlMoneyConverter))]
+    public decimal Total { get; set; }
+}
+</code></pre>
+<p>Return <code>false</code> to signal a parse failure (the property keeps its default). Empty cells are skipped before the converter runs. <code>context</code> carries the workbook's date system (<code>IsDate1904</code>) and the parser culture (<code>FormatProvider</code>); to unit-test a converter, pass <code>new ExcelRowContext { IsDate1904 = false, FormatProvider = CultureInfo.InvariantCulture }</code>.</p>
+<h2 id="parse-into-a-ref-struct-zero-copy">Parse into a ref struct (zero-copy)</h2>
+<p><code>ExcelParser.FromAttributes&lt;T&gt;</code> takes a <code>ref struct</code> model just as it takes a class or a struct — same attribute-driven column matching (<code>[ExcelColumn]</code>, <code>[ExcelRequired]</code>, <code>[ExcelConverter]</code>), but a <code>ReadOnlySpan&lt;byte&gt;</code> property binds directly to the cell's raw bytes instead of allocating a <code>string</code>:</p>
+<!-- snippet: parsing-ref-struct -->
+<pre><code class="lang-csharp">using System.Text;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+public readonly ref struct ChangeRowRef
+{
+    public ReadOnlySpan&lt;byte&gt; File { get; init; }   // zero-copy — aliases the reader's row buffer
+    public int LinesAdded { get; init; }
+}
+
+using var workbook = Excel.FromXlsxFile(&quot;changes.xlsx&quot;);
+
+foreach (ChangeRowRef item in ExcelParser.FromAttributes&lt;ChangeRowRef&gt;().Parse(workbook.FirstSheet))
+{
+    Console.WriteLine($&quot;{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}&quot;);
+}
+</code></pre>
+<p>The result of <code>Parse</code> supports <code>await foreach</code> (add <code>.WithCancellation(ct)</code> to pass a token), so a <code>ref struct</code> model can be parsed asynchronously — the rows are streamed via <code>MoveNextAsync</code> while the model stays a zero-copy <code>ref struct</code>:</p>
+<!-- snippet: parsing-ref-struct-async -->
+<pre><code class="lang-csharp">await using var workbook = await Excel.FromXlsxFileAsync(&quot;changes.xlsx&quot;);
+
+await foreach (ChangeRowRef item in ExcelParser.FromAttributes&lt;ChangeRowRef&gt;().Parse(workbook.FirstSheet))
+{
+    Console.WriteLine($&quot;{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}&quot;);
+}
+</code></pre>
+<p>A few differences from a class or struct model:</p>
+<ul>
+<li><strong>Span fields alias the reader's row buffer</strong> — valid only until the next row. Copy them out (e.g. <code>Encoding.UTF8.GetString(span)</code>) if you need to keep the value past the loop body. Under <code>await foreach</code>, the same rule means the model can't be held across an <code>await</code> in the loop body.</li>
+<li><strong>The non-generic <code>IEnumerator.Current</code> throws.</strong> <code>IEnumerable&lt;T&gt;</code> and <code>IAsyncEnumerable&lt;T&gt;</code> both accept a <code>ref struct</code> element type on net9.0+, so the sequence flows through them normally; only the legacy non-generic <code>IEnumerator.Current</code> cannot, because it would have to box. LINQ over a <code>ref struct</code> model is still out, since its operators do not carry the <code>allows ref struct</code> anti-constraint.</li>
+<li><strong>Not AOT/trim-safe</strong> on this path, since it reflects over <code>T</code>'s properties and compiles setters at runtime. For an AOT-clean zero-copy model, mark the <code>ref partial struct</code> <code>[ExcelSerializable]</code> and read it with <code>ExcelParser.Generated&lt;T&gt;</code> — see <a href="#generate-typed-maps-at-compile-time-native-aot--trimming">Generate typed maps at compile time</a>.</li>
+<li>A regular <code>struct</code>/<code>class</code> model uses the same entry point — only a genuine <code>ref struct</code> model gets the extra zero-copy span-property binding.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/parsing.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

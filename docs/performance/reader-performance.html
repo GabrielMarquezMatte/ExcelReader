@@ -1,0 +1,2464 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Reader performance: where the time goes, and what bounds it | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Reader performance: where the time goes, and what bounds it | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/performance/reader-performance.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="reader-performance-where-the-time-goes-and-what-bounds-it">Reader performance: where the time goes, and what bounds it</h1>
+
+<p>Measured 2026-09-15/16 on a <strong>13th Gen Intel Core i7-1365U</strong> (12 logical / 10 physical cores, P+E),
+AVX2, no AVX-512, .NET 10. Corpus: <code>tests/ExcelReader.Benchmarks/Data/65K_Records_Data.*</code> — 65,536
+rows, 14 columns, numeric and date heavy, with only ~5 KB of shared strings. The string-heavy section
+uses <code>StringHeavyWorkbookGenerator</code>'s 65,536-row fixture instead.</p>
+<p><strong>This is not the machine the published tables come from.</strong> Those, in <code>benchmarks.md</code>, are a Ryzen 7
+5700X desktop. A throttling mobile part with P and E cores is exactly the hardware <code>ARCHITECTURE.md</code>
+describes discarding an earlier parallel-CSV measurement over, so nothing here should be compared
+against a published number by absolute milliseconds — only ratios measured within one run are
+meaningful, and anything destined for <code>benchmarks.md</code> has to be re-run on the documented machine.
+The exceptions are &quot;Second round&quot; and &quot;Third round&quot; below, which were measured on the Ryzen.</p>
+<p>The harness was a throwaway console app, not committed. Every table below comes from a single
+interleaved round-robin run, where each variant runs once per round so thermal drift hits all of
+them equally. <strong>This machine drifts a lot</strong> — the same sequential scan measured between 21 ms and
+36 ms across runs — so read the ratios, not the absolute milliseconds. <code>min</code> across rounds is used
+throughout as the cleanest estimate of true cost.</p>
+<h2 id="the-model">The model</h2>
+<p>With <code>PrefetchDecompression</code> off, inflate and parse are serialized, so a read costs <code>I + P</code>. With it
+on they overlap, so a read costs <code>max(I, P)</code> plus handoff overhead. Measuring the inflate on its own
+gives <code>I</code>, and the two reads then solve for <code>P</code>. Predicted and measured agreed to within ~6% on
+XLSX, which is what makes the rest of this document trustworthy.</p>
+<h2 id="xlsx--parse-bound-barely">XLSX — parse-bound, barely</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I — inflate <code>xl/worksheets/sheet1.xml</code>, 6.7 MB → 34.4 MB</td>
+<td>34.4 ms</td>
+</tr>
+<tr>
+<td>P — parse</td>
+<td>40.6 ms</td>
+</tr>
+<tr>
+<td>read, prefetched</td>
+<td>44.9 ms</td>
+</tr>
+<tr>
+<td>floor, <code>max(I, P)</code></td>
+<td>40.6 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Parse decomposed by adding one layer at a time (each without prefetch, so the times stay additive):</p>
+<table>
+<thead>
+<tr>
+<th>layer</th>
+<th>delta</th>
+<th>share of P</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L1 scan + emit into accumulator</td>
+<td>34.5 ms</td>
+<td>85.0%</td>
+</tr>
+<tr>
+<td>L2 + enumerate cells</td>
+<td>0.5 ms</td>
+<td>1.3%</td>
+</tr>
+<tr>
+<td>L3 + read <code>Cell.Type</code></td>
+<td>0.2 ms</td>
+<td>0.5%</td>
+</tr>
+<tr>
+<td>L4 + take the zero-copy text span</td>
+<td>~0 ms</td>
+<td>~0%</td>
+</tr>
+<tr>
+<td>L5 + consumer's <code>TryParse</code>/<code>TryGetDateTime</code></td>
+<td>5.8 ms</td>
+<td>14.4%</td>
+</tr>
+</tbody>
+</table>
+<p>Within L1, scanning is ~24.5 ms and emitting into the accumulator ~10.0 ms.</p>
+<p><strong>The whole <code>Row</code>/<code>Cell</code> ref-struct surface costs ~0.7 ms of 40.6 (1.7%).</strong> Enumeration, construction
+and span access are effectively free. There is nothing to win there, and no performance reason to
+revisit that design.</p>
+<h2 id="xlsb--inflate-bound-4-ceiling">XLSB — inflate-bound, 4% ceiling</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I — inflate <code>xl/worksheets/sheet1.bin</code>, 3.74 MB → 15.9 MB</td>
+<td>18.6–18.9 ms</td>
+</tr>
+<tr>
+<td>P — parse</td>
+<td>17.0 ms</td>
+</tr>
+<tr>
+<td>read, prefetched</td>
+<td>19.4–19.6 ms</td>
+</tr>
+</tbody>
+</table>
+<p><code>P/I = 0.90</code>: the parser is already ~10% faster than the decompressor feeding it. An infinitely fast
+XLSB parser would move the read from 19.5 ms to 18.7 ms.</p>
+<p><strong>Do not optimize the XLSB parser.</strong> <code>XlsbReader.Enumerator</code> is a single forward pass over TLV
+records; there is no structural waste left in it, and none of the time is its.</p>
+<h2 id="xls--no-floor-but-the-format-caps-the-workload">XLS — no floor, but the format caps the workload</h2>
+<p>Uncompressed OLE/CFB, so there is no inflate stage at all.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>read, stream</td>
+<td>11.0 ms</td>
+</tr>
+<tr>
+<td>read, in-memory</td>
+<td>10.5 ms</td>
+</tr>
+<tr>
+<td>of which scan + emit</td>
+<td>8.0 ms</td>
+</tr>
+<tr>
+<td>container overhead (stream vs memory)</td>
+<td>0.4 ms (3–4%)</td>
+</tr>
+</tbody>
+</table>
+<p>BIFF8 is the one format where parallel parsing would convert 1:1 — no inflate wall, and it carries a
+native row index (<code>INDEX</code> → <code>DBCELL</code> → row-block offsets) over seekable uncompressed data, so
+partitioning would need no boundary guessing. It is still not worth building: BIFF8 caps at 65,536
+rows × 256 columns, this corpus is already at the row cap, and it reads in 11 ms. There is no such
+thing as a slow XLS.</p>
+<h2 id="the-pattern-across-the-zip-formats">The pattern across the ZIP formats</h2>
+<p>Read time tracks inflated payload size, not parser quality.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>inflated payload</th>
+<th>read, prefetched</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX</td>
+<td>34.4 MB</td>
+<td>~45 ms</td>
+</tr>
+<tr>
+<td>XLSB</td>
+<td>15.9 MB</td>
+<td>~19.5 ms</td>
+</tr>
+</tbody>
+</table>
+<p>2.16x the payload, 2.3x the time. XLSB is not faster because its parser is better; it is faster
+because there are fewer bytes to inflate. For a caller who controls the producer, writing XLSB is a
+larger win than anything available inside the readers.</p>
+<h2 id="string-heavy-xlsx--the-shared-string-prologue-dominates">String-heavy XLSX — the shared-string prologue dominates</h2>
+<p>Different corpus, different balance. <code>sharedStrings.xml</code> is 2.79 MB → 7.5 MB inflated, 29% of the
+payload, and it is loaded to completion before the first row is enumerated.</p>
+<table>
+<thead>
+<tr>
+<th>stage</th>
+<th>without prefetch</th>
+<th>with prefetch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>prologue — inflate + parse <code>sharedStrings.xml</code></td>
+<td>34.4 ms</td>
+<td>19.8 ms</td>
+</tr>
+<tr>
+<td>sheet stage</td>
+<td>49.7 ms</td>
+<td>28.5 ms</td>
+</tr>
+<tr>
+<td><strong>total</strong></td>
+<td><strong>84.1 ms</strong></td>
+<td><strong>48.4 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The prologue is 41% of the prefetched read (54% for XLSB on the same corpus). The two stages are
+strictly serial today and read two independent ZIP entries — two separate deflate streams, which
+<em>can</em> inflate concurrently.</p>
+<p>Upper bound if they were fully overlapped: <code>48.4 − min(19.8, 28.5)</code> = <strong>28.5 ms, 1.69x</strong>. See
+&quot;shared-string prefetch&quot; below for why no cheap version reaches it.</p>
+<p>Within the stages: the SST stage is inflate-bound (18.6 inflate vs 15.8 parse), so speeding up the
+shared-string parser gains nothing. The sheet stage is parse-bound with <strong>8.9 ms above its inflate
+floor</strong> — the one place in this document where ordinary parser work still converts 1:1. That 8.9 ms
+has not been decomposed.</p>
+<p>On the Ryzen the SST stage was not inflate-bound: its parse cost as much as its inflate. &quot;Third
+round&quot; below decomposes both stages there and removes most of the SST parse.</p>
+<h2 id="csv--the-parser-is-at-the-floor-the-cost-is-in-the-value-layer">CSV — the parser is at the floor; the cost is in the value layer</h2>
+<p>CSV is the only format with neither an inflate floor nor a format size cap, so every millisecond is
+parse and every millisecond saved converts at any file size. That made it the best remaining
+candidate. It turned out the parser has nothing left to give.</p>
+<p>Generated 50,000-row corpus (2.32 MB), reading three columns:</p>
+<table>
+<thead>
+<tr>
+<th>stage</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>framing + emit + span</td>
+<td>2.32 ms</td>
+</tr>
+<tr>
+<td>raw <code>IndexOfAny</code> byte sweep, no framing at all</td>
+<td>2.24 ms</td>
+</tr>
+</tbody>
+</table>
+<p><strong>1.03x of a bare byte sweep.</strong> <code>CsvControlScanner</code> already does the right thing — one <code>Vector256</code>
+pass producing a mask of delimiter/quote/CR/LF, kept stateful across refills through <code>Reset</code>/
+<code>Continue</code>, so the vector setup amortizes over the whole buffer. (This is the same structural-scan
+idea that lost badly in XLSX. It wins here because CSV fields are longer and the scanner is stateful
+rather than restarted per short hop.)</p>
+<p><strong>That comparison used a weak baseline.</strong> A sweep that restarts <code>IndexOfAny</code> at every hit pays the
+vector setup 200,000 times, so 2.24 ms is not a floor — it is a fourth implementation of the same
+scan, and a bad one. The layered decomposition below re-measures against a real floor. The
+conclusion survives, for a different reason: framing is not 97% of a floor, it is 13% of the read.</p>
+<p>So the cost is downstream of framing:</p>
+<table>
+<thead>
+<tr>
+<th>conversion</th>
+<th>per call</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TryParse&lt;int&gt;</code></td>
+<td>6.2 ns</td>
+</tr>
+<tr>
+<td><code>GetString()</code></td>
+<td>17.6 ns</td>
+</tr>
+<tr>
+<td><code>TryGetDateTime</code> on a text date</td>
+<td>see below</td>
+</tr>
+</tbody>
+</table>
+<h3 id="trygetdatetime-did-not-work-on-text-dates-at-all"><code>TryGetDateTime</code> did not work on text dates at all</h3>
+<p><code>TryGetDateTime</code> resolves the cell as an Excel <strong>serial number</strong> — it called <code>TryGetDouble</code> first. On
+an ISO date string that is a <code>double.TryParse</code> that walks 27 characters and fails, so the method
+returned <code>false</code> after ~69 ns of wasted work. Measured on the corpus: <strong>0 of 50,000 date cells
+succeeded</strong>.</p>
+<p>There was no other efficient path. <code>TryParse&lt;T&gt;</code> is constrained to <code>IUtf8SpanParsable&lt;T&gt;</code>, which
+<code>DateTime</code> does not implement, so the only working option was <code>GetString()</code> followed by
+<code>DateTime.Parse</code> — <strong>163.7 ns per date</strong>, 26x the int parse. A date written by this library's own
+<code>CsvWriter</code> could not be read back by its own <code>CsvReader</code>; a test asserted that limitation rather
+than the round-trip its name promised.</p>
+<p><code>FastDate</code> (<code>src/ExcelReader.Core/Reader/Internal/FastDate.cs</code>) now parses ISO-8601 straight from UTF-8:
+<code>yyyy-MM-dd</code>, optionally <code>T</code> or a space, a time, and up to seven fractional digits. A trailing zone
+designator is rejected rather than guessed at.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>before</th>
+<th>after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>text date cells resolved</td>
+<td>0 of 50,000</td>
+<td>50,000 of 50,000</td>
+</tr>
+<tr>
+<td>cost per date</td>
+<td>163.7 ns (via <code>GetString</code>)</td>
+<td><strong>40.4 ns</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>4.05x, and the API stopped lying.</strong> Order matters: the text-date attempt runs first, guarded by
+<code>_hasNumber</code>, because reaching it through <code>TryGetDouble</code> costs a full failing double parse on every
+date cell — measured at 85.4 ns with the wrong order against 40.4 ns with the right one. The guard
+keeps the XLSX serial-date path untouched; its consumer-conversion layer measured 6.3 ms before and
+after, inside the run-to-run band.</p>
+<h3 id="where-the-csv-read-actually-goes">Where the CSV read actually goes</h3>
+<p>A second harness split the read into layers that each add one stage to the same pass, so adjacent
+rows subtract. Two groups, interleaved separately because the typed variants allocate a model per
+row and their GC cost would otherwise land on their neighbours. Same 50,000-row corpus, same
+machine, one run.</p>
+<p>Framing prototypes, in memory, no reader machinery:</p>
+<table>
+<thead>
+<tr>
+<th>layer</th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L0 <code>Vector256</code> masking only, popcount the hits</td>
+<td>0.102 ms</td>
+<td></td>
+</tr>
+<tr>
+<td>L1 + drain bits, reload the byte to classify it</td>
+<td>0.384 ms</td>
+<td></td>
+</tr>
+<tr>
+<td>L2 + drain bits, separate masks per class, no reload</td>
+<td>0.389 ms</td>
+<td><strong>0.99x</strong></td>
+</tr>
+<tr>
+<td>L3 + emit a 16-byte field descriptor</td>
+<td>0.562 ms</td>
+<td></td>
+</tr>
+<tr>
+<td>L4 + emit a 32-byte <code>CellDesc</code>-shaped descriptor</td>
+<td>0.666 ms</td>
+<td></td>
+</tr>
+<tr>
+<td><code>IndexOfAny</code> restarted per hit (the old baseline)</td>
+<td>1.748 ms</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>All four field-emitting layers were gated on an identical checksum.</p>
+<p>The shipped reader, same corpus, stream source:</p>
+<table>
+<thead>
+<tr>
+<th>stage</th>
+<th></th>
+<th>delta</th>
+<th>share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rows, no cell access</td>
+<td>1.476 ms</td>
+<td></td>
+<td>30%</td>
+</tr>
+<tr>
+<td>+ four cell spans</td>
+<td>1.676 ms</td>
+<td>+0.200</td>
+<td>4%</td>
+</tr>
+<tr>
+<td>+ int column</td>
+<td>2.174 ms</td>
+<td>+0.498</td>
+<td>10%</td>
+</tr>
+<tr>
+<td>+ date column</td>
+<td>3.906 ms</td>
+<td>+1.732</td>
+<td>35%</td>
+</tr>
+<tr>
+<td>+ double column</td>
+<td>4.942 ms</td>
+<td>+1.036</td>
+<td>21%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The scan is 2% of the read and the date conversion is 35%.</strong> Masking 2.3 MB costs 0.102 ms;
+everything above L0 is per-field bookkeeping, not scanning. <code>Cell</code> materialization is 1 ns per cell.
+Framing at 0.666 ms against the reader's 1.476 ms rows-only figure leaves ~0.8 ms of enumerator
+overhead — <code>MoveNext</code>, <code>_acc.Reset</code>, refill and compaction bookkeeping — which is the largest
+undecomposed block left in CSV after the conversions.</p>
+<p><strong>Unexplained:</strong> spans-only is faster from a stream than from an already-resident buffer
+(1.676 vs 2.201 ms), but full conversion is faster from the buffer (4.942 vs 4.190 ms). Both
+directions reproduced across four runs. No explanation; recorded rather than guessed at.</p>
+<h3 id="the-enumerator-overhead-register-pressure-not-memory-traffic--116x-on-wide-rows">The enumerator overhead: register pressure, not memory traffic — 1.16x on wide rows</h3>
+<p>Wide corpus (50,000 rows × 32 short text fields, 9.8 MB). The reader enumerating rows with no cell
+access ran at <strong>2.25x a standalone framing prototype</strong> doing the same scan and writing the same
+descriptors: 2.8 ns per field above framing. That overhead is per field, not per row — fitting the
+narrow and wide corpora together gives ~5 ns fixed per row and ~2.6 ns per field.</p>
+<p>The JIT disassembly of <code>TryParseSimpleRecord</code> showed, per field, a load and store of the scanner's
+<code>_mask</code>, a load and store of <code>_col</code>, two loads and a store of the accumulator's <code>Count</code>, a load and
+store of <code>_lastCol</code>, and <code>_cells</code> reloaded twice — all loop-carried through memory, where the
+prototype keeps them in registers. Three attempts, each measured:</p>
+<table>
+<thead>
+<tr>
+<th>attempt</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>copy the scanner struct into a local for the loop</td>
+<td><strong>slower</strong>, 2.25x → 2.52x</td>
+</tr>
+<tr>
+<td>accumulator state and column in locals, committed once per record</td>
+<td><strong>no change</strong></td>
+</tr>
+<tr>
+<td>drain the vector mask in a call-free leaf function, one call per record</td>
+<td><strong>1.16x</strong> on wide</td>
+</tr>
+</tbody>
+</table>
+<p>The second attempt explains the first two. Its disassembly showed the locals <strong>spilled to the
+stack</strong>: the loop still contained calls on cold paths (<code>GrowCells</code>, <code>ThrowColumnLimit</code>,
+<code>NextScalar</code>, <code>SkipByte</code>), so every variable live across the loop needed a callee-saved register,
+and x64 Windows has eight. The store-forwarding chain did not go away; it moved from the heap to
+the stack. The prototype has no calls in its loop, so it gets the volatile registers.</p>
+<p><code>CsvReader.Enumerator.DrainFields</code> is that loop with no calls in it. It takes vector masks from
+<code>CsvControlScanner.TryTakeMask</code>, emits delimiter-terminated fields, and closes the record on LF or
+a CRLF inside one chunk. It hands back to the existing per-hit path on a quote, a bare CR, a CRLF
+split across chunks, a full descriptor array, the column limit, or a buffer tail shorter than a
+vector.</p>
+<p>A first version drained only delimiters and returned to the per-hit path for every record end. It
+won 1.14x on wide rows and <strong>lost ~12% on the narrow benchmark</strong>: a 47-byte record spans one and a
+half chunks, so it paid two non-inlined calls per record and still took the slow path for the
+newline. Closing the record inside the leaf and loading the next chunk from inside it made the
+narrow case neutral.</p>
+<p>In-process A/B, separate binaries for the old and new source, alternated three times, min of 12:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>before</th>
+<th>after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>wide, rows only</td>
+<td>5.54–5.90 ms</td>
+<td><strong>4.38–4.70 ms</strong> (~1.28x)</td>
+</tr>
+<tr>
+<td>wide, 32 cell spans (<code>ExcelReaderWide</code> shape)</td>
+<td>7.97–8.47 ms</td>
+<td><strong>6.94–7.48 ms</strong> (~1.16x)</td>
+</tr>
+<tr>
+<td>narrow, 4 cell spans</td>
+<td>1.50–1.66 ms</td>
+<td>1.53–1.65 ms (neutral)</td>
+</tr>
+</tbody>
+</table>
+<p>BenchmarkDotNet, same machine, one run each: <code>ExcelReaderWide</code> 8.939 → 8.128 ms (the new run's
+standard deviation was 0.91 ms, so read that as direction only), <code>ExcelReader</code> 3.774 → 3.609 ms,
+<code>ExcelReaderAsync</code> 3.506 → 3.356 ms.</p>
+<p>Correctness gate: 3,000 seeded random inputs weighted toward quotes, bare CR, CRLF and rows wider
+than the initial descriptor array, each read both from memory and through a stream that returns
+1–96 bytes per read so refills land at arbitrary offsets. 5,496,494 rows, byte-identical digests
+between the old and new builds. The gate was checked by mutation: shifting the CRLF record end by
+one byte changed both the row count and the digest.</p>
+<h3 id="against-a-one-billion-row-challenge-workload">Against a One Billion Row Challenge workload</h3>
+<p>A scaled-down 1BRC: 10,000,000 rows of <code>station;temperature</code>, 413 stations, min/max/sum/count per
+station. Every variant shares one open-addressing aggregation table, so the differences are reading
+and parsing. All variants produced identical checksums, station counts and row counts. 12 threads on
+the i7-1365U (2 performance + 8 efficiency cores).</p>
+<p>Re-measured 2026-09-22, after <code>CsvStructuralScanner</code> (de49a45) and the <code>DrainFields</code> work. Min of
+five rounds, three separate processes, all three within a few percent of each other:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>per row</th>
+<th>MB/s</th>
+<th>linear extrapolation to 1B</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hand-written parser, 1 thread</td>
+<td>43.5 ns</td>
+<td>420</td>
+<td>~44 s</td>
+</tr>
+<tr>
+<td>hand-written parser, partitioned by newline</td>
+<td>7.1 ns</td>
+<td>2,600</td>
+<td>~7 s</td>
+</tr>
+<tr>
+<td>ExcelReader rows, 1 thread</td>
+<td>60.0 ns</td>
+<td>305</td>
+<td>~60 s</td>
+</tr>
+<tr>
+<td>ExcelReader rows, partitioned by the caller</td>
+<td>11.2 ns</td>
+<td>1,630</td>
+<td>~11 s</td>
+</tr>
+<tr>
+<td><code>CsvParallel.AggregateAsync</code>, dop 1</td>
+<td>66.2 ns</td>
+<td>275</td>
+<td>~66 s</td>
+</tr>
+<tr>
+<td><code>CsvParallel.AggregateAsync</code>, dop 12</td>
+<td>11.4 ns</td>
+<td>1,600</td>
+<td>~11 s</td>
+</tr>
+</tbody>
+</table>
+<p>The corpus is a rebuild, not the original bytes: 183 MB at 19.2 bytes per row against the first
+run's 222 MB at 22, because the station names are synthetic and shorter. <strong>What makes the two tables
+comparable is the control</strong>: the hand-written parser measured 42.3 ns then and 43.5 ns now. With the
+baseline standing still, the reader's movement is the library's, not the corpus's.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>2026-09-21</th>
+<th>2026-09-22</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ExcelReader rows, 1 thread</td>
+<td>81.3 ns</td>
+<td>60.0 ns</td>
+<td>1.36x</td>
+</tr>
+<tr>
+<td>ExcelReader rows, partitioned</td>
+<td>18.7 ns</td>
+<td>11.2 ns</td>
+<td>1.67x</td>
+</tr>
+<tr>
+<td>the library's own parallel path</td>
+<td>241.7 ns (<code>CsvParallel.ParseAsync&lt;T&gt;</code>)</td>
+<td>11.4 ns (<code>CsvParallel.AggregateAsync</code>)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>The hand-written baseline is deliberately naive (<code>IndexOf</code> for the separator, a digit loop, FNV over
+the key bytes) and is not a leaderboard entry; the winning entries add SWAR temperature parsing,
+branch-free key hashing and memory-mapped input, and run on server hardware. So these rows position
+the library against a plain specialized parser on the same machine, not against the leaderboard.</p>
+<ul>
+<li>The general reader costs <strong>1.38x a naive specialized parser</strong>, about 16.5 ns per row of generality
+on this shape (<code>Row</code>/<code>Cell</code> construction, the 32-byte <code>CellDesc</code>, generic <code>TryParse&lt;double&gt;</code>,
+double-to-fixed-point conversion). It was ~2x and ~39 ns before the structural scanner. The same
+1.38x holds partitioned, 11.2 ns against 7.1.</li>
+<li>Partitioning converts: 5.4x on 12 mixed threads for raw rows, 5.8x for the aggregation API, 6.1x
+for the hand-written parser.</li>
+<li><strong><code>CsvParallel.AggregateAsync</code> is now at parity with hand-partitioning</strong> — 11.4 ns against 11.2 for
+a caller that splits the buffer itself. The earlier reading, that the library's own parallel path
+ran 13x slower than the caller-partitioned raw path, was measured against
+<code>CsvParallel.ParseAsync&lt;T&gt;</code>, which allocates a model object and a string per row. The aggregation
+overload does not, and closes the gap. Its cost over the plain single-threaded reader is 1.10x
+(66.2 ns against 60.0), which is the delegate plus partition bookkeeping.</li>
+<li>So the missing public API for partitioned raw rows costs nothing on an aggregation workload.
+It would still matter for a consumer that must see each <code>Row</code> itself rather than fold it.</li>
+</ul>
+<p>Cost of handing each <code>Row</code> to user code instead of an inline loop, same workload, one thread,
+interleaved, 5,000,000 rows, identical checksums:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>per row</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>inline loop</td>
+<td>62.7 ns</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>delegate <code>(ref TState state, Row row)</code></td>
+<td>68.3 ns</td>
+<td>1.09x</td>
+</tr>
+<tr>
+<td>struct implementing a static-abstract processor interface, constrained generic</td>
+<td>76.8 ns</td>
+<td>1.23x</td>
+</tr>
+</tbody>
+</table>
+<p>That measurement chose the engine behind <code>CsvParallel.AggregateAsync</code>: a
+<code>CsvRowAction&lt;TState&gt;(ref TState state, Row row)</code> delegate, one accumulator per partition, and a
+combine folded left to right in file order. It reuses the typed path's speculative partitioning.
+The public surface has two shapes over that one engine: an <code>ICsvAccumulator&lt;TSelf&gt;</code> type
+(<code>Add(Row)</code>, <code>Merge(TSelf)</code>, parameterless constructor), and a <code>CsvAggregation&lt;TState&gt;</code> object
+holding <code>Seed</code>, <code>Accumulate</code> and <code>Combine</code>. Both take a <code>CsvParallelOptions</code> carrying
+<code>DegreeOfParallelism</code>, <code>Reader</code> and <code>HeaderRow</code>.
+A partition whose guessed start turns out wrong is read again from its confirmed start with a fresh
+accumulator, and the first attempt's accumulator and any exception its callbacks threw are
+discarded. That is why the callback may only mutate the accumulator it is handed. Partitions are
+sized at a quarter of a worker's share, clamped to 1–64 MB, so accumulator creation and merging stay
+per-partition costs, not per-64-KB ones.</p>
+<p>Same 1BRC sample, 12 threads, interleaved, identical checksums (the machine was warmer than for the
+first table, so compare within this table only):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>per row</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>caller-partitioned raw rows, inline loop</td>
+<td>25.7 ns, 25.0 ns</td>
+</tr>
+<tr>
+<td>three loose delegates (the first version of this API)</td>
+<td>31.5 ns, 28.5 ns</td>
+</tr>
+<tr>
+<td><code>CsvParallel.ParseAsync&lt;T&gt;</code></td>
+<td>209.5 ns</td>
+</tr>
+</tbody>
+</table>
+<p>About 1.15x the hand-partitioned loop — the delegate plus partition bookkeeping — and <strong>7x faster
+than the typed parallel path</strong>. Unlike the hand-partitioned loop, it is correct for quoted fields
+that span lines.</p>
+<p>The two public shapes, measured after the surface was settled, same sample, interleaved, identical
+checksums:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>12 threads</th>
+<th>1 thread</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>caller-partitioned raw rows, inline loop</td>
+<td>24.1 ns, 26.0 ns</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>CsvParallel.AggregateAsync(data, CsvAggregation&lt;T&gt;)</code></td>
+<td>26.9 ns, 29.0 ns</td>
+<td>84.2 ns, 75.3 ns</td>
+</tr>
+<tr>
+<td><code>CsvParallel.AggregateAsync&lt;TAccumulator&gt;(data)</code></td>
+<td>34.4 ns, 37.5 ns</td>
+<td>117.6 ns, 95.1 ns</td>
+</tr>
+</tbody>
+</table>
+<p>The accumulator overload costs <strong>~1.3x the aggregation overload</strong> — more than the 1.15–1.23x a
+direct interface call measured, because it goes through the same delegate engine and so pays the
+delegate call and the interface call on every record. That is the price of keeping one engine; a
+second engine specialized on the accumulator type would remove the delegate hop. The one-thread
+fallback also runs above the inline loop's ~62 ns, since it enumerates through <code>MoveNextAsync</code>.</p>
+<p>A prototype (not in the library) put a typed record between <code>Row</code> and the accumulator: a
+<code>ref struct Reading : ICsvRecord&lt;Reading&gt;</code> with <code>static abstract bool TryParse(Row, out TSelf)</code>
+holding the station as a <code>ReadOnlySpan&lt;byte&gt;</code>, and an accumulator whose <code>Add</code> takes the record, with
+the record parameter declared <code>allows ref struct</code>. It compiles — a span taken from the <code>Row</code> may flow
+into the <code>out</code> record — and through the same delegate engine, one thread, interleaved, identical
+checksums:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>per row</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CsvAggregation</code>, <code>Row</code></td>
+<td>68.2 ns, 68.5 ns</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td><code>ICsvAccumulator&lt;TSelf&gt;</code>, <code>Add(Row)</code></td>
+<td>99.5 ns, 93.8 ns</td>
+<td>1.37–1.46x</td>
+</tr>
+<tr>
+<td>record accumulator, <code>TryParse</code> into a <code>ref struct</code>, <code>Add(Reading)</code></td>
+<td>67.5 ns, 69.6 ns</td>
+<td>0.99–1.02x</td>
+</tr>
+</tbody>
+</table>
+<p>Adding a layer made it faster than the shipped interface. The likely reason — inferred, not
+confirmed in the disassembly — is that <code>TryParse</code> is a static method on a value type, so the JIT
+specializes and inlines the <code>Row</code> work into the delegate, and the interface call then carries only a
+span and a double instead of the whole <code>Row</code>.</p>
+<p>The shipped overloads repeat this comparison directly: <code>ExcelParser.FromAttributes</code> and
+<code>ExcelParser.Generated</code> bind the header once and call one column parser per column into a
+<code>ref struct</code> model, the same shape the prototype used. A scaled-down 1BRC sample
+(<code>station;temperature</code>, 413 stations, one decimal temperature, seeded), 5,000,000 rows, one thread,
+interleaved, two runs, identical checksums:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>per row (two runs)</th>
+<th>ratio vs <code>CsvAggregation</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CsvAggregation</code>, <code>Row</code></td>
+<td>45.4 ns, 44.6 ns</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>record, static <code>TryParse</code></td>
+<td>45.5 ns, 45.2 ns</td>
+<td>1.00–1.01x</td>
+</tr>
+<tr>
+<td>reflection <code>ExcelParser.FromAttributes</code></td>
+<td>65.9 ns, 66.4 ns</td>
+<td>1.45–1.49x</td>
+</tr>
+<tr>
+<td>generated <code>ExcelParser.Generated</code></td>
+<td>63.3 ns, 62.9 ns</td>
+<td>1.39–1.41x</td>
+</tr>
+</tbody>
+</table>
+<p>Both mapped paths cost more than the record and <code>CsvAggregation</code> shapes, and the generated map is
+consistently a little cheaper than the reflected one — the same ordering the prototype found. The
+per-column cost over the hand-written <code>TryParse</code> here is roughly 9–10 ns per column; with two
+columns this says nothing yet about wide models, where that cost grows with every mapped column.</p>
+<p>The constrained-generic struct, the textbook zero-cost shape, came out slower than the delegate.
+The multithreaded version of this comparison was unusable: the same inline partitioned loop
+measured 16.9 ns per row when run fourth and 23.8 ns when run seventh, from heat alone.</p>
+<h3 id="the-date-parser-149x-from-one-vectorized-pass-over-the-round-trip-form">The date parser: 1.49x from one vectorized pass over the round-trip form</h3>
+<p>The date column is 35% of the CSV read, so it was decomposed next. Two candidate cost centres had
+never been separated: the digit loops, and building the <code>DateTime</code>.</p>
+<table>
+<thead>
+<tr>
+<th>variant</th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>current <code>FastDate</code></td>
+<td></td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>digits only, no <code>DateTime</code> built at all</td>
+<td></td>
+<td>1.19–1.23x</td>
+</tr>
+<tr>
+<td>one leap check + month-table ticks</td>
+<td></td>
+<td>0.83–0.86x</td>
+</tr>
+<tr>
+<td>branchless civil-days ticks (Hinnant)</td>
+<td></td>
+<td>0.76–0.81x</td>
+</tr>
+<tr>
+<td>+ SWAR 4-digit year on civil-days</td>
+<td></td>
+<td>0.82–0.86x</td>
+</tr>
+<tr>
+<td><strong>one vectorized pass over the 27-byte form</strong></td>
+<td></td>
+<td><strong>1.45–1.49x</strong></td>
+</tr>
+<tr>
+<td>+ separators validated in the same vectors</td>
+<td></td>
+<td>1.44–1.50x</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Construction was not the problem.</strong> <code>DateTime.DaysInMonth</code> followed by <code>new DateTime(y, m, d)</code>
+runs two independent leap-year computations, which looked like the obvious waste; removing both
+accounts for 19% at most, and every attempt to replace them with hand-written date arithmetic was
+<strong>slower</strong>. The BCL's constructor is not worth reimplementing.</p>
+<p><strong>88% of the cost was the digits.</strong> <code>yyyy-MM-ddTHH:mm:ss.fffffff</code> is 27 bytes holding 21 digits at
+fixed offsets. Two overlapping 16-byte loads cover it (bytes 0..15 and 11..26); one unsigned compare
+per load validates every digit position at once against a constant mask; one shuffle per load packs
+the digits so they fold in pairs instead of one dependent multiply-add per digit. The seven-digit
+fraction loop, which the shape makes free, was the largest single piece.</p>
+<p>Anything that is not exactly 27 bytes falls through to the existing parser. Two extensions were
+measured and <strong>not</strong> built:</p>
+<ul>
+<li>Validating the separators inside the vectors instead of with five scalar compares: <strong>no
+difference</strong>. Those bytes are in L1 by definition and the branches are perfectly predicted.</li>
+<li>Using the same vectorized date extraction for the 19-byte <code>yyyy-MM-ddTHH:mm:ss</code> form: <strong>no
+difference</strong> (7.2 ns either way). Without the fraction there is not enough digit work to pay for
+the load and shuffle.</li>
+</ul>
+<p>The masked validation has one trap worth recording. A first version ORed the digit mask and the
+separator mask without restricting each to its own positions, which accepts a digit sitting in a
+separator slot — <code>2024503-15T10:20:30.1234567</code> would have parsed as 2024-01-01. <code>FastDateTests</code>
+carries one case per separator position for this.</p>
+<h3 id="the-double-parser-nothing-found-and-the-obvious-hypothesis-was-wrong">The double parser: nothing found, and the obvious hypothesis was wrong</h3>
+<table>
+<thead>
+<tr>
+<th>variant</th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>current <code>FastDouble</code></td>
+<td>12.3–15.4 ns</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>split at the dot, two tight digit loops</td>
+<td></td>
+<td>0.81–0.90x</td>
+</tr>
+<tr>
+<td>BCL <code>double.TryParse</code></td>
+<td></td>
+<td>0.27–0.31x</td>
+</tr>
+</tbody>
+</table>
+<p><code>FastDouble</code>'s loop carries six branches per byte, and the corpus's value column varies in length,
+so mispredicted loop exits looked like the cost. Running the same parser over values of uniform
+length tests that directly — and it came out <strong>slower</strong>, not faster: 18.7 ns on uniform 8-byte
+values against 12.3 ns on the real mixed corpus. Cost tracks digit count at roughly 2.4 ns per
+digit, which is the signature of the serial <code>mantissa * 10 + d</code> dependency chain, not of
+misprediction.</p>
+<p>SWAR would break that chain, and this is the one place it would genuinely pay. It needs an 8-byte
+load, and the value column averages 5.9 bytes, so the fast path would have to read past the end of
+the field. Inside the reader those spans always point into a pooled buffer with slack, but
+<code>FastDouble</code> would then depend on an invariant nothing enforces. Not built, for 2 ns.</p>
+<p>This corpus had no values above 15 digits, so it never measured the path <code>FastDouble</code> rejected. The
+real-data corpus is full of them; &quot;Third round&quot; below covers what they cost and the fix.</p>
+<h3 id="parallel-csv-converts--346x-and-it-already-ships">Parallel CSV converts — 3.46x, and it already ships</h3>
+<p><code>CsvParallel.ParseAsync&lt;T&gt;</code> partitions by byte range with <code>CsvBoundaryResolver</code> confirming row
+starts. Typed models, allocating, own interleave:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>dop 1 (falls through to the sequential path)</td>
+<td>14.202 ms</td>
+</tr>
+<tr>
+<td>dop 6</td>
+<td>5.068 ms (2.80x)</td>
+</tr>
+<tr>
+<td>dop 12</td>
+<td>4.107 ms (3.46x)</td>
+</tr>
+</tbody>
+</table>
+<p>This was the one place in the library where parallelism converted, and it converted because CSV has no
+inflate floor. Since v7 <code>SheetParallel</code> also reads XLSX and XLSB on several threads (see &quot;Parallel intra-sheet
+parsing&quot; below), with a smaller gain because inflate is still sequential. Parallel reading is only available on
+the typed path: <code>Row</code> and <code>Cell</code> are <code>ref struct</code>s and cannot cross a thread boundary, so raw row enumeration
+hits the same wall. <code>CsvParallel</code> is named <code>SheetParallel</code> in v7; the entries in this file keep the names they
+were measured under.</p>
+<h2 id="approaches-measured-and-rejected">Approaches measured and rejected</h2>
+<h3 id="simd-structural-index-simdjson-stage-1--086097x-rejected">SIMD structural index (simdjson stage 1) — 0.86–0.97x, rejected</h3>
+<p>A prototype replaced the scanner's repeated short <code>Span.IndexOf</code> calls with a bitmap of <code>&lt;</code>, <code>&gt;</code> and
+quote positions (one bit per byte, AVX2), added quote-pair attribute extraction, and dropped the
+<code>&lt;/row</code> pre-scan. Both scanners produced identical checksums over 917,504 cells.</p>
+<p>It was <strong>slower</strong>, across three independent interleaved runs. Its locate-only core lost 11.07 ms to
+12.59 ms even with index construction (2.12 ms) measured separately.</p>
+<p><code>Span.IndexOf(byte)</code> is already vectorized, and XLSX hop distances are short (~37 bytes per cell), so
+a scan almost always resolves inside the first vector — one load, one compare, one tzcnt. The bitmap
+adds 37.5% more memory traffic and a dependent mask load to save a branch that was already cheap.
+AVX-512 would halve index construction but not the memory traffic, so it would not flip the verdict.</p>
+<h3 id="parallel-intra-sheet-parsing--46x-on-the-scan-129x-on-the-reader-not-built">Parallel intra-sheet parsing — 4.6x on the scan, 1.29x on the reader, not built</h3>
+<p>Partitioning an already-inflated sheet by byte range works and is exactly correct: checksums at
+degree of parallelism 1/2/4/8/12/16 were byte-identical to the sequential scan. A raw <code>&lt;</code> cannot
+appear in XML text content, so the first name-boundary-checked <code>&lt;row</code> at or after a chunk start is
+unambiguously a row start — no confirm-then-reparse cascade like the parallel CSV path needs, and
+rows carry no cross-row state.</p>
+<p>The scan went from 32.7 ms to 7.1 ms at dop 12 (4.59x). The reader did not move. <code>P</code> only barely
+exceeds <code>I</code>, so parallelising the scan takes <code>P</code> to 26.0 ms and the prefetched floor becomes
+<code>max(38.8, 26.0)</code> = 38.8 ms — 1.29x. Parallelising the <em>entire</em> parse gives the identical 1.29x,
+because inflate is then all that is left.</p>
+<p>It would also only ever serve the typed-parsing layer: <code>Row</code>/<code>Cell</code> are <code>ref struct</code> and cannot cross
+a thread boundary.</p>
+<p><strong>Update 2026-10-10: built.</strong> <code>InflateStream</code> moved the inflate floor, so the prefetched XLSX read became
+parse-bound and the reasoning above no longer holds. A spike (Ryzen 7 5700X, real-data 65K corpus, min of 30
+interleaved rounds, sheet stage only, outputs identical to sequential) measured:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>XLSX (6.7 → 34.4 MB)</th>
+<th>XLSB (3.7 → 15.9 MB)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>read today, no prefetch / prefetch</td>
+<td>44.6 / 29.2 ms</td>
+<td>26.5 / 15.8 ms</td>
+</tr>
+<tr>
+<td>inflate only, whole buffer</td>
+<td>14.9 ms</td>
+<td>9.5 ms</td>
+</tr>
+<tr>
+<td>parse only, dop 1 / 2 / 4 / 8</td>
+<td>29.0 / 14.8 / 7.8 / 4.2 ms</td>
+<td>15.4 / 7.8 / 4.0 / 2.3 ms</td>
+</tr>
+<tr>
+<td>A: 1 inflate thread + N parse workers (N ≥ 2)</td>
+<td>16.0 ms (1.8x)</td>
+<td>12.5 ms (1.25x)</td>
+</tr>
+<tr>
+<td>B oracle: parallel inflate + parse, 8 threads</td>
+<td>7.7 ms</td>
+<td>3.6 ms</td>
+</tr>
+</tbody>
+</table>
+<p>A is what shipped: <code>SheetParallel</code> over XLSX and XLSB, one producer that inflates and cuts row-aligned chunks,
+<code>dop - 1</code> parse workers, an ordered merge (see ARCHITECTURE.md). The spike's consumer was light and its buffers
+were pre-touched, so those numbers are the shape of the gain, not a promise. Measured on the built pipeline
+(JIT harness, same corpus and method, light consumer, 256 KB chunks):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>XLSX</th>
+<th>XLSB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>prefetched sequential read</td>
+<td>28.35 ms</td>
+<td>15.65 ms</td>
+</tr>
+<tr>
+<td>pipeline, dop 3 to 16</td>
+<td>17.6 ms (1.61x)</td>
+<td>13.3 ms (1.18x)</td>
+</tr>
+<tr>
+<td>typed <code>ParseAsync</code>, sequential / dop 4</td>
+<td>55.4 / 18.9 ms</td>
+<td>37.6 / 14.4 ms</td>
+</tr>
+<tr>
+<td><code>xl_parse_typed</code> over the published NativeAOT DLL, dop 1 / dop 0</td>
+<td>54.1 / 20.3 ms (2.6x)</td>
+<td>28.2 / 15.2 ms (1.85x)</td>
+</tr>
+</tbody>
+</table>
+<p>Under the JIT the sheet stage stops scaling at dop 3, one producer plus two workers: dop 2 is a plain overlap of inflate and parse and gains
+nothing. The chunk size defaults to 256 KB, down from 1 MB: it removes ~0.5 ms of serial tail, and 4 MB adds
+~3.7 ms. XLSB stops at ~13 ms against a 9.6 ms inflate floor because the producer walks every BIFF12 record
+(~2.2 ms) and <code>InflateStream.Read</code> adds a copy (~0.7 ms). Only parallel inflate moves that. The
+BenchmarkDotNet tables for this are in <code>benchmarks.md</code>; they were taken on a loaded machine and are pending an
+idle rerun.</p>
+<h3 id="faster-inflate--measured-separately-no-gain">Faster inflate — measured separately, no gain</h3>
+<p>libdeflate was measured against <code>System.IO.Compression</code> on this workload before this investigation:
+no faster, and slower in places. libdeflate is whole-buffer only — no streaming API — so it forces
+the entire sheet to be materialized before parsing starts and destroys the inflate/parse overlap
+<code>PrefetchStream</code> exists to provide.</p>
+<p><strong>The inflate floor does not move by swapping in a whole-buffer compression library.</strong> That is what
+this measurement showed, and it was read too broadly: the decoder itself was never at the floor.
+Measured on its own libdeflate is about twice as fast as <code>DeflateStream</code> on these entries; what cost
+it the win end to end was having no streaming API. &quot;Fourth round&quot; below measures decoders in
+isolation and replaces <code>DeflateStream</code> with a managed streaming one.</p>
+<h3 id="lazy-number-parsing--a-trade-not-a-win">Lazy number parsing — a trade, not a win</h3>
+<p><code>EmitScalarValueFast</code> runs <code>FastDouble.TryParseLossless</code> on every number cell at emit time whether or
+not the consumer asks for the value. Guarding both call sites (temporarily) to defer it:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>eager</th>
+<th>lazy</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nobody reads a number</td>
+<td>35.3 ms</td>
+<td>29.4 ms</td>
+<td>saves 5.8 ms</td>
+</tr>
+<tr>
+<td>consumer reads every number</td>
+<td>42.4 ms</td>
+<td>44.8 ms</td>
+<td>costs 2.4 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Both paths produced a byte-identical accumulator, so the lazy fallback is correct. Parsing at emit
+time, while the value bytes are still hot in L1, is cheaper than parsing them later from
+<code>Cell.TryParse</code>. Deferring skips no work for a consumer that reads numbers, and loses the locality.
+Worth having only as an opt-in for consumers that skip numeric columns entirely — never as a default.</p>
+<h3 id="shared-string-prefetch--measured-at-11x-not-built">Shared-string prefetch — measured at ~1.1x, not built</h3>
+<p>The consumer needs the shared-string table at row 1, and in a pull model the consumer's thread is the
+thread parsing the sheet, so it blocks there and the sheet parse stops with it.</p>
+<table>
+<thead>
+<tr>
+<th>version</th>
+<th>gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>load the SST on a background task at open</td>
+<td>~1%</td>
+</tr>
+<tr>
+<td>+ resolve the shared index lazily at consumption</td>
+<td>~1%</td>
+</tr>
+<tr>
+<td>overlap the two inflates only</td>
+<td><strong>negative</strong> (49.7 ms vs 48.4)</td>
+</tr>
+<tr>
+<td>speed up the shared-string parser</td>
+<td>0% (that stage is inflate-bound)</td>
+</tr>
+<tr>
+<td>incremental SST with a published watermark</td>
+<td><strong>1.11x measured</strong></td>
+</tr>
+<tr>
+<td>decouple the sheet parse from the consumer</td>
+<td>1.69x (upper bound, not measured)</td>
+</tr>
+</tbody>
+</table>
+<p>Overlapping the inflates alone loses because the sheet stage is already parse-bound at 28.5 ms
+against 20.4 ms of inflate — its inflate is already hidden, so pre-inflating buys nothing and costs
+scheduling.</p>
+<h4 id="the-watermark-variant-and-why-it-falls-short">The watermark variant, and why it falls short</h4>
+<p>Shared-string indices are assigned in first-use order, so a sheet written row by row references them
+in roughly ascending order. That suggests parsing the SST incrementally on its own thread, publishing
+a monotonic &quot;resolved up to index N&quot; watermark, and letting the sheet parse — still on the consumer's
+thread — block only when it needs an index the SST has not reached. No producer/consumer split.</p>
+<p>The ordering property is real. Measured over <code>StringHeavy.xlsx</code> (190,105 unique strings), the highest
+index a row needs, by row decile:</p>
+<table>
+<thead>
+<tr>
+<th>row decile</th>
+<th>0%</th>
+<th>10%</th>
+<th>20%</th>
+<th>30%</th>
+<th>50%</th>
+<th>70%</th>
+<th>90%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fraction of the table needed</td>
+<td>20%</td>
+<td>34%</td>
+<td>46%</td>
+<td>56%</td>
+<td>72%</td>
+<td>87%</td>
+<td>100%</td>
+</tr>
+</tbody>
+</table>
+<p>Row 1 alone needs only index 10. A prototype confirmed the consequence: across ~590,000 shared cells,
+the sheet stalled exactly <strong>once</strong> — after that the SST parser stayed ahead for the whole file.</p>
+<p>But that single stall costs 10.9 ms of the SST's 14.5 ms, hiding only 3.6 ms. The sheet reaches row 1
+in microseconds and already demands a fifth of the table. A stall happens whenever
+<code>table fraction / row fraction</code> exceeds the ratio between the two stages' total costs; in the first
+decile that is 3.4 against a ratio of 2.32. The prologue is shortened, not removed.</p>
+<p>Serial 46.5 ms → watermark 42.0 ms, <strong>1.11x</strong>. On the numeric corpus (5.9 KB table) it measured
+0.98x — threading overhead with nothing to hide.</p>
+<p><strong>In the real reader it would be worse.</strong> The prototype's stage ratio was favourable: its sheet scan
+is 33.6 ms against an SST parse of 14.5 ms that excludes inflate, a ratio of 2.32. The reader's real
+ratio is 29.3 / 19.8 = 1.48, because its SST stage is inflate-bound at 18.6 ms. A lower ratio means
+more stalling, not less. Scaling the measured stall gives ~14.9 ms of the 19.8 ms stage hidden away,
+about 4.9 ms off a 48.4 ms read — ~1.1x again, from both directions.</p>
+<p>Not worth building: ~1.1x on string-heavy workbooks only, in exchange for a background thread inside
+the reader, the <code>MaxSharedStringBytes</code> limit being enforced on it, exception propagation across it,
+and a public API change. The 1.69x ceiling remains real but sits behind the producer/consumer split,
+which is the same constraint that caps parallel parsing — and the watermark, which looked like the
+shortcut to it, delivers less than a sixth.</p>
+<h3 id="split-character-class-masks-in-the-csv-scanner--099x-rejected">Split character-class masks in the CSV scanner — 0.99x, rejected</h3>
+<p><code>CsvControlScanner</code> ORs four <code>Vector256.Equals</code> results into one mask, and the record loop then
+reloads <code>buf[stop]</code> to find out which class the hit belonged to. Keeping the four masks separate and
+testing the bit against them removes that second load. It measured 0.389 ms against 0.384 ms — <strong>no
+difference</strong>. Three extra <code>ExtractMostSignificantBits</code> cost exactly what an L1 hit costs, and the
+byte was in L1 by definition, having just been loaded into the vector register.</p>
+<h3 id="a-csv-specific-narrow-cell-descriptor--0104-ms-not-built">A CSV-specific narrow cell descriptor — 0.104 ms, not built</h3>
+<p><code>CellDesc</code> is 32 bytes because it carries <code>Number</code>, <code>HasNumber</code> and <code>SharedIndex</code> for the binary
+formats. CSV never sets any of them. A 16-byte descriptor measured 0.562 ms against 0.666 ms over
+200,000 fields — real, and <strong>2% of the read</strong>. Not worth a second descriptor type and a second
+<code>ToCell</code> path through <code>Row</code> and <code>Cell</code>.</p>
+<h3 id="restructuring-fastdouble-around-the-decimal-point--081x-rejected">Restructuring <code>FastDouble</code> around the decimal point — 0.81x, rejected</h3>
+<p><code>FastDouble</code> runs six branches per byte: dot seen, digit range, leading zero, digit counter,
+overflow guard, scale increment. Locating the dot once with <code>IndexOf</code> and running two tight digit
+loops removes all of that from the per-byte path. It measured <strong>slower</strong>: 17.0 ns against 13.9 ns.
+The corpus's value column averages 5.9 bytes, so the <code>IndexOf</code> call and the slicing cost more than
+the branches they eliminate. <code>FastDouble</code> is already 3.4x <code>double.TryParse</code> (13.9 ns vs 47.5 ns).</p>
+<h2 id="what-landed">What landed</h2>
+<p>Two changes, both verified against the full suite (1535 tests):</p>
+<ul>
+<li><strong><code>ParseRowInWindow</code> replacing <code>EnsureRowBuffered</code> + <code>ParseRow</code>.</strong> The old design located <code>&lt;/row</code>
+first and then walked the same bytes again looking for cells, traversing every row twice. Cells and
+the row end now come off one forward walk; the contiguity guarantee moved to a slow path that
+re-parses after a refill, which is reached only when a row genuinely straddles the buffer window.
+Worth 2.2 ms on the scan in isolation (1.10x).</li>
+<li><strong><code>XlsxXml.ColumnIndex</code> unrolled to XFD</strong>, the last valid column, with longer refs falling back to
+the original loop. 1.44x in a direct A/B over the 983,040 real <code>r=&quot;...&quot;</code> values from the corpus
+(4.40 ns → 3.05 ns per ref), agreeing on every one.</li>
+</ul>
+<p>Integrated effect: <strong>~1.8 ms, about 5% of L1.</strong> The components measure 3.4 ms in isolation; the gap
+is expected, because the <code>&lt;/row</code> pre-scan was also warming the cache for the walk that followed it.
+Microbenchmarks overstate.</p>
+<p>A third change, from the CSV investigation: <strong><code>FastDate</code>, a UTF-8 ISO-8601 date parser</strong>, wired into
+<code>Cell.TryGetDateTime</code> as the first attempt for non-numeric cells. Text dates went from unreadable
+(0 of 50,000) to 40.4 ns each, against 163.7 ns for the <code>GetString()</code> + <code>DateTime.Parse</code> workaround
+that was previously the only option. It serves CSV, text dates in XLS, and XLSX <code>t=&quot;d&quot;</code>.</p>
+<p>A fourth: <strong><code>FastDate.TryParseRoundTrip</code></strong>, a vectorized path for the 27-byte
+<code>yyyy-MM-ddTHH:mm:ss.fffffff</code> form — the shape this library's own <code>CsvWriter</code> emits. 1.45–1.49x over
+the scalar parser, gated by a 50,000-value differential and by <code>FastDateTests</code> cases covering a
+digit in each separator slot. Anything else falls through to the scalar parser unchanged.</p>
+<h3 id="second-round-2026-09-21-ryzen-7-5700x">Second round (2026-09-21, Ryzen 7 5700X)</h3>
+<p>Measured on the published tables' machine, BenchmarkDotNet <code>--job Medium</code>, one run before and one
+after, each whole benchmark class. Baseline was the previous commit built from a <code>git archive</code>.
+Full suite at 1759/1759 afterwards.</p>
+<ul>
+<li><strong><code>FastDate</code> reached the typed path.</strong> <code>ColumnParserFactory.TryParseDateTimeText</code> tried
+<code>Utf8Parser.TryParse(…, 'O')</code> before the culture parse, and <code>TryParseDateOnlyText</code> went straight to
+the culture parse. Both now try <code>FastDate</code> first and keep the culture parse as the fallback.
+<code>CsvParserTests.TextDatesBindExactlyAsTheCultureParserWould</code> pins nine shapes to the old result.</li>
+<li><strong>XLSX <code>t=&quot;d&quot;</code> cells use <code>FastDate</code>.</strong> <code>XlsxReader.Enumerator.TryParseIsoDate</code> tries it first and
+keeps its char-copy <code>DateTime.TryParse</code> for shapes <code>FastDate</code> rejects. Years below 100 are rejected
+as before. No benchmark reads <code>t=&quot;d&quot;</code> cells, so this one is unmeasured; it is the same parser the
+CSV rows below measure.</li>
+<li><strong><code>IRowWriter.WriteUtf8(ReadOnlySpan&lt;byte&gt;)</code></strong>, a default interface method that decodes to a
+string. <code>CsvRowWriter</code> and <code>XlsxRowWriter</code> override it to copy the bytes straight through when they
+are valid UTF-8 and need no escaping, and fall back to <code>Write(string)</code> otherwise — always for XLSX
+shared strings. The C ABI and the Arrow writer now call it instead of building a string per cell.
+<code>WriteUtf8ParityTests</code> checks 14 values byte-for-byte against <code>Write(string)</code> on all three paths.</li>
+<li><strong>Styled rows format the style id with <code>Utf8Formatter</code></strong> into the row buffer instead of an
+interpolated string per row.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>before</th>
+<th>after</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CsvParseBenchmark.ExcelParserSync</code> (typed, 50k rows)</td>
+<td>7.081 ms</td>
+<td>5.979 ms</td>
+<td>1.18x</td>
+</tr>
+<tr>
+<td><code>CsvParallelParseBenchmark.ConversionHeavy</code>, dop 1</td>
+<td>1,372.6 ms</td>
+<td>981.9 ms</td>
+<td>1.40x</td>
+</tr>
+<tr>
+<td><code>CsvParallelParseBenchmark.ConversionHeavy</code>, dop 16</td>
+<td>331.6 ms</td>
+<td>271.8 ms</td>
+<td>1.22x</td>
+</tr>
+<tr>
+<td><code>CsvParallelParseBenchmark.ConversionHeavyAggregate</code>, dop 1</td>
+<td>1,217.1 ms</td>
+<td>845.9 ms</td>
+<td>1.44x</td>
+</tr>
+<tr>
+<td><code>CsvParallelParseBenchmark.ConversionHeavyAggregate</code>, dop 8</td>
+<td>240.0 ms</td>
+<td>160.8 ms</td>
+<td>1.49x</td>
+</tr>
+<tr>
+<td><code>WritePathBenchmark.NativeStrings_Csv</code></td>
+<td>10.14 ms / 21.36 MB</td>
+<td>4.881 ms / 384 B</td>
+<td>2.08x</td>
+</tr>
+<tr>
+<td><code>WritePathBenchmark.NativeStrings_Xlsx</code></td>
+<td>27.16 ms / 21.38 MB</td>
+<td>21.053 ms / 18 KB</td>
+<td>1.29x</td>
+</tr>
+<tr>
+<td><code>WritePathBenchmark.ArrowStrings_Xlsx</code></td>
+<td>31.49 ms / 21.38 MB</td>
+<td>26.087 ms / 18 KB</td>
+<td>1.21x</td>
+</tr>
+<tr>
+<td><code>WritePathBenchmark.StyledRows_Xlsx</code></td>
+<td>10.07 ms / 7.65 MB</td>
+<td>7.814 ms / 18 KB</td>
+<td>1.29x</td>
+</tr>
+</tbody>
+</table>
+<p>Controls: <code>NarrowInt</code>, which has no dates, and Sylvan both stayed inside run-to-run noise (Sylvan
+11.97 → 12.78 ms, in the unfavourable direction). Allocation on the typed paths did not change; the
+model object per row is what they allocate. The published tables in <code>benchmarks.md</code> come from a
+third, separate run after these changes.</p>
+<h3 id="writing-doubles-2026-09-21-ryzen-7-5700x">Writing doubles (2026-09-21, Ryzen 7 5700X)</h3>
+<p><code>WriteBenchmark</code> had SpreadCheetah ~8% ahead of the XLSX writer. With compression off the writer
+still took 13.6 ms of its 17.5, so the cost was generating XML, not deflate. Per cell, above an
+empty row: string ~30 ns, int ~18 ns, double ~92 ns, date ~118 ns. Both of the last two end in
+<code>Utf8Formatter.TryFormat(double)</code>, the general shortest-round-trip formatter.</p>
+<p><code>CellFormatter.TryFormatDouble</code> tries scales 10⁰–10⁴ and takes the first where <code>round(v·10ᵈ) / 10ᵈ == v</code>
+exactly, for <code>0 &lt; |v| &lt; 1e9</code>. That integer, with a decimal point inserted, is the shortest form, so
+the output is byte-identical. Anything else, including <code>-0</code>, falls through to <code>Utf8Formatter</code>. The
+XLSX writer (numbers and date serials) and the CSV writer use it.</p>
+<table>
+<thead>
+<tr>
+<th>per value</th>
+<th><code>Utf8Formatter</code></th>
+<th><code>TryFormatDouble</code></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>short decimals (<code>1.5</code>, <code>45293.25</code>)</td>
+<td>61.6 ns</td>
+<td>15.1 ns</td>
+<td>4.07x</td>
+</tr>
+<tr>
+<td>integral</td>
+<td>55.2 ns</td>
+<td>12.5 ns</td>
+<td>4.40x</td>
+</tr>
+<tr>
+<td>serials with a time of day</td>
+<td>99.5 ns</td>
+<td>98.9 ns</td>
+<td>1.01x</td>
+</tr>
+</tbody>
+</table>
+<p>Correctness gate: 6.1M values (short decimals, random doubles across magnitudes, random bit
+patterns, edges and their neighbours), zero mismatches. <code>DoubleFormatTests</code> keeps 600k of them.</p>
+<p>End to end, A/B harness (one executable built against each <code>ExcelReader.Core.dll</code>, alternated
+three times, min of 25):</p>
+<table>
+<thead>
+<tr>
+<th>50k rows</th>
+<th>before</th>
+<th>after</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX</td>
+<td>17.50 ms</td>
+<td>12.68 ms</td>
+<td>1.38x</td>
+</tr>
+<tr>
+<td>XLSX, shared strings</td>
+<td>17.08 ms</td>
+<td>12.11 ms</td>
+<td>1.41x</td>
+</tr>
+<tr>
+<td>CSV</td>
+<td>6.71 ms</td>
+<td>4.23 ms</td>
+<td>1.59x</td>
+</tr>
+<tr>
+<td>XLSB (control)</td>
+<td>7.65 ms</td>
+<td>7.63 ms</td>
+<td>—</td>
+</tr>
+<tr>
+<td>SpreadCheetah (control)</td>
+<td>15.66 ms</td>
+<td>15.52 ms</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>BenchmarkDotNet afterwards: XLSX writing 12.261 ms against SpreadCheetah's 15.548 ms, CSV writing
+4.624 ms against Sep's 7.075 ms. XLSB writes doubles in binary and is unaffected.</p>
+<p>Not extended to serials with a time of day: <code>days + seconds/86400</code> has a factor of 3³ in the
+denominator, so its shortest form is ~17 digits and no scale reaches it. Only a full shortest-float
+algorithm (Ryu-class) would, for ~85 ns per such cell. Not built.</p>
+<h3 id="write-side-decomposition-of-xlsb-and-xls--nothing-to-take">Write-side decomposition of XLSB and XLS — nothing to take</h3>
+<p>Same per-column-type method as above, 50k rows:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>XLSB, <code>Fastest</code></th>
+<th>XLSB, no compression</th>
+<th>XLS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>all four columns</td>
+<td>8.37 ms</td>
+<td>3.98 ms</td>
+<td>5.19 ms</td>
+</tr>
+<tr>
+<td>empty rows</td>
+<td>1.79 ms</td>
+<td>0.94 ms</td>
+<td>0.53 ms</td>
+</tr>
+</tbody>
+</table>
+<p>XLSB is deflate-bound: more than half its time is compression, and serialization costs 10–17 ns per
+cell. <code>prefetchWrite</code> already moves that deflate off the caller's thread. XLS costs 5–7 ns per cell.</p>
+<p><strong>RK encoding for non-integral doubles — measured, reverted.</strong> The XLSB writer emits <code>BrtCellRk</code> only
+for integers. Adding the other two RK forms (truncated IEEE, integer/100), each accepted only when
+<code>Biff12.Rk</code> decodes it back to the same bits, turned 1.5 and 45293.25 into 4-byte cells: the raw sheet
+shrank 8% (3.75 → 3.45 MB) but the compressed one 1.3% (706 → 697 KB), and write time moved ~1%,
+inside noise. Deflate was already squeezing those 8-byte doubles. Not worth the diff or the Excel
+compatibility check an XLSB writer change needs.</p>
+<h3 id="the-native-bindings-nativeaot-loses-dynamic-pgo">The native bindings: NativeAOT loses dynamic PGO</h3>
+<p>The C++ and Rust bindings read <code>65K_Records_Data.xlsx</code> in ~110 ms, against ~65 ms for the .NET
+reader. One harness ran the same <code>xl_open_memory</code> + <code>xl_parse_typed</code> exports (14 typed columns) three
+ways, plus the equivalent Core-only read:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>ms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core read, JIT</td>
+<td>70.9</td>
+</tr>
+<tr>
+<td>ABI, JIT (<code>delegate* unmanaged</code> over the managed assembly)</td>
+<td>84.1</td>
+</tr>
+<tr>
+<td>ABI, NativeAOT (P/Invoke into the published library)</td>
+<td>109.3</td>
+</tr>
+<tr>
+<td>ABI, NativeAOT, <code>IlcInstructionSet=x86-64-v3</code></td>
+<td>107.3</td>
+</tr>
+<tr>
+<td>ABI, NativeAOT, <code>IlcPgoOptimize</code> (framework profile)</td>
+<td>109.4</td>
+</tr>
+<tr>
+<td>ABI, JIT, <code>DOTNET_TieredPGO=0</code></td>
+<td>106.6</td>
+</tr>
+</tbody>
+</table>
+<p>The C++ binding's published 110.4 ms matches the AOT row, so its <code>std::string</code> conversion is
+negligible. The ABI layer costs ~13 ms. The rest, ~25 ms, is <strong>dynamic PGO</strong>: with it off, the JIT
+lands exactly on NativeAOT. The instruction set is not the cause.</p>
+<p>Where PGO acts, <code>DOTNET_TieredPGO=0</code> against the default, JIT:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>PGO</th>
+<th>no PGO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>inflate only</td>
+<td>23.1 ms</td>
+<td>23.2 ms</td>
+</tr>
+<tr>
+<td>rows only</td>
+<td>61.8 ms</td>
+<td>79.7 ms</td>
+</tr>
+<tr>
+<td>+ 14 cell spans</td>
+<td>+1.3 ms</td>
+<td>+9.5 ms</td>
+</tr>
+</tbody>
+</table>
+<p>The XLSX scan. <code>MethodJitInliningFailed</code> events (runtime keyword <code>0x1000</code>, read with an in-process
+<code>EventListener</code>) showed what PGO inlines into the per-cell path that static heuristics refuse, as
+&quot;too many il bytes&quot; or &quot;unprofitable&quot;: <code>ReadCellOpenTagSpan</code>, <code>ScanCellAttributes</code>, <code>IsXmlSpace</code> (a
+call per attribute byte), <code>XlsxXml.ColumnIndex</code>, <code>IsCellStart</code>, <code>FastDouble.TryParse</code> and
+<code>CellAccumulator.Add</code>. <code>[MethodImpl(AggressiveInlining)]</code> on those seven:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>before</th>
+<th>after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rows only, JIT without PGO</td>
+<td>79.6 ms</td>
+<td>66.3 ms</td>
+</tr>
+<tr>
+<td>ABI, JIT without PGO</td>
+<td>107.4 ms</td>
+<td>94.0 ms</td>
+</tr>
+<tr>
+<td><strong>ABI, NativeAOT</strong></td>
+<td><strong>109.9 ms</strong></td>
+<td><strong>97.2 ms</strong> (1.13x)</td>
+</tr>
+<tr>
+<td>rows only, JIT with PGO</td>
+<td>60.0–62.2 ms</td>
+<td>60.8–62.8 ms (alternated three times; noise)</td>
+</tr>
+</tbody>
+</table>
+<p>Remaining gap to the PGO'd JIT is ~13 ms. Forcing <code>Row</code>'s column lookup inline changed nothing, so
+what is left in the cell accessor is block layout and register allocation, which attributes do not
+reach. A trace-derived <code>.mibc</code> fed to ILC (<code>MibcFile</code> items become <code>--mibc</code>) is the tool for that; it
+needs <code>dotnet-pgo</code>, which is not on nuget.org.</p>
+<p>Re-running the binding suites against a library published from this tree: the C++ full XLSX read
+went from 110.4 to 98.0 ms and Rust's from 123.5 to 108.5 ms, and the C++ <code>write_sheet</code> from
+136.6 to 100.1–105.3 ms, the last mostly from <code>TryFormatDouble</code>.</p>
+<h4 id="second-pass-xlsb-the-abi-layer-and-a-static-profile">Second pass: XLSB, the ABI layer, and a static profile</h4>
+<p>Same harness, now over all three formats (14 typed columns, 65K rows), min ms:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Core, JIT</th>
+<th>ABI, JIT</th>
+<th>ABI, NativeAOT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSB</td>
+<td>29.2</td>
+<td>45.3</td>
+<td>52.2</td>
+</tr>
+<tr>
+<td>CSV</td>
+<td>12.2</td>
+<td>26.9</td>
+<td>33.7</td>
+</tr>
+</tbody>
+</table>
+<p><strong>XLSB record reader.</strong> <code>Biff12RecordReader.TryReadRecord</code> runs once per cell and was refused inline
+without PGO. Forcing it inline moved the Core XLSB read from 33.3 to 27.1 ms without PGO, faster than
+the PGO'd JIT's 28.8. No change with PGO.</p>
+<p><strong>The ABI layer</strong> costs more than the whole CSV read. A CPU-sampled trace (<code>dotnet-trace</code>,
+<code>dotnet-sampled-thread-time</code>) and a counter around <code>BuildTable</code> split its ~15 ms on CSV into 0.6 ms
+copying the caller's buffer in <code>xl_open_memory</code>, 2.5 ms copying the column chunks into the native
+table, and ~12 ms of per-cell work. By column type, ABI minus Core: string ~33 ns/cell, date ~24,
+double ~24, int ~8. Three changes, worth 2.5–3 ms with PGO and ~1 ms without:</p>
+<ul>
+<li>string cells append their UTF-8 bytes directly instead of <code>TryFormat</code> into a scratch buffer and
+then copying;</li>
+<li>date/time/bool columns call the <code>ColumnParserFactory</code> readers directly instead of through the
+<code>ExcelCellReaders</code> delegate fields;</li>
+<li>the validity bitmap is not touched until a column's first null, which backfills every earlier row;
+a column with no nulls ships no bitmap, so writing a bit per cell was wasted.</li>
+</ul>
+<p>Building the table in native memory directly would remove the 2.5 ms copy but needs realloc growth
+(which copies too) and a change to what <code>xl_free_table</code> frees. Not done.</p>
+<p><strong>Static PGO profile.</strong> <code>tests/ExcelReader.NativePgoTrainer</code> runs the typed parse over the three
+fixtures; a trace of it becomes <code>src/ExcelReader.Native/pgo/excelreader.mibc</code>, which ILC now
+consumes on every publish. ABI through NativeAOT, min ms:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>no profile</th>
+<th>full profile</th>
+<th>profile without XLSB methods</th>
+<th>JIT with PGO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX</td>
+<td>95.8</td>
+<td>85.5</td>
+<td><strong>84.9</strong> (1.13x)</td>
+<td>~83</td>
+</tr>
+<tr>
+<td>XLSB</td>
+<td>42.9</td>
+<td>44.1</td>
+<td><strong>38.4</strong> (1.12x)</td>
+<td>~41.4</td>
+</tr>
+<tr>
+<td>CSV</td>
+<td>32.1</td>
+<td>25.8</td>
+<td><strong>25.6</strong> (1.26x)</td>
+<td>~24.4</td>
+</tr>
+</tbody>
+</table>
+<p>The profile's XLSB counts made the XLSB parse slower; dropping those methods from it made XLSB faster
+than both the unprofiled build and the JIT. The shipped profile excludes them.</p>
+<p><strong>Typed mapping, not changed.</strong> A generated <code>[ExcelSerializable]</code> map parses the 50K-row CSV in
+5.44 ms against 3.99 ms for a hand-written loop doing the same conversions. The generator's fused
+lambdas still invoke <code>ExcelCellReaders.String</code>/<code>DateTimeAuto</code>, which are delegate fields, so string and
+date cells pay two indirect calls. Emitting direct calls through a hidden public helper class
+measured ~3%, inside noise. Not worth new public surface.</p>
+<p>A prototype of the bigger change, the generator emitting one static whole-row parse over
+header-resolved column indices, showed the rest of the gap is not the mapping either. Stepping from the
+hand-written loop to the shipped path, min ms of one clean run:</p>
+<table>
+<thead>
+<tr>
+<th>step</th>
+<th>ms</th>
+<th>delta</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hand-written loop</td>
+<td>4.05</td>
+<td></td>
+</tr>
+<tr>
+<td>+ empty-cell checks and a column-index indirection</td>
+<td>4.35</td>
+<td>+0.30</td>
+</tr>
+<tr>
+<td>+ the whole-row parse as a separate static method</td>
+<td>4.49</td>
+<td>+0.13</td>
+</tr>
+<tr>
+<td>+ handing each model to a per-row callback</td>
+<td>5.04</td>
+<td>+0.55</td>
+</tr>
+<tr>
+<td>+ handing it out through an <code>IEnumerable&lt;T&gt;</code> iterator</td>
+<td>5.40</td>
+<td>+0.36</td>
+</tr>
+<tr>
+<td>shipped generated map</td>
+<td>5.45</td>
+<td>+0.05</td>
+</tr>
+</tbody>
+</table>
+<p>The per-column delegates and binding loop cost ~0.05 ms over a whole-row parse. The 1.36x is the
+API's shape, one model per row delivered to the caller, plus the empty-cell checks any correct mapper
+needs. A generator rewrite would recover ~1–5%. Not built.</p>
+<h3 id="third-round-2026-09-25-ryzen-7-5700x">Third round (2026-09-25, Ryzen 7 5700X)</h3>
+<p>This round covered two things: string-heavy XLSX first, then the 17-digit doubles that fill the
+real-data corpus. The iterations ran in the A/B console harness: one executable built against each
+<code>ExcelReader.Core.dll</code>, alternated three times. The before/after tables are BenchmarkDotNet
+<code>--job Medium</code>, comparing the previous commit (9cc3be4) against the result. Full suite at 2391/2391
+afterwards.</p>
+<h4 id="string-heavy-xlsx-the-shared-string-parse-was-half-the-prologue">String-heavy XLSX: the shared-string parse was half the prologue</h4>
+<p><code>XlsxSharedStringHotPathBenchmark</code> splits the read into stages. Its stored variants re-zip the same
+workbook without compression, so each stored row minus its compressed twin is that stage's inflate.</p>
+<table>
+<thead>
+<tr>
+<th>stage</th>
+<th>before</th>
+<th>after</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>whole read</td>
+<td>54.16 ms</td>
+<td>42.04 ms</td>
+<td>1.29x</td>
+</tr>
+<tr>
+<td>whole read, prefetch</td>
+<td>34.27 ms</td>
+<td>28.31 ms</td>
+<td>1.21x</td>
+</tr>
+<tr>
+<td>shared-string table (open + first row)</td>
+<td>23.07 ms</td>
+<td>13.63 ms</td>
+<td>1.69x</td>
+</tr>
+<tr>
+<td>whole read, stored</td>
+<td>32.32 ms</td>
+<td>19.97 ms</td>
+<td>1.62x</td>
+</tr>
+<tr>
+<td>shared-string table, stored</td>
+<td>11.53 ms</td>
+<td>3.10 ms</td>
+<td>3.72x</td>
+</tr>
+</tbody>
+</table>
+<p>Before, the table cost ~11.5 ms of inflate and ~11.5 ms of parse, so it was not inflate-bound on
+this machine. <code>ParseSharedBody</code> located every <code>&lt;si&gt;</code> with a sequence of token searches, even though
+nearly every entry has the plain shape <code>&lt;si&gt;&lt;t&gt;text&lt;/t&gt;&lt;/si&gt;</code>. Allocation did not change in any row.</p>
+<p>Three changes landed, each with parity tests in <code>XlsxXmlDialectTests</code>:</p>
+<ul>
+<li><strong>Plain shared strings</strong> (c22b90e). The fast path matches <code>&lt;si&gt;&lt;t&gt;</code>, runs one
+<code>IndexOfAny('&lt;', '&amp;')</code>, requires <code>&lt;/t&gt;&lt;/si&gt;</code> right after and copies the text. Anything else —
+entities, <code>xml:space</code>, rich runs, <code>rPh</code>, CDATA, <code>&lt;t/&gt;</code> — takes the existing path. In the harness
+the table went from 24.2 to 14.2 ms and the whole read from 55.4 to 45.3 ms.</li>
+<li><strong>The shared index parsed together with the cell close</strong> (4f7e620). One digit loop that must end at
+<code>&lt;/v&gt;&lt;/c&gt;</code>, instead of an <code>IndexOf('&lt;')</code> followed by <code>Utf8Parser.TryParse</code> per cell. In the harness,
+prefetch went from 35.7 to 33.4 ms and the stored sheet stage dropped 7.6%. Over the 524,288 indices
+in isolation, the digit loop costs 1.36 ms against 2.37 ms for <code>Utf8Parser</code>. A standalone
+parser swap with no fused close check did not show that gain end to end.</li>
+<li><strong>The canonical <code>&lt;c&gt;</code> attribute scanner inlined</strong> (1902511). The Tier1 disassembly showed its
+out-parameters (tag end, column, style, kind) going through the stack on every cell. In
+the harness this took prefetch 7.6%, the real-data read 5%, typed parsing 7% and real-data typed
+parsing 4% faster.</li>
+</ul>
+<p>Measured and not kept:</p>
+<table>
+<thead>
+<tr>
+<th>attempt</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hoist the <code>&lt;/row</code> check into a <code>NoInlining</code> helper to free registers</td>
+<td>1–2% slower</td>
+</tr>
+<tr>
+<td><code>NoInlining</code> on <code>ParseCellSpan</code></td>
+<td>5–8% slower</td>
+</tr>
+<tr>
+<td><code>AggressiveInlining</code> on the shared-index emitter</td>
+<td>neutral</td>
+</tr>
+<tr>
+<td>split the cell parser into hot and cold halves</td>
+<td>JIT 3% faster, NativeAOT 0.6% slower</td>
+</tr>
+<tr>
+<td>a smaller second <code>CellDesc</code></td>
+<td>ceiling 1.3 ms: removing <code>CellAccumulator.Add</code> entirely (measurement-only build) saves that much of the ~15.6 ms sheet parse</td>
+</tr>
+<tr>
+<td>faster <code>WorkbookLookups.SharedAt</code></td>
+<td>ceiling 0.5 ms, measured the same way; the cost is the memory access</td>
+</tr>
+<tr>
+<td>zero-copy <code>PrefetchStream</code> handoff</td>
+<td>ceiling ≤2.1 ms (prefetched sheet stage against stored); the copy itself is ~0.3 ms with a hot cache</td>
+</tr>
+</tbody>
+</table>
+<p>What remains of the 42 ms default read is ~22 ms of inflate (~10.5 ms for the table, ~11.5 ms for
+the sheet) and ~17 ms of worksheet scan, with no isolable hotspot left in it. Only
+<code>PrefetchDecompression</code> reduces the inflate share, by overlapping it with the parse.</p>
+<h4 id="17-digit-doubles-eisel-lemire">17-digit doubles: Eisel-Lemire</h4>
+<p>8.4% of the real-data corpus's numeric cells (49,799 of 589,815) have 17 significant digits, such as
+<code>35.840000000000003</code>, the form Excel writes for many computed values. <code>FastDouble</code>
+stopped at 15 digits, so each of those fell through to <code>double.TryParse</code>, at ~106 ns against ~36 ns
+now.</p>
+<p>c0fe107 accepts up to 19 digits. When the mantissa is ≤ 2⁵³ and the power of ten is within ±22, it
+keeps the exact multiply/divide. Otherwise it runs a port of fast_float's <code>compute_float</code>, using
+128-bit truncated powers of five for 10⁻⁶⁴–10⁶⁴. Values outside that table, subnormals and overflow
+still go to <code>double.TryParse</code>.</p>
+<p>Correctness gate: ~16M inputs compared bit for bit against <code>double.Parse</code>, with zero mismatches.
+The inputs were the corpus values, random bit patterns formatted as <code>R</code>, <code>G17</code> and <code>E18</code>, Excel-like
+magnitudes, random decimals, the edge cases, and 300,000 strings within one unit in the 19th digit of
+an exact halfway point between two doubles. <code>FastDoubleTests</code> keeps a 200,000-value random round
+trip and the 17–19 digit cases.</p>
+<p><strong>The first version lost precision.</strong> It also parsed the long values at emit time, which set
+<code>HasNumber</code>, and then <code>TryParse&lt;long&gt;</code> and <code>TryParse&lt;decimal&gt;</code> converted from the double:
+<code>long.MaxValue</code> became 2⁶³ and failed, and <code>35.840000000000003m</code> became <code>35.84m</code>.
+<code>CellVariantTests.TryParseLongSucceeds</code> caught it. XLSX emit now stops at 15 digits
+(<code>FastDouble.TryParseLossless</code>), where the double keeps every digit the text had; the 19-digit parser
+serves <code>TryGetDouble</code> and <code>TryParse&lt;double&gt;</code>. The emit-time version was faster (1.11x on the real-data
+read against 1.07x), and recovering those ~3 ms needs a separate &quot;approximate double&quot; flag on <code>Cell</code>.</p>
+<p>A/B harness, medians of three alternated rounds:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>before</th>
+<th>after</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>real-data XLSX, cell-by-cell</td>
+<td>58.3 ms</td>
+<td>54.4 ms</td>
+<td>1.07x</td>
+</tr>
+<tr>
+<td>same, stored</td>
+<td>36.1 ms</td>
+<td>32.5 ms</td>
+<td>1.11x</td>
+</tr>
+<tr>
+<td>real-data XLSX, typed parse</td>
+<td>69.6 ms</td>
+<td>65.8 ms</td>
+<td>1.06x</td>
+</tr>
+<tr>
+<td><code>xl_parse_typed</code> over the ABI, JIT</td>
+<td>71.5 ms</td>
+<td>68.2 ms</td>
+<td>1.05x</td>
+</tr>
+</tbody>
+</table>
+<p>The same investigation found a culture bug. <code>Cell.TryParse&lt;T&gt;(provider: null)</code> treated null as the
+invariant culture in the fast path but as the current culture in the fallback, so under pt-BR the
+fallback read <code>35.840000000000003</code> as 3.58e16. Before Eisel-Lemire every 17-digit cell took that
+fallback. The fallback that re-parses a stored double's formatted text used the caller's provider on
+text that is always invariant, so a pt-BR <code>TryParse&lt;Half&gt;</code> read 3.5 as 35. Since b8bcafa, null means
+the invariant culture everywhere, and that re-parse is always invariant. <code>CellNullProviderTests</code>
+runs under pt-BR.</p>
+<h4 id="nativeaot-again">NativeAOT, again</h4>
+<p>After this round, <code>xl_parse_typed</code> over the real-data XLSX file costs 74.1 ms under the JIT and
+84.0 ms under NativeAOT; XLSB is at parity (41.4 against 42.3 ms). The JIT with
+<code>DOTNET_TieredPGO=0</code> lands at 84.7 ms, so the gap is still dynamic PGO. Turning off guarded
+devirtualization changes nothing. The static profile does not recover it. The <code>.mibc</code> reaches ILC
+(<code>--mibc</code> is in the response file) and holds edge counts for <code>ParseRowInWindow</code>, yet removing it or
+regenerating it from this tree moves XLSX by ≤0.5% (85.1 against 85.4 ms). <code>IlcInstructionSet=x86-64-v3</code>
+is worth ~1%.</p>
+<p>A trap for whoever regenerates the profile: the ILC publish is incremental and ignores a changed
+<code>.mibc</code>, producing a byte-identical library. Delete <code>src/ExcelReader.Native/obj/Release/net10.0/&lt;rid&gt;/native</code>
+before publishing.</p>
+<p>The C++ binding's full XLSX read moved from 93.2 to ~85.4 ms with no native change, from the
+XLSX changes above.</p>
+<h3 id="nativeaot-xlsx-gap-re-checked-2026-10-09-ryzen-7-5700x">NativeAOT XLSX gap, re-checked (2026-10-09, Ryzen 7 5700X)</h3>
+<p>The gap quoted under &quot;NativeAOT, again&quot; (JIT 74.1 ms, NativeAOT 84.0 ms) predates <code>InflateStream</code>, the
+regenerated profile and the native column buffers, so it was re-measured first. The python binding
+reads <code>65K_Records_Data.xlsx</code> with <code>parse_typed</code> in 58.0–58.5 ms from the shipped library. The same
+<code>ReadApi.OpenMemory</code> + <code>TypedApi.ParseTyped</code> calls in a scratch console, JIT against NativeAOT built
+with the library's settings (<code>OptimizationPreference=Speed</code>, <code>x86-64-v3</code>, the <code>.mibc</code>), min of 40
+rounds:</p>
+<table>
+<thead>
+<tr>
+<th>stage</th>
+<th>JIT</th>
+<th>NativeAOT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>inflate <code>sheet1.xml</code> (<code>InflateStream</code>)</td>
+<td>16.0 ms</td>
+<td>16.0 ms</td>
+</tr>
+<tr>
+<td>rows only, no prefetch</td>
+<td>39.1 ms</td>
+<td>43.5 ms</td>
+</tr>
+<tr>
+<td>rows + <code>TryGetDouble</code> on every number</td>
+<td>42.8 ms</td>
+<td>47.9 ms</td>
+</tr>
+<tr>
+<td><code>xl_parse_typed</code></td>
+<td>54.0 ms</td>
+<td>60.7 ms</td>
+</tr>
+</tbody>
+</table>
+<p>So the gap is ~12% in the harness and ~7% against the shipped library. <strong>Inflate is at parity</strong>, so
+the decode loop is not part of it. About two thirds is the worksheet scan and a third is the typed
+conversions after it.</p>
+<p><strong>A first harness left out <code>OptimizationPreference=Speed</code></strong> and read 66.5 ms for NativeAOT: ILC's
+default blended mode inlines much less. Check a harness's ILC settings against the project's before
+trusting a gap measured in it.</p>
+<p>The disassembly, with <code>--codegenopt:JitDisasm=ParseRowInWindow</code> and <code>JitStdOutFile</code> given to ILC as
+<code>IlcArg</code> items through a <code>CustomAfterMicrosoftCommonTargets</code> file: ILC's <code>ParseRowInWindow</code> is 846
+bytes with 15 inlinees and <strong>a call to <code>ParseCellSpan</code></strong>. The JIT's Tier1 listing is 3,906 bytes with
+202 inlinees and no such call; it pulled <code>ParseCellSpan</code> and its callees into the row loop. (Earlier
+notes found <code>NoInlining</code> on <code>ParseCellSpan</code> costs the JIT 5–8%, so the inlined shape is the fast one.)
+<code>[MethodImpl(MethodImplOptions.AggressiveInlining)]</code> on <code>ParseCellSpan</code> makes ILC do the same:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>NativeAOT before</th>
+<th>after</th>
+<th>JIT before</th>
+<th>after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rows only</td>
+<td>43.5 ms</td>
+<td>41.8 ms</td>
+<td>39.2 ms</td>
+<td>39.5 ms</td>
+</tr>
+<tr>
+<td><code>xl_parse_typed</code></td>
+<td>60.7 ms</td>
+<td>58.9 ms</td>
+<td>54.0 ms</td>
+<td>54.0 ms</td>
+</tr>
+</tbody>
+</table>
+<p>That is 3–4% in the harness and neutral under the JIT. <strong>It does not reach the shipped library</strong>: the
+real <code>ExcelReader.Native.dll</code> built with and without the attribute, alternated three times through the
+python binding, measured 57.9–58.5 ms and 58.4–58.7 ms. The C++ <code>BM_ExcelReader_Xlsx_ParseOnly</code> agreed
+(55.9–56.8 ms against 56.6–56.8). The real library's <code>ParseCellSpan</code> was a call in its baseline too, so
+the attribute applies there; the Core-level harness just does not predict the end-to-end number, most
+likely because the C ABI layer and the typed column writers dominate what the scan saves. Not kept.</p>
+<p>What is left is spread thin: ~0.7 ms in the consumer's double parse (<code>TryGetDouble</code> over every number
+costs 4.4 ms under ILC and 3.7 ms under the JIT, with listings of about the same size, 662 and 641
+bytes), ~2.5 ms in the typed conversions, and the rest in the scan. No hot spot is visible in either
+listing.</p>
+<h3 id="fourth-round-2026-10-08-i7-1365u-a-managed-inflate-decoder">Fourth round (2026-10-08, i7-1365U): a managed inflate decoder</h3>
+<p>Measured on the laptop, so only the ratios mean anything; the published tables need the Ryzen run.
+Harnesses were throwaway console apps: interleaved rounds, minimum of 30 to 60, outputs compared
+byte for byte.</p>
+<p>Inflate only, single thread pinned to one core, against <code>DeflateStream</code> (.NET 10):</p>
+<table>
+<thead>
+<tr>
+<th>decoder</th>
+<th>XLSX <code>sheet1.xml</code>, 6.7 → 34.4 MB</th>
+<th>XLSB <code>sheet1.bin</code>, 3.7 → 15.9 MB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>libdeflate 1.19, whole buffer</td>
+<td>2.14–2.18x</td>
+<td>1.64–1.67x</td>
+</tr>
+<tr>
+<td>ISA-L 2.30, whole buffer</td>
+<td>1.48–1.49x</td>
+<td>1.29–1.33x</td>
+</tr>
+<tr>
+<td>ISA-L 2.30, streaming, 64 KB</td>
+<td>1.39–1.42x</td>
+<td>1.23–1.25x</td>
+</tr>
+<tr>
+<td><code>InflateStream</code></td>
+<td>1.56–1.61x</td>
+<td>1.35–1.41x</td>
+</tr>
+</tbody>
+</table>
+<p><code>InflateStream</code> is a C# port of libdeflate's decoder design made resumable. It reaches roughly
+three quarters of libdeflate's speed on XLSX and four fifths on XLSB, and passes ISA-L without a
+native dependency. An earlier throwaway version that decoded a whole buffer in one call measured
+1.74–1.78x on XLSX, so streaming costs under a tenth.</p>
+<p>End to end in the reader, in-process A/B over the real-data corpus, identical checksums. The
+<code>InflateStream</code> column is one run of 30 rounds; the ISA-L column spans four runs:</p>
+<table>
+<thead>
+<tr>
+<th>read</th>
+<th><code>InflateStream</code></th>
+<th>ISA-L behind the same seam</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX, no prefetch</td>
+<td>1.25–1.26x</td>
+<td>1.19–1.21x</td>
+</tr>
+<tr>
+<td>XLSB, no prefetch</td>
+<td>1.13–1.15x</td>
+<td>1.10–1.14x</td>
+</tr>
+<tr>
+<td>XLSX, prefetch</td>
+<td>1.11–1.12x</td>
+<td>1.09–1.15x</td>
+</tr>
+<tr>
+<td>XLSB, prefetch</td>
+<td>1.05–1.06x</td>
+<td>1.03–1.07x</td>
+</tr>
+</tbody>
+</table>
+<p>This is the <code>I + P</code> model again. Without prefetch a faster <code>I</code> converts directly. With prefetch the
+read is <code>max(I, P)</code>, both decoders land together, and what is left is the parse.</p>
+<p><code>InflateBenchmark</code>, BenchmarkDotNet <code>--job Short</code>, in-process, same laptop:</p>
+<table>
+<thead>
+<tr>
+<th>entry</th>
+<th><code>DeflateStream</code></th>
+<th><code>InflateStream</code></th>
+<th>ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX sheet</td>
+<td>34.91 ms, 541 B</td>
+<td>21.71 ms, 332 B</td>
+<td>0.62</td>
+</tr>
+<tr>
+<td>XLSB sheet</td>
+<td>19.40 ms, 404 B</td>
+<td>13.68 ms, 270 B</td>
+<td>0.71</td>
+</tr>
+<tr>
+<td>string-heavy <code>sharedStrings.xml</code></td>
+<td>16.10 ms, 280 B</td>
+<td>10.32 ms, 270 B</td>
+<td>0.64</td>
+</tr>
+</tbody>
+</table>
+<p>Measured and not kept:</p>
+<table>
+<thead>
+<tr>
+<th>attempt</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AggressiveOptimization</code> on the decode loop</td>
+<td>no change, so the loop does not depend on dynamic PGO</td>
+</tr>
+<tr>
+<td><code>Vector128</code> match copy for offsets of 16 and up</td>
+<td>no change on XLSX, slightly slower on XLSB</td>
+</tr>
+</tbody>
+</table>
+<h4 id="the-decode-loops-tier1-disassembly-2026-10-09-ryzen-7-5700x">The decode loop's Tier1 disassembly (2026-10-09, Ryzen 7 5700X)</h4>
+<p><code>DOTNET_JitDisasm=FastLoop</code> on a scratch harness that inflates the XLSX sheet 150 times. The <code>(Tier1)</code>
+listing is 955 bytes, and the loop <strong>keeps every live value in a register</strong>: <code>bitbuf</code>, <code>bitsleft</code>, both
+cursors, the limits, the table base and the mask are all in registers, with eight callee-saved pushes in the
+prologue and no stack traffic inside the loop. The spill problem the CSV scanner had is not here. Two
+earlier listings are <code>Instrumented Tier0</code> and <code>Tier1-OSR</code>; the OSR one is the method's first long call,
+so read the last listing.</p>
+<p>Where the time goes, from timestamps around the pieces, one XLSX sheet, 16.6 ms in total:</p>
+<table>
+<thead>
+<tr>
+<th>piece</th>
+<th>ms</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FastLoop</code> (1,042 calls)</td>
+<td>14.6</td>
+<td>88%</td>
+</tr>
+<tr>
+<td>417 dynamic block headers and table builds</td>
+<td>0.7</td>
+<td>4%</td>
+</tr>
+<tr>
+<td>copy to the caller and slide the window (isolated)</td>
+<td>0.8</td>
+<td>5%</td>
+</tr>
+</tbody>
+</table>
+<p>So the streaming overhead the &quot;Fourth round&quot; blamed for part of the gap is ~5%, and the table builds
+are not it either. The gap to libdeflate is inside the loop, at ~2.4 GB/s of output.</p>
+<p>What the listing does show is small. Each decoded entry pays a zero-extending <code>mov r12d, r15d</code> before
+<code>sub rsi, r12</code>, because <code>bitsleft</code> is a <code>long</code> and the entry a <code>uint</code>. Making <code>bitsleft</code> a <code>uint</code>, as
+libdeflate has it, removes that and measured 15.87–15.99 ms → 15.63–15.77 ms on XLSX (~1.5%) and nothing on XLSB.
+Not applied. The literal path takes four jumps per run of literals because the JIT laid the second and
+third literal out of line, and several <code>mov r13, rbx</code> / <code>shrx rbx, r13, r15</code> pairs keep the pre-shift
+<code>saved</code> value alive for the match path whether or not it is used. None of that is something source
+changes reach reliably; what is left is the JIT's block layout and register copies. Not worth chasing.</p>
+<p><strong>A behavior change came with it.</strong> <code>DeflateStream</code> does not reject a stream that ends before its
+final block: it returns what it decoded and reports end of stream. A sheet entry cut short therefore
+used to yield a silent prefix of its rows. <code>InflateStream</code> throws <code>InvalidDataException</code>.</p>
+<h2 id="known-open-items">Known open items</h2>
+<ul>
+<li><p><strong>Parallel inflate is the open lead (spec B, not built).</strong> It replaces the pipeline's producer only; the
+queue, workers and merge stay. The oracle ceilings at 8 threads, parallel inflate plus parse, are 7.7 ms for
+XLSX and 3.6 ms for XLSB, against 17.6 and 13.3 ms for the shipped pipeline. A deflate block finder costs
+0.4–1 ms per split point, with no false positives in 14 hits. The marker finding: XLSX back-references stop
+depending on the unknown window after about 1 MB, but XLSB ones never do, so about 65–70% of XLSB output bytes depend on the unknown window. The cost of the 16-bit marker decode loop is unmeasured, and it decides whether
+XLSB gains much.</p>
+</li>
+<li><p><code>InflateStream</code> reaches about three quarters of libdeflate's inflate speed on XLSX. The Tier1
+disassembly shows no spills and 88% of the time in <code>FastLoop</code> itself (see &quot;The decode loop's Tier1
+disassembly&quot;); the remainder is JIT codegen. A <code>uint bitsleft</code> is worth ~1.5% if anyone wants it.</p>
+</li>
+<li><p>&quot;Fourth round&quot; is from the i7-1365U. The Ryzen 7 5700X re-run (2026-10-09, <code>--job Medium</code>) is in
+<code>benchmarks.md</code>: <code>InflateStream</code> is 0.70x / 0.78x / 0.63x of <code>DeflateStream</code> on the XLSX sheet, XLSB
+sheet and string-heavy <code>sharedStrings.xml</code>, against 0.62 / 0.71 / 0.64 on the laptop. The
+non-prefetched reads moved with it (real-data XLSX 49.7 → 43.8 ms, XLSB 27.7 → 25.7 ms; string-heavy
+XLSX 41.2 → 33.2 ms) and the prefetched ones did not (27.8 → 29.5 ms, 16.9 → 17.4 ms), as the
+<code>max(I, P)</code> model predicts. The native C ABI table in <code>benchmarks.md</code> has not been re-run since.</p>
+</li>
+<li><p>NativeAOT XLSX is ~7–10% behind the JIT, down from the ~13% in &quot;NativeAOT, again&quot;; the diff of the
+JIT's Tier1 <code>ParseRowInWindow</code> against ILC's is done (see &quot;NativeAOT XLSX gap, re-checked&quot;). The one
+difference found does not move the shipped library.</p>
+</li>
+<li><p><strong>17-digit numbers parsed twice in XLSX: prototyped 2026-10-09 (Ryzen 7 5700X), not kept.</strong> Emit
+rejects them to keep the text exact and the consumer parses them again. The prototype parsed up to
+19 digits at emit, had <code>FastDouble</code> report whether the result keeps every digit (15 or fewer), and
+carried that as a <code>NumberApproximate</code> flag through <code>CellAccumulator</code>, <code>CellDesc</code> and <code>Cell</code>.
+<code>TryGetDouble</code> and <code>TryParse&lt;double&gt;</code> used the number; every other <code>T</code> ignored an approximate one and
+read the text, so <code>long</code> and <code>decimal</code> stayed exact. The flag costs nothing in size: <code>CellDesc</code> stays
+32 bytes (the new <code>bool</code> fills the last padding byte) and <code>Cell</code> has padding to spare, so &quot;a wider
+<code>Cell</code>&quot; was wrong. Real-data XLSX, 49,799 17-digit cells of 589,815, min of 35 rounds, base and new
+<code>ExcelReader.Core.dll</code> alternated three times in separate processes, identical checksums:</p>
+<table>
+<thead>
+<tr>
+<th>consumer</th>
+<th>before</th>
+<th>after</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TryParse&lt;double&gt;</code> on every number</td>
+<td>43.3–43.6 ms</td>
+<td>42.1–43.1 ms (~2%)</td>
+</tr>
+<tr>
+<td><code>TryGetDouble</code> on every number</td>
+<td>42.4–43.0 ms</td>
+<td>42.2–42.4 ms (~1%)</td>
+</tr>
+<tr>
+<td><code>TryParse&lt;decimal&gt;</code></td>
+<td>53.5–54.5 ms</td>
+<td>54.3–54.8 ms (~+1%)</td>
+</tr>
+<tr>
+<td>no number parsed</td>
+<td>41.5–41.9 ms</td>
+<td>42.1–43.0 ms (~+1.5%)</td>
+</tr>
+</tbody>
+</table>
+<p>A trade, like lazy number parsing: the double consumers win ~1 ms, not the ~3 ms estimated, because
+the 36 ns parse moves to emit and the consumers that never ask for a double (<code>decimal</code>, <code>long</code>,
+text) now pay it for nothing. Not worth a flag threaded through three structs and a <code>Cell</code>
+semantics rule. Reopen only if double columns dominate real workloads.</p>
+</li>
+<li><p><code>PrefetchStream</code> handoff: ~2.7 ms on the i7, ≤2.1 ms on the Ryzen string-heavy sheet, of which
+the copy itself is ~0.3 ms. Removing it means replacing the <code>Stream</code> seam with a buffer-exchange
+protocol — and that seam is where the decompressed-byte limit counters sit, so it is a trust
+boundary, not just a copy.</p>
+</li>
+<li><p><strong>CSV enumerator overhead, re-measured 2026-10-09 (Ryzen 7 5700X).</strong> The earlier reading is
+superseded: it predates <code>CsvStructuralScanner</code> and its per-record diagnosis no longer holds.
+Scratch harness, min of 50 interleaved rounds, 50,000 rows, the scanner driven directly for the
+framing floor (drain the field-end bits, emit a descriptor per field):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>wide, 32 fields (9.8 MB)</th>
+<th>narrow, 4 fields (1.2 MB)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>scanner only, popcount</td>
+<td>0.79 ms</td>
+<td>0.10 ms</td>
+</tr>
+<tr>
+<td>scan + drain + emit a 32-byte descriptor</td>
+<td>2.93 ms</td>
+<td>0.38 ms</td>
+</tr>
+<tr>
+<td>reader, rows only</td>
+<td>5.37 ms (1.83x)</td>
+<td>0.88 ms (2.3x)</td>
+</tr>
+<tr>
+<td>reader + <code>row[i].Value.Length</code> on every cell</td>
+<td>7.72 ms</td>
+<td>1.10 ms</td>
+</tr>
+</tbody>
+</table>
+<p>The overhead above framing is <strong>per field, not per record</strong>: fitting the two shapes gives ~1.4 ns
+per field and ~4 ns per row. Per field, <code>DrainFields</code> also loads <code>buf[stop]</code> to find the record end,
+<code>buf[start]</code> to test for a quote, and builds a <code>CellDesc</code> with a branch on empty; the prototype does
+none of that. The indexer adds ~1.4 ns per cell on top, about 45% of rows-only, not &quot;as much again&quot;.
+Hoisting <code>_delimiter</code> and <code>_quote</code> into locals made it <strong>slower</strong> (5.37 → 5.6–5.7 ms), the register
+pressure result from the CSV enumerator section again. Telling quoted from unquoted fields from a
+scanner quote-start mask instead of the <code>buf[start]</code> load is the one idea left; it is worth at most
+~0.5 ns of a ~3.3 ns field, which is a few percent of any read that converts values.</p>
+</li>
+<li><p>Reading a CSV from an already-resident buffer is slower than from a stream for spans only, and
+faster for full conversion. Reproduced in both directions across four runs, unexplained.</p>
+</li>
+</ul>
+<h3 id="resolved-the-csv-gap-against-sylvan-was-the-benchmark-not-using-this-librarys-date-api">Resolved: the CSV gap against Sylvan was the benchmark not using this library's date API</h3>
+<p><code>CsvReadBenchmark</code>'s accumulator parsed the date column with the BCL's
+<code>Utf8Parser.TryParse(..., 'O')</code> rather than <code>Cell.TryGetDateTime</code>. Every competitor in that table
+uses its own library's accessor — <code>GetDateTime</code>, <code>GetField&lt;DateTime&gt;</code> — so ExcelReader was the only
+entrant not being measured through its own API. It had no choice: before <code>FastDate</code>,
+<code>TryGetDateTime</code> could not read a text date at all.</p>
+<p>Measured at 63.6 ns per date for <code>Utf8Parser</code> against 42.0 ns for <code>TryGetDateTime</code> on <code>FastDate</code>.
+Switching the benchmark to the library's own accessor, then tuning the parser, under BenchmarkDotNet:</p>
+<table>
+<thead>
+<tr>
+<th><code>CsvReadBenchmark.ExcelReader</code></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>as published, date via <code>Utf8Parser.TryParse(…, 'O')</code></td>
+<td>4.786 ms</td>
+</tr>
+<tr>
+<td>date via <code>Cell.TryGetDateTime</code> (<code>FastDate</code>)</td>
+<td>4.149 ms</td>
+</tr>
+<tr>
+<td>+ <code>FastDate</code> tuned (below)</td>
+<td>3.966 ms</td>
+</tr>
+<tr>
+<td>+ vectorized round-trip path in <code>FastDate</code></td>
+<td><strong>3.381 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Those four figures come from four separate BenchmarkDotNet runs over a session during which the
+machine warmed and cooled, so the 4.786 → 3.381 span is not a clean single-run comparison. The
+drift-resistant statements are the isolated 1.45–1.49x on a date that is 35% of the read, which
+predicts about 1.13x end to end, and the same-run competitor ratio below.</p>
+<p>Same run, same corpus, 50,000 rows:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>mean</th>
+<th>ratio</th>
+<th>allocated</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ExcelReader</td>
+<td>3.381 ms</td>
+<td>1.00</td>
+<td>368 B</td>
+</tr>
+<tr>
+<td>ExcelReaderAsync</td>
+<td>3.309 ms</td>
+<td>0.98</td>
+<td>440 B</td>
+</tr>
+<tr>
+<td>Sylvan</td>
+<td>4.282 ms</td>
+<td>1.27</td>
+<td>1,688,737 B</td>
+</tr>
+<tr>
+<td>Sep</td>
+<td>7.115 ms</td>
+<td>2.10</td>
+<td>4,024 B</td>
+</tr>
+<tr>
+<td>CsvHelper</td>
+<td>26.027 ms</td>
+<td>7.70</td>
+<td>15,073,424 B</td>
+</tr>
+</tbody>
+</table>
+<p>None of this goes to the README until it is re-run on the Ryzen 7 5700X.</p>
+<p><strong>17.1% on the same method.</strong> Sylvan, the control, did not move across the first two runs
+(4.460 → 4.489 ms) — a third run reported 6.185 ms with a 1.56 ms standard deviation and is
+discarded as an outlier. Against its stable figure ExcelReader now leads by roughly 12%, at 368 B
+against 1,688,737 B allocated.</p>
+<p>Caveats: six iterations on a throttling mobile CPU give wide error bars (±0.64 ms on ExcelReader), so
+the lead over Sylvan sits near the margin. The 17.1% before/after on one method is the sounder
+number, being the same code path measured three times. Everything here needs re-running on the
+README's machine before publication.</p>
+<h4 id="tuning-the-parser-two-of-three-changes-were-worth-it">Tuning the parser: two of three changes were worth it</h4>
+<p>Measured over the corpus's 50,000 real date strings, all variants agreeing on every value:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>per date</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>original (<code>scale /= 10</code> per fraction digit)</td>
+<td>31.3 ns</td>
+<td>1.00x</td>
+</tr>
+<tr>
+<td>fraction scale from a lookup table</td>
+<td>27.2 ns</td>
+<td>1.15x</td>
+</tr>
+<tr>
+<td>+ two-digit fields unrolled</td>
+<td>23.1 ns</td>
+<td>1.35x</td>
+</tr>
+<tr>
+<td>+ SWAR four-digit year</td>
+<td>21.7 ns</td>
+<td>1.44x</td>
+</tr>
+</tbody>
+</table>
+<p>The first two shipped. The seven <code>scale /= 10</code> steps were a chain of dependent integer divisions, and
+the five two-digit fields did not need a loop at all.</p>
+<p><strong>The SWAR year did not ship.</strong> It buys 1.07x on top — 1.4 ns — in exchange for masked-validation bit
+arithmetic, and a first attempt at exactly that code had a bug: <code>(a | b) &lt;= 9</code> does not test two
+digits, since <code>2 | 8</code> is 10. The differential check against the other variants caught it. Six percent
+is not worth that surface in a date parser.</p>
+<h3 id="still-open">Still open</h3>
+<ul>
+<li>A first attempt to attribute this gap in an interleaved in-process harness found no gap at all
+(7.120 ms vs 7.180 ms). That harness was the wrong tool: Sylvan allocates 1.69 MB per operation
+and triggers 265 Gen0 collections per 1000 ops, so its GC cost lands on whichever variant happens
+to be running. Interleaving compares variants with matching allocation profiles; against an
+allocating competitor it needs BenchmarkDotNet's process isolation.</li>
+<li><code>FastDate</code> is now ~23 ns on a full round-trip timestamp. Whether Sylvan's date path is still ahead
+was never measured directly — it was inferred by subtracting totals, which is not evidence.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/performance/reader-performance.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

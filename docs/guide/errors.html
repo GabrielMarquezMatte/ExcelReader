@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Errors across languages | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Errors across languages | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/errors.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="errors-across-languages">Errors across languages</h1>
+
+<p>The .NET library throws exceptions. The C ABI turns each failure into an <code>XL_*</code> status code, and the
+Python, Rust and C++ bindings turn that code into their own error type. This page maps one onto the
+other, so a failure seen in one language can be recognized in another.</p>
+<h2 id="status-codes">Status codes</h2>
+<p>Every <code>xl_*</code> function returns one of these. After a failure, <code>xl_last_error_ptr</code> returns the message
+for the calling thread.</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Constant</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><code>XL_OK</code></td>
+<td>Success.</td>
+</tr>
+<tr>
+<td>-1</td>
+<td><code>XL_EOF</code></td>
+<td>No more rows or batches. Not an error: the bindings end iteration on it.</td>
+</tr>
+<tr>
+<td>-2</td>
+<td><code>XL_BUFFER_TOO_SMALL</code></td>
+<td>The caller's buffer cannot hold the result. The bindings grow the buffer and retry, so it never reaches user code.</td>
+</tr>
+<tr>
+<td>-3</td>
+<td><code>XL_INVALID_HANDLE</code></td>
+<td>The handle is null, already closed, or was never opened.</td>
+</tr>
+<tr>
+<td>-4</td>
+<td><code>XL_INVALID_ARGUMENT</code></td>
+<td>An argument failed validation before any work started: a null pointer, a bad length, malformed options.</td>
+</tr>
+<tr>
+<td>-5</td>
+<td><code>XL_ERROR</code></td>
+<td>Anything else. The message is the message of the .NET exception behind it.</td>
+</tr>
+<tr>
+<td>-6</td>
+<td><code>XL_STATUS_PASSWORD_REQUIRED</code></td>
+<td>The workbook is encrypted and no password was supplied.</td>
+</tr>
+<tr>
+<td>-7</td>
+<td><code>XL_STATUS_PASSWORD_INCORRECT</code></td>
+<td>The supplied password did not match the workbook's verifier.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="by-failure">By failure</h2>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>C#</th>
+<th>Status</th>
+<th>Python</th>
+<th>Rust</th>
+<th>C++</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Encrypted, no password</td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelEncryptionException.html"><code>ExcelEncryptionException</code></a>, <code>Reason == PasswordRequired</code></td>
+<td>-6</td>
+<td><code>PasswordRequiredError</code></td>
+<td><code>Error::PasswordRequired</code></td>
+<td><code>xl::Error</code>, <code>code == XL_STATUS_PASSWORD_REQUIRED</code></td>
+</tr>
+<tr>
+<td>Wrong password</td>
+<td><code>ExcelEncryptionException</code>, <code>Reason == PasswordIncorrect</code></td>
+<td>-7</td>
+<td><code>PasswordIncorrectError</code></td>
+<td><code>Error::PasswordIncorrect</code></td>
+<td><code>xl::Error</code>, <code>code == XL_STATUS_PASSWORD_INCORRECT</code></td>
+</tr>
+<tr>
+<td>Unsupported encryption, or failed integrity check</td>
+<td><code>ExcelEncryptionException</code>, <code>Reason</code> is <code>UnsupportedScheme</code> or <code>IntegrityFailure</code></td>
+<td>-5</td>
+<td><code>ExcelReaderError</code></td>
+<td><code>Error::Native</code></td>
+<td><code>xl::Error</code>, <code>code == XL_ERROR</code></td>
+</tr>
+<tr>
+<td>Corrupt or malformed file</td>
+<td><code>InvalidDataException</code></td>
+<td>-5</td>
+<td><code>ExcelReaderError</code></td>
+<td><code>Error::Native</code></td>
+<td><code>xl::Error</code>, <code>code == XL_ERROR</code></td>
+</tr>
+<tr>
+<td>Feature the reader does not support</td>
+<td><code>NotSupportedException</code></td>
+<td>-5</td>
+<td><code>ExcelReaderError</code></td>
+<td><code>Error::Native</code></td>
+<td><code>xl::Error</code>, <code>code == XL_ERROR</code></td>
+</tr>
+<tr>
+<td>File exceeds a configured resource limit</td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelLimitExceededException.html"><code>ExcelLimitExceededException</code></a></td>
+<td>-5</td>
+<td><code>ExcelReaderError</code></td>
+<td><code>Error::Native</code></td>
+<td><code>xl::Error</code>, <code>code == XL_ERROR</code></td>
+</tr>
+<tr>
+<td>Workbook already closed</td>
+<td><code>ObjectDisposedException</code></td>
+<td>-3</td>
+<td><code>ExcelReaderError</code></td>
+<td><code>Error::Native</code></td>
+<td><code>xl::Error</code>, <code>code == XL_INVALID_HANDLE</code></td>
+</tr>
+<tr>
+<td>Invalid argument</td>
+<td><code>ArgumentException</code> and its subclasses</td>
+<td>-4, or -5 when the check happens past the ABI boundary</td>
+<td><code>ExcelReaderError</code></td>
+<td><code>Error::Native</code></td>
+<td><code>xl::Error</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>PasswordRequiredError</code> and <code>PasswordIncorrectError</code> derive from <code>ExcelReaderError</code>, so
+<code>except ExcelReaderError</code> catches every native failure in Python. Rust's <code>Error::code()</code> returns the
+status for every variant. The C++ header throws nothing: every entry point returns
+<code>std::expected&lt;T, xl::Error&gt;</code>.</p>
+<p>Only the two password cases are worth retrying with different input. The rest fail the same way on
+every attempt.</p>
+<p>Each binding also checks some arguments itself, before calling the ABI, and reports those with its
+own native types: Python raises <code>ValueError</code>, <code>TypeError</code> or <code>IndexError</code>; Rust panics on an
+out-of-range index (see the crate README's &quot;Bounds and panics&quot;); C++ returns <code>xl::Error</code> with
+<code>code == XL_INVALID_ARGUMENT</code>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/errors.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

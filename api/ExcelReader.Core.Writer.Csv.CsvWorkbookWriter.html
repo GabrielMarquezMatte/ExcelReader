@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CsvWorkbookWriter | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CsvWorkbookWriter | ExcelReader ">
+      
+      <meta name="description" content="Writes a CSV file through the  contract. A CSV file holds exactly one sheet, so only a single  call is supported.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Writer_Csv_CsvWorkbookWriter.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Writer.Csv.CsvWorkbookWriter%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter">
+
+
+
+  <h1 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter" class="text-break">
+Class CsvWorkbookWriter  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Writer.html">Writer</a>.<a class="xref" href="ExcelReader.Core.Writer.Csv.html">Csv</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Writes a CSV file through the <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html">IWorkbookWriter&lt;TSheet&gt;</a> contract. A CSV file holds
+exactly one sheet, so only a single <a class="xref" href="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html#ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_AddSheet_System_String_">AddSheet(string)</a> call is supported.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class CsvWorkbookWriter : IWorkbookWriter&lt;CsvSheetWriter&gt;, IDisposable, IAsyncDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CsvWorkbookWriter</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html">IWorkbookWriter</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Csv.CsvSheetWriter.html">CsvSheetWriter</a>&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iasyncdisposable">IAsyncDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="ExcelReader.Arrow.ArrowWriteExtensions.html#ExcelReader_Arrow_ArrowWriteExtensions_WriteRecordBatch_ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Apache_Arrow_RecordBatch_ExcelReader_Arrow_ArrowWriteOptions_">ArrowWriteExtensions.WriteRecordBatch(CsvWorkbookWriter, RecordBatch, ArrowWriteOptions?)</a>
+  </div>
+  <div>
+      <a class="xref" href="ExcelReader.Arrow.ArrowWriteExtensions.html#ExcelReader_Arrow_ArrowWriteExtensions_WriteRecordBatchAsync_ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Apache_Arrow_RecordBatch_ExcelReader_Arrow_ArrowWriteOptions_System_Threading_CancellationToken_">ArrowWriteExtensions.WriteRecordBatchAsync(CsvWorkbookWriter, RecordBatch, ArrowWriteOptions?, CancellationToken)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_AddSheet_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.AddSheet*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_AddSheet_System_String_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.AddSheet(System.String)">
+  AddSheet(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Begins a new sheet named <code class="paramref">name</code> and returns its writer. Only one sheet may be
+open (started and not yet ended) at a time; the previous sheet's writer must be ended and
+disposed before starting the next one.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CsvSheetWriter AddSheet(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The sheet's name, shown to Excel; must be unique (ignoring case) within the workbook and
+meet Excel's sheet-name restrictions (1-31 characters, no <code>: \ / ? * [ ]</code>).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Csv.CsvSheetWriter.html">CsvSheetWriter</a></dt>
+    <dd><p>The writer for the new sheet.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">name</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">name</code> is empty, longer than 31 characters, or contains one of <code>: \ / ? * [ ]</code>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The workbook has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A sheet was already added; a CSV file holds only one.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_AddSheet_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.AddSheet*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_AddSheet_System_String_ExcelReader_Core_ExcelSheetVisibility_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.AddSheet(System.String,ExcelReader.Core.ExcelSheetVisibility)">
+  AddSheet(string, ExcelSheetVisibility)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates <code class="paramref">visibility</code>, then ignores it: delimited text has no tab bar, so a
+CSV file cannot record that a sheet is hidden.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CsvSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The sheet's name, shown to Excel; must be unique (ignoring case) within the workbook and
+meet Excel's sheet-name restrictions (1-31 characters, no <code>: \ / ? * [ ]</code>).</p>
+</dd>
+    <dt><code>visibility</code> <a class="xref" href="ExcelReader.Core.ExcelSheetVisibility.html">ExcelSheetVisibility</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Csv.CsvSheetWriter.html">CsvSheetWriter</a></dt>
+    <dd><p>The writer for the new sheet.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">name</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">name</code> is empty, longer than 31 characters, or contains one of <code>: \ / ? * [ ]</code>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The workbook has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A sheet was already added; a CSV file holds only one.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">visibility</code> is not a defined value.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_AddStyle_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.AddStyle*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.AddStyle(ExcelReader.Core.Writer.CellStyle)">
+  AddStyle(CellStyle)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>No-op: CSV has no cell styles. Always returns 0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AddStyle(CellStyle style)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>style</code> <a class="xref" href="ExcelReader.Core.Writer.CellStyle.html">CellStyle</a></dt>
+    <dd><p>The number format/bold/italic combination to register.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The style's index, for use with <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_SetColumnStyle_System_Int32_System_Int32_">SetColumnStyle(int, int)</a> and <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Int32_System_Threading_CancellationToken_">StartRowAsync(int, CancellationToken)</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Create_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.Create*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Create_System_IO_Stream_System_Boolean_ExcelReader_Core_Writer_Csv_CsvWriterOptions_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.Create(System.IO.Stream,System.Boolean,ExcelReader.Core.Writer.Csv.CsvWriterOptions)">
+  Create(Stream, bool, CsvWriterOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a writer that emits a CSV file to <code class="paramref">stream</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CsvWorkbookWriter Create(Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The destination stream.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>, the stream is left open when the writer is disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.Csv.CsvWriterOptions.html">CsvWriterOptions</a></dt>
+    <dd><p>Delimiter/quote options; defaults to <a class="xref" href="ExcelReader.Core.Writer.Csv.CsvWriterOptions.html#ExcelReader_Core_Writer_Csv_CsvWriterOptions_Default">Default</a> when omitted.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html">CsvWorkbookWriter</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Dispose_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.Dispose*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Dispose" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html#ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_DisposeAsync">DisposeAsync()</a>, for native/unmanaged callers whose ABI
+is synchronous.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_DisposeAsync_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.DisposeAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_DisposeAsync" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.DisposeAsync">
+  DisposeAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or
+resetting unmanaged resources asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask DisposeAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd><p>A task that represents the asynchronous dispose operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_End_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.End*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_End" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.End">
+  End()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html#ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_EndAsync_System_Threading_CancellationToken_">EndAsync(CancellationToken)</a>, for native/unmanaged callers whose ABI is
+synchronous.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void End()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The workbook has already been ended.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_EndAsync_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.EndAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_EndAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.EndAsync(System.Threading.CancellationToken)">
+  EndAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finalizes the workbook, writing any trailing structure (e.g. the workbook manifest/index)
+so the destination stream contains a complete, readable file. No further sheets may be added
+afterward. Idempotent with disposal: disposing an already-ended workbook is a no-op beyond
+releasing resources. A call that fails part-way still ends the workbook: it cannot be retried,
+and disposing it only releases the stream. A token already canceled on entry leaves the
+workbook untouched.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask EndAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The workbook has already been ended.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Flush_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.Flush*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_Flush" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.Flush">
+  Flush()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html#ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_FlushAsync_System_Threading_CancellationToken_">FlushAsync(CancellationToken)</a>, for native/unmanaged callers whose ABI
+is synchronous.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Flush()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_FlushAsync_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.FlushAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvWorkbookWriter_FlushAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.FlushAsync(System.Threading.CancellationToken)">
+  FlushAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Flushes any buffered output for the workbook and its current sheet to the destination stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask FlushAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvWorkbookWriter.cs/#L124" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

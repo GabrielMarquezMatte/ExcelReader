@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TableView | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TableView | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/TableView.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="class-tableview">Class TableView</h1>
+
+<p>The rows of a typed parse, held in native columnar memory.</p>
+<p>Each row converts to <code>T</code> on access. Owns that memory; a random-access range of <code>T</code>.</p>
+<pre><code class="lang-cpp">template &lt;typename T&gt;
+class xl::TableView
+</code></pre>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T</code></td>
+<td>Row type, mapped by <code>ExcelMapper&lt;T&gt;</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="methods">Methods</h2>
+<h3 id="begin">begin</h3>
+<pre><code class="lang-cpp">iterator begin() const
+</code></pre>
+<p><strong>Returns</strong> iterator</p>
+<h3 id="end">end</h3>
+<pre><code class="lang-cpp">iterator end() const
+</code></pre>
+<p><strong>Returns</strong> iterator</p>
+<h3 id="size">size</h3>
+<pre><code class="lang-cpp">int64_t size() const noexcept
+</code></pre>
+<p><strong>Returns</strong> int64_t</p>
+<h3 id="empty">empty</h3>
+<pre><code class="lang-cpp">bool empty() const noexcept
+</code></pre>
+<p><strong>Returns</strong> bool</p>
+<h3 id="at">at</h3>
+<pre><code class="lang-cpp">std::optional&lt;T&gt; at(int64_t row) const
+</code></pre>
+<p>Row <code>row</code> as <code>T</code>, bounds-checked.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>row</code></td>
+<td>int64_t</td>
+<td></td>
+<td>0-based row.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::optional&lt;T&gt;: The row, or empty outside <code>[0, size())</code>.</p>
+<h3 id="to_vector">to_vector</h3>
+<pre><code class="lang-cpp">std::vector&lt;T&gt; to_vector() const
+</code></pre>
+<p>Every row converted to <code>T</code>.</p>
+<p><strong>Returns</strong> std::vector&lt;T&gt;</p>
+<h3 id="from_raw">from_raw</h3>
+<pre><code class="lang-cpp">static TableView from_raw(xl_table table)
+</code></pre>
+<p>Takes ownership of a table produced by the C ABI.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>table</code></td>
+<td>xl_table</td>
+<td></td>
+<td>Table from <code>xl_parse_typed</code> or <code>xl_typed_reader_next</code>, freed by this object.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="TableView.html">TableView</a></p>
+<h2 id="operators">Operators</h2>
+<h3 id="operator">operator[]</h3>
+<pre><code class="lang-cpp">T operator[](int64_t row) const
+</code></pre>
+<p>Row <code>row</code> as <code>T</code>. Unchecked; at() is the checked read.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>row</code></td>
+<td>int64_t</td>
+<td></td>
+<td>0-based row, below size().</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> T</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/TableView.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

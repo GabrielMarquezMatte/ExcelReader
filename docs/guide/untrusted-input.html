@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Reading untrusted files | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Reading untrusted files | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/untrusted-input.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="reading-untrusted-files">Reading untrusted files</h1>
+
+<p>What one hostile workbook can cost you, which options bound it, and how to reject a file cleanly.
+Read this before you accept spreadsheets from uploads, APIs or mail.</p>
+<p>A spreadsheet is a container whose sizes, counts and offsets are written by whoever made the file.
+The readers check every one of those values before it drives an allocation, and the options below
+turn what is left — a file that is well-formed but simply enormous — into an
+<a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelLimitExceededException.html"><code>ExcelLimitExceededException</code></a> instead of an out-of-memory crash. The defaults suit
+a desktop tool or a batch job reading files you trust. A server should set its own.</p>
+<h2 id="the-limits">The limits</h2>
+<p>All of them live on <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html"><code>ExcelReaderOptions</code></a>:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th style="text-align: right;">Default</th>
+<th>Bounds</th>
+<th>Formats</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MaxTotalDecompressedBytes</code></td>
+<td style="text-align: right;">512 MiB</td>
+<td>What one read of a sheet inflates or loads from its container, counting the workbook's metadata, styles, shared strings and decrypted package</td>
+<td>XLSX, XLSB, XLS, encrypted</td>
+</tr>
+<tr>
+<td><code>MaxSharedStringBytes</code></td>
+<td style="text-align: right;">128 MiB</td>
+<td>The shared-string table, which is held in memory for the whole read</td>
+<td>XLSX, XLSB, XLS</td>
+</tr>
+<tr>
+<td><code>MaxCellBytes</code></td>
+<td style="text-align: right;">32 MiB</td>
+<td>Each buffer that grows to hold one cell value, or one CSV record</td>
+<td>all</td>
+</tr>
+<tr>
+<td><code>MaxZipEntries</code></td>
+<td style="text-align: right;">65,536</td>
+<td>Entries in the ZIP directory</td>
+<td>XLSX, XLSB</td>
+</tr>
+<tr>
+<td><code>MaxPasswordSpinCount</code></td>
+<td style="text-align: right;">100,000</td>
+<td>Key-derivation iterations an agile-encrypted file may ask for</td>
+<td>encrypted XLSX, XLSB</td>
+</tr>
+</tbody>
+</table>
+<p>Two limits are fixed by Excel's grid rather than configured: a cell past column XFD (16,384) throws
+with <code>LimitName == &quot;Columns&quot;</code>, and no single buffer may exceed .NET's array size
+(<code>LimitName == &quot;ArrayMaxLength&quot;</code>).</p>
+<p>How they count:</p>
+<ul>
+<li><strong><code>MaxTotalDecompressedBytes</code> is per read of a sheet.</strong> The workbook's one-time loads (its
+metadata, styles and shared strings) count toward every read, and each read adds the sheet it
+inflates. Reading a sheet again starts from the one-time loads, so a workbook kept open and read
+repeatedly never runs out.</li>
+<li><strong>XLS has nothing to inflate, but it is not streamed:</strong> the whole Workbook stream is read into
+memory, up to <code>MaxTotalDecompressedBytes</code>.</li>
+<li><strong>CSV has no total limit.</strong> It streams, so the size of what you hand it is the bound; only
+<code>MaxCellBytes</code> applies.</li>
+<li><strong>Zero or a negative value turns a byte or entry limit off.</strong> <code>MaxPasswordSpinCount</code> has no off
+switch. In the Python, Rust and C++ bindings and the C ABI, <code>0</code> means the default instead, and a
+limit cannot be turned off.</li>
+<li><strong>Reads running at once each have their own budget.</strong> Ten uploads read together, or several sheets
+of one workbook read on different threads, can inflate ten times the budget between them.</li>
+</ul>
+<h2 id="a-profile-for-uploads">A profile for uploads</h2>
+<p>Size each limit for the largest file you legitimately expect, measured rather than guessed. For a
+service taking spreadsheets of a few MB, something like:</p>
+<!-- snippet: untrusted-input-options -->
+<pre><code class="lang-csharp">var uploadOptions = new ExcelReaderOptions
+{
+    MaxTotalDecompressedBytes = 64L * 1024 * 1024, // everything one workbook may inflate
+    MaxSharedStringBytes = 16L * 1024 * 1024,
+    MaxCellBytes = 1024 * 1024,
+    MaxZipEntries = 1_000,
+};
+</code></pre>
+<p>Cap the upload itself as well, before it reaches the reader: the options bound what the file
+expands to, not how many bytes you accept. <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_"><code>Excel.Open</code></a> needs a seekable stream, so
+buffer a request body to a file or to memory first.</p>
+<p>Leave <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_PrefetchDecompression"><code>PrefetchDecompression</code></a> off: it adds a thread per read, which a busy server
+cannot spare. For encrypted uploads, set <code>VerifyEncryptedIntegrity</code> so a tampered package is
+rejected; see <a href="encryption.html">Encrypted workbooks</a>.</p>
+<p>No option bounds wall-clock time. The work a read does grows with the bytes it inflates, which the
+limits bound; for a deadline, use the async entry points and enumerators, which take a
+<code>CancellationToken</code>.</p>
+<h2 id="rejecting-a-file">Rejecting a file</h2>
+<p>A limit can trip when the workbook opens, when you start reading a sheet (XLSX loads its shared
+strings then), or halfway down it. Wrap the whole read, not just the open, and do not commit rows until the read
+has finished:</p>
+<!-- snippet: untrusted-input-reject -->
+<pre><code class="lang-csharp">try
+{
+    using IExcelWorkbook workbook = Excel.Open(upload, options: uploadOptions);
+    foreach (Row row in workbook.FirstSheet)
+    {
+        // stage the row; commit only once the loop has finished
+    }
+}
+catch (ExcelLimitExceededException ex)
+{
+    Console.WriteLine($&quot;Rejected: {ex.LimitName} reached {ex.Actual}, limit {ex.Limit}&quot;);
+}
+catch (Exception ex) when (IsRejectedFile(ex))
+{
+    Console.WriteLine($&quot;Rejected: {ex.Message}&quot;);
+}
+
+static bool IsRejectedFile(Exception ex) =&gt;
+    ex is InvalidDataException or EndOfStreamException or NotSupportedException
+        or ExcelEncryptionException or ExcelParseException
+    || ex.GetType() == typeof(ArgumentException)
+    || ex.GetType() == typeof(InvalidOperationException);
+</code></pre>
+<p><code>LimitName</code> is the option's name (or <code>Columns</code>, <code>ArrayMaxLength</code>); <code>Limit</code> and <code>Actual</code> are in that
+limit's unit — bytes, entries or iterations.</p>
+<p>That exception list is exactly what the fuzz suite accepts as a correct rejection of arbitrary
+bytes. Anything else escaping a read of a file — an <code>IndexOutOfRangeException</code>, an
+<code>OutOfMemoryException</code>, a hang — is a bug; please report it privately as described in
+<a href="../../SECURITY.html">SECURITY.md</a>. See <a href="errors.html">Errors across languages</a> for how these map onto the
+bindings.</p>
+<h2 id="what-the-reader-does-not-do">What the reader does not do</h2>
+<ul>
+<li><strong>It evaluates nothing.</strong> A formula cell reports the result Excel cached when it saved the file,
+so the value is whatever the file claims; recompute anything you rely on. Macros are never run
+and external links never followed.</li>
+<li><strong>It resolves no XML entities beyond the predefined ones.</strong> Sheet XML goes through the library's
+own scanner, which decodes <code>&amp;amp;</code>-style and numeric references and copies anything else through
+as text, so there is no entity expansion and no external fetch. The one <code>XmlReader</code>, for the
+encryption descriptor, prohibits DTDs.</li>
+</ul>
+<h2 id="writing-untrusted-text-to-csv">Writing untrusted text to CSV</h2>
+<p>The writers store text as text: in XLSX, XLSB and XLS a string that starts with <code>=</code> is still a
+string. CSV has no cell types, and Excel opening a <code>.csv</code> treats a field starting with <code>=</code>, <code>+</code>,
+<code>-</code> or <code>@</code> as a formula. <a class="xref" href="../../api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html"><code>CsvWorkbookWriter</code></a> writes your text unchanged, so if a person may open the
+file in a spreadsheet program, neutralize those fields yourself:</p>
+<!-- snippet: untrusted-input-csv-injection -->
+<pre><code class="lang-csharp">static string Neutralize(string text) =&gt;
+    text.Length &gt; 0 &amp;&amp; &quot;=+-@\t\r&quot;.Contains(text[0]) ? &quot;'&quot; + text : text;
+
+row.Write(Neutralize(comment));
+</code></pre>
+<p>The leading <code>'</code> changes the data, so do this only for files meant for people, not for files another
+program parses back.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/untrusted-input.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

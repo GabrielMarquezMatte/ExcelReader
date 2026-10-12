@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace ExcelReader.Core.Writer | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace ExcelReader.Core.Writer | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Writer">
+
+  <h1 id="ExcelReader_Core_Writer" data-uid="ExcelReader.Core.Writer" class="text-break">Namespace ExcelReader.Core.Writer</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a></dt>
+      <dd><p>Creates <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout&lt;T&gt;</a> instances.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout&lt;T&gt;</a></dt>
+      <dd><p>How <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html">SheetWriterExtensions</a>' <code>WriteRecordsAsync</code> turns a <code class="typeparamref">T</code> into a
+header row and one row per record. Create one with <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>:
+<a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html#ExcelReader_Core_Writer_ExcelRecordLayout_FromAttributes__1">FromAttributes&lt;T&gt;()</a> reflects over the record type, and
+<a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html#ExcelReader_Core_Writer_ExcelRecordLayout_Generated__1">Generated&lt;T&gt;()</a> uses the <code>[ExcelSerializable]</code> source-generated map.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.html">ExcelRecordMapBuilder&lt;T, TRow&gt;</a></dt>
+      <dd><p>Accumulates a property-to-column write plan for <code class="typeparamref">T</code>, fed either by the
+source generator (feature A) or by a hand-written <a class="xref" href="ExcelReader.Core.Writer.IExcelRecordMap-1.html">IExcelRecordMap&lt;T&gt;</a> implementation.
+The write-side counterpart to <a class="xref" href="ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html">ExcelRowMapBuilder&lt;T&gt;</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
+      <dd><p>Configures an Excel table written with <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_BeginTable_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_">BeginTable(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?)</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html">SheetWriterExtensions</a></dt>
+      <dd><p>Convenience methods layered on <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html">ISheetWriter&lt;TRow&gt;</a>: write a whole collection of
+records to a sheet in one call, driving the start-row/write/dispose lifecycle per record.</p>
+</dd>
+    </dl>
+    <h3 id="structs">
+Structs
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.CellStyle.html">CellStyle</a></dt>
+      <dd><p>A column- or row-level cell style: number format, bold, and italic. Register one with <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+    </dl>
+    <h3 id="interfaces">
+Interfaces
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.IExcelCellWriter-1.html">IExcelCellWriter&lt;T&gt;</a></dt>
+      <dd><p>Writes a value of type <code class="typeparamref">T</code> as a cell of a row, for use with the
+<code>[ExcelConverter]</code> attribute on a property that <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html#ExcelReader_Core_Writer_ExcelRecordLayout_FromAttributes__1">FromAttributes&lt;T&gt;()</a> writes.
+Implement this alongside <code>IExcelCellConverter&lt;T&gt;</code> on the same converter type to round-trip
+a custom type through both writing (via <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html#ExcelReader_Core_Writer_ExcelRecordLayout_FromAttributes__1">FromAttributes&lt;T&gt;()</a>) and reading
+(via <code>ExcelParser&lt;T&gt;</code>). A single instance is shared across every row and thread, so
+implementations must be stateless and thread-safe.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.IExcelRecordMap-1.html">IExcelRecordMap&lt;T&gt;</a></dt>
+      <dd><p>Implemented by the source generator (feature A) — or by hand, before the generator runs — on the
+record type itself, which must be <code>partial</code>. Generated in the same <code>partial</code> as
+<a class="xref" href="ExcelReader.Core.Parser.IExcelRowMap-1.html">IExcelRowMap&lt;T&gt;</a>, since both maps derive from the same
+property list and attributes.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.IRowWriter.html">IRowWriter</a></dt>
+      <dd><p>Writes one row's cells in column order, starting at the first column. Obtained from
+<a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Threading_CancellationToken_">StartRowAsync(CancellationToken)</a>; each <code>Write</code>/<a class="xref" href="ExcelReader.Core.Writer.IRowWriter.html#ExcelReader_Core_Writer_IRowWriter_Skip_System_Int32_">Skip(int)</a> call advances
+to the next column, so cells must be written left-to-right with no way to revisit an earlier
+column. Disposing the row writer (sync or async) finalizes the row and returns it to the sheet.
+Calling any member after disposal throws <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html">ISheetWriter&lt;TRow&gt;</a></dt>
+      <dd><p>Writes one sheet's rows to the workbook. Obtained from <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddSheet_System_String_">AddSheet(string)</a>;
+a caller optionally sets column styles and widths, writes rows in order via <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Threading_CancellationToken_">StartRowAsync(CancellationToken)</a>,
+then ends the sheet. The sheet's leading structure is written when the first row starts, or at
+<a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_EndAsync_System_Threading_CancellationToken_">EndAsync(CancellationToken)</a> for a sheet with no rows.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html">ITableSheetWriter&lt;TRow&gt;</a></dt>
+      <dd><p>A sheet writer that can write Excel tables (ranges formatted with &quot;Format as Table&quot;). Implemented by the
+XLSX and XLSB sheet writers.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html">IWorkbookWriter&lt;TSheet&gt;</a></dt>
+      <dd><p>Writes a whole workbook (XLSX, XLSB, XLS or CSV) to a destination stream, one sheet at a time.
+Implementations open the underlying stream/archive on construction, so a caller only needs to
+add sheets with <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddSheet_System_String_">AddSheet(string)</a> and dispose the workbook (or call
+<a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_EndAsync_System_Threading_CancellationToken_">EndAsync(CancellationToken)</a> then dispose) when finished.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

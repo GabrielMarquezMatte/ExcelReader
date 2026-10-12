@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>excelreader (Python) | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="excelreader (Python) | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/python/README.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+
+<p><img src="https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png" alt="ExcelReader logo"></p>
+<h1 id="excelreader-python">excelreader (Python)</h1>
+<p>Read and write XLSX, XLSB, XLS and CSV through ExcelReader's NativeAOT library. No .NET runtime
+required — the shared library is self-contained.</p>
+<h2 id="install-from-source">Install (from source)</h2>
+<pre><code class="lang-bash">python python/scripts/build_native.py   # requires the .NET 10 SDK, once per machine
+pip install -e &quot;python[dev]&quot;
+</code></pre>
+<p><code>build_native.py</code> publishes <code>src/ExcelReader.Native</code> for your platform and copies the resulting
+<code>ExcelReader.Native.{dll,so,dylib}</code> into <code>excelreader/_lib/</code>. To point at a binary you built
+elsewhere, set <code>EXCELREADER_NATIVE_LIB</code> to its full path.</p>
+<h2 id="usage">Usage</h2>
+<pre><code class="lang-python">from excelreader import open_workbook
+
+with open_workbook(&quot;book.xlsx&quot;) as workbook:
+    print(workbook.sheet_count, workbook.sheets[0].name)
+    for row in workbook.sheets[0].rows():
+        for cell in row:
+            print(cell.column, cell.type.name, cell.value)
+</code></pre>
+<h3 id="sheets">Sheets</h3>
+<p>A workbook hands out sheets. <code>workbook.sheets</code> is a sequence: <code>len()</code>, iteration, and lookup by
+index (negative allowed), slice or name (names match without regard to case; a miss raises
+<code>KeyError</code>). A <code>Sheet</code> is the workbook and an index; it holds no native resource, and every read on
+it opens its own cursor.</p>
+<pre><code class="lang-python">import excelreader
+
+with excelreader.open_workbook(&quot;report.xlsx&quot;) as workbook:
+    for sheet in workbook.sheets:
+        print(sheet.index, sheet.name, sheet.visibility)
+
+    totals = workbook.sheets[&quot;Totals&quot;]
+    for row in totals.rows():
+        ...
+</code></pre>
+<p>One open workbook can be read from several threads, which loads the shared-string table once.
+The native calls release the GIL:</p>
+<pre><code class="lang-python">from concurrent.futures import ThreadPoolExecutor
+
+with excelreader.open_workbook(&quot;report.xlsx&quot;) as workbook, ThreadPoolExecutor() as pool:
+    tables = list(pool.map(lambda sheet: sheet.to_arrow(sheet.infer_schema()), workbook.sheets))
+</code></pre>
+<p><code>rows()</code> and <code>iter_parse_typed()</code> are generators: the native cursor opens at the first <code>next()</code>. A
+generator that has already started keeps working after <code>workbook.close()</code>; one that has not started
+raises at its first <code>next()</code>. A <code>RecordBatchReader</code> opens its stream at the call, so it works after
+<code>close()</code> even if never started.</p>
+<h3 id="formats">Formats</h3>
+<p><code>open_workbook</code> sniffs XLS/XLSX/XLSB by file signature. CSV has no signature, so it is chosen by the
+<code>.csv</code> extension — or explicitly:</p>
+<pre><code class="lang-python">open_workbook(&quot;data.txt&quot;, format=&quot;csv&quot;)
+</code></pre>
+<h3 id="dates">Dates</h3>
+<p><code>cell.value</code> is always the raw text as stored, so <code>CellType.DATE</code> cells hold Excel serial numbers.
+Use <code>Cell.as_date()</code> to convert, passing the workbook's epoch flag:</p>
+<pre><code class="lang-python">as_date = cell.as_date(workbook.is_date1904)
+</code></pre>
+<p><code>as_date()</code> returns <code>None</code> for any cell that isn't <code>CellType.DATE</code>.</p>
+<h3 id="reading-everything-at-once">Reading everything at once</h3>
+<p><code>rows()</code> iterates row-by-row; <code>read_all()</code> materializes the whole sheet in one call:</p>
+<pre><code class="lang-python">all_rows = workbook.sheets[0].read_all()
+</code></pre>
+<p>This holds every row in memory at once, so prefer <code>rows()</code> for very large sheets.</p>
+<h3 id="reading-everything-at-once-faster">Reading everything at once, faster</h3>
+<p><code>read_all()</code>/<code>rows()</code> build one <code>Cell</code>/<code>str</code> object per cell, which dominates wall-clock time on a
+large sheet. <code>read_all_columnar()</code> decodes the same data into parallel flat arrays instead — no
+per-cell object construction — and is several times faster on large sheets:</p>
+<pre><code class="lang-python">columnar = workbook.sheets[0].read_all_columnar()
+# columnar.row_offsets[i]:row_offsets[i+1]  -&gt; cell indices for row i
+# columnar.columns[j] / columnar.types[j]   -&gt; cell j's column index / CellType
+# columnar.value_offsets[j]:[j+1]           -&gt; cell j's byte slice into columnar.values
+</code></pre>
+<p>Materialize a single cell on demand instead of decoding every value up front:</p>
+<pre><code class="lang-python">from excelreader import decode_cell
+
+first_cell = decode_cell(columnar, 0)
+</code></pre>
+<p>Each array is a stdlib <code>array.array('i')</code>, or a NumPy <code>int32</code> array if NumPy is installed
+(<code>pip install -e &quot;python[numpy]&quot;</code>) — NumPy is optional and never required.</p>
+<h3 id="typed-columns--the-fastest-path">Typed columns — the fastest path</h3>
+<p>Everything above hands back cell <em>text</em>, which means the library formats every value to a string on
+the way out. <code>parse_typed()</code> skips that entirely: you give it a schema, and the conversion happens
+natively, straight into typed column buffers. On a 65,536 × 14 sheet it is ~8× faster than
+<code>read_all_columnar()</code>, ~25× faster than <code>read_all()</code>, and faster than <code>polars.read_excel()</code> — see
+<a href="#reading">Reading</a> below for the measured numbers.</p>
+<pre><code class="lang-python">from excelreader import ColumnSpec, ColumnType
+
+with open_workbook(&quot;sales.xlsb&quot;) as workbook:
+    table = workbook.sheets[0].parse_typed([
+        ColumnSpec(ColumnType.STRING, name=&quot;Region&quot;),
+        ColumnSpec(ColumnType.DATE, name=&quot;Order Date&quot;),
+        ColumnSpec(ColumnType.F64, name=&quot;Total Revenue&quot;, nullable=True),
+    ])
+
+table.row_count            # rows read
+table.names                # [&quot;Region&quot;, &quot;Order Date&quot;, &quot;Total Revenue&quot;]
+region, day, revenue = table.columns
+region[0]                  # &quot;Asia&quot; — strings decode on demand, not one str per row up front
+day[0]                     # 15477 — days since 1970-01-01
+revenue[0]                 # 14862.69
+table.validity[2]          # bit-packed nulls, or None when the column has none
+</code></pre>
+<p>Leave <code>name</code> out to resolve a column by position instead: <code>ColumnSpec(ColumnType.I64, index=3)</code>.
+<code>header_row</code> defaults to 1 (the first row names the columns); pass <code>header_row=0</code> for a sheet with no
+header, where every spec must resolve by index.</p>
+<p>A column that fails to convert is an error unless its spec sets <code>nullable=True</code>, which records the
+failure in <code>table.validity</code> and keeps reading.</p>
+<p><code>parse_typed()</code> always reads the whole sheet from its first row, independent of any <code>rows()</code>
+generator in progress.</p>
+<h4 id="reading-a-sheet-a-batch-at-a-time">Reading a sheet a batch at a time</h4>
+<p>For a sheet too large to hold in memory at once, <code>iter_parse_typed()</code> is <code>parse_typed()</code> a batch at a
+time — a generator yielding one <code>TypedTable</code> per batch:</p>
+<pre><code class="lang-python">with open_workbook(&quot;sales.xlsb&quot;) as workbook:
+    schema = [
+        ColumnSpec(ColumnType.STRING, name=&quot;Region&quot;),
+        ColumnSpec(ColumnType.DATE, name=&quot;Order Date&quot;),
+        ColumnSpec(ColumnType.F64, name=&quot;Total Revenue&quot;, nullable=True),
+    ]
+    for batch in workbook.sheets[0].iter_parse_typed(schema, batch_size=10_000):
+        region, day, revenue = batch.columns
+        ...
+</code></pre>
+<p><code>batch_size</code> is rows per batch; <code>0</code> means one unbounded batch, identical to <code>parse_typed()</code>, and a
+negative value is an error. Chunked reads are independent: several can be open on one workbook at
+once, typed or Arrow (see <a href="#arrow">Arrow</a> below), and none disturbs another.</p>
+<p>Being a generator, <code>iter_parse_typed()</code> opens nothing until the first iteration, so a bad
+<code>batch_size</code> is only raised there, not at the call.</p>
+<h4 id="reading-a-large-sheet-on-several-threads">Reading a large sheet on several threads</h4>
+<p><code>parse_typed()</code>, <code>to_arrow()</code>, <code>to_record_batch()</code> and <code>to_polars()</code> take <code>parallelism</code>: <code>1</code> (the
+default) reads on one thread, <code>0</code> uses every core, <code>n</code> up to n threads. XLSX, XLSB and CSV are split. XLS, or a
+sheet under 256 KiB, is read on one thread with the same result. The table is identical
+either way. Every partition's columns are held until they are merged, so the peak memory is higher
+than a sequential read of the same file. <code>to_polars()</code> with <code>parallelism</code> other than 1 parses the whole
+file instead of streaming it in batches.</p>
+<p><code>xl_parse_typed</code> on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th style="text-align: right;"><code>parallelism=1</code></th>
+<th style="text-align: right;"><code>parallelism=0</code></th>
+<th style="text-align: right;">Speed-up</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>65K_Records_Data.csv</code> (8 MB, 65,535 rows)</td>
+<td style="text-align: right;">21.4 ms</td>
+<td style="text-align: right;">5.8 ms</td>
+<td style="text-align: right;">3.7x</td>
+</tr>
+<tr>
+<td>the same rows ×20 (160 MB, 1.3M rows)</td>
+<td style="text-align: right;">425.9 ms</td>
+<td style="text-align: right;">117.5 ms</td>
+<td style="text-align: right;">3.6x</td>
+</tr>
+</tbody>
+</table>
+<p>The same call on the real-data workbooks (XLSX 6.7 MB compressed, XLSB 3.7 MB; measured with the
+published NativeAOT library): XLSX 54.1 ms at
+<code>parallelism=1</code> against 20.3 ms at <code>0</code> (2.6x), XLSB 28.2 ms against 15.2 ms (1.85x). Inflate runs on
+one thread, so under the JIT the sheet stage stops scaling at about three threads.</p>
+<p>Peak working set on the 160 MB file, above the interpreter's own, went from 470 MiB to 503 MiB (both
+include the file's bytes and the handle's copy of them).</p>
+<h4 id="guessing-a-schema">Guessing a schema</h4>
+<p>Writing the <code>ColumnSpec</code> list by hand means already knowing every column's name and type. When you
+don't, <code>infer_schema()</code> samples the sheet and guesses one for you:</p>
+<pre><code class="lang-python">with open_workbook(&quot;sales.xlsb&quot;) as workbook:
+    sheet = workbook.sheets[0]
+    schema = sheet.infer_schema()   # header_row=1, sample_size=100 by default
+    table = sheet.parse_typed(schema)
+</code></pre>
+<p>By default each column's type comes from the <code>CellType</code> Excel already stored for its sampled cells,
+so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
+mix of kinds, only formula/error results, or nothing sampled falls back to <code>ColumnType.STRING</code>;
+<code>nullable</code> is set when any sampled row left the column empty. CSV cells carry no such type tag, so
+by default every CSV column is guessed <code>ColumnType.STRING</code>. Pass <code>parse_text=True</code> to type text cells
+from their exact shape instead: integers, decimals, <code>true</code>/<code>false</code> and ISO dates or date-times. Codes
+with a leading zero (<code>00123</code>), scientific notation (<code>12E4</code>), padded or comma-decimal numbers and
+non-ISO dates stay strings. It is
+still a guess over the sample, so a value further down can fail to convert:</p>
+<pre><code class="lang-python">with open_workbook(&quot;sales.csv&quot;) as workbook:
+    sheet = workbook.sheets[0]
+    schema = sheet.infer_schema(parse_text=True)
+    table = sheet.parse_typed(schema, parallelism=0)
+</code></pre>
+<h3 id="writing">Writing</h3>
+<p><code>write_workbook()</code> writes a <code>TypedTable</code> (what <code>parse_typed()</code> returns) back out as a single sheet,
+through the same <code>xl_write_typed</code> native export — one-shot, no writer handle before or after the call:</p>
+<pre><code class="lang-python">from excelreader import ColumnType, write_workbook
+
+with open_workbook(&quot;sales.xlsb&quot;) as workbook:
+    sheet = workbook.sheets[0]
+    table = sheet.parse_typed(sheet.infer_schema())
+
+types = [ColumnType.STRING, ColumnType.DATE, ColumnType.F64]  # one per table.columns, in order
+write_workbook(&quot;sales_copy.xlsx&quot;, table, types)
+</code></pre>
+<p><code>types</code> is required because a <code>TypedTable</code> column is a raw buffer (<code>array</code>/<code>StringColumn</code>/NumPy
+array) and nothing about the buffer alone tells I64 from TIME apart — both are 8-byte-per-row
+arrays. <code>format</code> is inferred from the path's extension (one of xlsx/xlsb/xls/csv) or set explicitly:</p>
+<pre><code class="lang-python">write_workbook(&quot;report.dat&quot;, table, types, format=&quot;csv&quot;)
+</code></pre>
+<p><code>write_pandas()</code> and <code>write_polars()</code> build the table from a DataFrame instead (both go through
+<code>write_arrow()</code>, so <code>pyarrow</code> must be installed):</p>
+<pre><code class="lang-python">from excelreader import write_pandas, write_polars
+
+write_pandas(&quot;report.xlsx&quot;, df)          # requires pandas + pyarrow
+write_polars(&quot;report.xlsx&quot;, polars_df)   # requires polars + pyarrow
+</code></pre>
+<p><code>WriteOptions</code> sets the sheet name and CSV dialect, mirroring <code>xl_write_options</code> — every field
+defaults to <code>None</code>, meaning &quot;use the library default&quot;:</p>
+<pre><code class="lang-python">from excelreader import WriteOptions
+
+write_workbook(
+    &quot;report.xlsx&quot;, table, types,
+    options=WriteOptions(sheet_name=&quot;Q3 Results&quot;, use_shared_strings=True),
+)
+</code></pre>
+<p><strong>Phase-1 limits, stated plainly:</strong> a single sheet only (no multi-sheet workbooks); the whole table
+must already be in memory (no streaming/chunked writes); no styling beyond the temporal number
+formats <code>xl_write_typed</code> applies to DATE/TIME/TIMESTAMP columns. <code>format=&quot;auto&quot;</code> is not accepted —
+sniffing reads a file's existing signature bytes, and a file being created has none.</p>
+<h2 id="writing-a-sheet-row-by-row">Writing a sheet row by row</h2>
+<p><code>open_workbook</code>'s counterpart for writing one row at a time, instead of building a whole table
+first:</p>
+<pre><code class="lang-python">import datetime
+from excelreader import open_writer
+
+with open_writer(&quot;out.xlsx&quot;) as writer:
+    writer.start_sheet(&quot;Data&quot;)
+    writer.write_row([&quot;name&quot;, &quot;qty&quot;, &quot;when&quot;])
+    writer.write_row([&quot;widget&quot;, 7, datetime.date(2026, 1, 31)])
+    writer.end_sheet()
+</code></pre>
+<p><code>write_row</code> picks each cell's type from the Python value. For control over a column's type — or to
+write a typed blank — use the explicit methods: <code>write_str</code>, <code>write_i64</code>, <code>write_f64</code>, <code>write_bool</code>,
+<code>write_date</code>, <code>write_time</code>, <code>write_timestamp</code>, and <code>write_null(ColumnType.I64)</code>. A <code>None</code> passed to
+<code>write_row</code> becomes a blank string cell.</p>
+<p>To build a workbook without touching the filesystem, use <code>open_writer_to_memory</code> and read the result
+out with <code>bytes()</code>:</p>
+<pre><code class="lang-python">from excelreader import open_writer_to_memory
+
+with open_writer_to_memory(&quot;xlsx&quot;) as writer:
+    writer.start_sheet(&quot;Data&quot;)
+    writer.write_row([&quot;name&quot;, &quot;qty&quot;])
+    writer.end_sheet()
+    payload = writer.bytes()
+</code></pre>
+<p><code>write_workbook_to_bytes()</code> is the same idea for the columnar <code>write_workbook()</code> path, and
+<code>write_arrow_to_bytes()</code>, <code>write_pandas_to_bytes()</code> and <code>write_polars_to_bytes()</code> for the frame
+writers. With no path to infer it from, each takes an explicit <code>format</code>:</p>
+<pre><code class="lang-python">from excelreader import write_pandas_to_bytes
+
+payload = write_pandas_to_bytes(df, format=&quot;xlsx&quot;)
+</code></pre>
+<h3 id="arrow">Arrow</h3>
+<p>With <code>pyarrow</code> installed, <code>to_arrow()</code> runs the same read and hands the buffers to pyarrow zero-copy
+over the Arrow C Data Interface:</p>
+<pre><code class="lang-python">import pyarrow as pa
+
+with open_workbook(&quot;sales.xlsb&quot;) as workbook:
+    array = workbook.sheets[0].to_arrow(schema)
+
+batch = pa.RecordBatch.from_struct_array(array)
+</code></pre>
+<p>pyarrow owns the buffers from that point on, so the result stays valid after the workbook is closed.</p>
+<h4 id="streaming-recordbatchreader-pandas-and-polars">Streaming: RecordBatchReader, pandas, and polars</h4>
+<p><code>to_record_batch_reader()</code> is <code>to_arrow()</code> a batch at a time, as a streaming
+<code>pyarrow.RecordBatchReader</code> — peak memory is one batch rather than one sheet:</p>
+<pre><code class="lang-python">with open_workbook(&quot;sales.xlsb&quot;) as workbook:
+    reader = workbook.sheets[0].to_record_batch_reader(schema, batch_size=10_000)
+    for batch in reader:
+        ...
+</code></pre>
+<p>Same <code>batch_size</code> rules as <code>iter_parse_typed()</code> above, except <code>to_record_batch_reader()</code> raises
+immediately rather than on the first iteration. The reader keeps working after the workbook is closed.</p>
+<p><code>iter_pandas()</code>/<code>iter_polars()</code> build on it, yielding one DataFrame per batch (requires pyarrow, plus
+pandas or polars respectively):</p>
+<pre><code class="lang-python">with open_workbook(&quot;sales.xlsb&quot;) as workbook:
+    for frame in workbook.sheets[0].iter_polars(schema, batch_size=10_000):
+        ...
+</code></pre>
+<p><code>to_pandas()</code>/<code>to_polars()</code> materialize the whole sheet as a single DataFrame and also take a
+<code>batch_size</code>, but the two spend it differently — do not blur them. <code>to_polars()</code> genuinely streams:
+polars consumes the reader batch by batch, so the whole sheet is never resident as Arrow buffers at
+once. <code>to_pandas()</code> does <strong>not</strong> bound peak memory the same way — <code>RecordBatchReader.read_all()</code>
+concatenates every batch before pandas ever sees them. What <code>batch_size</code> buys <code>to_pandas()</code> instead is
+the conversion: <code>self_destruct=True</code> frees each Arrow chunk as pandas consumes it, so the sheet is
+never held twice, once as Arrow and once as the DataFrame.</p>
+<p><strong>A faulted stream surfaces differently from every other native error in this library</strong>: pyarrow's
+<code>RecordBatchReader</code> reports a failed batch as a plain <code>OSError</code> carrying the native error message, not
+<code>ExcelReaderError</code> — the failure crosses the Arrow C Data Interface before this library's own
+exception wrapping ever runs.</p>
+<h3 id="from-memory">From memory</h3>
+<pre><code class="lang-python">from excelreader import open_bytes
+
+with open_bytes(payload) as workbook:
+    ...
+</code></pre>
+<h3 id="from-your-own-bytes">From your own bytes</h3>
+<p><code>open_source()</code> takes any object with a <code>size</code> and a <code>read_at(offset, buffer)</code> that fills <code>buffer</code>
+and returns the count. The library asks for 4 MiB blocks and caches them, and every sheet can still
+be read on its own thread.</p>
+<pre><code class="lang-python">import urllib.request
+
+from excelreader import open_source
+
+class HttpSource:
+    def __init__(self, url):
+        self.url = url
+        with urllib.request.urlopen(urllib.request.Request(url, method=&quot;HEAD&quot;)) as response:
+            self.size = int(response.headers[&quot;Content-Length&quot;])
+
+    def read_at(self, offset, buffer):
+        request = urllib.request.Request(self.url, headers={&quot;Range&quot;: f&quot;bytes={offset}-{offset + len(buffer) - 1}&quot;})
+        with urllib.request.urlopen(request) as response:
+            data = response.read()
+        buffer[: len(data)] = data
+        return len(data)
+
+with open_source(HttpSource(&quot;https://example.com/book.xlsx&quot;)) as workbook:
+    ...
+</code></pre>
+<p><code>open_stream()</code> reads anything with <code>readinto()</code> or <code>read()</code>, such as <code>sys.stdin.buffer</code>. A CSV is
+read as it arrives, and its first 16 MiB are kept so that <code>infer_schema()</code> followed by a read works;
+an XLSX, XLSB or XLS is read whole first.</p>
+<pre><code class="lang-python">import sys
+
+from excelreader import open_stream
+
+with open_stream(sys.stdin.buffer, &quot;csv&quot;) as workbook:
+    ...
+</code></pre>
+<p>Both callbacks run with the GIL held. For a file on disk, <code>open_workbook()</code> is faster.</p>
+<h3 id="reader-options">Reader options</h3>
+<p><code>open_workbook()</code>/<code>open_bytes()</code> take an optional <code>OpenOptions</code> for CSV dialect settings and reader
+resource limits. Every field defaults to <code>None</code>, meaning &quot;use the library default&quot;, so you set only
+what you want to change.</p>
+<pre><code class="lang-python">from excelreader import OpenOptions, open_workbook
+
+# A semicolon-delimited CSV, which the default comma dialect would read as one column per row.
+with open_workbook(&quot;export.csv&quot;, format=&quot;csv&quot;, options=OpenOptions(csv_delimiter=ord(&quot;;&quot;))) as workbook:
+    for row in workbook.sheets[0].rows():
+        ...
+</code></pre>
+<p><code>csv_delimiter</code> and <code>csv_quote</code> are byte values, so pass <code>ord(&quot;;&quot;)</code> rather than <code>&quot;;&quot;</code>.</p>
+<p>The <code>max_*</code> fields are resource limits rather than tuning knobs: they bound what a malformed or
+hostile file can make the reader allocate, and exceeding one raises <code>ExcelReaderError</code>. Lower them
+when parsing untrusted uploads.</p>
+<pre><code class="lang-python">options = OpenOptions(
+    max_total_decompressed_bytes=64 * 1024 * 1024,  # zip-bomb budget for XLSX/XLSB
+    max_cell_bytes=1024 * 1024,
+    max_zip_entries=1024,
+)
+</code></pre>
+<p><code>prefetch_decompression=True</code> overlaps inflating an XLSX/XLSB sheet with parsing it — worth it for
+single-file batch work, not for a server already reading many files in parallel. See the root README
+for the measured trade.</p>
+<h3 id="encrypted-workbooks">Encrypted workbooks</h3>
+<p><code>open_workbook()</code>/<code>open_bytes()</code> take a <code>password</code> keyword to open a password-protected OOXML
+workbook (.xlsx/.xlsb/.xlsm):</p>
+<pre><code class="lang-python">from excelreader import PasswordIncorrectError, open_workbook
+
+try:
+    with open_workbook(&quot;protected.xlsx&quot;, password=&quot;hunter2&quot;) as workbook:
+        ...
+except PasswordIncorrectError:
+    ...  # ask again
+</code></pre>
+<p>Omitting <code>password</code> for an encrypted file raises <code>PasswordRequiredError</code>; a wrong one raises
+<code>PasswordIncorrectError</code> — both subclass <code>ExcelReaderError</code>, so a caller that doesn't care about the
+distinction can just catch that. Any other native failure (an unsupported encryption scheme, a
+corrupt file) also raises <code>ExcelReaderError</code> but is not worth retrying.</p>
+<p>An explicit <code>format=&quot;xlsx&quot;</code>/<code>format=&quot;xlsb&quot;</code> works for an encrypted file too, the same as leaving
+<code>format</code> unset — both routes decrypt correctly given the right <code>password</code>.</p>
+<p>Writing an encrypted workbook is a second step: write the plaintext package with <code>write_workbook</code>
+(or any of the <code>write_*</code> helpers), then wrap it with <code>encrypt_package</code>, which produces an
+agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a
+<code>dataIntegrity</code> HMAC:</p>
+<pre><code class="lang-python">from excelreader import encrypt_package, write_workbook
+
+write_workbook(&quot;plain.xlsx&quot;, table, types)
+encrypt_package(&quot;plain.xlsx&quot;, &quot;secret.xlsx&quot;, &quot;hunter2&quot;)
+</code></pre>
+<p><code>package_path</code> is read twice (it is not disposed or removed), so it must already be a finished file.
+Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
+packages can be encrypted, matching what <code>open_workbook</code>/<code>open_bytes</code> can decrypt.</p>
+<p><code>encrypt_package_bytes()</code> does the same over bytes, so the plaintext package never has to be written
+to disk:</p>
+<pre><code class="lang-python">from excelreader import encrypt_package_bytes, write_workbook_to_bytes
+
+secret = encrypt_package_bytes(write_workbook_to_bytes(table, types, format=&quot;xlsx&quot;), &quot;hunter2&quot;)
+</code></pre>
+<h2 id="benchmarks">Benchmarks</h2>
+<p><code>benchmarks/bench_read.py</code> and <code>benchmarks/bench_write.py</code> over
+<code>tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb</code> (65,535 data rows, 14 columns), the same
+fixture the .NET, C++ and Rust suites use. Measured on Windows 10 (22H2), AMD Ryzen 7 5700X
+(16 logical CPUs @ 3.39 GHz), CPython 3.14.7, 10 runs each (medians shown; <code>min</code> is in the scripts' own
+output), against a library published from commit 65945b4. Competitors: polars 1.44.1 (with
+fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter 3.2.9.</p>
+<h3 id="reading">Reading</h3>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th style="text-align: right;">Median</th>
+<th>What it produces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>to_record_batch_reader()</code></td>
+<td style="text-align: right;">31.9 ms</td>
+<td>Arrow record batches, streamed</td>
+</tr>
+<tr>
+<td><code>to_arrow()</code></td>
+<td style="text-align: right;">31.8 ms</td>
+<td>the same parse, handed to pyarrow zero-copy</td>
+</tr>
+<tr>
+<td><code>parse_typed()</code></td>
+<td style="text-align: right;">33.5 ms</td>
+<td>typed columnar buffers, converted natively</td>
+</tr>
+<tr>
+<td><code>iter_parse_typed()</code></td>
+<td style="text-align: right;">34.2 ms</td>
+<td>the same typed buffers, in batches</td>
+</tr>
+<tr>
+<td><code>to_polars()</code></td>
+<td style="text-align: right;">34.6 ms</td>
+<td>typed columnar DataFrame, schema inferred</td>
+</tr>
+<tr>
+<td><code>polars.read_excel()</code></td>
+<td style="text-align: right;">125.6 ms</td>
+<td>typed columnar DataFrame, types inferred</td>
+</tr>
+<tr>
+<td><code>read_all_columnar()</code></td>
+<td style="text-align: right;">463.3 ms</td>
+<td>raw columnar cells, no per-cell Python objects</td>
+</tr>
+<tr>
+<td><code>rows()</code></td>
+<td style="text-align: right;">1,034.6 ms</td>
+<td>one <code>Cell</code> object per cell, streamed per row</td>
+</tr>
+<tr>
+<td><code>read_all()</code></td>
+<td style="text-align: right;">1,631.0 ms</td>
+<td>one <code>Cell</code> object per cell, all at once</td>
+</tr>
+</tbody>
+</table>
+<p>The batched readers cost the same as their whole-sheet counterparts and lower the peak memory:
+<code>to_record_batch_reader(batch_size=10000)</code> peaks at 11.4 MiB against 18.8 MiB for one whole-sheet
+record batch on this file.</p>
+<p>Only the <code>to_polars()</code> / <code>polars.read_excel()</code> pair is a like-for-like comparison (~3.6x), and even
+that one is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules
+are not identical. The rows above it produce different things and are listed to show what each API
+costs, not to rank them — <code>read_all()</code> is ~49x slower than <code>parse_typed()</code> because it materializes
+917,504 Python objects, which is the price of that shape, not a slow parser.</p>
+<p>CSV, from <code>65K_Records_Data.csv</code> (8.2 MB), same 14 typed columns:</p>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th style="text-align: right;">Median</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>parse_typed(parallelism=1)</code></td>
+<td style="text-align: right;">23.6 ms</td>
+</tr>
+<tr>
+<td><code>parse_typed(parallelism=0)</code></td>
+<td style="text-align: right;">12.0 ms</td>
+</tr>
+<tr>
+<td><code>to_polars(parallelism=1)</code></td>
+<td style="text-align: right;">25.0 ms</td>
+</tr>
+<tr>
+<td><code>to_polars(parallelism=0)</code></td>
+<td style="text-align: right;">10.8 ms</td>
+</tr>
+<tr>
+<td><code>polars.read_csv(try_parse_dates=True)</code></td>
+<td style="text-align: right;">7.3 ms</td>
+</tr>
+<tr>
+<td><code>pandas.read_csv</code>, pyarrow engine</td>
+<td style="text-align: right;">115.8 ms</td>
+</tr>
+<tr>
+<td><code>pandas.read_csv</code>, C engine</td>
+<td style="text-align: right;">138.7 ms</td>
+</tr>
+</tbody>
+</table>
+<p>polars' CSV reader is ahead (multithreaded, and it infers types from the text without our schema
+step); ExcelReader is ~10x faster than pandas on either engine. These include opening the file, so
+they are above the in-memory <code>xl_parse_typed</code> figures in <a href="#reading-a-large-sheet-on-several-threads">Reading a large sheet on several
+threads</a>.</p>
+<h3 id="writing-1">Writing</h3>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th style="text-align: right;">Median</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>write_workbook()</code> → csv</td>
+<td style="text-align: right;">35.1 ms</td>
+<td>8.2 MB</td>
+</tr>
+<tr>
+<td><code>write_workbook()</code> → xls</td>
+<td style="text-align: right;">44.4 ms</td>
+<td>17.7 MB</td>
+</tr>
+<tr>
+<td><code>write_workbook()</code> → xlsb</td>
+<td style="text-align: right;">71.5 ms</td>
+<td>5.1 MB</td>
+</tr>
+<tr>
+<td><code>write_workbook()</code> → xlsx</td>
+<td style="text-align: right;">90.6 ms</td>
+<td>5.1 MB</td>
+</tr>
+<tr>
+<td><code>write_polars()</code> → xlsx</td>
+<td style="text-align: right;">487.4 ms</td>
+<td>5.1 MB</td>
+</tr>
+<tr>
+<td><code>write_pandas()</code> → xlsx</td>
+<td style="text-align: right;">493.8 ms</td>
+<td>5.1 MB</td>
+</tr>
+<tr>
+<td><code>polars.DataFrame.write_excel()</code></td>
+<td style="text-align: right;">4,670.4 ms</td>
+<td>5.6 MB</td>
+</tr>
+<tr>
+<td><code>pandas.DataFrame.to_excel()</code></td>
+<td style="text-align: right;">7,192.9 ms</td>
+<td>5.5 MB</td>
+</tr>
+</tbody>
+</table>
+<p>The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
+<code>write_polars()</code> is ~9.6x faster than polars' own <code>write_excel()</code>, and <code>write_pandas()</code> ~14.6x
+faster than <code>to_excel()</code>. Both of ours pay a conversion the raw path does not: the DataFrame goes
+through Arrow and then a Python list before reaching the native columns, which is most of the gap
+between the ~490 ms rows and the 90 ms one. Handing <code>write_workbook()</code> buffers that are already
+columnar — what <code>parse_typed()</code> returns — skips all of it.</p>
+<p><code>write_workbook(xlsx)</code> at 90.6 ms lands within ~5 ms of the C++ binding's
+<code>xl::write_columns</code> on the same 14 columns (85.4 ms), which is the expected result: both are thin wrappers
+over the same <code>xl_write_typed</code> call, and neither adds work per cell.</p>
+<p><code>xls</code> being both the largest file and faster than xlsb and xlsx is not a paradox — BIFF8 writes
+fixed-width records with no compression, so it trades 3.5x the bytes for less work per cell.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>A <code>Workbook</code> can be read from several threads at once; see <a href="#sheets">Sheets</a>.</li>
+<li>Empty cells are skipped, so <code>cell.column</code> may skip indices. Do not assume <code>row[i].column == i</code>.</li>
+<li>The ABI is documented in <code>src/ExcelReader.Native/include/excelreader.h</code>.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/python/README.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

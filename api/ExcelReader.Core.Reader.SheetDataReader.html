@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SheetDataReader | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SheetDataReader | ExcelReader ">
+      
+      <meta name="description" content="Adapts one  to , so it can feed SqlBulkCopy, DataTable.Load, Dapper, or any other ADO.NET consumer directly.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Reader_SheetDataReader.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Reader.SheetDataReader%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Reader.SheetDataReader">
+
+
+
+  <h1 id="ExcelReader_Core_Reader_SheetDataReader" data-uid="ExcelReader.Core.Reader.SheetDataReader" class="text-break">
+Class SheetDataReader  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Reader.html">Reader</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Adapts one <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a> to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a>, so it
+can feed <code>SqlBulkCopy</code>, <code>DataTable.Load</code>, Dapper, or any other ADO.NET consumer directly.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class SheetDataReader : IDataReader, IDataRecord, IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SheetDataReader</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord">IDataRecord</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="ExcelReader_Core_Reader_SheetDataReader_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>The column shape is fixed once, at construction time, from the header row (or from the first data
+row when <a class="xref" href="ExcelReader.Core.Reader.SheetDataReaderOptions.html#ExcelReader_Core_Reader_SheetDataReaderOptions_HeaderRow">HeaderRow</a> is 0) — it never grows as later, wider rows come in. There is no schema
+pass, so <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_GetFieldType_System_Int32_">GetFieldType(int)</a>, <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_GetValue_System_Int32_">GetValue(int)</a>, and the typed getters all read the
+<em>current</em> row's own cell type; a consumer that builds a schema from the first
+<a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_Read">Read()</a> (e.g. <code>DataTable.Load</code>) locks in that row's types for the whole load.</p>
+<p>
+One <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html">SheetDataReader</a> reads one sheet: <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_NextResult">NextResult()</a> always returns
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>. To read every sheet, construct one per <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html#ExcelReader_Core_Reader_IExcelWorkbook_SheetAt_System_Int32_">SheetAt(int)</a>.
+</p>
+<p>
+Disposing this reader disposes the row enumerator it created, not the workbook the sheet came
+from — the caller still owns that.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader__ctor_" data-uid="ExcelReader.Core.Reader.SheetDataReader.#ctor*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader__ctor_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_SheetDataReaderOptions_" data-uid="ExcelReader.Core.Reader.SheetDataReader.#ctor(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Reader.SheetDataReaderOptions)">
+  SheetDataReader(IExcelSheet, SheetDataReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps <code class="paramref">sheet</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SheetDataReader(IExcelSheet sheet, SheetDataReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to read. Its workbook stays owned by the caller.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.SheetDataReaderOptions.html">SheetDataReaderOptions</a></dt>
+    <dd><p>The header row; <a class="xref" href="ExcelReader.Core.Reader.SheetDataReaderOptions.html#ExcelReader_Core_Reader_SheetDataReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Core.Reader.SheetDataReaderOptions.html#ExcelReader_Core_Reader_SheetDataReaderOptions_HeaderRow">HeaderRow</a> is negative.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Core.Reader.SheetDataReaderOptions.html#ExcelReader_Core_Reader_SheetDataReaderOptions_HeaderRow">HeaderRow</a> is positive and <code class="paramref">sheet</code> is a table view (<a class="xref" href="ExcelReader.Core.Reader.ExcelTable.html#ExcelReader_Core_Reader_ExcelTable_AsSheet">AsSheet()</a>) of a table without a header row.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_Depth_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Depth*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_Depth" data-uid="ExcelReader.Core.Reader.SheetDataReader.Depth">
+  Depth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating the depth of nesting for the current row.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Depth { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The level of nesting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_FieldCount_" data-uid="ExcelReader.Core.Reader.SheetDataReader.FieldCount*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_FieldCount" data-uid="ExcelReader.Core.Reader.SheetDataReader.FieldCount">
+  FieldCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of columns in the current row.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FieldCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>When not positioned in a valid recordset, 0; otherwise, the number of columns in the current record. The default is -1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_IsClosed_" data-uid="ExcelReader.Core.Reader.SheetDataReader.IsClosed*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_IsClosed" data-uid="ExcelReader.Core.Reader.SheetDataReader.IsClosed">
+  IsClosed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether the data reader is closed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsClosed { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if the data reader is closed; otherwise, <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_Item_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Item*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_Item_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Item(System.Int32)">
+  this[int]
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the column located at the specified index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public object this[int i] { get; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index of the column to get.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The column located at the specified index as an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_Item_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Item*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_Item_System_String_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Item(System.String)">
+  this[string]
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the column with the specified name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public object this[string name] { get; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the column to find.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The column with the specified name as an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>No column with the specified name was found.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_RecordsAffected_" data-uid="ExcelReader.Core.Reader.SheetDataReader.RecordsAffected*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_RecordsAffected" data-uid="ExcelReader.Core.Reader.SheetDataReader.RecordsAffected">
+  RecordsAffected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of rows changed, inserted, or deleted by execution of the SQL statement.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RecordsAffected { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows changed, inserted, or deleted; 0 if no rows were affected or the statement failed; and -1 for SELECT statements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_Close_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Close*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_Close" data-uid="ExcelReader.Core.Reader.SheetDataReader.Close">
+  Close()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Closes the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> Object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Close()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_Dispose_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Dispose*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_Dispose" data-uid="ExcelReader.Core.Reader.SheetDataReader.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetBoolean_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetBoolean*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetBoolean_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetBoolean(System.Int32)">
+  GetBoolean(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the value of the specified column as a Boolean.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GetBoolean(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based column ordinal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>The value of the column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetByte_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetByte*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetByte_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetByte(System.Int32)">
+  GetByte(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the 8-bit unsigned integer value of the specified column.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte GetByte(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based column ordinal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a></dt>
+    <dd><p>The 8-bit unsigned integer value of the specified column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetBytes_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetBytes*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetBytes_System_Int32_System_Int64_System_Byte___System_Int32_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetBytes(System.Int32,System.Int64,System.Byte[],System.Int32,System.Int32)">
+  GetBytes(int, long, byte[]?, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a stream of bytes from the specified column offset into the buffer as an array, starting at the given buffer offset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based column ordinal.</p>
+</dd>
+    <dt><code>fieldOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The index within the field from which to start the read operation.</p>
+</dd>
+    <dt><code>buffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The buffer into which to read the stream of bytes.</p>
+</dd>
+    <dt><code>bufferoffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index for <code class="paramref">buffer</code> to start the read operation.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of bytes to read.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The actual number of bytes read.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetChar_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetChar*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetChar_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetChar(System.Int32)">
+  GetChar(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the character value of the specified column.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public char GetChar(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based column ordinal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a></dt>
+    <dd><p>The character value of the specified column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetChars_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetChars*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetChars_System_Int32_System_Int64_System_Char___System_Int32_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetChars(System.Int32,System.Int64,System.Char[],System.Int32,System.Int32)">
+  GetChars(int, long, char[]?, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a stream of characters from the specified column offset into the buffer as an array, starting at the given buffer offset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based column ordinal.</p>
+</dd>
+    <dt><code>fieldoffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The index within the row from which to start the read operation.</p>
+</dd>
+    <dt><code>buffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.char">char</a>[]</dt>
+    <dd><p>The buffer into which to read the stream of bytes.</p>
+</dd>
+    <dt><code>bufferoffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index for <code class="paramref">buffer</code> to start the read operation.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of bytes to read.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The actual number of characters read.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetData_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetData*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetData_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetData(System.Int32)">
+  GetData(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L365"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> for the specified column ordinal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDataReader GetData(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a></dt>
+    <dd><p>The <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> for the specified column ordinal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetDataTypeName_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDataTypeName*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDataTypeName_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDataTypeName(System.Int32)">
+  GetDataTypeName(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the data type information for the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetDataTypeName(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The data type information for the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetDateTime_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDateTime*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDateTime_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDateTime(System.Int32)">
+  GetDateTime(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the date and time data value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DateTime GetDateTime(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a></dt>
+    <dd><p>The date and time data value of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetDecimal_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDecimal*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDecimal_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDecimal(System.Int32)">
+  GetDecimal(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the fixed-position numeric value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public decimal GetDecimal(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd><p>The fixed-position numeric value of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetDouble_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDouble*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDouble_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDouble(System.Int32)">
+  GetDouble(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the double-precision floating point number of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GetDouble(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double-precision floating point number of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetFieldType_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetFieldType*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetFieldType_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetFieldType(System.Int32)">
+  GetFieldType(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a> information corresponding to the type of <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> that would be returned from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.getvalue">GetValue(int)</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Type GetFieldType(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a></dt>
+    <dd><p>The <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a> information corresponding to the type of <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> that would be returned from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.getvalue">GetValue(int)</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetFloat_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetFloat*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetFloat_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetFloat(System.Int32)">
+  GetFloat(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L281"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the single-precision floating point number of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float GetFloat(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The single-precision floating point number of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetGuid_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetGuid*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetGuid_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetGuid(System.Int32)">
+  GetGuid(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the GUID value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Guid GetGuid(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.guid">Guid</a></dt>
+    <dd><p>The GUID value of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetInt16_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt16*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetInt16_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt16(System.Int32)">
+  GetInt16(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the 16-bit signed integer value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public short GetInt16(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a></dt>
+    <dd><p>The 16-bit signed integer value of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetInt32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt32*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetInt32_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt32(System.Int32)">
+  GetInt32(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L269"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the 32-bit signed integer value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetInt32(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The 32-bit signed integer value of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetInt64_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt64*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetInt64_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt64(System.Int32)">
+  GetInt64(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the 64-bit signed integer value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long GetInt64(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The 64-bit signed integer value of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetName_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetName*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetName_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetName(System.Int32)">
+  GetName(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name for the field to find.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetName(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the field or the empty string (&quot;&quot;), if there is no value to return.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetOrdinal_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetOrdinal*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetOrdinal_System_String_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetOrdinal(System.String)">
+  GetOrdinal(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return the index of the named field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetOrdinal(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the named field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetSchemaTable_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetSchemaTable*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetSchemaTable" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetSchemaTable">
+  GetSchemaTable()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.datatable">DataTable</a> that describes the column metadata of the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a>.</p>
+<p>Returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> if the executed command returned no resultset, or after <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader.nextresult">NextResult()</a> returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[UnconditionalSuppressMessage(&quot;Trimming&quot;, &quot;IL2111&quot;, Justification = &quot;typeof(Type) as the &#39;DataType&#39; schema column&#39;s own type is a metadata literal, never reflected over.&quot;)]
+public DataTable GetSchemaTable()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.datatable">DataTable</a></dt>
+    <dd><p>A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.datatable">DataTable</a> that describes the column metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> is closed.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetString_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetString*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetString_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetString(System.Int32)">
+  GetString(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the string value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetString(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The string value of the specified field.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetValue_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetValue*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetValue_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetValue(System.Int32)">
+  GetValue(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the value of the specified field.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public object GetValue(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The field value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_GetValues_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetValues*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetValues_System_Object___" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetValues(System.Object[])">
+  GetValues(object[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Populates an array of objects with the column values of the current record.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetValues(object[] values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>[]</dt>
+    <dd><p>An array of <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> to copy the attribute fields into.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of instances of <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> in the array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_IsDBNull_" data-uid="ExcelReader.Core.Reader.SheetDataReader.IsDBNull*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_IsDBNull_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.IsDBNull(System.Int32)">
+  IsDBNull(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Return whether the specified field is set to null.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsDBNull(int i)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>i</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the field to find.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if the specified field is set to null; otherwise, <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.indexoutofrangeexception">IndexOutOfRangeException</a></dt>
+    <dd><p>The index passed was outside the range of 0 through <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.fieldcount">FieldCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_NextResult_" data-uid="ExcelReader.Core.Reader.SheetDataReader.NextResult*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_NextResult" data-uid="ExcelReader.Core.Reader.SheetDataReader.NextResult">
+  NextResult()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Always returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> — see the type-level remarks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool NextResult()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetDataReader_Read_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Read*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetDataReader_Read" data-uid="ExcelReader.Core.Reader.SheetDataReader.Read">
+  Read()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Advances the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> to the next record.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Read()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if there are more rows; otherwise, <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

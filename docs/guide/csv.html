@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>CSV | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="CSV | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/csv.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="csv">CSV</h1>
+
+<p>Reading, dialect sniffing and writing delimited text.
+Parallel CSV parsing is covered in <a href="reading.html#parallel-reading-opt-in">reading.md</a>.</p>
+<h2 id="read-csv">Read CSV</h2>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvReader.html"><code>CsvReader</code></a> is a workbook with exactly one, unnamed sheet (<code>csv.FirstSheet</code>, the same sheet as <code>csv.Sheets[0]</code>). It streams RFC 4180 CSV (quoted fields, embedded delimiters/newlines, <code>&quot;&quot;</code>-escaped quotes) through the same <a class="xref" href="../../api/ExcelReader.Core.Reader.Row.html"><code>Row</code></a>/<a class="xref" href="../../api/ExcelReader.Core.Reader.Cell.html"><code>Cell</code></a> model as the Excel workbooks, so <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParser-1.html"><code>ExcelParser&lt;T&gt;</code></a> works on it unchanged.</p>
+<!-- snippet: csv-read -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+using var csv = Excel.FromCsvFile(&quot;report.csv&quot;);
+
+foreach (var row in csv.FirstSheet)
+{
+    Console.WriteLine(row[0].GetString());
+}
+
+// Typed parsing works exactly like the Excel workbooks:
+foreach (var item in ExcelParser.FromAttributes&lt;ChangeRow&gt;().Parse(csv.FirstSheet))
+{
+    Console.WriteLine($&quot;{item.File}: +{item.LinesAdded}&quot;);
+}
+</code></pre>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromCsv_"><code>Excel.FromCsv</code></a>/<code>FromCsvFile</code>/<code>FromCsvAsync</code>/<code>FromCsvFileAsync</code> mirror the other formats' factory shape and take the same <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html"><code>ExcelReaderOptions</code></a>. Its <code>Csv</code> property, a <a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvReaderOptions.html"><code>CsvReaderOptions</code></a>, changes the delimiter/quote character, supplies a non-UTF-8 <code>Encoding</code> (transcoded to UTF-8 internally), or turns off BOM detection; <code>MaxCellBytes</code> and <code>InternStrings</code> stay on <code>ExcelReaderOptions</code>, as for every format:</p>
+<!-- snippet: csv-read-options -->
+<pre><code class="lang-csharp">var options = new ExcelReaderOptions { Csv = new CsvReaderOptions { Delimiter = (byte)';' } };
+using var csv = Excel.FromCsvFile(&quot;relatorio.csv&quot;, options);
+</code></pre>
+<p>Every CSV cell is text (<a class="xref" href="../../api/ExcelReader.Core.Reader.CellType.html#ExcelReader_Core_Reader_CellType_ExcelString"><code>CellType.ExcelString</code></a>, or <a class="xref" href="../../api/ExcelReader.Core.Reader.CellType.html#ExcelReader_Core_Reader_CellType_Empty"><code>CellType.Empty</code></a> for a blank field); at the reader level there is no binary numeric or date representation, so <a class="xref" href="../../api/ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_TryGetDateTime_"><code>Cell.TryGetDateTime</code></a>/<code>IsDate1904</code> (always <code>false</code> for CSV) do not apply. The typed parser, however, is CSV-specialized: <code>ExcelParser&lt;T&gt;.Parse(CsvSheet)</code> parses <code>DateTime</code>/<code>DateOnly</code> columns directly from the cell text (ISO or culture format, honoring <code>Culture</code> — e.g. pt-BR <code>02/07/2026</code>), so no <code>[ExcelConverter]</code> is needed for dates. All the usual attributes work unchanged (<code>[ExcelColumn]</code> aliases, <code>[ExcelRequired]</code>, <code>[ExcelConverter]</code>), and a converter still takes precedence over the built-in date parsing. (Holding the sheet as an <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet.html"><code>IExcelSheet</code></a> instead routes through the generic Excel pipeline, where dates use serial-number semantics — prefer the concrete <code>Parse(CsvSheet)</code> overload for CSV.)</p>
+<p>A <code>CsvReader</code> over memory, a file path or a seekable stream allows several enumerators at once, each reading the sheet from the start. Over a seekable stream, every enumerator starts at the position the stream had when the <code>CsvReader</code> was created; where the stream's position ends up afterwards is unspecified, so do not rely on it (a file stream, and a memory stream with an exposed buffer, are read without touching it). A non-seekable stream can be read once: a second enumeration throws <code>InvalidOperationException</code>.</p>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_"><code>Excel.Open</code></a>/<code>OpenAsync</code> do <strong>not</strong> auto-detect CSV — plain text has no magic-byte signature to sniff. Name the format instead: every <code>Open</code>/<code>OpenAsync</code> overload takes an optional <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelFileFormat.html"><code>ExcelFileFormat</code></a>, and <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv"><code>ExcelReaderOptions.Csv</code></a> carries the dialect, so a caller that decides the format from an extension or a content-type header configures both families through one options object:</p>
+<!-- snippet: csv-open-by-format -->
+<pre><code class="lang-csharp">ExcelFileFormat format = Path.GetExtension(path) is &quot;.csv&quot; ? ExcelFileFormat.Csv : ExcelFileFormat.Unknown;
+
+using IExcelWorkbook workbook = Excel.Open(path, format, new ExcelReaderOptions
+{
+    Password = secret,                                                  // used by the Excel formats
+    Csv = CsvReaderOptions.Default with { SniffDialect = true },        // used by the CSV format
+});
+</code></pre>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown"><code>ExcelFileFormat.Unknown</code></a> keeps the signature-based detection the no-format overloads do; <code>EncryptedOoxml</code> is a detection result rather than something to open, so passing it throws <code>ArgumentOutOfRangeException</code>.</p>
+<h2 id="sniff-a-csv-dialect">Sniff a CSV dialect</h2>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvSniffer.html#ExcelReader_Core_Reader_Csv_CsvSniffer_Detect_"><code>CsvSniffer.Detect</code></a> infers the delimiter, quote character, and encoding (from a leading byte-order mark) from a sample of bytes, so a <code>;</code>-separated pt-BR export or a TSV can be read without the caller knowing the dialect up front. It is deterministic (ties break by candidate order) and never throws on arbitrary input — an indecisive sample returns <a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvDialect.html#ExcelReader_Core_Reader_Csv_CsvDialect_Default"><code>CsvDialect.Default</code></a> (comma, <code>&quot;</code>, UTF-8).</p>
+<!-- snippet: csv-sniff -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Csv;
+
+CsvDialect dialect = CsvSniffer.DetectFile(&quot;export.csv&quot;);
+using var csv = Excel.FromCsvFile(&quot;export.csv&quot;, new ExcelReaderOptions { Csv = CsvReaderOptions.Default.WithDialect(dialect) });
+</code></pre>
+<p><code>CsvSniffer.Detect</code> takes a span of bytes or a seekable <code>Stream</code>, <code>DetectFile</code> takes a path, and <code>DetectAsync</code>/<code>DetectFileAsync</code> are the async siblings; only the first 64 KiB are examined. The <code>Stream</code> overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws <code>ArgumentException</code>; buffer it first, or pass the bytes as a span instead. Pass <a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvSnifferOptions.html"><code>CsvSnifferOptions</code></a> to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.</p>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvReaderOptions.html#ExcelReader_Core_Reader_Csv_CsvReaderOptions_SniffDialect"><code>CsvReaderOptions.SniffDialect</code></a> does the sample-then-apply above for you, at the entry point that owns the source — the <code>Excel.FromCsv*</code> factories, and <code>Excel.Open</code> with <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv"><code>ExcelFileFormat.Csv</code></a>. The dialect of a parallel read is the one the CSV workbook was opened with:</p>
+<!-- snippet: csv-sniff-on-open -->
+<pre><code class="lang-csharp">using var csv = Excel.FromCsvFile(&quot;export.csv&quot;, new ExcelReaderOptions { Csv = CsvReaderOptions.Default with { SniffDialect = true } });
+</code></pre>
+<p>An explicitly set <code>Encoding</code> survives sniffing unless the source carries a byte-order mark naming a different one — a sniffed encoding only ever comes from a BOM, so it never silently overrides a caller who knows their file is Windows-1252.</p>
+<h2 id="write-csv">Write CSV</h2>
+<p><a class="xref" href="../../api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html"><code>CsvWorkbookWriter</code></a> emits RFC 4180 CSV: no styles or shared strings, so rows stream straight to the output. A CSV file is a single sheet, so <code>AddSheet</code> is called once (the name is ignored).</p>
+<!-- snippet: csv-write -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Csv;
+
+using var stream = File.Create(&quot;out.csv&quot;);
+using var workbook = CsvWorkbookWriter.Create(stream);
+using var writer = workbook.AddSheet(&quot;Sheet1&quot;);
+
+using (CsvRowWriter row = writer.StartRow())
+{
+    row.Write(&quot;Name&quot;);
+    row.Write(&quot;Total&quot;);
+    row.Write(&quot;Created&quot;);
+}
+
+using (CsvRowWriter row = writer.StartRow())
+{
+    row.Write(&quot;Q1&quot;);
+    row.Write(42);
+    row.Write(DateTime.UtcNow);
+}
+</code></pre>
+<p>Fields are quoted only when they contain the delimiter, quote character, <code>\r</code>, or <code>\n</code>; embedded quotes are doubled. <code>bool</code> writes as lowercase <code>true</code>/<code>false</code> and <code>DateTime</code>/<code>DateOnly</code> as round-trip ISO 8601 (<code>&quot;O&quot;</code>); <code>TimeOnly</code> as a time-of-day fraction — all matching what <code>ExcelParser&lt;T&gt;.Parse(CsvSheet)</code> expects, so a file written by <code>CsvWorkbookWriter</code> parses back without configuration. <code>Skip(count)</code> writes empty fields to keep column positions aligned (CSV has no sparse-cell concept).</p>
+<p><a class="xref" href="../../api/ExcelReader.Core.Writer.Csv.CsvWriterOptions.html"><code>CsvWriterOptions</code></a> mirrors <code>CsvReaderOptions</code>'s delimiter, quote and encoding, so a file written with one set of settings reads back with the matching set:</p>
+<!-- snippet: csv-write-options -->
+<pre><code class="lang-csharp">using var workbook = CsvWorkbookWriter.Create(stream, leaveOpen: false, new CsvWriterOptions
+{
+    Delimiter = (byte)';',
+    Encoding = Encoding.Latin1,          // fields are formatted as UTF-8, then transcoded on the way out
+    WriteByteOrderMark = true,           // what makes Excel open a UTF-8 file as UTF-8
+    NewLine = CsvNewLine.LineFeed,       // default is CRLF, as RFC 4180 specifies
+});
+</code></pre>
+<p>Fields containing <code>\r</code> or <code>\n</code> are quoted whichever <code>NewLine</code> is chosen, so the terminator never changes how the file reads back.</p>
+<p>To dump a collection of typed records instead of writing cells by hand, call <code>WriteRecordsAsync</code> on the sheet from <code>CsvWorkbookWriter.Create(stream)</code> — the same <a href="writing.html#write-typed-records">record-writing API</a> as the Excel formats, restricted to a single sheet.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/csv.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

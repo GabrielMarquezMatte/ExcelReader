@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Migrating from v5 to v6 | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Migrating from v5 to v6 | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/migrating-to-v6.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="migrating-from-v5-to-v6">Migrating from v5 to v6</h1>
+
+<p>What changed in the reading API and how to port v5 code.
+See also <a href="reading.html">reading.md</a> for the full reading guide.</p>
+<h2 id="what-changed">What changed</h2>
+<p>A v5 reader owned one &quot;current sheet&quot; that you moved with <code>MoveToSheet</code>; in v6 the reader became a workbook that hands out sheets, and each sheet is read on its own. Because a sheet no longer shares a cursor with its workbook, the sheets of one workbook can now be read in parallel.</p>
+<h2 id="types">Types</h2>
+<table>
+<thead>
+<tr>
+<th>v5</th>
+<th>v6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>XlsxReader</code>, <code>XlsbReader</code>, <code>XlsReader</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html"><code>XlsxWorkbook</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html"><code>XlsbWorkbook</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Xls.XlsWorkbook.html"><code>XlsWorkbook</code></a></td>
+</tr>
+<tr>
+<td><code>XlsxReader.Enumerator</code> (and the other two)</td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.html"><code>XlsxWorkbook.Enumerator</code></a> (and <a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.html"><code>XlsbWorkbook.Enumerator</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.html"><code>XlsWorkbook.Enumerator</code></a>)</td>
+</tr>
+<tr>
+<td><code>IExcelRowReader</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelWorkbook.html"><code>IExcelWorkbook</code></a> and <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet.html"><code>IExcelSheet</code></a></td>
+</tr>
+<tr>
+<td><code>IExcelRowReader&lt;TEnumerator&gt;</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet-1.html"><code>IExcelSheet&lt;TEnumerator&gt;</code></a></td>
+</tr>
+<tr>
+<td><code>ExcelSheet</code>, <code>reader.Sheets()</code></td>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsx.XlsxSheet.html"><code>XlsxSheet</code></a> / <a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsb.XlsbSheet.html"><code>XlsbSheet</code></a> / <a class="xref" href="../../api/ExcelReader.Core.Reader.Xls.XlsSheet.html"><code>XlsSheet</code></a> / <a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvSheet.html"><code>CsvSheet</code></a>, <code>workbook.Sheets</code></td>
+</tr>
+<tr>
+<td><a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvReader.html"><code>CsvReader</code></a></td>
+<td><code>CsvReader</code> (same name; now a workbook with one sheet)</td>
+</tr>
+</tbody>
+</table>
+<p>An explicit <code>ExcelEnumerable&lt;T, XlsReader, XlsReader.Enumerator&gt;</code> declaration becomes <code>ExcelEnumerable&lt;T, XlsSheet, XlsWorkbook.Enumerator&gt;</code> (likewise for XLSX and XLSB).</p>
+<p>A sheet is a small value (<code>XlsxSheet</code> and its siblings are <code>readonly struct</code>s) that holds no resources: it is a workbook plus an index. <code>IExcelSheet</code> is the format-agnostic view of one, with <code>Index</code>, <code>Name</code>, <code>Visibility</code> and <code>GetEnumerator()</code>.</p>
+<h2 id="members">Members</h2>
+<table>
+<thead>
+<tr>
+<th>v5</th>
+<th>v6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reader.GetEnumerator()</code>, <code>foreach (Row row in reader)</code></td>
+<td><code>workbook.FirstSheet.GetEnumerator()</code>, <code>foreach (Row row in workbook.FirstSheet)</code></td>
+</tr>
+<tr>
+<td><code>reader.MoveToSheet(i)</code> then read</td>
+<td>read <code>workbook.Sheets[i]</code> (<code>workbook.SheetAt(i)</code> on an <code>IExcelWorkbook</code>)</td>
+</tr>
+<tr>
+<td><code>reader.TryMoveToSheet(name)</code></td>
+<td><code>workbook.TryGetSheet(name, out var sheet)</code></td>
+</tr>
+<tr>
+<td><code>reader.SheetName</code>, <code>reader.SheetNameAt(i)</code></td>
+<td><code>sheet.Name</code>, <code>workbook.Sheets[i].Name</code></td>
+</tr>
+<tr>
+<td><code>reader.SheetVisibility</code>, <code>reader.SheetVisibilityAt(i)</code></td>
+<td><code>sheet.Visibility</code></td>
+</tr>
+<tr>
+<td><code>reader.SheetCount</code></td>
+<td><code>workbook.Sheets.Count</code> (or <code>workbook.SheetCount</code> on <code>IExcelWorkbook</code>)</td>
+</tr>
+<tr>
+<td><code>parser.Parse(reader)</code></td>
+<td><code>parser.Parse(workbook.FirstSheet)</code></td>
+</tr>
+<tr>
+<td><code>Excel.InferSchema(reader)</code></td>
+<td><code>Excel.InferSchema(sheet)</code></td>
+</tr>
+<tr>
+<td><code>new ExcelDataReader(reader)</code></td>
+<td><code>new ExcelDataReader(sheet)</code></td>
+</tr>
+<tr>
+<td><code>reader.ToArrowRecordBatch()</code></td>
+<td><code>sheet.ToArrowRecordBatch()</code></td>
+</tr>
+<tr>
+<td><code>Excel.Open(...)</code> returning <code>IExcelRowReader</code></td>
+<td><code>Excel.Open(...)</code> returning <code>IExcelWorkbook</code>; use <code>FirstSheet</code>, <code>SheetAt(i)</code> and <code>TryGetSheet</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>FirstSheet</code> is the same sheet as <code>Sheets[0]</code> and <code>SheetAt(0)</code>.</p>
+<h2 id="before-and-after">Before and after</h2>
+<p>Reading the first sheet:</p>
+<pre><code class="lang-csharp">// v5
+using IExcelRowReader reader = Excel.Open(&quot;book.xlsx&quot;);
+foreach (Row row in reader)
+{
+    Console.WriteLine(row[0].GetString());
+}
+
+// v6
+using IExcelWorkbook workbook = Excel.Open(&quot;book.xlsx&quot;);
+foreach (Row row in workbook.FirstSheet)
+{
+    Console.WriteLine(row[0].GetString());
+}
+</code></pre>
+<p>Walking every sheet:</p>
+<pre><code class="lang-csharp">// v5
+using IExcelRowReader reader = Excel.Open(&quot;book.xlsx&quot;);
+for (int i = 0; i &lt; reader.SheetCount; i++)
+{
+    reader.MoveToSheet(i);
+    Console.WriteLine(reader.SheetName);
+    foreach (Row row in reader)
+    {
+        Console.WriteLine(row[0].GetString());
+    }
+}
+
+// v6
+using IExcelWorkbook workbook = Excel.Open(&quot;book.xlsx&quot;);
+for (int i = 0; i &lt; workbook.SheetCount; i++)
+{
+    IExcelSheet sheet = workbook.SheetAt(i);
+    Console.WriteLine(sheet.Name);
+    foreach (Row row in sheet)
+    {
+        Console.WriteLine(row[0].GetString());
+    }
+}
+</code></pre>
+<p>When you open a format directly (<a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromXlsxFile_"><code>Excel.FromXlsxFile</code></a> and the like), <code>workbook.Sheets</code> is a typed list: <code>foreach (XlsxSheet sheet in workbook.Sheets)</code> walks every sheet without boxing.</p>
+<p>v5's <code>ExcelSheet</code> had a positional <code>Deconstruct</code>, so <code>foreach (var (i, name) in reader.Sheets())</code> worked. The v6 sheets do not deconstruct; read the properties instead:</p>
+<pre><code class="lang-csharp">foreach (XlsxSheet sheet in workbook.Sheets)
+{
+    Console.WriteLine($&quot;{sheet.Index}: {sheet.Name}&quot;);
+}
+</code></pre>
+<p>Parsing a named sheet:</p>
+<pre><code class="lang-csharp">// v5
+using IExcelRowReader reader = Excel.Open(&quot;changes.xlsx&quot;);
+if (reader.TryMoveToSheet(&quot;Changes&quot;))
+{
+    foreach (ChangeRow item in ExcelParser.FromAttributes&lt;ChangeRow&gt;().Parse(reader))
+    {
+        Console.WriteLine(item.File);
+    }
+}
+
+// v6
+using IExcelWorkbook workbook = Excel.Open(&quot;changes.xlsx&quot;);
+if (workbook.TryGetSheet(&quot;Changes&quot;, out var sheet))
+{
+    foreach (ChangeRow item in ExcelParser.FromAttributes&lt;ChangeRow&gt;().Parse(sheet))
+    {
+        Console.WriteLine(item.File);
+    }
+}
+</code></pre>
+<p>A CSV file:</p>
+<pre><code class="lang-csharp">// v5
+using CsvReader csv = Excel.FromCsvFile(&quot;book.csv&quot;);
+foreach (Row row in csv)
+{
+    Console.WriteLine(row[0].GetString());
+}
+
+// v6
+using CsvReader csv = Excel.FromCsvFile(&quot;book.csv&quot;);
+foreach (Row row in csv.FirstSheet)
+{
+    Console.WriteLine(row[0].GetString());
+}
+</code></pre>
+<h2 id="reading-sheets-in-parallel">Reading sheets in parallel</h2>
+<p>Each sheet of a workbook can be read on its own thread:</p>
+<pre><code class="lang-csharp">using XlsxWorkbook workbook = Excel.FromXlsxFile(path);
+
+Parallel.For(0, workbook.Sheets.Count, i =&gt;
+{
+    foreach (Row row in workbook.Sheets[i])
+    {
+        // consume
+    }
+});
+</code></pre>
+<p>The contract:</p>
+<ul>
+<li>A workbook is safe to share between threads once it is open: reading its metadata, getting sheets and creating enumerators all work concurrently.</li>
+<li>An enumerator belongs to one thread at a time. Using one enumerator from two threads at once is undefined behavior and is not checked.</li>
+<li>You may have several enumerators open at once, including several over the same sheet. The exception is a CSV over a non-seekable stream, which serves one.</li>
+<li>Do not use, reposition or dispose a stream or buffer you passed in until the workbook and every enumerator obtained from it are disposed.</li>
+</ul>
+<h2 id="behavior-changes">Behavior changes</h2>
+<ul>
+<li>Getting a workbook's sheets (<code>Sheets</code>, <code>FirstSheet</code>, <code>SheetAt</code>, <code>TryGetSheet</code>) or opening an enumerator after <code>Dispose</code> throws <code>ObjectDisposedException</code> (since 5.2.0). <code>SheetCount</code> and <code>IsDate1904</code> still answer.</li>
+<li>Disposing a workbook does not close its file or stream while an enumerator from it is still undisposed; the resources are released when the last enumerator is disposed (since 5.2.0).</li>
+<li>A failed XLSX shared-string load fails every later enumeration the same way (since 5.2.0).</li>
+<li>A cancelled XLSX shared-string load is retried by the next enumeration, and the bytes it had read still count toward <code>MaxTotalDecompressedBytes</code> (since 5.2.0).</li>
+<li>A CSV over a seekable stream is read from the position the stream had when the <code>CsvReader</code> was created, by any number of enumerators at once. The stream's position afterwards is unspecified: file streams and memory streams with an exposed buffer are left untouched, any other seekable stream may be moved (since 5.2.0).</li>
+<li>A CSV over a non-seekable stream still allows one enumeration (since 5.2.0).</li>
+</ul>
+<h2 id="native-bindings">Native bindings</h2>
+<p>The C ABI changes with the library: <code>XL_ABI_VERSION</code> is 6. A workbook handle no longer has a current
+sheet. Every read takes a zero-based sheet index, and rows are read through a cursor opened per
+sheet, so one handle serves several threads.</p>
+<table>
+<thead>
+<tr>
+<th>v5</th>
+<th>v6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>xl_open_file(path, len, format, &amp;wb)</code></td>
+<td><code>xl_open_file(path, len, format, NULL, &amp;wb)</code></td>
+</tr>
+<tr>
+<td><code>xl_open_file_ex</code>, <code>xl_open_memory_ex</code></td>
+<td><code>xl_open_file</code>, <code>xl_open_memory</code> with the options pointer</td>
+</tr>
+<tr>
+<td><code>xl_move_to_sheet(wb, i)</code></td>
+<td>pass <code>i</code> to the read function</td>
+</tr>
+<tr>
+<td><code>xl_sheet_name(wb, ...)</code></td>
+<td><code>xl_sheet_name_at(wb, i, ...)</code></td>
+</tr>
+<tr>
+<td>none</td>
+<td><code>xl_sheet_visibility_at(wb, i, &amp;v)</code>, <code>xl_sheet_index(wb, name, len, &amp;i)</code></td>
+</tr>
+<tr>
+<td><code>xl_next_row(wb, ...)</code></td>
+<td><code>xl_rows_open(wb, i, &amp;rows)</code>, <code>xl_rows_next(rows, ...)</code>, <code>xl_rows_close(rows)</code></td>
+</tr>
+<tr>
+<td><code>xl_next_row_view(wb, &amp;row)</code></td>
+<td><code>xl_rows_next_view(rows, &amp;row)</code></td>
+</tr>
+<tr>
+<td><code>xl_read_all_blob(wb, ...)</code>, <code>xl_read_all_decoded(wb, &amp;out)</code></td>
+<td><code>xl_rows_read_all_blob(rows, ...)</code>, <code>xl_rows_read_all_decoded(rows, &amp;out)</code></td>
+</tr>
+<tr>
+<td><code>xl_rows</code> (the decoded result struct)</td>
+<td><code>xl_rows_decoded</code>; <code>xl_rows</code> is now the cursor handle</td>
+</tr>
+<tr>
+<td><code>xl_parse_typed(wb, specs, n, header, &amp;t)</code></td>
+<td><code>xl_parse_typed(wb, i, specs, n, header, 1, &amp;t)</code></td>
+</tr>
+<tr>
+<td><code>xl_parse_typed_ex(wb, specs, n, header, dop, &amp;t)</code></td>
+<td><code>xl_parse_typed(wb, i, specs, n, header, dop, &amp;t)</code></td>
+</tr>
+<tr>
+<td><code>xl_parse_arrow</code>, <code>xl_parse_arrow_ex</code></td>
+<td><code>xl_parse_arrow(wb, i, specs, n, header, dop, &amp;array, &amp;schema)</code></td>
+</tr>
+<tr>
+<td><code>xl_parse_arrow_stream(wb, ...)</code>, <code>xl_typed_reader_open(wb, ...)</code></td>
+<td>the same, with <code>i</code> after <code>wb</code></td>
+</tr>
+<tr>
+<td><code>xl_infer_schema(wb, header, sample, &amp;s)</code></td>
+<td><code>xl_infer_schema(wb, i, header, sample, 0, &amp;s)</code></td>
+</tr>
+<tr>
+<td><code>xl_infer_schema_ex(wb, header, sample, flags, &amp;s)</code></td>
+<td><code>xl_infer_schema(wb, i, header, sample, flags, &amp;s)</code></td>
+</tr>
+</tbody>
+</table>
+<p>Behavior changes:</p>
+<ul>
+<li><code>xl_parse_typed</code> and <code>xl_parse_arrow</code> used to read sequentially; pass <code>1</code> as
+<code>degree_of_parallelism</code> to keep that. <code>0</code> uses every processor on a CSV.</li>
+<li>Opening a second typed reader or Arrow stream on a workbook used to fail, and reading the workbook
+another way used to invalidate an open one. Both now work: each read is independent.</li>
+<li>A cursor, typed reader or Arrow stream keeps working after <code>xl_close</code> on its workbook.</li>
+</ul>
+<h3 id="rust">Rust</h3>
+<p>The crate follows the library: reads move from <code>Workbook</code> to <code>Sheet</code>.</p>
+<table>
+<thead>
+<tr>
+<th>v5</th>
+<th>v6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>workbook.move_to_sheet(i)?</code> then a read</td>
+<td><code>workbook.sheet(i)?</code> and read from it</td>
+</tr>
+<tr>
+<td><code>workbook.sheet_name()?</code></td>
+<td><code>workbook.sheet(i)?.name()?</code> or <code>workbook.sheet_name_at(i)?</code></td>
+</tr>
+<tr>
+<td><code>workbook.rows()</code></td>
+<td><code>workbook.sheet(0)?.rows()?</code></td>
+</tr>
+<tr>
+<td><code>workbook.read_all_blob()?</code>, <code>read_all_decoded()?</code></td>
+<td>the same methods on a <code>Sheet</code></td>
+</tr>
+<tr>
+<td><code>workbook.typed_chunks::&lt;T&gt;(h, n)?</code>, <code>workbook.infer_schema(h, n)?</code></td>
+<td>the same methods on a <code>Sheet</code></td>
+</tr>
+<tr>
+<td><code>parse_sheet::&lt;T&gt;(&amp;mut workbook, h)?</code></td>
+<td><code>parse_sheet::&lt;T&gt;(workbook.sheet(0)?, h)?</code></td>
+</tr>
+<tr>
+<td><code>parse_arrow::&lt;T&gt;(&amp;mut workbook, h)?</code>, <code>parse_arrow_stream</code></td>
+<td>the same, taking a <code>Sheet</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>Workbook</code> no longer needs to be <code>mut</code>, and it is <code>Send + Sync</code>. A cursor reads its sheet once from
+the top; call <code>rows()</code> again for another pass. <code>Sheet::read_all_blob()</code> and <code>read_all_decoded()</code>
+read the whole sheet from its first row; they no longer continue a cursor. A crate built for ABI 5 refuses a v6 library with an
+ABI-version error at the first <code>Workbook::open</code>.</p>
+<h3 id="python">Python</h3>
+<p>The package follows the library: reads move from <code>Workbook</code> to <code>Sheet</code>.</p>
+<table>
+<thead>
+<tr>
+<th>v5</th>
+<th>v6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>workbook.move_to_sheet(i)</code> then a read</td>
+<td>read from <code>workbook.sheets[i]</code></td>
+</tr>
+<tr>
+<td><code>workbook.sheet_name</code></td>
+<td><code>workbook.sheets[i].name</code></td>
+</tr>
+<tr>
+<td><code>for index, name in workbook.sheets():</code></td>
+<td><code>for sheet in workbook.sheets:</code></td>
+</tr>
+<tr>
+<td><code>workbook.rows()</code>, <code>read_all()</code>, <code>read_all_columnar()</code></td>
+<td>the same methods on <code>workbook.sheets[i]</code></td>
+</tr>
+<tr>
+<td><code>workbook.parse_typed(...)</code>, <code>to_arrow(...)</code>, <code>to_polars(...)</code>, <code>infer_schema(...)</code> and the other read methods</td>
+<td>the same methods on <code>workbook.sheets[i]</code>, same arguments</td>
+</tr>
+</tbody>
+</table>
+<p><code>workbook.sheets[&quot;Name&quot;]</code> finds a sheet by name and raises <code>KeyError</code> when there is none. A package
+built for ABI 5 refuses a v6 library when it loads it.</p>
+<p>Each <code>rows()</code> call starts at the sheet's first row, and <code>read_all()</code> / <code>read_all_columnar()</code> read the whole sheet; none of them continues an earlier read. A <code>rows()</code> generator that has started keeps working after <code>workbook.close()</code>, where v5 raised.</p>
+<h3 id="c">C++</h3>
+<p>The wrapper follows the library: reads move from <code>xl::Workbook</code> to <code>xl::Sheet</code>.</p>
+<table>
+<thead>
+<tr>
+<th>v5</th>
+<th>v6</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>workbook.move_to_sheet(i)</code> then a read</td>
+<td>read from <code>workbook.sheet(i)</code></td>
+</tr>
+<tr>
+<td><code>workbook.sheet_name()</code></td>
+<td><code>workbook.sheet(i).name()</code> or <code>workbook.sheet_name_at(i)</code></td>
+</tr>
+<tr>
+<td><code>workbook.rows()</code></td>
+<td><code>workbook.sheet(0).rows()</code>, which returns <code>std::expected&lt;RowCursor, Error&gt;</code></td>
+</tr>
+<tr>
+<td><code>workbook.read_all_decoded()</code>, <code>workbook.infer_schema(h, n)</code></td>
+<td>the same methods on a <code>Sheet</code></td>
+</tr>
+<tr>
+<td><code>xl::parse_sheet&lt;T&gt;(workbook, h)</code>, <code>xl::typed_reader&lt;T&gt;(workbook, h, n)</code></td>
+<td>the same, taking a <code>Sheet</code></td>
+</tr>
+<tr>
+<td><code>xl::parse_arrow&lt;T&gt;(workbook, h)</code>, <code>xl::arrow_stream&lt;T&gt;(workbook, h, n)</code></td>
+<td>the same, taking a <code>Sheet</code></td>
+</tr>
+<tr>
+<td><code>rows()</code> then <code>next_row()</code> then <code>read_all_decoded()</code></td>
+<td><code>auto cursor = sheet.rows(); cursor-&gt;next_row(); cursor-&gt;read_all_decoded();</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>xl::RowCursor</code> now owns a native cursor and is move-only. <code>Sheet::read_all_decoded()</code> reads the whole
+sheet from its first row; to read what a cursor has left, call <code>RowCursor::read_all_decoded()</code>. Code
+built against the v5 header does not link or load against a v6 library, because the v5 exports it
+names are gone.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/migrating-to-v6.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

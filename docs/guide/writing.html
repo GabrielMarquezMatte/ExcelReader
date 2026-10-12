@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Writing workbooks | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Writing workbooks | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/writing.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="writing-workbooks">Writing workbooks</h1>
+
+<p>Writers for XLSX (Open XML), XLSB (BIFF12) and XLS (BIFF8), cell styles,
+typed records, and prefetch compression. See <a href="csv.html">csv.md</a> for CSV output.</p>
+<h2 id="write-xlsx-workbooks">Write XLSX workbooks</h2>
+<!-- snippet: writing-xlsx -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
+
+await using var stream = File.Create(&quot;out.xlsx&quot;);
+await using var workbook = XlsxWorkbookWriter.Create(stream);
+
+await using (var sheet = workbook.AddSheet(&quot;Summary&quot;))
+{
+    await using (var row = await sheet.StartRowAsync())
+    {
+        row.Write(&quot;Name&quot;);
+        row.Write(&quot;Total&quot;);
+        row.Write(&quot;Created&quot;);
+    }
+
+    await using (var row = await sheet.StartRowAsync())
+    {
+        row.Write(&quot;Q1&quot;);
+        row.Write(42);
+        row.Write(DateTime.UtcNow);
+    }
+}
+
+await workbook.EndAsync();
+</code></pre>
+<p>By default, the XLSX writer emits inline strings to keep memory usage flat while rows stream out.
+If your workbook repeats many strings and smaller files matter more than the extra lookup table, opt in to shared strings:</p>
+<!-- snippet: writing-xlsx-shared-strings -->
+<pre><code class="lang-csharp">await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = true });
+</code></pre>
+<h2 id="hidden-sheets">Hidden sheets</h2>
+<p>Every <a class="xref" href="../../api/ExcelReader.Core.Writer.IWorkbookWriter-1.html"><code>IWorkbookWriter&lt;TSheet&gt;</code></a> takes an optional <a class="xref" href="../../api/ExcelReader.Core.ExcelSheetVisibility.html"><code>ExcelSheetVisibility</code></a> alongside the sheet name, written to whatever the format uses for it — XLSX's <code>state</code> attribute, XLSB's <code>BrtBundleSh.hsState</code>, XLS's <code>BoundSheet8.hsState</code> — so it reads back through <a href="reading.html#open-by-auto-detecting-the-format"><code>IExcelSheet.Visibility</code></a>:</p>
+<!-- snippet: writing-hidden-sheets -->
+<pre><code class="lang-csharp">using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
+
+await using (var data = workbook.AddSheet(&quot;Data&quot;)) { /* rows */ } // visible
+await using (var lookups = workbook.AddSheet(&quot;Lookups&quot;, ExcelSheetVisibility.Hidden)) { /* rows */ }
+await using (var audit = workbook.AddSheet(&quot;Audit&quot;, ExcelSheetVisibility.VeryHidden)) { /* rows */ } // not in Excel's unhide dialog
+</code></pre>
+<p>A workbook whose sheets are <em>all</em> hidden is rejected when it is ended (<code>InvalidOperationException</code>): the formats allow it, but Excel reports such a file as damaged, so it is caught at write time rather than shipped to a user. CSV accepts the argument and ignores it — delimited text has no tab bar to hide from.</p>
+<h2 id="cell-styles-on-write">Cell styles on write</h2>
+<p>Every <code>IWorkbookWriter&lt;TSheet&gt;</code> supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a <a class="xref" href="../../api/ExcelReader.Core.Writer.CellStyle.html"><code>CellStyle</code></a> once with <code>AddStyle</code> and apply its returned index to a column (before the first row) or to a whole row (when starting it):</p>
+<!-- snippet: writing-styles -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
+
+await using var workbook = XlsxWorkbookWriter.Create(stream);
+
+int currency = workbook.AddStyle(new CellStyle { NumberFormat = &quot;R$ #,##0.00&quot; });
+int header = workbook.AddStyle(new CellStyle { Bold = true });
+
+await using var sheet = workbook.AddSheet(&quot;Summary&quot;);
+sheet.SetColumnStyle(columnIndex: 1, currency); // before the first row
+sheet.SetColumnWidth(columnIndex: 0, width: 20);
+
+await using (var row = await sheet.StartRowAsync(header))
+{
+    row.Write(&quot;Product&quot;);
+    row.Write(&quot;Total&quot;);
+}
+await using (var row = await sheet.StartRowAsync())
+{
+    row.Write(&quot;Widget&quot;);
+    row.Write(1234.5);
+}
+
+await workbook.EndAsync();
+</code></pre>
+<p><code>AddStyle</code> deduplicates by value: registering the same <code>CellStyle</code> twice returns the same index, and index 0 is always the general/default style. <code>SetColumnStyle</code>/<code>SetColumnWidth</code> must be called before the sheet's first <code>StartRow</code>/<code>StartRowAsync</code> (calling them later throws <code>InvalidOperationException</code>) — the column layout (XLSX <code>&lt;cols&gt;</code>, XLSB <code>BrtColInfo</code>, XLS <code>COLINFO</code>) has to be written ahead of the row data. A row's style (from <code>StartRowAsync(int, CancellationToken)</code>) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.</p>
+<p>Cell-level styling (one specific cell rather than a whole column or row) is out of scope. Bold/italic render only in XLSX today; XLSB and XLS apply the number format but keep the default font, since their font records are opaque binary blobs this library isn't confident hand-editing without a verified field map.</p>
+<h2 id="read-and-write-xlsb-workbooks-biff12">Read and write XLSB workbooks (BIFF12)</h2>
+<p>Use <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromXlsbFile_"><code>Excel.FromXlsbFile</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromXlsb_"><code>Excel.FromXlsb</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromXlsbFileAsync_"><code>Excel.FromXlsbFileAsync</code></a>, or <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromXlsbAsync_"><code>Excel.FromXlsbAsync</code></a> to open XLSB directly. For writing, use <a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html"><code>XlsbWorkbookWriter</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html"><code>XlsbSheetWriter</code></a>, and <a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html"><code>XlsbRowWriter</code></a>.</p>
+<!-- snippet: writing-xlsb -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsb;
+
+await using var stream = File.Create(&quot;out.xlsb&quot;);
+await using var workbook = XlsbWorkbookWriter.Create(stream);
+
+await using (XlsbSheetWriter sheet = workbook.AddSheet(&quot;Summary&quot;))
+{
+    await using (XlsbRowWriter row = await sheet.StartRowAsync())
+    {
+        row.Write(&quot;Name&quot;);
+        row.Write(&quot;Total&quot;);
+        row.Write(&quot;Created&quot;);
+    }
+}
+
+await workbook.EndAsync();
+</code></pre>
+<p>The XLSB writer also defaults to inline string cells. Set <a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.html#ExcelReader_Core_Writer_Xlsb_XlsbWriterOptions_UseSharedStrings"><code>XlsbWriterOptions.UseSharedStrings</code></a> to deduplicate repeated text into <code>sharedStrings.bin</code>.</p>
+<h2 id="write-xls-workbooks-biff8">Write XLS workbooks (BIFF8)</h2>
+<p><a class="xref" href="../../api/ExcelReader.Core.Writer.Xls.XlsWorkbookWriter.html"><code>XlsWorkbookWriter</code></a> emits a binary BIFF8 <code>.xls</code> file. The sheet and row APIs are synchronous; only the final <code>EndAsync</code> (which assembles and flushes the OLE container) is async. BIFF8 is capped at 65,536 rows × 256 columns per sheet.</p>
+<!-- snippet: writing-xls -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xls;
+
+await using var stream = File.Create(&quot;out.xls&quot;);
+await using var workbook = XlsWorkbookWriter.Create(stream);
+
+using (var sheet = workbook.AddSheet(&quot;Summary&quot;))
+{
+    using (var row = sheet.StartRow())
+    {
+        row.Write(&quot;Name&quot;);
+        row.Write(&quot;Total&quot;);
+        row.Write(&quot;Created&quot;);
+    }
+
+    using (var row = sheet.StartRow())
+    {
+        row.Write(&quot;Q1&quot;);
+        row.Write(42);
+        row.Write(DateTime.UtcNow);
+    }
+}
+
+await workbook.EndAsync();
+</code></pre>
+<h2 id="write-typed-records">Write typed records</h2>
+<p>The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, <code>sheet.WriteRecordsAsync(records, layout)</code> writes a header row followed by one row per record, with the columns coming from an <a class="xref" href="../../api/ExcelReader.Core.Writer.ExcelRecordLayout-1.html"><code>ExcelRecordLayout&lt;T&gt;</code></a>. <code>ExcelRecordLayout.FromAttributes&lt;T&gt;()</code> maps each public readable property to a column by reflection. It is an extension on <a class="xref" href="../../api/ExcelReader.Core.Writer.ISheetWriter-1.html"><code>ISheetWriter&lt;TRow&gt;</code></a>, so the same call works on a sheet from any of the writers above — XLSX, XLSB, XLS, and CSV.</p>
+<!-- snippet: writing-records -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
+
+public sealed class Sale
+{
+    public string? Region { get; set; }
+    public int Units { get; set; }
+    public decimal Revenue { get; set; }
+    public DateOnly Date { get; set; }
+}
+
+var sales = new[]
+{
+    new Sale { Region = &quot;North&quot;, Units = 42, Revenue = 1234.50m, Date = new DateOnly(2026, 1, 2) },
+    new Sale { Region = &quot;South&quot;, Units = 17, Revenue = 512.00m,  Date = new DateOnly(2026, 1, 3) },
+};
+
+await using var stream = File.Create(&quot;sales.xlsx&quot;);
+await using var workbook = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
+await using (var sheet = workbook.AddSheet(&quot;Sales&quot;))
+{
+    await sheet.WriteRecordsAsync(sales, ExcelRecordLayout.FromAttributes&lt;Sale&gt;());
+}
+</code></pre>
+<p>Disposing the sheet ends it; add the next sheet after that (a duplicate name throws, ignoring case), so one workbook can hold sheets of different record types. The sheet stays open after <code>WriteRecordsAsync</code>, so you can append more rows before disposing it. <a class="xref" href="../../api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html"><code>CsvWorkbookWriter</code></a> is the exception: a CSV file is a single sheet, so a second <code>AddSheet</code> throws (the sheet name is ignored). An <code>IAsyncEnumerable&lt;T&gt;</code> overload streams records that are produced asynchronously. The written file round-trips straight back through <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParser-1.html"><code>ExcelParser&lt;T&gt;</code></a> because the headers are the property names.</p>
+<p>Column behavior mirrors the parser attributes:</p>
+<ul>
+<li><strong><code>[ExcelColumn(&quot;Header&quot;)]</code></strong> — use a custom header instead of the property name (the first alias wins).</li>
+<li><strong><code>[ExcelIgnore]</code></strong> — exclude a property from both writing and parsing (for computed/transient members).</li>
+<li><strong><code>[ExcelConverter(typeof(MyConverter))]</code></strong> — if the converter also implements <a class="xref" href="../../api/ExcelReader.Core.Writer.IExcelCellWriter-1.html"><code>IExcelCellWriter&lt;T&gt;</code></a>, it controls how the value is written, so a custom type round-trips through the same converter it reads with.</li>
+</ul>
+<p><code>DateTime</code> and <code>DateOnly</code> are written as Excel date serials; <code>TimeOnly</code> as a time-of-day fraction. Numeric properties (including <code>Half</code>) become number cells; any other type is written as text formatted with the invariant culture — <code>DateTimeOffset</code> as ISO 8601 (<code>&quot;O&quot;</code>), enums by name — so the file parses back the same whatever the writing machine's culture. <code>Int128</code>/<code>UInt128</code> stay text because a number cell is a double and would drop their low digits. (<code>CsvWorkbookWriter</code> follows the CSV rules instead — see <a href="csv.html#write-csv">Write CSV</a> — writing <code>DateTime</code>/<code>DateOnly</code> as ISO text and <code>TimeOnly</code> as a time-of-day fraction, all still round-tripping through <code>ExcelParser&lt;T&gt;</code>.)</p>
+<p>For a model marked <code>[ExcelSerializable]</code>, pass <code>ExcelRecordLayout.Generated&lt;T&gt;()</code> instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See <a href="parsing.html#generate-typed-maps-at-compile-time-native-aot--trimming">Generate typed maps at compile time</a>.</p>
+<h2 id="write-an-excel-table">Write an Excel table</h2>
+<p>The XLSX and XLSB sheet writers implement <a class="xref" href="../../api/ExcelReader.Core.Writer.ITableSheetWriter-1.html"><code>ITableSheetWriter&lt;TRow&gt;</code></a>. <code>BeginTable</code> writes the header row
+and opens a table there; every row written until <code>EndTable</code> (or the end of the sheet) belongs to it. The
+file opens in Excel already formatted as a table, with filter buttons and the chosen built-in style, and
+reads back through <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelWorkbook.html#ExcelReader_Core_Reader_IExcelWorkbook_Tables"><code>IExcelWorkbook.Tables</code></a>.</p>
+<!-- snippet: writing-table -->
+<pre><code class="lang-csharp">using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create(&quot;report.xlsx&quot;));
+XlsxSheetWriter sheet = workbook.AddSheet(&quot;Report&quot;);
+sheet.BeginTable(&quot;Sales&quot;, [&quot;Region&quot;, &quot;Units&quot;, &quot;Revenue&quot;]);
+foreach (Sale s in sales)
+{
+    using XlsxRowWriter row = sheet.StartRow();
+    row.Write(s.Region);
+    row.Write(s.Units);
+    row.Write(s.Revenue);
+}
+sheet.EndTable();
+</code></pre>
+<p>For records, <code>WriteTableAsync</code> does all three steps with the same layouts as <code>WriteRecordsAsync</code>:</p>
+<!-- snippet: writing-table-records -->
+<pre><code class="lang-csharp">await sheet.WriteTableAsync(sales, &quot;Sales&quot;, ExcelRecordLayout.FromAttributes&lt;Sale&gt;());
+</code></pre>
+<ul>
+<li><a class="xref" href="../../api/ExcelReader.Core.Writer.ExcelTableOptions.html"><code>ExcelTableOptions</code></a> sets <code>FirstColumn</code>, <code>StyleName</code> (a built-in <code>TableStyleLight1</code>–<code>21</code>,
+<code>TableStyleMedium1</code>–<code>28</code> or <code>TableStyleDark1</code>–<code>11</code>, or <code>null</code> for none; default <code>TableStyleMedium2</code>) and
+the banding flags <code>ShowRowStripes</code>, <code>ShowColumnStripes</code>, <code>ShowFirstColumn</code>, <code>ShowLastColumn</code>.</li>
+<li>With <code>FirstColumn &gt; 0</code>, rows you write yourself must <code>Skip(FirstColumn)</code> to reach the table;
+<code>WriteTableAsync</code> does it for you.</li>
+<li>One table can be open per sheet at a time; write as many as you like one after another. Table names
+must be valid Excel names, must not read as cell references (<code>A1</code>, <code>R1C1</code>), and must be unique in the
+workbook, ignoring case. A table with no data rows gets one empty row, as Excel requires.</li>
+<li>Totals rows, custom table styles, and tables in XLS or CSV are not supported.</li>
+</ul>
+<h2 id="prefetch-compression-xlsxxlsb-writing">Prefetch compression (XLSX/XLSB writing)</h2>
+<p>The write-side mirror of <a href="reading.html#prefetch-decompression-xlsxxlsb">Prefetch decompression</a>. XLSX and XLSB
+are ZIP-backed, so every row a writer serializes has to be deflated before it reaches the stream,
+and by default that happens on the calling thread. Set <code>PrefetchWrite</code> on the writer options to move the deflate
+onto a background thread, so the caller keeps building the next batch of rows while the previous one
+compresses:</p>
+<!-- snippet: writing-prefetch -->
+<pre><code class="lang-csharp">await using var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true });
+XlsxSheetWriter sheet = wb.AddSheet(&quot;S1&quot;);
+
+foreach (var record in records)
+{
+    using XlsxRowWriter row = sheet.StartRow();
+    row.Write(record.Name);
+    row.Write(record.Value);
+}
+
+await sheet.EndAsync();
+</code></pre>
+<p><a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.html"><code>XlsbWriterOptions</code></a> has the same property. XLS and CSV are uncompressed, so
+they have nothing to overlap and do not offer it.</p>
+<p>Writing a 50,000-row workbook (<code>WriteBenchmark</code>, both figures from one run):</p>
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th style="text-align: right;">Default</th>
+<th style="text-align: right;"><code>PrefetchWrite = true</code></th>
+<th style="text-align: right;">Gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX</td>
+<td style="text-align: right;">10.910 ms</td>
+<td style="text-align: right;">6.865 ms</td>
+<td style="text-align: right;">37%</td>
+</tr>
+<tr>
+<td>XLSB</td>
+<td style="text-align: right;">7.555 ms</td>
+<td style="text-align: right;">5.614 ms</td>
+<td style="text-align: right;">26%</td>
+</tr>
+</tbody>
+</table>
+<p>Allocations are unchanged (4.02 MB vs. 4.03–4.04 MB) — the background writer hands over buffers the row
+writer already owns rather than copying them.</p>
+<p>The same caveat as the read side applies: <strong>do not enable it for concurrent server workloads</strong>. A
+caller already writing many files in parallel is CPU-saturated, and an extra background thread per
+writer only doubles thread demand for no gain. It's meant for single-file batch work.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/writing.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
