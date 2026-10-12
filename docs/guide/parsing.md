@@ -31,7 +31,7 @@ foreach (var item in parser.Parse(workbook.FirstSheet))
 
 Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, and `enum`s (matched by member name or numeric value). Each also works as a `Nullable<T>`. Empty cells leave the property at its default; an unparseable cell is skipped (keeps the default) unless the column is required. `T` needs no parameterless-constructor constraint, so models with `required` members are supported, through both `FromAttributes` and the source generator. `required` alone does not make a column mandatory; that is what `[ExcelRequired]` does.
 
-`Parse` also accepts the `IExcelSheet` of the `IExcelWorkbook` from `Excel.Open`, so you can parse without knowing the concrete format:
+`Parse` also accepts the [`IExcelSheet`](xref:ExcelReader.Core.Reader.IExcelSheet) of the [`IExcelWorkbook`](xref:ExcelReader.Core.Reader.IExcelWorkbook) from [`Excel.Open`](xref:ExcelReader.Core.Reader.Excel.Open*), so you can parse without knowing the concrete format:
 
 ```csharp
 using IExcelWorkbook workbook = Excel.Open("changes.xlsx"); // or .xlsb / .xls
@@ -40,7 +40,7 @@ foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(workbook.Firs
 
 ## Generate typed maps at compile time (Native AOT / trimming)
 
-`ExcelParser.FromAttributes<T>` and `ExcelRecordLayout.FromAttributes<T>` reflect over `T` (`GetProperties`, `MakeGenericMethod`), which trimming can break and Native AOT cannot run at all. The raw `Excel.From*` readers already use no reflection; mark a model `[ExcelSerializable]` to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own `[ExcelColumn]`/`[ExcelRequired]`/`[ExcelConverter]`/`[ExcelIgnore]` attributes, and `ExcelParser.Generated<T>`/`ExcelRecordLayout.Generated<T>` read and write through that map instead of reflection:
+[`ExcelParser.FromAttributes<T>`](xref:ExcelReader.Core.Parser.ExcelParser.FromAttributes*) and [`ExcelRecordLayout.FromAttributes<T>`](xref:ExcelReader.Core.Writer.ExcelRecordLayout.FromAttributes*) reflect over `T` (`GetProperties`, `MakeGenericMethod`), which trimming can break and Native AOT cannot run at all. The raw `Excel.From*` readers already use no reflection; mark a model `[ExcelSerializable]` to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own `[ExcelColumn]`/`[ExcelRequired]`/`[ExcelConverter]`/`[ExcelIgnore]` attributes, and [`ExcelParser.Generated<T>`](xref:ExcelReader.Core.Parser.ExcelParser.Generated*)/[`ExcelRecordLayout.Generated<T>`](xref:ExcelReader.Core.Writer.ExcelRecordLayout.Generated*) read and write through that map instead of reflection:
 
 ```csharp
 using ExcelReader.Core.Parser;
@@ -76,14 +76,14 @@ await using (var sheet = workbook.AddSheet("Changes"))
 Notes:
 
 - `[ExcelSerializable]` requires the model — and every type it's nested inside, if any — to be `partial`; the generator emits into an additional part of the same declaration. A compile error (`EXR001`/`EXR002`) names exactly what to fix.
-- Supported property types match `ExcelParser.FromAttributes<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each — plus `ReadOnlySpan<byte>`, which binds zero-copy through `ExcelCellReaders.Utf8`. The model may be a `ref struct`: mark it `ref partial struct` and the generator emits `IExcelRowMap<T>` on it like any other shape, so `ExcelParser.Generated<T>` and `ExcelParser.Build<T>` read it AOT-clean, as do the map-driven `SheetParallel.ForEachAsync`/`SheetParallel.AggregateAsync` overloads.
+- Supported property types match `ExcelParser.FromAttributes<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each — plus `ReadOnlySpan<byte>`, which binds zero-copy through [`ExcelCellReaders.Utf8`](xref:ExcelReader.Core.Parser.ExcelCellReaders.Utf8*). The model may be a `ref struct`: mark it `ref partial struct` and the generator emits [`IExcelRowMap<T>`](xref:ExcelReader.Core.Parser.IExcelRowMap%601) on it like any other shape, so `ExcelParser.Generated<T>` and [`ExcelParser.Build<T>`](xref:ExcelReader.Core.Parser.ExcelParser.Build*) read it AOT-clean, as do the map-driven [`SheetParallel.ForEachAsync`](xref:ExcelReader.Core.Reader.SheetParallel.ForEachAsync*)/[`SheetParallel.AggregateAsync`](xref:ExcelReader.Core.Reader.SheetParallel.AggregateAsync*) overloads.
 - The generator requires a build via `dotnet build`/the .NET SDK. Visual Studio's or `MSBuild.exe`'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to `ExcelParser.FromAttributes<T>`/`ExcelRecordLayout.FromAttributes<T>` for that build path.
-- `ExcelParser.Generated<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser.FromAttributes<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model reads `DateTime`/`DateOnly`/`TimeOnly` via `ExcelCellReaders.DateTimeAuto`/`DateOnlyAuto`/`TimeOnlyAuto`: an Excel serial number first, falling back to date/time text when the cell isn't numeric — so a CSV column round-trips through the library's own writer either way. The one edge case this can't distinguish: a CSV cell that's only digits (e.g. an Excel serial number typed as plain text) is always read as a serial number, never as date text.
+- `ExcelParser.Generated<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser.FromAttributes<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model reads `DateTime`/`DateOnly`/`TimeOnly` via [`ExcelCellReaders.DateTimeAuto`](xref:ExcelReader.Core.Parser.ExcelCellReaders.DateTimeAuto)/`DateOnlyAuto`/`TimeOnlyAuto`: an Excel serial number first, falling back to date/time text when the cell isn't numeric — so a CSV column round-trips through the library's own writer either way. The one edge case this can't distinguish: a CSV cell that's only digits (e.g. an Excel serial number typed as plain text) is always read as a serial number, never as date text.
 - The attribute-based reflection path keeps working unchanged; `[ExcelSerializable]` is an additive, opt-in alternative for the same model shape, not a replacement.
 
 ## Map columns at runtime (fluent API)
 
-`[ExcelColumn]`/`[ExcelRequired]` fix the mapping at compile time. When the mapping itself is a runtime decision — loaded from a config file, chosen by a user in a UI, or different per input file — build it with `ExcelRowMapBuilder<T>` through `ExcelParser.Build<T>` instead:
+`[ExcelColumn]`/`[ExcelRequired]` fix the mapping at compile time. When the mapping itself is a runtime decision — loaded from a config file, chosen by a user in a UI, or different per input file — build it with [`ExcelRowMapBuilder<T>`](xref:ExcelReader.Core.Parser.ExcelRowMapBuilder%601) through `ExcelParser.Build<T>` instead:
 
 ```csharp
 using ExcelReader.Core.Parser;
@@ -120,7 +120,7 @@ var parser = ExcelParser.Build<ChangeRow>(builder => builder
 
 A builder that uses `PropertyAt` skips the header-row step entirely — the first row is already data. Mixing `PropertyAt` with `Property`/`PropertyNullable`/`Converted` on the same builder throws, since one map can't both wait for a header row and skip it.
 
-`ExcelParser.BuildWithAttributeFallback<T>` merges the builder's bindings with `[ExcelColumn]`/`[ExcelRequired]`-driven ones reflected from `T`: a builder binding replaces every attribute-driven property that shares one of its header names; a property whose header names none of the builder's bindings mention keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model — reuse one of the property's existing `[ExcelColumn]` names in the builder:
+[`ExcelParser.BuildWithAttributeFallback<T>`](xref:ExcelReader.Core.Parser.ExcelParser.BuildWithAttributeFallback*) merges the builder's bindings with `[ExcelColumn]`/`[ExcelRequired]`-driven ones reflected from `T`: a builder binding replaces every attribute-driven property that shares one of its header names; a property whose header names none of the builder's bindings mention keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model — reuse one of the property's existing `[ExcelColumn]` names in the builder:
 
 ```csharp
 var parser = ExcelParser.BuildWithAttributeFallback<ChangeRow>(builder => builder
@@ -133,7 +133,7 @@ The match is by header name, not by property identity: configuring a *different*
 
 ## Parser configuration
 
-Pass an `ExcelParserOptions` to control header handling and culture:
+Pass an [`ExcelParserOptions`](xref:ExcelReader.Core.Parser.ExcelParserOptions) to control header handling and culture:
 
 ```csharp
 using System.Globalization;
@@ -150,7 +150,7 @@ var options = new ExcelParserOptions
 var parser = ExcelParser.FromAttributes<ChangeRow>(options);
 ```
 
-`Culture` applies when parsing text-backed numeric/`Guid` cells (XLSX inline and shared strings); binary numeric cells (XLS/XLSB) carry a raw value and ignore it. `HeaderNormalization` flags (`Trim`, `CollapseSpaces`, `RemoveDiacritics`) are applied to both the sheet headers and the property names before matching.
+`Culture` applies when parsing text-backed numeric/`Guid` cells (XLSX inline and shared strings); binary numeric cells (XLS/XLSB) carry a raw value and ignore it. [`HeaderNormalization`](xref:ExcelReader.Core.Parser.HeaderNormalization) flags (`Trim`, `CollapseSpaces`, `RemoveDiacritics`) are applied to both the sheet headers and the property names before matching.
 
 ## Required columns
 
@@ -173,7 +173,7 @@ public sealed class Order
 
 ## Custom converters
 
-For types the built-in parsers do not handle — money strings, custom formats, domain value objects — implement `IExcelCellConverter<T>` and attach it with `[ExcelConverter]`. `T` must be the property's exact type. One instance is created and reused across all rows, so converters must be stateless.
+For types the built-in parsers do not handle — money strings, custom formats, domain value objects — implement [`IExcelCellConverter<T>`](xref:ExcelReader.Core.Parser.IExcelCellConverter%601) and attach it with `[ExcelConverter]`. `T` must be the property's exact type. One instance is created and reused across all rows, so converters must be stateless.
 
 ```csharp
 using System.Globalization;

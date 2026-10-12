@@ -5,7 +5,7 @@ Parallel CSV parsing is covered in [reading.md](reading.md#parallel-reading-opt-
 
 ## Read CSV
 
-`CsvReader` is a workbook with exactly one, unnamed sheet (`csv.FirstSheet`, the same sheet as `csv.Sheets[0]`). It streams RFC 4180 CSV (quoted fields, embedded delimiters/newlines, `""`-escaped quotes) through the same `Row`/`Cell` model as the Excel workbooks, so `ExcelParser<T>` works on it unchanged.
+[`CsvReader`](xref:ExcelReader.Core.Reader.Csv.CsvReader) is a workbook with exactly one, unnamed sheet (`csv.FirstSheet`, the same sheet as `csv.Sheets[0]`). It streams RFC 4180 CSV (quoted fields, embedded delimiters/newlines, `""`-escaped quotes) through the same [`Row`](xref:ExcelReader.Core.Reader.Row)/[`Cell`](xref:ExcelReader.Core.Reader.Cell) model as the Excel workbooks, so [`ExcelParser<T>`](xref:ExcelReader.Core.Parser.ExcelParser%601) works on it unchanged.
 
 ```csharp
 using ExcelReader.Core.Parser;
@@ -25,18 +25,18 @@ foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(csv.FirstShee
 }
 ```
 
-`Excel.FromCsv`/`FromCsvFile`/`FromCsvAsync`/`FromCsvFileAsync` mirror the other formats' factory shape and take the same `ExcelReaderOptions`. Its `Csv` property, a `CsvReaderOptions`, changes the delimiter/quote character, supplies a non-UTF-8 `Encoding` (transcoded to UTF-8 internally), or turns off BOM detection; `MaxCellBytes` and `InternStrings` stay on `ExcelReaderOptions`, as for every format:
+[`Excel.FromCsv`](xref:ExcelReader.Core.Reader.Excel.FromCsv*)/`FromCsvFile`/`FromCsvAsync`/`FromCsvFileAsync` mirror the other formats' factory shape and take the same [`ExcelReaderOptions`](xref:ExcelReader.Core.Reader.ExcelReaderOptions). Its `Csv` property, a [`CsvReaderOptions`](xref:ExcelReader.Core.Reader.Csv.CsvReaderOptions), changes the delimiter/quote character, supplies a non-UTF-8 `Encoding` (transcoded to UTF-8 internally), or turns off BOM detection; `MaxCellBytes` and `InternStrings` stay on `ExcelReaderOptions`, as for every format:
 
 ```csharp
 var options = new ExcelReaderOptions { Csv = new CsvReaderOptions { Delimiter = (byte)';' } };
 using var csv = Excel.FromCsvFile("relatorio.csv", options);
 ```
 
-Every CSV cell is text (`CellType.ExcelString`, or `CellType.Empty` for a blank field); at the reader level there is no binary numeric or date representation, so `Cell.TryGetDateTime`/`IsDate1904` (always `false` for CSV) do not apply. The typed parser, however, is CSV-specialized: `ExcelParser<T>.Parse(CsvSheet)` parses `DateTime`/`DateOnly` columns directly from the cell text (ISO or culture format, honoring `Culture` — e.g. pt-BR `02/07/2026`), so no `[ExcelConverter]` is needed for dates. All the usual attributes work unchanged (`[ExcelColumn]` aliases, `[ExcelRequired]`, `[ExcelConverter]`), and a converter still takes precedence over the built-in date parsing. (Holding the sheet as an `IExcelSheet` instead routes through the generic Excel pipeline, where dates use serial-number semantics — prefer the concrete `Parse(CsvSheet)` overload for CSV.)
+Every CSV cell is text ([`CellType.ExcelString`](xref:ExcelReader.Core.Reader.CellType.ExcelString), or [`CellType.Empty`](xref:ExcelReader.Core.Reader.CellType.Empty) for a blank field); at the reader level there is no binary numeric or date representation, so [`Cell.TryGetDateTime`](xref:ExcelReader.Core.Reader.Cell.TryGetDateTime*)/`IsDate1904` (always `false` for CSV) do not apply. The typed parser, however, is CSV-specialized: `ExcelParser<T>.Parse(CsvSheet)` parses `DateTime`/`DateOnly` columns directly from the cell text (ISO or culture format, honoring `Culture` — e.g. pt-BR `02/07/2026`), so no `[ExcelConverter]` is needed for dates. All the usual attributes work unchanged (`[ExcelColumn]` aliases, `[ExcelRequired]`, `[ExcelConverter]`), and a converter still takes precedence over the built-in date parsing. (Holding the sheet as an [`IExcelSheet`](xref:ExcelReader.Core.Reader.IExcelSheet) instead routes through the generic Excel pipeline, where dates use serial-number semantics — prefer the concrete `Parse(CsvSheet)` overload for CSV.)
 
 A `CsvReader` over memory, a file path or a seekable stream allows several enumerators at once, each reading the sheet from the start. Over a seekable stream, every enumerator starts at the position the stream had when the `CsvReader` was created; where the stream's position ends up afterwards is unspecified, so do not rely on it (a file stream, and a memory stream with an exposed buffer, are read without touching it). A non-seekable stream can be read once: a second enumeration throws `InvalidOperationException`.
 
-`Excel.Open`/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff. Name the format instead: every `Open`/`OpenAsync` overload takes an optional `ExcelFileFormat`, and `ExcelReaderOptions.Csv` carries the dialect, so a caller that decides the format from an extension or a content-type header configures both families through one options object:
+[`Excel.Open`](xref:ExcelReader.Core.Reader.Excel.Open*)/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff. Name the format instead: every `Open`/`OpenAsync` overload takes an optional [`ExcelFileFormat`](xref:ExcelReader.Core.Reader.ExcelFileFormat), and [`ExcelReaderOptions.Csv`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.Csv) carries the dialect, so a caller that decides the format from an extension or a content-type header configures both families through one options object:
 
 ```csharp
 ExcelFileFormat format = Path.GetExtension(path) is ".csv" ? ExcelFileFormat.Csv : ExcelFileFormat.Unknown;
@@ -48,11 +48,11 @@ using IExcelWorkbook workbook = Excel.Open(path, format, new ExcelReaderOptions
 });
 ```
 
-`ExcelFileFormat.Unknown` keeps the signature-based detection the no-format overloads do; `EncryptedOoxml` is a detection result rather than something to open, so passing it throws `ArgumentOutOfRangeException`.
+[`ExcelFileFormat.Unknown`](xref:ExcelReader.Core.Reader.ExcelFileFormat.Unknown) keeps the signature-based detection the no-format overloads do; `EncryptedOoxml` is a detection result rather than something to open, so passing it throws `ArgumentOutOfRangeException`.
 
 ## Sniff a CSV dialect
 
-`CsvSniffer.Detect` infers the delimiter, quote character, and encoding (from a leading byte-order mark) from a sample of bytes, so a `;`-separated pt-BR export or a TSV can be read without the caller knowing the dialect up front. It is deterministic (ties break by candidate order) and never throws on arbitrary input — an indecisive sample returns `CsvDialect.Default` (comma, `"`, UTF-8).
+[`CsvSniffer.Detect`](xref:ExcelReader.Core.Reader.Csv.CsvSniffer.Detect*) infers the delimiter, quote character, and encoding (from a leading byte-order mark) from a sample of bytes, so a `;`-separated pt-BR export or a TSV can be read without the caller knowing the dialect up front. It is deterministic (ties break by candidate order) and never throws on arbitrary input — an indecisive sample returns [`CsvDialect.Default`](xref:ExcelReader.Core.Reader.Csv.CsvDialect.Default) (comma, `"`, UTF-8).
 
 ```csharp
 using ExcelReader.Core.Reader;
@@ -62,9 +62,9 @@ CsvDialect dialect = CsvSniffer.DetectFile("export.csv");
 using var csv = Excel.FromCsvFile("export.csv", new ExcelReaderOptions { Csv = CsvReaderOptions.Default.WithDialect(dialect) });
 ```
 
-`CsvSniffer.Detect` takes a span of bytes or a seekable `Stream`, `DetectFile` takes a path, and `DetectAsync`/`DetectFileAsync` are the async siblings; only the first 64 KiB are examined. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as a span instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
+`CsvSniffer.Detect` takes a span of bytes or a seekable `Stream`, `DetectFile` takes a path, and `DetectAsync`/`DetectFileAsync` are the async siblings; only the first 64 KiB are examined. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as a span instead. Pass [`CsvSnifferOptions`](xref:ExcelReader.Core.Reader.Csv.CsvSnifferOptions) to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
 
-`CsvReaderOptions.SniffDialect` does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, and `Excel.Open` with `ExcelFileFormat.Csv`. The dialect of a parallel read is the one the CSV workbook was opened with:
+[`CsvReaderOptions.SniffDialect`](xref:ExcelReader.Core.Reader.Csv.CsvReaderOptions.SniffDialect) does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, and `Excel.Open` with [`ExcelFileFormat.Csv`](xref:ExcelReader.Core.Reader.ExcelFileFormat.Csv). The dialect of a parallel read is the one the CSV workbook was opened with:
 
 ```csharp
 using var csv = Excel.FromCsvFile("export.csv", new ExcelReaderOptions { Csv = CsvReaderOptions.Default with { SniffDialect = true } });
@@ -74,7 +74,7 @@ An explicitly set `Encoding` survives sniffing unless the source carries a byte-
 
 ## Write CSV
 
-`CsvWorkbookWriter` emits RFC 4180 CSV: no styles or shared strings, so rows stream straight to the output. A CSV file is a single sheet, so `AddSheet` is called once (the name is ignored).
+[`CsvWorkbookWriter`](xref:ExcelReader.Core.Writer.Csv.CsvWorkbookWriter) emits RFC 4180 CSV: no styles or shared strings, so rows stream straight to the output. A CSV file is a single sheet, so `AddSheet` is called once (the name is ignored).
 
 ```csharp
 using ExcelReader.Core.Writer;
@@ -101,7 +101,7 @@ using (CsvRowWriter row = writer.StartRow())
 
 Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime`/`DateOnly` as round-trip ISO 8601 (`"O"`); `TimeOnly` as a time-of-day fraction — all matching what `ExcelParser<T>.Parse(CsvSheet)` expects, so a file written by `CsvWorkbookWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept).
 
-`CsvWriterOptions` mirrors `CsvReaderOptions`'s delimiter, quote and encoding, so a file written with one set of settings reads back with the matching set:
+[`CsvWriterOptions`](xref:ExcelReader.Core.Writer.Csv.CsvWriterOptions) mirrors `CsvReaderOptions`'s delimiter, quote and encoding, so a file written with one set of settings reads back with the matching set:
 
 ```csharp
 using var workbook = CsvWorkbookWriter.Create(stream, leaveOpen: false, new CsvWriterOptions

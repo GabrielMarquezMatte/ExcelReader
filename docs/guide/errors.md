@@ -24,12 +24,12 @@ for the calling thread.
 
 | Failure | C# | Status | Python | Rust | C++ |
 |---|---|---|---|---|---|
-| Encrypted, no password | `ExcelEncryptionException`, `Reason == PasswordRequired` | -6 | `PasswordRequiredError` | `Error::PasswordRequired` | `xl::Error`, `code == XL_STATUS_PASSWORD_REQUIRED` |
+| Encrypted, no password | [`ExcelEncryptionException`](xref:ExcelReader.Core.Reader.ExcelEncryptionException), `Reason == PasswordRequired` | -6 | `PasswordRequiredError` | `Error::PasswordRequired` | `xl::Error`, `code == XL_STATUS_PASSWORD_REQUIRED` |
 | Wrong password | `ExcelEncryptionException`, `Reason == PasswordIncorrect` | -7 | `PasswordIncorrectError` | `Error::PasswordIncorrect` | `xl::Error`, `code == XL_STATUS_PASSWORD_INCORRECT` |
 | Unsupported encryption, or failed integrity check | `ExcelEncryptionException`, `Reason` is `UnsupportedScheme` or `IntegrityFailure` | -5 | `ExcelReaderError` | `Error::Native` | `xl::Error`, `code == XL_ERROR` |
 | Corrupt or malformed file | `InvalidDataException` | -5 | `ExcelReaderError` | `Error::Native` | `xl::Error`, `code == XL_ERROR` |
 | Feature the reader does not support | `NotSupportedException` | -5 | `ExcelReaderError` | `Error::Native` | `xl::Error`, `code == XL_ERROR` |
-| File exceeds a configured resource limit | `ExcelLimitExceededException` | -5 | `ExcelReaderError` | `Error::Native` | `xl::Error`, `code == XL_ERROR` |
+| File exceeds a configured resource limit | [`ExcelLimitExceededException`](xref:ExcelReader.Core.Reader.ExcelLimitExceededException) | -5 | `ExcelReaderError` | `Error::Native` | `xl::Error`, `code == XL_ERROR` |
 | Workbook already closed | `ObjectDisposedException` | -3 | `ExcelReaderError` | `Error::Native` | `xl::Error`, `code == XL_INVALID_HANDLE` |
 | Invalid argument | `ArgumentException` and its subclasses | -4, or -5 when the check happens past the ABI boundary | `ExcelReaderError` | `Error::Native` | `xl::Error` |
 
