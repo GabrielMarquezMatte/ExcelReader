@@ -6,9 +6,10 @@ on:
     paths:
       - 'src/ExcelReader.Core/**'
       - 'src/ExcelReader.Arrow/**'
-      - 'src/ExcelReader.Native/include/excelreader.h'
+      - 'src/ExcelReader.Native/include/**'
       - 'python/src/**'
       - 'python/scripts/api_markdown.py'
+      - 'cpp/scripts/api_markdown.py'
       - 'docs/**'
       - '**.md'
       - 'docfx.json'
@@ -36,6 +37,12 @@ jobs:
       # Importing excelreader loads the native library lazily, so this needs only the sources.
       - name: Build Python API reference
         run: python3 python/scripts/api_markdown.py
+
+      - name: Build C++ API reference
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends doxygen
+          python3 cpp/scripts/api_markdown.py
 
       - name: Build site
         run: |

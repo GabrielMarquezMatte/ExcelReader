@@ -16,7 +16,7 @@
   ],
   "build": {
     "content": [
-      { "files": [ "index.md", "toc.yml", "api/**.{yml,md}", "python-api/**.{yml,md}" ], "src": "docs" },
+      { "files": [ "index.md", "toc.yml", "api/**.{yml,md}", "python-api/**.{yml,md}", "cpp-api/**.{yml,md}" ], "src": "docs" },
       {
         "files": [
           "docs/README.md",

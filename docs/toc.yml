@@ -30,6 +30,8 @@
       href: https://docs.rs/excelreader
     - name: C++
       href: ../cpp/README.md
+    - name: C++ API
+      href: cpp-api/
 - name: Performance
   items:
     - name: Benchmarks
