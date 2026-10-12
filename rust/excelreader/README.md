@@ -13,7 +13,7 @@ parse, schema-driven writing, row-by-row decoded reads, and Arrow export.
 excelreader = "2.1"
 ```
 
-```rust
+```rust,no_run
 use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
 
 #[derive(Default, ExcelMapper)]
@@ -27,6 +27,7 @@ struct Row {
 let workbook = Workbook::open("book.xlsx")?;
 let table = parse_sheet::<Row>(workbook.sheet(0)?, 1)?;
 for row in table.iter() { /* ... */ }
+# Ok::<(), excelreader::Error>(())
 ```
 
 `parse_sheet` takes a `Sheet`, which `Workbook::sheet` hands out (see below).
@@ -56,7 +57,8 @@ excelreader = { version = "2.1", features = ["chrono"] }
 
 ### Sheets and schema inference
 
-```rust
+```rust,no_run
+# use excelreader::workbook::Workbook;
 let workbook = Workbook::open("book.xlsx")?;
 for (index, name) in workbook.sheet_names()?.iter().enumerate() {
     println!("{index}: {name}");
@@ -66,6 +68,7 @@ for (index, name) in workbook.sheet_names()?.iter().enumerate() {
 for column in workbook.sheet(1)?.infer_schema(1, 100)? {
     println!("{:?} -> type {}", column.name, column.column_type);
 }
+# Ok::<(), excelreader::Error>(())
 ```
 
 `infer_schema_parse_text(header_row, sample_size)` also types text cells (every CSV field, or
@@ -76,7 +79,8 @@ sequential); XLSX, XLSB and CSV are split, and the result equals `parse_sheet`'s
 A workbook hands out sheets. A `Sheet` is the workbook and an index: it holds no native
 resource, it is `Copy`, and every read on it opens its own cursor.
 
-```rust
+```rust,no_run
+# use excelreader::workbook::Workbook;
 let workbook = Workbook::open("report.xlsx")?;
 
 for sheet in workbook.sheets()? {
@@ -89,12 +93,15 @@ while let Some(row) = rows.next_row() {
     let row = row?;
     // ...
 }
+# Ok::<(), excelreader::Error>(())
 ```
 
 `Workbook` is `Send + Sync`, so sheets can be read in parallel over one open workbook, which
 loads the shared-string table once:
 
-```rust
+```rust,no_run
+# use excelreader::workbook::Workbook;
+# let workbook = Workbook::open("report.xlsx")?;
 let tables = std::thread::scope(|scope| {
     let handles: Vec<_> = workbook
         .sheets()?
@@ -103,6 +110,7 @@ let tables = std::thread::scope(|scope| {
         .collect();
     handles.into_iter().map(|handle| handle.join().expect("no panic")).collect::<Result<Vec<_>, _>>()
 })?;
+# Ok::<(), excelreader::Error>(())
 ```
 
 `Workbook::open_with` takes an explicit format and `OpenOptions`; `Workbook::open_memory` reads from
@@ -113,7 +121,7 @@ a byte slice. Note that format sniffing does not detect CSV - pass `XL_FORMAT_CS
 `OpenOptions::password` unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm) through
 `Workbook::open_with`/`open_memory`:
 
-```rust
+```rust,no_run
 use excelreader::workbook::Workbook;
 use excelreader::{Error, OpenOptions, XL_FORMAT_AUTO};
 
@@ -137,12 +145,16 @@ Writing an encrypted workbook is a second step: write the plaintext package with
 `write_sheet`, then wrap it with `encrypt_package`, which produces an agile-encrypted (ECMA-376 4.4)
 CFB container - AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
 
-```rust
+```rust,no_run
 use excelreader::writer::{encrypt_package, write_columns};
 use excelreader::XL_FORMAT_XLSX;
+# use excelreader::writer::{Column, ColumnData};
+# let ids = [1i64, 2, 3];
+# let columns = [Column { name: Some("id"), data: ColumnData::I64(&ids), validity: None }];
 
 write_columns("plain.xlsx", XL_FORMAT_XLSX, &columns, None)?;
 encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")?;
+# Ok::<(), excelreader::Error>(())
 ```
 
 `package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
@@ -154,7 +166,7 @@ packages can be encrypted, matching what `Workbook::open_with`/`open_memory` can
 Implement [`Source`] to read from anything you can read at an offset. The library calls `read_at`
 from several threads, fetching 4 MiB blocks it caches; every sheet can still be read in parallel.
 
-```rust
+```rust,ignore
 struct HttpSource { client: reqwest::blocking::Client, url: String, size: u64 }
 
 impl excelreader::Source for HttpSource {
@@ -179,8 +191,10 @@ let workbook = Workbook::open_source(source, XL_FORMAT_AUTO, None)?;
 Anything that implements `Read` works through `open_reader`. A CSV is read as it arrives; an XLSX,
 XLSB or XLS is read whole first.
 
-```rust
+```rust,no_run
+# use excelreader::{workbook::Workbook, XL_FORMAT_CSV};
 let workbook = Workbook::open_reader(std::io::stdin(), XL_FORMAT_CSV, None)?;
+# Ok::<(), excelreader::Error>(())
 ```
 
 An `io::Error` from your source, or a panic in it, comes back as the `Error` of the call that
@@ -192,13 +206,21 @@ needed the bytes.
 excelreader = { version = "2.1", features = ["arrow"] }
 ```
 
-```rust
+```rust,no_run
+# #[cfg(feature = "arrow")]
+# fn main() -> Result<(), excelreader::Error> {
 use excelreader::arrow::parse_arrow;
 use excelreader::workbook::Workbook;
+# #[derive(Default, excelreader::workbook::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
 let batch = parse_arrow::<Row>(workbook.sheet(0)?, 1)?;
 println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
+# Ok(())
+# }
+# #[cfg(not(feature = "arrow"))]
+# fn main() {}
 ```
 
 Off by default â€” arrow-rs is a large dependency and the typed-parse path needs none of it.
@@ -207,9 +229,13 @@ Batched: `parse_arrow_stream` is `parse_arrow` delivered a batch at a time, retu
 `ArrowChunks<'_>`, an `Iterator<Item = Result<RecordBatch, ArrowError>>` that also implements
 `RecordBatchReader`:
 
-```rust
+```rust,no_run
+# #[cfg(feature = "arrow")]
+# fn main() -> Result<(), excelreader::Error> {
 use excelreader::arrow::parse_arrow_stream;
 use excelreader::workbook::Workbook;
+# #[derive(Default, excelreader::workbook::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
 let mut chunks = parse_arrow_stream::<Row>(workbook.sheet(0)?, 1, 10_000)?;
@@ -217,7 +243,10 @@ while let Some(batch) = chunks.next() {
     let Ok(batch) = batch else { break }; // ArrowChunks does not fuse, unlike TypedChunks
     println!("{} rows", batch.num_rows());
 }
-# Ok::<(), excelreader::Error>(())
+# Ok(())
+# }
+# #[cfg(not(feature = "arrow"))]
+# fn main() {}
 ```
 
 Same `batch_size` semantics as `typed_chunks` below. Unlike `TypedChunks`,
@@ -229,11 +258,15 @@ first `Err` rather than continuing the loop.
 `#[derive(ExcelMapper)]` generates both halves, so the same struct reads and writes - the field
 types in the table above apply unchanged:
 
-```rust
+```rust,no_run
 use excelreader::writer::write_sheet;
 use excelreader::XL_FORMAT_XLSX;
+# #[derive(Default, excelreader::workbook::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
+# let rows = vec![Row::default()];
 
 write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
+# Ok::<(), excelreader::Error>(())
 ```
 
 `Option<T>` fields become an LSB-first validity bitmap: `None` writes a blank cell rather than a
@@ -244,7 +277,7 @@ For buffers that are already columnar, `write_columns` borrows them and copies n
 lifetimes on `Column<'a>` are what turn the ABI's borrow contract into something the compiler
 checks:
 
-```rust
+```rust,no_run
 use excelreader::writer::{write_columns, Column, ColumnData};
 use excelreader::XL_FORMAT_XLSX;
 
@@ -255,6 +288,7 @@ let columns = [Column {
     validity: None,
 }];
 write_columns("out.xlsx", XL_FORMAT_XLSX, &columns, None)?;
+# Ok::<(), excelreader::Error>(())
 ```
 
 `validity` is checked against the row count before the call: the ABI takes the bitmap without a
@@ -274,7 +308,7 @@ field. That transpose is the only copy it makes; `write_columns` pays nothing.
 `write_sheet`/`write_columns` build the whole table in memory first. `writer_handle::WriterHandle` is
 the row-by-row alternative, writing directly as each call arrives instead:
 
-```rust
+```rust,no_run
 use excelreader::writer_handle::WriterHandle;
 
 let mut handle = WriterHandle::open("out.xlsx", None)?;
@@ -284,6 +318,7 @@ handle.write_str(Some("Name"))?;
 handle.write_i64(Some(42))?;
 handle.end_row()?;
 handle.end_sheet()?;
+# Ok::<(), excelreader::Error>(())
 ```
 
 Call order mirrors the C ABI's `xl_writer_handle`: `open`/`open_with`/`open_memory`, then per sheet
@@ -299,7 +334,7 @@ on the drop for that.
 `Sheet::rows` returns a cursor over that sheet. Each row borrows a buffer the cursor
 reuses, so iterating a sheet allocates nothing per row:
 
-```rust
+```rust,no_run
 use excelreader::workbook::Workbook;
 
 let workbook = Workbook::open("book.xlsx")?;
@@ -318,7 +353,8 @@ Because each row borrows the cursor's buffer, only one row is alive at a time â€
 enforces it. To hold every row at once, use `read_all_decoded`, which decodes the whole
 sheet in one native call and keeps it alive until dropped:
 
-```rust
+```rust,no_run
+# use excelreader::workbook::Workbook;
 let workbook = Workbook::open("book.xlsx")?;
 let rows = workbook.sheet(0)?.read_all_decoded()?;
 for row in rows.iter() {
@@ -335,8 +371,10 @@ native side and never formats a cell to text.
 For a sheet too large to hold in memory at once, `Sheet::typed_chunks` is `parse_sheet` delivered
 a batch at a time:
 
-```rust
+```rust,no_run
 use excelreader::workbook::Workbook;
+# #[derive(Default, excelreader::workbook::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
 let chunks = workbook.sheet(0)?.typed_chunks::<Row>(1, 10_000)?;
