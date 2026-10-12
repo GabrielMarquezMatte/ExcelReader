@@ -1,8 +1,9 @@
 name: Native bindings
 
 on:
+  # develop is covered by its pull request into master; a push trigger there would run everything twice.
   push:
-    branches: [master, develop]
+    branches: [master]
   pull_request:
     branches: [master, develop]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -145,13 +146,17 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
+      # The next two compile the crate again (default features, then the bench profile); that
+      # catches nothing platform-specific the test build above missed, so one OS is enough.
       - name: cargo build (default features)
+        if: runner.os == 'Linux'
         working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo build --workspace --verbose
 
       - name: cargo bench (smoke)
+        if: runner.os == 'Linux'
         working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}

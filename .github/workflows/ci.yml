@@ -65,6 +65,9 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     env:
       RUN: ${{ needs.changes.outputs.dotnet }}
+      # The whole solution compiles the same on every OS, so Linux builds all of it and the others
+      # build only what the tests need.
+      BUILD_TARGET: ${{ matrix.os == 'ubuntu-latest' && 'ExcelReader.slnx' || 'tests/ExcelReader.Tests/ExcelReader.Tests.csproj' }}
 
     steps:
       - name: Nothing to build
@@ -85,11 +88,11 @@ jobs:
 
       - name: Restore
         if: env.RUN == 'true'
-        run: dotnet restore ExcelReader.slnx
+        run: dotnet restore ${{ env.BUILD_TARGET }}
 
       - name: Build (Release)
         if: env.RUN == 'true'
-        run: dotnet build ExcelReader.slnx --configuration Release --no-restore -p:DeterministicSourcePaths=false
+        run: dotnet build ${{ env.BUILD_TARGET }} --configuration Release --no-restore -p:DeterministicSourcePaths=false
 
       - name: Verify formatting (whitespace)
         if: env.RUN == 'true' && matrix.os == 'ubuntu-latest'

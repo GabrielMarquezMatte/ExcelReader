@@ -1,8 +1,9 @@
 name: CodeQL
 
 on:
+  # develop is covered by its pull request into master; a push trigger there would run everything twice.
   push:
-    branches: [ master, develop ]
+    branches: [ master ]
   pull_request:
     branches: [ master, develop ]
     types: [ opened, synchronize, reopened, ready_for_review ]
@@ -89,9 +90,14 @@ jobs:
           languages: ${{ matrix.language }}
           queries: security-extended
 
+      # Only the shipped projects: tests, benchmarks and the fuzz harness double the build for code
+      # no one runs against untrusted input.
       - name: Build (Release)
         if: matrix.language == 'csharp'
-        run: dotnet build ExcelReader.slnx --configuration Release
+        run: |
+          for project in src/*/*.csproj; do
+            dotnet build "$project" --configuration Release
+          done
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
