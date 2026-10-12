@@ -120,7 +120,7 @@ namespace ExcelReader.Cli
 
         private static void WriteXlsx(IExcelSheet sheet, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
-            using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(target, leaveOpen);
+            using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(target, leaveOpen, new XlsxWriterOptions { Date1904 = sheet.IsDate1904 });
             WriteRows<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, sheet, onProgress);
         }
 
@@ -132,7 +132,7 @@ namespace ExcelReader.Cli
 
         private static void WriteXls(IExcelSheet sheet, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
-            using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, date1904: sheet.IsDate1904);
+            using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, new XlsWriterOptions { Date1904 = sheet.IsDate1904 });
             WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, sheet, onProgress);
         }
 
@@ -170,7 +170,7 @@ namespace ExcelReader.Cli
                             }
                             break;
                         case CellType.Date:
-                            var dateValue = cellValue.TryGetDateTime(out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");
+                            var dateValue = cellValue.TryGetDateTime(sheet.IsDate1904, out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");
                             row.Write(dateValue);
                             break;
                         default:
@@ -195,7 +195,7 @@ namespace ExcelReader.Cli
             {
                 using IExcelWorkbook workbook = Open(path, sheet, out IExcelSheet selected, password, inputDelimiter);
 
-                foreach (ExcelColumnSchema column in Excel.InferSchema(selected, headerRow, sampleSize))
+                foreach (ExcelColumnSchema column in Excel.InferSchema(selected, new SchemaInferenceOptions { HeaderRow = headerRow, SampleSize = sampleSize }))
                 {
                     stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
                     stdout.Write('\t');

@@ -66,7 +66,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsx_Sylvan()
         {
             using MemoryStream ms = Open(_xlsx, nameof(Xlsx_Sylvan));
-            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 
@@ -115,7 +115,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsb_Sylvan()
         {
             using MemoryStream ms = Open(_xlsb, nameof(Xlsb_Sylvan));
-            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new ExcelDataReaderOptions());
+            using Sylvan.Data.Excel.ExcelDataReader reader = Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 

@@ -25,7 +25,7 @@ result cannot silently mean "the oracle accepts everything".
 
 ## Targets
 
-`xlsx`, `xlsx-memory`, `xlsb`, `xlsb-memory`, `xls`, `encrypted`, `csv`, `csv-sniff`.
+`xlsx`, `xlsx-memory`, `xlsb`, `xlsb-memory`, `xls`, `encrypted`, `csv`, `csv-sniff`, `inflate`.
 
 The `-memory` variants exist because the in-memory ZIP path (`ZipMemoryIndex`) is a different
 container parser from the `Stream`/`ZipArchive` one, and `csv-sniff` because dialect detection runs
@@ -33,6 +33,11 @@ over untrusted bytes before any reader is constructed. `encrypted` is a third co
 directory + `EncryptionInfo` descriptor) layered under the ZIP one, and runs before any password
 check, so it gets its own target with a fixed, correct password (`hunter2`) so mutations explore the
 parsers instead of dead-ending on a verifier mismatch.
+
+`inflate` feeds raw bytes straight to the managed DEFLATE decoder, without a ZIP around them, and
+compares its output with `DeflateStream`'s whenever both accept the input. It exists because the
+other targets only notice a decoder that crashes or hangs: one that decodes the wrong bytes
+without crashing would pass every one of them.
 
 ## Running locally
 

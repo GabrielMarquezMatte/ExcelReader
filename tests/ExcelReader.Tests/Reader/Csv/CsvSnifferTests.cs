@@ -177,7 +177,7 @@ namespace ExcelReader.Tests.Reader.Csv
             byte[] data = Bytes("nome;idade\nAna;30\nBia;25\n");
             CsvDialect dialect = CsvSniffer.Detect(data);
             CsvReaderOptions options = CsvReaderOptions.Default.WithDialect(dialect);
-            using var reader = Excel.FromCsv(data, options);
+            using var reader = Excel.FromCsv(data, new ExcelReaderOptions { Csv = options });
             using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());

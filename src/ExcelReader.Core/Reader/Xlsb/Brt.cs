@@ -18,6 +18,18 @@ namespace ExcelReader.Core.Reader.Xlsb
         internal const int SSTItem = 19;
         internal const int ColInfo = 60;
         internal const int Font = 43;
+        internal const int BeginList = 343;
+        internal const int BeginListCol = 347;
+        internal const int ListTableStyleClient = 513;
+        internal const int BeginAFilter = 161;
+        internal const int EndAFilter = 162;
+        internal const int EndList = 344;
+        internal const int BeginListCols = 345;
+        internal const int EndListCols = 346;
+        internal const int EndListCol = 348;
+        internal const int BeginListParts = 660;
+        internal const int ListPart = 661;
+        internal const int EndListParts = 662;
         internal const int Fmt = 44;
         internal const int Fill = 45;
         internal const int Border = 46;
@@ -38,8 +50,6 @@ namespace ExcelReader.Core.Reader.Xlsb
         internal const int BundleSh = 156;
         internal const int BeginSst = 159;
         internal const int EndSst = 160;
-        internal const int BeginCellMetadata = 161;
-        internal const int EndCellMetadata = 162;
         internal const int BeginStyleSheet = 278;
         internal const int EndStyleSheet = 279;
         internal const int BeginColInfos = 390;
@@ -59,9 +69,6 @@ namespace ExcelReader.Core.Reader.Xlsb
         internal const int Style = 48;
         internal const int BeginCellStyleXFs = 626;
         internal const int EndCellStyleXFs = 627;
-        internal const int BeginTableStyles = 648;
-        internal const int TableStyleClient = 649;
-        internal const int EndTableStyles = 650;
         internal const int BeginBundleShs = 143;
         internal const int EndBundleShs = 144;
     }

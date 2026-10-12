@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [xlsx, xlsx-memory, xlsx-differential, xlsb, xlsb-memory, xlsb-differential, xls, encrypted, csv, csv-sniff, csv-parallel]
+        target: [xlsx, xlsx-memory, xlsx-differential, xlsx-pipeline, xlsb, xlsb-memory, xlsb-differential, xlsb-pipeline, xls, encrypted, csv, csv-sniff, csv-parallel, inflate]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -76,7 +76,7 @@ jobs:
 
       - name: Publish harness
         run: |
-          dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out
+          dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out -p:RunAnalyzers=false
           chmod +x fuzz-out/ExcelReader.Fuzz
 
       - name: Generate seed corpus
@@ -110,6 +110,7 @@ jobs:
             xls)       dict=xls ;;
             encrypted) dict=encrypted ;;
             csv*)      dict=csv ;;
+            inflate)   dict=inflate ;;
           esac
           ./libfuzzer-dotnet \
             --target_path=fuzz-out/ExcelReader.Fuzz \
@@ -158,7 +159,7 @@ jobs:
 
       - name: Build
         if: env.RUN == 'true'
-        run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release
+        run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -p:RunAnalyzers=false
 
       - name: Generate corpus
         if: env.RUN == 'true'

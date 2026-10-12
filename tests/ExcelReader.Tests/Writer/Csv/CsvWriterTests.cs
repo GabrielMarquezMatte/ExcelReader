@@ -246,7 +246,7 @@ namespace ExcelReader.Tests.Writer.Csv
             }
             ms.Position = 0;
 
-            using IExcelWorkbook reader = Excel.FromCsv(ms, options: new CsvReaderOptions { Quote = (byte)'5' });
+            using IExcelWorkbook reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = new CsvReaderOptions { Quote = (byte)'5' } });
             using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("155", e.Current[0].GetString());
@@ -340,7 +340,7 @@ namespace ExcelReader.Tests.Writer.Csv
             Assert.Equal("has, comma", row2[0].GetString());
             Assert.Equal(CellType.ExcelString, row2[1].Type);
             Assert.Equal("true", row2[1].GetString());
-            Assert.True(row2[2].TryGetDateTime(out DateTime readBack));
+            Assert.True(row2[2].TryGetDateTime(isDate1904: false, out DateTime readBack));
             Assert.Equal(date, readBack);
             Assert.Equal(date.ToString("O"), row2[2].GetString());
         }

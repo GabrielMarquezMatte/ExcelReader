@@ -1,3 +1,5 @@
+![ExcelReader logo](https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png)
+
 # excelreader (Python)
 
 Read and write XLSX, XLSB, XLS and CSV through ExcelReader's NativeAOT library. No .NET runtime
@@ -175,11 +177,11 @@ once, typed or Arrow (see [Arrow](#arrow) below), and none disturbs another.
 Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
 `batch_size` is only raised there, not at the call.
 
-#### Reading a large CSV on several threads
+#### Reading a large sheet on several threads
 
 `parse_typed()`, `to_arrow()`, `to_record_batch()` and `to_polars()` take `parallelism`: `1` (the
-default) reads on one thread, `0` uses every core, `n` up to n threads. Only CSV is split. Any other
-format, or a CSV under 256 KiB, is read on one thread with the same result. The table is identical
+default) reads on one thread, `0` uses every core, `n` up to n threads. XLSX, XLSB and CSV are split. XLS, or a
+sheet under 256 KiB, is read on one thread with the same result. The table is identical
 either way. Every partition's columns are held until they are merged, so the peak memory is higher
 than a sequential read of the same file. `to_polars()` with `parallelism` other than 1 parses the whole
 file instead of streaming it in batches.
@@ -190,6 +192,11 @@ file instead of streaming it in batches.
 |---|---:|---:|---:|
 | `65K_Records_Data.csv` (8 MB, 65,535 rows) | 21.4 ms | 5.8 ms | 3.7x |
 | the same rows ×20 (160 MB, 1.3M rows) | 425.9 ms | 117.5 ms | 3.6x |
+
+The same call on the real-data workbooks (XLSX 6.7 MB compressed, XLSB 3.7 MB; measured with the
+published NativeAOT library): XLSX 54.1 ms at
+`parallelism=1` against 20.3 ms at `0` (2.6x), XLSB 28.2 ms against 15.2 ms (1.85x). Inflate runs on
+one thread, so under the JIT the sheet stage stops scaling at about three threads.
 
 Peak working set on the 160 MB file, above the interpreter's own, went from 470 MiB to 503 MiB (both
 include the file's bytes and the handle's copy of them).
@@ -380,6 +387,49 @@ with open_bytes(payload) as workbook:
     ...
 ```
 
+### From your own bytes
+
+`open_source()` takes any object with a `size` and a `read_at(offset, buffer)` that fills `buffer`
+and returns the count. The library asks for 4 MiB blocks and caches them, and every sheet can still
+be read on its own thread.
+
+```python
+import urllib.request
+
+from excelreader import open_source
+
+class HttpSource:
+    def __init__(self, url):
+        self.url = url
+        with urllib.request.urlopen(urllib.request.Request(url, method="HEAD")) as response:
+            self.size = int(response.headers["Content-Length"])
+
+    def read_at(self, offset, buffer):
+        request = urllib.request.Request(self.url, headers={"Range": f"bytes={offset}-{offset + len(buffer) - 1}"})
+        with urllib.request.urlopen(request) as response:
+            data = response.read()
+        buffer[: len(data)] = data
+        return len(data)
+
+with open_source(HttpSource("https://example.com/book.xlsx")) as workbook:
+    ...
+```
+
+`open_stream()` reads anything with `readinto()` or `read()`, such as `sys.stdin.buffer`. A CSV is
+read as it arrives, and its first 16 MiB are kept so that `infer_schema()` followed by a read works;
+an XLSX, XLSB or XLS is read whole first.
+
+```python
+import sys
+
+from excelreader import open_stream
+
+with open_stream(sys.stdin.buffer, "csv") as workbook:
+    ...
+```
+
+Both callbacks run with the GIL held. For a file on disk, `open_workbook()` is faster.
+
 ### Reader options
 
 `open_workbook()`/`open_bytes()` take an optional `OpenOptions` for CSV dialect settings and reader
@@ -465,57 +515,74 @@ secret = encrypt_package_bytes(write_workbook_to_bytes(table, types, format="xls
 
 `benchmarks/bench_read.py` and `benchmarks/bench_write.py` over
 `tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb` (65,535 data rows, 14 columns), the same
-fixture the .NET, C++ and Rust suites use. Measured on Windows 10 (22H2), 16 logical CPUs
-@ 3.39 GHz, CPython 3.14.4, 10 runs each (medians shown; `min` is in the scripts' own output).
-Competitors: polars 1.44.1 (with fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter
-3.2.9.
+fixture the .NET, C++ and Rust suites use. Measured on Windows 10 (22H2), AMD Ryzen 7 5700X
+(16 logical CPUs @ 3.39 GHz), CPython 3.14.7, 10 runs each (medians shown; `min` is in the scripts' own
+output), against a library published from commit 65945b4. Competitors: polars 1.44.1 (with
+fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter 3.2.9.
 
 ### Reading
 
 | API | Median | What it produces |
 |---|---:|---|
-| `to_record_batch_reader()` | 35.8 ms | Arrow record batches, streamed |
-| `to_arrow()` | 36.1 ms | the same parse, handed to pyarrow zero-copy |
-| `parse_typed()` | 39.5 ms | typed columnar buffers, converted natively |
-| `iter_parse_typed()` | 38.4 ms | the same typed buffers, in batches |
-| `to_polars()` | 38.7 ms | typed columnar DataFrame, schema inferred |
-| `polars.read_excel()` | 124.3 ms | typed columnar DataFrame, types inferred |
-| `read_all_columnar()` | 471.7 ms | raw columnar cells, no per-cell Python objects |
-| `rows()` | 1,086.9 ms | one `Cell` object per cell, streamed per row |
-| `read_all()` | 1,656.5 ms | one `Cell` object per cell, all at once |
+| `to_record_batch_reader()` | 31.9 ms | Arrow record batches, streamed |
+| `to_arrow()` | 31.8 ms | the same parse, handed to pyarrow zero-copy |
+| `parse_typed()` | 33.5 ms | typed columnar buffers, converted natively |
+| `iter_parse_typed()` | 34.2 ms | the same typed buffers, in batches |
+| `to_polars()` | 34.6 ms | typed columnar DataFrame, schema inferred |
+| `polars.read_excel()` | 125.6 ms | typed columnar DataFrame, types inferred |
+| `read_all_columnar()` | 463.3 ms | raw columnar cells, no per-cell Python objects |
+| `rows()` | 1,034.6 ms | one `Cell` object per cell, streamed per row |
+| `read_all()` | 1,631.0 ms | one `Cell` object per cell, all at once |
 
 The batched readers cost the same as their whole-sheet counterparts and lower the peak memory:
-`to_record_batch_reader(batch_size=10000)` peaks at 20.2 MiB against 24.8 MiB for one whole-sheet
+`to_record_batch_reader(batch_size=10000)` peaks at 11.4 MiB against 18.8 MiB for one whole-sheet
 record batch on this file.
 
-Only the `to_polars()` / `polars.read_excel()` pair is a like-for-like comparison, and even that one
-is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules are
-not identical. The rows above it produce different things and are listed to show what each API
-costs, not to rank them — `read_all()` is ~42x slower than `parse_typed()` because it materializes
+Only the `to_polars()` / `polars.read_excel()` pair is a like-for-like comparison (~3.6x), and even
+that one is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules
+are not identical. The rows above it produce different things and are listed to show what each API
+costs, not to rank them — `read_all()` is ~49x slower than `parse_typed()` because it materializes
 917,504 Python objects, which is the price of that shape, not a slow parser.
+
+CSV, from `65K_Records_Data.csv` (8.2 MB), same 14 typed columns:
+
+| API | Median |
+|---|---:|
+| `parse_typed(parallelism=1)` | 23.6 ms |
+| `parse_typed(parallelism=0)` | 12.0 ms |
+| `to_polars(parallelism=1)` | 25.0 ms |
+| `to_polars(parallelism=0)` | 10.8 ms |
+| `polars.read_csv(try_parse_dates=True)` | 7.3 ms |
+| `pandas.read_csv`, pyarrow engine | 115.8 ms |
+| `pandas.read_csv`, C engine | 138.7 ms |
+
+polars' CSV reader is ahead (multithreaded, and it infers types from the text without our schema
+step); ExcelReader is ~10x faster than pandas on either engine. These include opening the file, so
+they are above the in-memory `xl_parse_typed` figures in [Reading a large sheet on several
+threads](#reading-a-large-sheet-on-several-threads).
 
 ### Writing
 
 | API | Median | Output |
 |---|---:|---|
-| `write_workbook()` → csv | 35.7 ms | 8.2 MB |
-| `write_workbook()` → xls | 43.9 ms | 17.7 MB |
-| `write_workbook()` → xlsb | 71.9 ms | 5.1 MB |
-| `write_workbook()` → xlsx | 90.2 ms | 5.1 MB |
-| `write_polars()` → xlsx | 470.2 ms | 5.1 MB |
-| `write_pandas()` → xlsx | 468.5 ms | 5.1 MB |
-| `polars.DataFrame.write_excel()` | 4,707.2 ms | 5.6 MB |
-| `pandas.DataFrame.to_excel()` | 7,274.0 ms | 5.5 MB |
+| `write_workbook()` → csv | 35.1 ms | 8.2 MB |
+| `write_workbook()` → xls | 44.4 ms | 17.7 MB |
+| `write_workbook()` → xlsb | 71.5 ms | 5.1 MB |
+| `write_workbook()` → xlsx | 90.6 ms | 5.1 MB |
+| `write_polars()` → xlsx | 487.4 ms | 5.1 MB |
+| `write_pandas()` → xlsx | 493.8 ms | 5.1 MB |
+| `polars.DataFrame.write_excel()` | 4,670.4 ms | 5.6 MB |
+| `pandas.DataFrame.to_excel()` | 7,192.9 ms | 5.5 MB |
 
 The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
-`write_polars()` is ~10.0x faster than polars' own `write_excel()`, and `write_pandas()` ~15.5x
+`write_polars()` is ~9.6x faster than polars' own `write_excel()`, and `write_pandas()` ~14.6x
 faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
 through Arrow and then a Python list before reaching the native columns, which is most of the gap
-between the 470 ms row and the 90 ms one. Handing `write_workbook()` buffers that are already
+between the ~490 ms rows and the 90 ms one. Handing `write_workbook()` buffers that are already
 columnar — what `parse_typed()` returns — skips all of it.
 
-`write_workbook(xlsx)` at 90.2 ms lands within ~5 ms of the C++ binding's
-`xl::write_columns` on the same 14 columns (85.1–85.9 ms), which is the expected result: both are thin wrappers
+`write_workbook(xlsx)` at 90.6 ms lands within ~5 ms of the C++ binding's
+`xl::write_columns` on the same 14 columns (85.4 ms), which is the expected result: both are thin wrappers
 over the same `xl_write_typed` call, and neither adds work per cell.
 
 `xls` being both the largest file and faster than xlsb and xlsx is not a paradox — BIFF8 writes

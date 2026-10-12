@@ -17,8 +17,10 @@ namespace ExcelReader.Fuzz
         {
             FuzzOracle.SelfCheck();
             Harnesses.AssertSameRowsSelfCheck();
+            Harnesses.InflateDivergenceSelfCheck();
             VerifyEncryptedSeedReachesRealCode(corpusDirectory);
             VerifyDifferentialSeedsReachBothReaders(corpusDirectory);
+            VerifyInflateSeedsCoverEveryBlockType(corpusDirectory);
 
             string[] files = Directory.Exists(corpusDirectory)
                 ? [.. Directory.GetFiles(corpusDirectory, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal)]
@@ -85,6 +87,39 @@ namespace ExcelReader.Fuzz
             foreach (string seedPath in Directory.GetFiles(corpusDirectory, "seed-xlsb*.bin", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
             {
                 VerifyOneDifferentialSeed(seedPath, xlsb: true);
+            }
+        }
+
+        private static void VerifyInflateSeedsCoverEveryBlockType(string corpusDirectory)
+        {
+            if (!Directory.Exists(corpusDirectory))
+            {
+                return;
+            }
+
+            (string Name, int BlockType)[] expected = [("seed-inflate-stored.bin", 0), ("seed-inflate-fixed.bin", 1), ("seed-inflate-dynamic.bin", 2)];
+            foreach ((string name, int blockType) in expected)
+            {
+                foreach (string seedPath in Directory.GetFiles(corpusDirectory, name, SearchOption.AllDirectories))
+                {
+                    VerifyOneInflateSeed(seedPath, blockType);
+                }
+            }
+        }
+
+        private static void VerifyOneInflateSeed(string seedPath, int blockType)
+        {
+            string name = Path.GetFileName(seedPath);
+            byte[] seed = File.ReadAllBytes(seedPath);
+            if (seed.Length == 0 || ((seed[0] >> 1) & 3) != blockType)
+            {
+                throw new InvalidOperationException(
+                    $"{name} does not start with a type-{blockType} deflate block, so it no longer seeds that path.");
+            }
+            if (Harnesses.InflateSeedForSelfCheck(seed) == 0)
+            {
+                throw new InvalidOperationException(
+                    $"the unmutated {name} decoded to nothing, so the inflate target compares nothing.");
             }
         }
 

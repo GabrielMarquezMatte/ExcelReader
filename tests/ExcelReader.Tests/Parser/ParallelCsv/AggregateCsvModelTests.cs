@@ -31,7 +31,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             public int Id { get; set; }
         }
 
-        private sealed class PeopleLog : ICsvAccumulator<PeopleLog, Person>, ICsvAccumulator<PeopleLog, IdOnly>
+        private sealed class PeopleLog : IRowAccumulator<PeopleLog, Person>, IRowAccumulator<PeopleLog, IdOnly>
         {
             public List<string> Rows { get; } = [];
 
@@ -76,7 +76,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             using CsvReader reader = Excel.FromCsv(csv);
             var rows = new List<string>();
-            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader.FirstSheet))
+            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserOptions { HeaderRow = headerRow }).Parse(reader.FirstSheet))
             {
                 rows.Add(Render(person));
             }
@@ -92,7 +92,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 ExcelParser.Generated<Person>(),
                 ExcelParser.FromAttributes<Person>(),
                 ExcelParser.Build<Person>(static b => b
-                    .PropertyRaw(["Name"], static (ref Person m, in Cell c, bool d, IFormatProvider pr) =>
+                    .PropertyRaw(["Name"], static (ref Person m, in Cell c, in ExcelRowContext x) =>
                     {
                         m.Name = c.Value;
                         return true;
@@ -107,8 +107,10 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
                 MappedAggregation<PeopleLog, Person>.Unbound,
-                MappedAggregation<PeopleLog, Person>.Binder(map, headerRow),
-                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = headerRow },
+                MappedAggregation<PeopleLog, Person>.Binder(map, map.CsvInfo, false, headerRow),
+                CsvReaderOptions.Default,
+                headerRow,
+                dop,
                 chunkSize,
                 TestContext.Current.CancellationToken);
         }
@@ -118,8 +120,10 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
                 MappedAggregation<PeopleLog, IdOnly>.Unbound,
-                MappedAggregation<PeopleLog, IdOnly>.Binder(map, headerRow),
-                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = headerRow },
+                MappedAggregation<PeopleLog, IdOnly>.Binder(map, map.CsvInfo, false, headerRow),
+                CsvReaderOptions.Default,
+                headerRow,
+                dop,
                 chunkSize,
                 TestContext.Current.CancellationToken);
         }
@@ -165,21 +169,29 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             byte[] csv = PeopleCsv(rows: 60_000);
             List<string> expected = Sequential(csv, headerRow: 1);
-            var options = new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 };
+            var options = new SheetParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 };
             CancellationToken ct = TestContext.Current.CancellationToken;
             ExcelParser<Person> map = ExcelParser.Generated<Person>();
             string path = Path.Combine(Path.GetTempPath(), $"exr-model-{Guid.NewGuid():N}.csv");
             await File.WriteAllBytesAsync(path, csv, ct);
             try
             {
-                Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(csv.AsMemory(), map, options, ct)).Rows);
-                Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(path, map, options, ct)).Rows);
+                using (CsvReader memory = Excel.FromCsv(csv))
+                {
+                    Assert.Equal(expected, (await SheetParallel.AggregateAsync<PeopleLog, Person>(memory.FirstSheet, map, options, ct)).Rows);
+                }
+                using (CsvReader fromPath = Excel.FromCsvFile(path))
+                {
+                    Assert.Equal(expected, (await SheetParallel.AggregateAsync<PeopleLog, Person>(fromPath.FirstSheet, map, options, ct)).Rows);
+                }
                 await using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true))
                 {
-                    Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(file, map, options, ct)).Rows);
+                    using CsvReader fromFile = Excel.FromCsv(file, leaveOpen: true);
+                    Assert.Equal(expected, (await SheetParallel.AggregateAsync<PeopleLog, Person>(fromFile.FirstSheet, map, options, ct)).Rows);
                 }
                 using var unseekable = new BufferedStream(new MemoryStream(csv, writable: false));
-                Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(unseekable, map, options, ct)).Rows);
+                using CsvReader fromBuffered = Excel.FromCsv(unseekable, leaveOpen: true);
+                Assert.Equal(expected, (await SheetParallel.AggregateAsync<PeopleLog, Person>(fromBuffered.FirstSheet, map, options, ct)).Rows);
             }
             finally
             {
@@ -192,7 +204,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             byte[] csv = "Note,Identifier,Name\nn1,1,ada\nn2,2,bob\n"u8.ToArray();
             ExcelParser<Person> map = ExcelParser.Build<Person>(static b => b
-                .PropertyRaw(["Name"], static (ref Person m, in Cell c, bool d, IFormatProvider pr) =>
+                .PropertyRaw(["Name"], static (ref Person m, in Cell c, in ExcelRowContext x) =>
                 {
                     m.Name = c.Value;
                     return true;
@@ -200,7 +212,9 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 .Property(["Identifier", "Id"], ExcelCellReaders.Parsable, static (ref Person m, int v) => m.Id = v)
                 .Property(["Note"], ExcelCellReaders.String, static (ref Person m, string v) => m.Note = v));
 
-            PeopleLog log = await CsvParallel.AggregateAsync<PeopleLog, Person>(csv, map, new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
+            using CsvReader reader = Excel.FromCsv(csv);
+
+            PeopleLog log = await SheetParallel.AggregateAsync<PeopleLog, Person>(reader.FirstSheet, map, new SheetParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
 
             Assert.Equal(["ada|1|n1", "bob|2|n2"], log.Rows);
         }
@@ -209,8 +223,9 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task AMissingRequiredColumnThrows()
         {
             byte[] csv = "Name,Note\nada,n1\n"u8.ToArray();
-            await Assert.ThrowsAsync<ExcelParseException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
-                csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken));
+            using CsvReader reader = Excel.FromCsv(csv);
+            await Assert.ThrowsAsync<ExcelParseException>(() => SheetParallel.AggregateAsync<PeopleLog, Person>(
+                reader.FirstSheet, ExcelParser.Generated<Person>(), new SheetParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -218,14 +233,15 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             byte[] csv = "ada,1\nbob,2\n"u8.ToArray();
             CancellationToken ct = TestContext.Current.CancellationToken;
-            await Assert.ThrowsAsync<ArgumentException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
-                csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 0 }, ct));
+            using CsvReader reader = Excel.FromCsv(csv);
+            await Assert.ThrowsAsync<ArgumentException>(() => SheetParallel.AggregateAsync<PeopleLog, Person>(
+                reader.FirstSheet, ExcelParser.Generated<Person>(), new SheetParallelOptions { HeaderRow = 0 }, ct));
 
-            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
-                csv, (ExcelParser<Person>)null!, new CsvParallelOptions { HeaderRow = 1 }, ct));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => SheetParallel.AggregateAsync<PeopleLog, Person>(
+                reader.FirstSheet, (ExcelParser<Person>)null!, new SheetParallelOptions { HeaderRow = 1 }, ct));
 
             ExcelParser<IdOnly> byIndex = ExcelParser.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
-            PeopleLog log = await CsvParallel.AggregateAsync<PeopleLog, IdOnly>(csv, byIndex, new CsvParallelOptions { HeaderRow = 0 }, ct);
+            PeopleLog log = await SheetParallel.AggregateAsync<PeopleLog, IdOnly>(reader.FirstSheet, byIndex, new SheetParallelOptions { HeaderRow = 0 }, ct);
             Assert.Equal(["1", "2"], log.Rows);
         }
 
@@ -248,8 +264,9 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task SkipsEmptyRecords()
         {
             byte[] csv = "Name,Id,Note\nada,1,n\n\nbob,2,m\n"u8.ToArray();
-            PeopleLog log = await CsvParallel.AggregateAsync<PeopleLog, Person>(
-                csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
+            using CsvReader reader = Excel.FromCsv(csv);
+            PeopleLog log = await SheetParallel.AggregateAsync<PeopleLog, Person>(
+                reader.FirstSheet, ExcelParser.Generated<Person>(), new SheetParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
             Assert.Equal(["ada|1|n", "bob|2|m"], log.Rows);
         }
 
@@ -257,10 +274,11 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task ReportsTheExactRowSequentiallyAndZeroWhenPartitioned()
         {
             byte[] csv = "Name,Id,Note\nada,1,n\nbob,2,n\ncid,oops,n\ndan,4,n\n"u8.ToArray();
-            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserOptions { ThrowOnParseFailure = true });
 
-            ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
-                csv, map, new CsvParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 }, TestContext.Current.CancellationToken));
+            using CsvReader reader = Excel.FromCsv(csv);
+            ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => SheetParallel.AggregateAsync<PeopleLog, Person>(
+                reader.FirstSheet, map, new SheetParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 }, TestContext.Current.CancellationToken));
             Assert.Equal(4, sequential.Row);
 
             ExcelParseException partitioned = await Assert.ThrowsAsync<ExcelParseException>(() => Chunked(csv, map, dop: 4, chunkSize: 8, headerRow: 1));
@@ -271,7 +289,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task DiscardsParseFailuresFromAMisguessedPartition()
         {
             byte[] csv = "Name,Id,Note\nok,1,\"one\nBOOM,notint,x\"\nok,2,two\nok,3,\"three\nBOOM,bad,y\"\nok,4,four\n"u8.ToArray();
-            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserOptions { ThrowOnParseFailure = true });
             List<string> expected = Sequential(csv, headerRow: 1);
             for (int chunkSize = 1; chunkSize <= csv.Length; chunkSize++)
             {
@@ -345,7 +363,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             public static bool operator !=(WideRow left, WideRow right) => !left.Equals(right);
         }
 
-        private sealed class WideLog : ICsvAccumulator<WideLog, WideRow>
+        private sealed class WideLog : IRowAccumulator<WideLog, WideRow>
         {
             public List<int> Values { get; } = [];
 
@@ -387,8 +405,9 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 b.Property([$"c{columns - 1}"], ExcelCellReaders.Parsable, static (ref WideRow m, int v) => m.Last = v, isRequired: true, requireValue: true);
             });
 
-            WideLog log = await CsvParallel.AggregateAsync<WideLog, WideRow>(
-                csv, map, new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
+            using CsvReader reader = Excel.FromCsv(csv);
+            WideLog log = await SheetParallel.AggregateAsync<WideLog, WideRow>(
+                reader.FirstSheet, map, new SheetParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
 
             Assert.Equal([7, 7], log.Values);
         }

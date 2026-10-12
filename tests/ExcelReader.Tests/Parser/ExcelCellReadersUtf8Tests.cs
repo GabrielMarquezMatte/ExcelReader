@@ -17,7 +17,7 @@ namespace ExcelReader.Tests.Parser
             {
                 for (int i = 0; i < 3; i++)
                 {
-                    Assert.True(ExcelCellReaders.Utf8(row[i], false, System.Globalization.CultureInfo.InvariantCulture, out ReadOnlySpan<byte> value));
+                    Assert.True(ExcelCellReaders.Utf8(row[i], default, out ReadOnlySpan<byte> value));
                     seen.Add(Encoding.UTF8.GetString(value));
                 }
             }

@@ -2,6 +2,7 @@
 
 from excelreader.arrow_stream import ArrowStream
 from excelreader.reader import Sheet, Sheets, Workbook, decode_cell, open_bytes, open_workbook
+from excelreader.sources import Source, open_source, open_stream
 from excelreader.types import (
     Cell,
     CellType,
@@ -46,6 +47,7 @@ __all__ = [
     "SheetVisibility",
     "SheetWriter",
     "Sheets",
+    "Source",
     "StringColumn",
     "TypedTable",
     "Workbook",
@@ -54,6 +56,8 @@ __all__ = [
     "encrypt_package",
     "encrypt_package_bytes",
     "open_bytes",
+    "open_source",
+    "open_stream",
     "open_workbook",
     "open_writer",
     "open_writer_to_memory",

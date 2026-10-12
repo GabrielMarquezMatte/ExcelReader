@@ -158,25 +158,25 @@ namespace ExcelReader.Tests.Reader
         public void InferSchema_Samples_The_Sheet_It_Is_Given()
         {
             using XlsxWorkbook workbook = Excel.FromXlsx(BuildXlsx());
-            ExcelColumnSchema[] schema = Excel.InferSchema(workbook.Sheets[1]);
-            Assert.Equal(2, schema.Length);
+            IReadOnlyList<ExcelColumnSchema> schema = Excel.InferSchema(workbook.Sheets[1]);
+            Assert.Equal(2, schema.Count);
             Assert.Equal("Name", schema[0].Name);
             Assert.Equal(ExcelColumnType.Int64Column, schema[1].Type);
-            Assert.Equal(schema.Length, Excel.InferSchema(workbook.Sheets[1], 1, 5).Length);
+            Assert.Equal(schema.Count, Excel.InferSchema(workbook.Sheets[1], new SchemaInferenceOptions { SampleSize = 5 }).Count);
             Assert.Throws<ArgumentNullException>(() => Excel.InferSchema((IExcelSheet)null!));
         }
 
         [Fact]
-        public void ExcelDataReader_Reads_The_Sheet_It_Is_Given_And_Names_Its_Table_After_It()
+        public void SheetDataReader_Reads_The_Sheet_It_Is_Given_And_Names_Its_Table_After_It()
         {
             using XlsxWorkbook workbook = Excel.FromXlsx(BuildXlsx());
-            using ExcelDataReader data = new(workbook.Sheets[1]);
+            using SheetDataReader data = new(workbook.Sheets[1]);
             Assert.Equal(2, data.FieldCount);
             Assert.True(data.Read());
             Assert.Equal("s1-0", data.GetString(0));
             using DataTable schema = data.GetSchemaTable()!;
             Assert.Equal("S1", schema.Rows[0][SchemaTableColumn.BaseTableName]);
-            Assert.Throws<ArgumentNullException>(() => new ExcelDataReader((IExcelSheet)null!));
+            Assert.Throws<ArgumentNullException>(() => new SheetDataReader((IExcelSheet)null!));
         }
 
         [Fact]

@@ -20,14 +20,17 @@ namespace ExcelReader.Fuzz
                 ["xlsx"] = Harnesses.Xlsx,
                 ["xlsx-memory"] = Harnesses.XlsxMemory,
                 ["xlsx-differential"] = Harnesses.XlsxDifferential,
+                ["xlsx-pipeline"] = Harnesses.XlsxPipeline,
                 ["xlsb"] = Harnesses.Xlsb,
                 ["xlsb-memory"] = Harnesses.XlsbMemory,
                 ["xlsb-differential"] = Harnesses.XlsbDifferential,
+                ["xlsb-pipeline"] = Harnesses.XlsbPipeline,
                 ["xls"] = Harnesses.Xls,
                 ["encrypted"] = Harnesses.Encrypted,
                 ["csv"] = Harnesses.Csv,
                 ["csv-sniff"] = Harnesses.CsvSniff,
                 ["csv-parallel"] = Harnesses.CsvParallel,
+                ["inflate"] = Harnesses.Inflate,
             };
 
         private static async Task<int> Main(string[] args)

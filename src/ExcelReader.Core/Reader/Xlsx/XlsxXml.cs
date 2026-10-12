@@ -167,6 +167,95 @@ namespace ExcelReader.Core.Reader.Xlsx
             return raw.Length;
         }
 
+        // Finds the first '<' or '&'. Only text with a '_' ahead of it can hold an _xHHHH_ escape, so the
+        // usual underscore-free text costs one scan instead of a second pass for "_x".
+        internal static int IndexOfMarkup(ReadOnlySpan<byte> text, out bool mayEscape)
+        {
+            int i = text.IndexOfAny((byte)'<', (byte)'&', (byte)'_');
+            mayEscape = i >= 0 && text[i] == (byte)'_';
+            if (!mayEscape)
+            {
+                return i;
+            }
+            int rest = text[i..].IndexOfAny((byte)'<', (byte)'&');
+            return rest < 0 ? -1 : i + rest;
+        }
+
+        // ST_Xstring text spells a UTF-16 code unit as _xHHHH_ (and a literal "_x0041_" as "_x005F_x0041_").
+        // Runs on text already freed of XML entities; the output is never longer than the input.
+        internal static int UnescapeXString(Span<byte> text)
+        {
+            int read = text.IndexOf("_x"u8);
+            if (read < 0)
+            {
+                return text.Length;
+            }
+            int write = read;
+            while (true)
+            {
+                int consumed = DecodeXStringEscape(text[read..], text[write..], out int written);
+                if (consumed == 0)
+                {
+                    text[write++] = text[read++];
+                }
+                else
+                {
+                    read += consumed;
+                    write += written;
+                }
+                int next = text[read..].IndexOf("_x"u8);
+                int run = next < 0 ? text.Length - read : next;
+                text.Slice(read, run).CopyTo(text[write..]);
+                read += run;
+                write += run;
+                if (next < 0)
+                {
+                    return write;
+                }
+            }
+        }
+
+        private static int DecodeXStringEscape(ReadOnlySpan<byte> source, Span<byte> destination, out int written)
+        {
+            written = 0;
+            if (!TryReadXStringUnit(source, out char unit))
+            {
+                return 0;
+            }
+            if (char.IsHighSurrogate(unit) && TryReadXStringUnit(source[7..], out char low) && char.IsLowSurrogate(low))
+            {
+                written = new Rune(unit, low).EncodeToUtf8(destination);
+                return 14;
+            }
+            if (char.IsSurrogate(unit))
+            {
+                return 0;
+            }
+            written = new Rune(unit).EncodeToUtf8(destination);
+            return 7;
+        }
+
+        private static bool TryReadXStringUnit(ReadOnlySpan<byte> source, out char unit)
+        {
+            unit = '\0';
+            if (source.Length < 7 || source[0] != (byte)'_' || source[1] != (byte)'x' || source[6] != (byte)'_')
+            {
+                return false;
+            }
+            int value = 0;
+            for (int i = 2; i < 6; i++)
+            {
+                int digit = HexVal(source[i]);
+                if (digit < 0)
+                {
+                    return false;
+                }
+                value = (value * 16) + digit;
+            }
+            unit = (char)value;
+            return true;
+        }
+
         internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest)
         {
             return WriteTextRuns(si, dest, "<t"u8, "</t>"u8, "<rPh"u8, "</rPh>"u8);
@@ -214,7 +303,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     break;
                 }
                 var innerText = remaining[..closeIndex];
-                var written = Decode(innerText, destSlice);
+                var written = UnescapeXString(destSlice[..Decode(innerText, destSlice)]);
                 totalWritten += written;
                 destSlice = destSlice[written..];
                 remaining = remaining[(closeIndex + tClose.Length)..];
@@ -270,14 +359,24 @@ namespace ExcelReader.Core.Reader.Xlsx
         private static int HexVal(byte d)
         {
             var value = (d & 0xF) + (9 * (d >> 6));
-            var isNum = (d - '0') <= 9u;
+            var isNum = (uint)(d - '0') <= 9u;
             var lower = (d | 0x20) - 'a';
-            var isAlpha = lower <= 5u;
+            var isAlpha = (uint)lower <= 5u;
             return (isNum || isAlpha) ? value : -1;
         }
 
-        [SkipLocalsInit]
         internal static string DecodeToString(ReadOnlySpan<byte> src)
+        {
+            return DecodeToString(src, xstring: false);
+        }
+
+        internal static string DecodeXStringToString(ReadOnlySpan<byte> src)
+        {
+            return DecodeToString(src, xstring: true);
+        }
+
+        [SkipLocalsInit]
+        private static string DecodeToString(ReadOnlySpan<byte> src, bool xstring)
         {
             if (src.IsEmpty)
             {
@@ -287,13 +386,13 @@ namespace ExcelReader.Core.Reader.Xlsx
             {
                 Span<byte> dest = stackalloc byte[src.Length];
                 int w = Decode(src, dest);
-                return Encoding.UTF8.GetString(dest[..w]);
+                return Encoding.UTF8.GetString(dest[..(xstring ? UnescapeXString(dest[..w]) : w)]);
             }
             byte[] buffer = ArrayPool<byte>.Shared.Rent(src.Length);
             try
             {
                 int w = Decode(src, buffer);
-                return Encoding.UTF8.GetString(buffer.AsSpan(0, w));
+                return Encoding.UTF8.GetString(buffer.AsSpan(0, xstring ? UnescapeXString(buffer.AsSpan(0, w)) : w));
             }
             finally
             {
@@ -330,6 +429,19 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
             }
             return rels;
+        }
+
+        internal static List<string> RelationshipTargets(ReadOnlySpan<byte> relsBytes, ReadOnlySpan<byte> typeSuffix)
+        {
+            List<string> targets = [];
+            foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(relsBytes, "<Relationship"u8))
+            {
+                if (Attr(tag, " Type="u8).EndsWith(typeSuffix))
+                {
+                    targets.Add(DecodeToString(Attr(tag, " Target="u8)));
+                }
+            }
+            return targets;
         }
     }
 }

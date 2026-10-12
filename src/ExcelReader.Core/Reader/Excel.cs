@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Xls;
@@ -44,12 +45,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <c>ZipArchive</c>
-        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// workbook never suspends, even under <c>await foreach</c>.
+        /// central directory without a <c>ZipArchive</c>. Small parts (workbook, styles, shared strings)
+        /// are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+        /// without <see cref="ExcelReaderOptions.PrefetchDecompression"/> enumeration never suspends, even
+        /// under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole XLSX file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</param>
         public static XlsxWorkbook FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
@@ -109,12 +111,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <c>ZipArchive</c>
-        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// workbook never suspends, even under <c>await foreach</c>.
+        /// central directory without a <c>ZipArchive</c>. Small parts (workbook, styles, shared strings)
+        /// are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+        /// without <see cref="ExcelReaderOptions.PrefetchDecompression"/> enumeration never suspends, even
+        /// under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole XLSB file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</param>
         public static XlsbWorkbook FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
@@ -196,13 +199,13 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the CSV file.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static CsvReader FromCsvFile(string path, CsvReaderOptions? options = null)
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsvFile(string path, ExcelReaderOptions? options = null)
         {
             FileStream stream = File.OpenRead(path);
             try
             {
-                return new CsvReader(stream, leaveOpen: false, CsvDialectResolver.Resolve(stream, options ?? CsvReaderOptions.Default));
+                return new CsvReader(stream, leaveOpen: false, CsvDialectResolver.Resolve(stream, CsvOf(options)));
             }
             catch
             {
@@ -214,33 +217,46 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            CsvReaderOptions effective = CsvDialectResolver.Resolve(stream, options ?? CsvReaderOptions.Default);
-            return new CsvReader(stream, leaveOpen, effective);
+            return OpenCsv(stream, leaveOpen, CsvOf(options));
+        }
+
+        internal static CsvReader OpenCsv(Stream stream, bool leaveOpen, CsvReaderOptions options)
+        {
+            return new CsvReader(stream, leaveOpen, CsvDialectResolver.Resolve(stream, options));
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source directly from an in-memory buffer.</summary>
         /// <param name="data">The whole CSV source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static CsvReader FromCsv(ReadOnlyMemory<byte> data, CsvReaderOptions? options = null)
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsv(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            CsvReaderOptions effective = CsvDialectResolver.Resolve(data, options ?? CsvReaderOptions.Default);
-            return new CsvReader(data, effective);
+            return OpenCsv(data, CsvOf(options));
+        }
+
+        internal static CsvReader OpenCsv(ReadOnlyMemory<byte> data, CsvReaderOptions options)
+        {
+            return new CsvReader(data, CsvDialectResolver.Resolve(data, options));
         }
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the CSV file.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static async ValueTask<CsvReader> FromCsvFileAsync(string path, CsvReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<CsvReader> FromCsvFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        {
+            return OpenCsvFileAsync(path, CsvOf(options), ct);
+        }
+
+        internal static async ValueTask<CsvReader> OpenCsvFileAsync(string path, CsvReaderOptions options, CancellationToken ct)
         {
             FileStream stream = OpenAsyncFile(path);
             try
             {
-                CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, options ?? CsvReaderOptions.Default, ct).ConfigureAwait(false);
+                CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, options, ct).ConfigureAwait(false);
                 return await CsvReader.CreateAsync(stream, leaveOpen: false, effective, ct).ConfigureAwait(false);
             }
             catch
@@ -253,62 +269,42 @@ namespace ExcelReader.Core.Reader
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
-        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static async ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
+        public static async ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, options ?? CsvReaderOptions.Default, ct).ConfigureAwait(false);
+            CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, CsvOf(options), ct).ConfigureAwait(false);
             return await CsvReader.CreateAsync(stream, leaveOpen, effective, ct).ConfigureAwait(false);
         }
 
         /// <summary>Guesses a column schema for <paramref name="sheet"/> by sampling it from the first row.</summary>
         /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
-        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
-        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
-        /// <param name="sampleSize">How many rows after the header to inspect.</param>
+        /// <param name="options">Header row, sample size and text parsing; <see cref="SchemaInferenceOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
         /// <remarks>
         /// This is a guess over a bounded sample, not a guarantee about the whole sheet — a column
-        /// whose first <paramref name="sampleSize"/> rows are all integers is reported as
+        /// whose first <see cref="SchemaInferenceOptions.SampleSize"/> rows are all integers is reported as
         /// <see cref="ExcelColumnType.Int64Column"/> even if row 10,000 holds text. Verify it fits
         /// before trusting it, and feed the result into <see cref="ExcelParser.Build{T}"/> to
         /// build a real map.
         /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
-        /// <paramref name="sampleSize"/> is not positive.</exception>
-        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow, int sampleSize)
-        {
-            return InferSchema(sheet, headerRow, sampleSize, parseText: false);
-        }
-
-        /// <summary>
-        /// Guesses a column schema by sampling the sheet's rows, as
-        /// <see cref="InferSchema(IExcelSheet, int, int)"/> does, and can also type cells that hold text.
-        /// </summary>
-        /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
-        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
-        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
-        /// <param name="sampleSize">How many rows after the header to inspect.</param>
-        /// <param name="parseText">When <see langword="true"/>, a text cell (every CSV field, or a number
-        /// stored as text) counts as an integer, a decimal, <c>true</c>/<c>false</c>, or an ISO-8601 date or
-        /// date-time when its text has exactly that shape. Numbers with a leading zero (<c>00123</c>), scientific
-        /// notation (<c>12E4</c>), padded or culture-formatted numbers, and non-ISO dates stay text. A column only gets a non-text type when
-        /// every sampled value converts to it.</param>
-        /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
-        /// <remarks>Still a guess over a bounded sample: a value past the sample can still fail to convert.
-        /// See <see cref="InferSchema(IExcelSheet, int, int)"/>.</remarks>
-        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
-        /// <paramref name="sampleSize"/> is not positive.</exception>
-        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow = 1, int sampleSize = 100, bool parseText = false)
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="SchemaInferenceOptions.HeaderRow"/> is negative, or
+        /// <see cref="SchemaInferenceOptions.SampleSize"/> is not positive.</exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <see cref="SchemaInferenceOptions.HeaderRow"/>.</exception>
+        /// <exception cref="InvalidOperationException"><see cref="SchemaInferenceOptions.HeaderRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
+        public static IReadOnlyList<ExcelColumnSchema> InferSchema(IExcelSheet sheet, SchemaInferenceOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(sheet);
+            options ??= SchemaInferenceOptions.Default;
+            if (options.HeaderRow > 0)
+            {
+                ExcelTableSheet.ThrowIfHeaderless(sheet);
+            }
+
             using IExcelRowEnumerator rows = sheet.GetEnumerator();
-            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText);
+            return SchemaInference.Infer(rows, sheet.IsDate1904, options.HeaderRow, options.SampleSize, options.ParseText, ExcelTableSheet.FirstColumnOf(sheet));
         }
 
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
@@ -470,7 +466,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => FromCsvFile(path, CsvOf(options)),
+                ExcelFileFormat.Csv => FromCsvFile(path, options),
                 ExcelFileFormat.Xlsx => FromXlsxFile(path, options),
                 ExcelFileFormat.Xlsb => FromXlsbFile(path, options),
                 ExcelFileFormat.Xls => FromXlsFile(path, options),
@@ -500,7 +496,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => FromCsv(stream, leaveOpen, CsvOf(options)),
+                ExcelFileFormat.Csv => FromCsv(stream, leaveOpen, options),
                 ExcelFileFormat.Xlsx => FromXlsx(stream, leaveOpen, options),
                 ExcelFileFormat.Xlsb => FromXlsb(stream, leaveOpen, options),
                 ExcelFileFormat.Xls => FromXls(stream, leaveOpen, options),
@@ -525,7 +521,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => FromCsv(data, CsvOf(options)),
+                ExcelFileFormat.Csv => FromCsv(data, options),
                 ExcelFileFormat.Xlsx => FromXlsx(data, options),
                 ExcelFileFormat.Xlsb => FromXlsb(data, options),
                 ExcelFileFormat.Xls => FromXls(data, options),
@@ -553,7 +549,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvFileAsync(path, CsvOf(options), ct)),
+                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvFileAsync(path, options, ct)),
                 ExcelFileFormat.Xlsx => AsWorkbookAsync(FromXlsxFileAsync(path, options, ct)),
                 ExcelFileFormat.Xlsb => AsWorkbookAsync(FromXlsbFileAsync(path, options, ct)),
                 ExcelFileFormat.Xls => AsWorkbookAsync(FromXlsFileAsync(path, options, ct)),
@@ -584,7 +580,7 @@ namespace ExcelReader.Core.Reader
             RequireOpenableFormat(format);
             return format switch
             {
-                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvAsync(stream, leaveOpen, CsvOf(options), ct)),
+                ExcelFileFormat.Csv => AsWorkbookAsync(FromCsvAsync(stream, leaveOpen, options, ct)),
                 ExcelFileFormat.Xlsx => AsWorkbookAsync(FromXlsxAsync(stream, leaveOpen, options, ct)),
                 ExcelFileFormat.Xlsb => AsWorkbookAsync(FromXlsbAsync(stream, leaveOpen, options, ct)),
                 ExcelFileFormat.Xls => AsWorkbookAsync(FromXlsAsync(stream, leaveOpen, options, ct)),
@@ -594,7 +590,13 @@ namespace ExcelReader.Core.Reader
 
         private static CsvReaderOptions CsvOf(ExcelReaderOptions? options)
         {
-            return options?.Csv ?? CsvReaderOptions.Default;
+            options ??= ExcelReaderOptions.Default;
+            CsvReaderOptions csv = options.Csv ?? CsvReaderOptions.Default;
+            return csv with
+            {
+                MaxCellBytes = csv.MaxCellBytesOverride ?? options.MaxCellBytes,
+                InternStrings = csv.InternStringsOverride ?? options.InternStrings,
+            };
         }
 
         private static async ValueTask<IExcelWorkbook> AsWorkbookAsync<TWorkbook>(ValueTask<TWorkbook> pending)

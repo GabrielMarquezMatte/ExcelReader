@@ -117,6 +117,10 @@ class OpenOptions(NamedTuple):
 
     `csv_delimiter` and `csv_quote` are byte values, not strings: pass `ord(';')`, not `';'`.
 
+    `source_block_size` and `source_cache_bytes` tune the block cache of `open_source()` (4 MiB blocks
+    in 64 MiB by default; a negative block size turns the cache off). `max_buffered_bytes` caps how
+    much `open_stream()` reads before an XLSX, XLSB or XLS opens.
+
     Validation happens on the native side, which owns the real limits; an out-of-range value raises
     `ExcelReaderError` with the reason. Fields mirror xl_open_options in
     src/ExcelReader.Native/include/excelreader.h.
@@ -134,6 +138,9 @@ class OpenOptions(NamedTuple):
     max_zip_entries: int | None = None
     prefetch_decompression: bool | None = None
     intern_strings: bool | None = None
+    source_block_size: int | None = None
+    source_cache_bytes: int | None = None
+    max_buffered_bytes: int | None = None
 
 
 class WriteOptions(NamedTuple):

@@ -7,15 +7,17 @@ Reading and writing password-protected packages.
 Password-protected `.xlsx`/`.xlsb`/`.xlsm` files open through the same entry points — the password
 goes on the options, so every overload supports it:
 
+<!-- snippet: encryption-open -->
 ```csharp
 var options = new ExcelReaderOptions { Password = "hunter2" };
 using IExcelWorkbook workbook = Excel.Open("protected.xlsx", options);
 foreach (Row row in workbook.FirstSheet) { /* ... */ }
 ```
 
-`ExcelEncryptionException.Reason` tells you what to do about a failure — only `PasswordRequired` and
+[`ExcelEncryptionException.Reason`](xref:ExcelReader.Core.Reader.ExcelEncryptionException.Reason) tells you what to do about a failure — only `PasswordRequired` and
 `PasswordIncorrect` are worth re-prompting for:
 
+<!-- snippet: encryption-reason -->
 ```csharp
 try
 {
@@ -37,13 +39,14 @@ different mechanism entirely, stored as hashes in the plaintext XML.
 only the buffers it owns: the derivation buffer and the derived key.
 
 **The `dataIntegrity` HMAC is not verified by default when reading from a stream.**
-`ExcelReaderOptions.VerifyEncryptedIntegrity` defaults to `false`, because the HMAC covers the whole
+[`ExcelReaderOptions.VerifyEncryptedIntegrity`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.VerifyEncryptedIntegrity) defaults to `false`, because the HMAC covers the whole
 encrypted package: checking it means a full pass over the file before the first row, which makes
 time-to-first-row proportional to file size and defeats streaming. With it off, decryption still
 fails loudly on corrupt ciphertext (the plaintext stops being a valid ZIP), but *targeted* tampering
 by someone who can modify the file is not detected. Set it to `true` whenever the workbook comes from
 somewhere you do not control and you care that it was not altered:
 
+<!-- snippet: encryption-verify-integrity -->
 ```csharp
 var options = new ExcelReaderOptions
 {
@@ -61,9 +64,10 @@ that, reading is ~10% slower than reading the same workbook unencrypted — see
 [Encrypted workbooks](../performance/benchmarks.md#encrypted-workbooks) in the benchmarks.
 
 Writing an encrypted workbook is a second step: build the package with any writer, then wrap it with
-`Excel.EncryptPackage`, which produces an agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC,
+[`Excel.EncryptPackage`](xref:ExcelReader.Core.Reader.Excel.EncryptPackage*), which produces an agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC,
 SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC.
 
+<!-- snippet: encryption-write -->
 ```csharp
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;

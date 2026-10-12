@@ -15,7 +15,6 @@ namespace ExcelReader.Core.Writer.Internal
 
         private static ArrayPool<byte> Pool => PoolOverride.Value ?? DefaultPool;
 
-        // Test seam: lets a test count every rent/return made on its own async flow.
         internal static void OverridePool(ArrayPool<byte>? pool)
         {
             PoolOverride.Value = pool;
@@ -169,7 +168,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        // Kept out of line so the inlined Ensure on every Write stays a single compare.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void Grow(int needed)
         {

@@ -127,7 +127,7 @@ namespace ExcelReader.Tests.Reader.Csv
             List<string> expected = Expected();
             using CsvReader reader = Excel.FromCsv(
                 new TrickleStream(BuildCsv(Encoding.Unicode)), leaveOpen: false,
-                new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false });
+                new ExcelReaderOptions { Csv = new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false } });
             using CsvReader.Enumerator first = reader.FirstSheet.GetEnumerator();
             using CsvReader.Enumerator second = reader.FirstSheet.GetEnumerator();
             Assert.Equal(expected, Drain(first), StringComparer.Ordinal);
@@ -213,7 +213,7 @@ namespace ExcelReader.Tests.Reader.Csv
             File.WriteAllBytes(path, BuildCsv(Encoding.Unicode));
             _paths.Add(path);
 
-            using CsvReader utf16 = Excel.FromCsvFile(path, new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false });
+            using CsvReader utf16 = Excel.FromCsvFile(path, new ExcelReaderOptions { Csv = new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false } });
             Assert.False(utf16.TryGetChunkSource(out _));
 
             using CsvReader utf8 = Excel.FromCsvFile(path);

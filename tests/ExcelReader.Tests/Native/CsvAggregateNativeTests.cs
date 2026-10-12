@@ -14,15 +14,15 @@ namespace ExcelReader.Tests.Native
         [Fact]
         public void Translate_Should_Return_Defaults_When_Options_Are_Absent()
         {
-            int status = NativeCsvAggregateOptions.Translate(null, out CsvParallelOptions options);
+            int status = NativeCsvAggregateOptions.Translate(null, out SheetParallelOptions options, out CsvReaderOptions reader);
 
             Assert.Equal(NativeStatus.Ok, status);
             Assert.Equal(0, options.DegreeOfParallelism);
             Assert.Equal(0, options.HeaderRow);
-            Assert.Equal((byte)',', options.Reader.Delimiter);
-            Assert.Equal((byte)'"', options.Reader.Quote);
-            Assert.True(options.Reader.DetectEncodingFromByteOrderMark);
-            Assert.Equal(32 * 1024 * 1024, options.Reader.MaxCellBytes);
+            Assert.Equal((byte)',', reader.Delimiter);
+            Assert.Equal((byte)'"', reader.Quote);
+            Assert.True(reader.DetectEncodingFromByteOrderMark);
+            Assert.Equal(32 * 1024 * 1024, reader.MaxCellBytes);
         }
 
         [Fact]
@@ -39,15 +39,15 @@ namespace ExcelReader.Tests.Native
                 MaxCellBytes = 4096,
             };
 
-            int status = NativeCsvAggregateOptions.Translate(raw, out CsvParallelOptions options);
+            int status = NativeCsvAggregateOptions.Translate(raw, out SheetParallelOptions options, out CsvReaderOptions reader);
 
             Assert.Equal(NativeStatus.Ok, status);
             Assert.Equal(4, options.DegreeOfParallelism);
             Assert.Equal(1, options.HeaderRow);
-            Assert.Equal((byte)';', options.Reader.Delimiter);
-            Assert.Equal((byte)'\'', options.Reader.Quote);
-            Assert.False(options.Reader.DetectEncodingFromByteOrderMark);
-            Assert.Equal(4096, options.Reader.MaxCellBytes);
+            Assert.Equal((byte)';', reader.Delimiter);
+            Assert.Equal((byte)'\'', reader.Quote);
+            Assert.False(reader.DetectEncodingFromByteOrderMark);
+            Assert.Equal(4096, reader.MaxCellBytes);
         }
 
         [Theory]
@@ -71,7 +71,7 @@ namespace ExcelReader.Tests.Native
                 MaxCellBytes = maxCellBytes,
             };
 
-            int status = NativeCsvAggregateOptions.Translate(raw, out _);
+            int status = NativeCsvAggregateOptions.Translate(raw, out _, out _);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
         }
@@ -83,7 +83,7 @@ namespace ExcelReader.Tests.Native
         {
             NativeCsvParallelOptionsRaw raw = new() { StructSize = structSize };
 
-            int status = NativeCsvAggregateOptions.Translate(raw, out _);
+            int status = NativeCsvAggregateOptions.Translate(raw, out _, out _);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
         }
@@ -94,7 +94,7 @@ namespace ExcelReader.Tests.Native
             NativeApi.ClearLastError();
             NativeCsvParallelOptionsRaw raw = default;
 
-            int status = NativeCsvAggregateOptions.Translate(raw, out _);
+            int status = NativeCsvAggregateOptions.Translate(raw, out _, out _);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             string message = NativeApi.LastErrorText();
@@ -112,7 +112,7 @@ namespace ExcelReader.Tests.Native
                 Delimiter = 9000,
             };
 
-            int status = NativeCsvAggregateOptions.Translate(raw, out _);
+            int status = NativeCsvAggregateOptions.Translate(raw, out _, out _);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Contains("csv_parallel_options.delimiter", NativeApi.LastErrorText(), StringComparison.Ordinal);
@@ -136,7 +136,7 @@ namespace ExcelReader.Tests.Native
 
         private static Row FirstRowOf(string csv)
         {
-            CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes(csv), CsvReaderOptions.Default);
+            CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes(csv), new ExcelReaderOptions { Csv = CsvReaderOptions.Default });
             CsvReader.Enumerator rows = reader.FirstSheet.GetEnumerator();
             Assert.True(rows.MoveNext());
             return rows.Current;

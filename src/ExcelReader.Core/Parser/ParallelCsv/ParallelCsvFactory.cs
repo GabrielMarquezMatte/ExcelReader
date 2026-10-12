@@ -1,9 +1,8 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
-using Microsoft.Win32.SafeHandles;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
 {
@@ -11,58 +10,21 @@ namespace ExcelReader.Core.Parser.ParallelCsv
     {
         private const long MinParallelBytes = 4 * 64 * 1024;
 
-        [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
-            Justification = "This factory is synchronous by design (see the VSTHRD200 suppression above); opening the file here, once, before any enumeration starts, is deliberate rather than a blocking call inside an async method.")]
-        internal static IAsyncEnumerable<T> Create<T>(
-            string path, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
-        {
-            CsvReaderOptions options = CsvDialectResolver.Resolve(path, readerOptions ?? CsvReaderOptions.Default);
-            int dop = Normalize(degreeOfParallelism);
-
-            var info = new FileInfo(path);
-            if (!CanPartition(dop, info.Length, options))
-            {
-                return Sequential(Excel.FromCsvFile(path, options), parser, ct);
-            }
-
-            SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.Asynchronous | FileOptions.RandomAccess);
-            return Build(new CsvChunkSource(handle, info.Length), options, parser, dop, chunkSizeOverride: 0, ownedHandle: handle, ct);
-        }
-
-        internal static IAsyncEnumerable<T> Create<T>(
-            ReadOnlyMemory<byte> data, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
-        {
-            CsvReaderOptions options = CsvDialectResolver.Resolve(data, readerOptions ?? CsvReaderOptions.Default);
-            int dop = Normalize(degreeOfParallelism);
-
-            if (!CanPartition(dop, data.Length, options))
-            {
-                return Sequential(Excel.FromCsv(data, options), parser, ct);
-            }
-            return Build(new CsvChunkSource(data), options, parser, dop, chunkSizeOverride: 0, ownedHandle: null, ct);
-        }
-
-        [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
-            Justification = "This factory is synchronous by design (see the VSTHRD200 suppression above); wrapping the caller-owned stream here, once, before any enumeration starts, is deliberate rather than a blocking call inside an async method.")]
-        internal static IAsyncEnumerable<T> Create<T>(
-            Stream stream, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
-        {
-            CsvReaderOptions options = CsvDialectResolver.Resolve(stream, readerOptions ?? CsvReaderOptions.Default);
-            int dop = Normalize(degreeOfParallelism);
-
-            if (!CsvSourceResolver.TryResolve(stream, out CsvChunkSource source)
-                || !CanPartition(dop, source.Length, options))
-            {
-                return Sequential(Excel.FromCsv(stream, leaveOpen: true, options), parser, ct);
-            }
-            return Build(source, options, parser, dop, chunkSizeOverride: 0, ownedHandle: null, ct);
-        }
-
         internal static IAsyncEnumerable<T> CreateWithChunkSize<T>(
             ReadOnlyMemory<byte> data, int degreeOfParallelism, int chunkSize, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
         {
             CsvReaderOptions options = CsvDialectResolver.Resolve(data, readerOptions ?? CsvReaderOptions.Default);
-            return Build(new CsvChunkSource(data), options, parser, Normalize(degreeOfParallelism), chunkSize, ownedHandle: null, ct);
+            return Build(new CsvChunkSource(data), options, parser, Normalize(degreeOfParallelism), chunkSize, ct);
+        }
+
+        internal static IAsyncEnumerable<T> Create<T>(CsvReader reader, int degreeOfParallelism, ExcelParser<T> parser, CancellationToken ct)
+        {
+            int dop = Normalize(degreeOfParallelism);
+            if (!reader.TryGetChunkSource(out CsvChunkSource source) || !CanPartition(dop, source.Length, reader.Options))
+            {
+                return new CsvEnumerable<T>(reader.FirstSheet, parser.Config, parser.CsvInfo, ownedReader: null, ct);
+            }
+            return Build(source, reader.Options, parser, dop, chunkSizeOverride: 0, ct, reader.Lifetime, reader);
         }
 
         internal static int Normalize(int degreeOfParallelism)
@@ -85,10 +47,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             ExcelParser<T> parser,
             int dop,
             int chunkSizeOverride,
-            SafeFileHandle? ownedHandle,
-            CancellationToken ct)
+            CancellationToken ct,
+            ReaderLifetime? lease = null,
+            object? owner = null)
         {
-            ExcelParserConfig config = parser.Config;
+            ExcelParserOptions config = parser.Config;
             TypeMapInfo<T> info = parser.CsvInfo;
             CsvBoundColumnMap<T> map;
             long dataStart;
@@ -99,18 +62,16 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
             if (dataStart >= source.Length)
             {
-                ownedHandle?.Dispose();
                 return Empty<T>();
             }
 
             CsvChunkPlan plan = CsvChunkPlan.Create(dataStart, source.Length - dataStart, dop, chunkSizeOverride);
             if (plan.Count <= 1)
             {
-                ownedHandle?.Dispose();
                 return Sequential(source.OpenReader(options), parser, ct);
             }
 
-            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, ownedHandle);
+            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, lease, owner);
         }
 
         private static CsvEnumerable<T> Sequential<T>(

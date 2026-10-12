@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The C# blocks in docs/guide are copied from the #regions here by sync.py, so a guide example
+       that stops compiling against the current API fails the build instead of going stale. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- The examples read like caller code, not like this repo's library code: no ConfigureAwait,
+         literal strings, Console output. The compiler's own warnings still fail the build. -->
+    <RunAnalyzers>false</RunAnalyzers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
+    <ProjectReference Include="..\..\src\ExcelReader.Arrow\ExcelReader.Arrow.csproj" />
+    <ProjectReference Include="..\..\src\ExcelReader.Generator\ExcelReader.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

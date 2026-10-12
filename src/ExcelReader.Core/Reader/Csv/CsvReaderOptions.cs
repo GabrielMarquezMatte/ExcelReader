@@ -2,7 +2,8 @@ using System.Text;
 
 namespace ExcelReader.Core.Reader.Csv
 {
-    /// <summary>Options controlling how <see cref="CsvReader"/> parses a CSV source.</summary>
+    /// <summary>The delimited-text settings for a CSV source, carried by <see cref="ExcelReaderOptions.Csv"/>.</summary>
+    /// <remarks>Size limits and string interning come from <see cref="ExcelReaderOptions"/>, as for every other format.</remarks>
     public sealed record CsvReaderOptions
     {
         /// <summary>Gets the byte used to separate fields within a record. Defaults to <c>,</c>.</summary>
@@ -21,23 +22,14 @@ namespace ExcelReader.Core.Reader.Csv
         /// <summary>Gets a value indicating whether a leading UTF-8 byte-order mark should be detected and skipped. Defaults to <see langword="true"/>.</summary>
         public bool DetectEncodingFromByteOrderMark { get; init; } = true;
 
-        /// <summary>Gets the maximum byte length allowed for a single buffered record/field. Defaults to 32 MiB.</summary>
-        /// <remarks>Mirrors <see cref="ExcelReaderOptions.MaxCellBytes"/> for the Excel readers.</remarks>
-        public int MaxCellBytes { get; init; } = 32 * 1024 * 1024;
+        internal int MaxCellBytes { get; init; } = 32 * 1024 * 1024;
 
-        /// <summary>
-        /// Gets a value indicating whether repeated field text is deduplicated through a small
-        /// content-keyed cache when materialized via <see cref="Cell.GetString"/>.
-        /// Defaults to <see langword="false"/>. Has no effect on the zero-copy
-        /// <see cref="Cell.Value"/> span path — only <c>GetString()</c> consults the
-        /// cache. Worth enabling for genuinely categorical columns (low-cardinality repeated text);
-        /// for high-cardinality data (unique IDs, or numeric/date columns read back as text, which CSV
-        /// has no other representation for) every lookup is a cache miss, so the per-call hashing cost
-        /// is pure overhead with no dedup benefit — measured roughly doubling wall-clock time on a
-        /// real-world, mixed-cardinality CSV corpus. Off by default so this never regresses a caller
-        /// who hasn't measured their own data.
-        /// </summary>
-        public bool InternStrings { get; init; }
+        internal bool InternStrings { get; init; }
+
+        // ponytail: the native ABI keeps separate csv_max_cell_bytes/csv_intern_strings fields; these let it win over ExcelReaderOptions.
+        internal int? MaxCellBytesOverride { get; init; }
+
+        internal bool? InternStringsOverride { get; init; }
 
         /// <summary>
         /// Gets a value indicating whether the source's dialect is inferred from a sample of its leading

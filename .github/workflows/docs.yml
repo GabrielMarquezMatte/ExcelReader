@@ -1,0 +1,74 @@
+name: Docs -> GitHub Pages
+
+on:
+  push:
+    branches: [master]
+    paths: &docs-paths
+      - 'src/ExcelReader.Core/**'
+      - 'src/ExcelReader.Arrow/**'
+      - 'src/ExcelReader.Native/include/**'
+      - 'python/src/**'
+      - 'python/scripts/api_markdown.py'
+      - 'cpp/scripts/api_markdown.py'
+      - 'docs/**'
+      - '**.md'
+      - 'docfx.json'
+      - 'assets/**'
+      - '.github/workflows/docs.yml'
+  # Builds without publishing, so a broken page or a Doxygen @param that no longer matches its
+  # signature fails the pull request instead of the next publish.
+  pull_request:
+    paths: *docs-paths
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The snippets themselves are compiled by ci.yml, which builds the whole solution.
+      - name: Check guide examples match docs/snippets
+        run: python3 docs/snippets/sync.py --check
+
+      # Importing excelreader loads the native library lazily, so this needs only the sources.
+      - name: Build Python API reference
+        run: python3 python/scripts/api_markdown.py
+
+      # Fails on any Doxygen documentation warning, such as an @param naming no parameter.
+      - name: Build C++ API reference
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends doxygen
+          python3 cpp/scripts/api_markdown.py
+
+      # Fails on a broken page link or an xref naming a member that no longer exists. Core loads the
+      # generator as an analyzer from its bin/Release output, so it is built first, or docfx warns
+      # FailedToResolveAnalyzer.
+      - name: Build site
+        run: |
+          dotnet build src/ExcelReader.Generator/ExcelReader.Generator.csproj --configuration Release -p:RunAnalyzers=false
+          dotnet tool install --global docfx --version 2.81.0
+          docfx docfx.json --warningsAsErrors
+
+      # keep_files leaves dev/bench (benchmark-pages.yml) in place; pages removed from the docs
+      # stay on the branch until deleted by hand.
+      - name: Publish to gh-pages
+        if: github.event_name != 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_site
+          publish_branch: gh-pages
+          keep_files: true

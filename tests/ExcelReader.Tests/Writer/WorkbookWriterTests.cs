@@ -12,6 +12,36 @@ namespace ExcelReader.Tests.Writer
 {
     public class WorkbookWriterTests
     {
+        [Fact]
+        public async Task XlsxDate1904RoundTrips()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var date = new DateTime(1904, 1, 2, 6, 0, 0, DateTimeKind.Unspecified);
+            var day = new DateOnly(2024, 5, 6);
+            var ms = new MemoryStream();
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, new XlsxWriterOptions { Date1904 = true }))
+            {
+                XlsxSheetWriter sheet = wb.AddSheet("S");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(ct))
+                {
+                    row.Write(date);
+                    row.Write(day);
+                }
+                await sheet.EndAsync(ct);
+                await wb.EndAsync(ct);
+            }
+            ms.Position = 0;
+
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            Assert.True(reader.IsDate1904);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDateTime(isDate1904: true, out DateTime parsed));
+            Assert.Equal(date, parsed);
+            Assert.True(e.Current[1].TryGetDateTime(isDate1904: true, out DateTime parsedDay));
+            Assert.Equal(day.ToDateTime(TimeOnly.MinValue), parsedDay);
+        }
+
 
         private sealed class StringRow
         {
@@ -114,9 +144,9 @@ namespace ExcelReader.Tests.Writer
 
         private sealed class MoneyConverter : IExcelCellConverter<Money>, IExcelCellWriter<Money>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Money value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out Money value)
             {
-                if (cell.TryParse(provider, out decimal amount))
+                if (cell.TryParse(context.FormatProvider, out decimal amount))
                 {
                     value = new Money(amount);
                     return true;
@@ -833,7 +863,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            var config = new ExcelParserConfig { HeaderRow = 2 };
+            var config = new ExcelParserOptions { HeaderRow = 2 };
             var rows = ExcelParser.FromAttributes<StringRow>(config).Parse(reader.FirstSheet).ToList();
             Assert.Single(rows);
             Assert.Equal("HeaderRow2", rows[0].Name);
