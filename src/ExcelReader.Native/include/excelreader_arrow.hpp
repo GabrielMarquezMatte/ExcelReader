@@ -16,10 +16,13 @@
 
 namespace xl
 {
+    /// @brief A sheet exported through the Arrow C Data Interface: one struct array and its schema.
+    ///
+    /// Releases both on destruction; move them out to hand them to an Arrow library.
     struct ArrowTable
     {
-        ArrowArray array{};
-        ArrowSchema schema{};
+        ArrowArray array{};   ///< One struct array holding every column.
+        ArrowSchema schema{}; ///< The struct type of `array`.
 
         ArrowTable() = default;
 
@@ -45,6 +48,7 @@ namespace xl
 
         ~ArrowTable() { release(); }
 
+        /// @brief Releases both now. Safe to call again.
         void release() noexcept
         {
             if (array.release != nullptr)
@@ -58,6 +62,11 @@ namespace xl
         }
     };
 
+    /// @brief parse_sheet into Arrow instead of `T`.
+    /// @tparam T Row type, mapped by `ExcelMapper<T>`.
+    /// @param sheet The sheet to read.
+    /// @param header_row As for parse_sheet.
+    /// @param degree_of_parallelism As for parse_sheet.
     template <typename T>
     std::expected<ArrowTable, Error> parse_arrow(Sheet sheet, int32_t header_row = 1,
                                                  int32_t degree_of_parallelism = 1)
@@ -80,6 +89,7 @@ namespace xl
         return result;
     }
 
+    /// @brief Owns one ArrowSchema and releases it on destruction.
     struct ArrowSchemaGuard
     {
         ArrowSchema schema{};
@@ -115,6 +125,7 @@ namespace xl
         }
     };
 
+    /// @brief Owns one ArrowArray and releases it on destruction.
     struct ArrowArrayGuard
     {
         ArrowArray array{};
@@ -150,6 +161,9 @@ namespace xl
         }
     };
 
+    /// @brief typed_reader's Arrow counterpart: record batches pulled one at a time.
+    ///
+    /// Use from one thread at a time.
     class ArrowStream
     {
     public:
@@ -173,6 +187,7 @@ namespace xl
 
         ~ArrowStream() { release(); }
 
+        /// @brief The schema every batch shares.
         std::expected<ArrowSchemaGuard, Error> schema()
         {
             if (stream_.release == nullptr)
@@ -188,6 +203,8 @@ namespace xl
             return guard;
         }
 
+        /// @brief Reads the next batch.
+        /// @return The batch, or empty at the end of the sheet.
         std::expected<std::optional<ArrowArrayGuard>, Error> next()
         {
             if (stream_.release == nullptr)
@@ -207,6 +224,8 @@ namespace xl
             return std::optional<ArrowArrayGuard>(std::move(guard));
         }
 
+        /// @brief Takes ownership of a stream produced by the C ABI.
+        /// @param stream Stream from `xl_parse_arrow_stream`, released by this object.
         static ArrowStream from_raw(ArrowArrayStream stream) { return ArrowStream(stream); }
 
     private:
@@ -234,6 +253,11 @@ namespace xl
         ArrowArrayStream stream_{};
     };
 
+    /// @brief Opens an ArrowStream over a sheet.
+    /// @tparam T Row type, mapped by `ExcelMapper<T>`.
+    /// @param sheet The sheet to read.
+    /// @param header_row As for parse_sheet.
+    /// @param batch_size As for typed_reader.
     template <typename T>
     std::expected<ArrowStream, Error> arrow_stream(Sheet sheet, int32_t header_row = 1,
                                                    int64_t batch_size = 10000)
