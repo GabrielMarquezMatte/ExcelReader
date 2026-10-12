@@ -121,7 +121,7 @@ pub struct XlOpenOptions {
     /// Password for an encrypted OOXML workbook, as UTF-8 bytes. NULL (with `password_len` 0) means
     /// "not encrypted, or fail with `XL_STATUS_PASSWORD_REQUIRED`". Not NUL-terminated -
     /// `password_len` is authoritative, since a password may contain any byte. The pointer need only
-    /// remain valid for the duration of the call - see [`OpenOptionsRaw`](crate::options::OpenOptionsRaw).
+    /// remain valid for the duration of the call - see [`crate::options::OpenOptionsRaw`].
     pub password: *const u8,
     pub password_len: i32,
     pub source_cache_bytes: i64,
