@@ -7,6 +7,8 @@ on:
       - 'src/ExcelReader.Core/**'
       - 'src/ExcelReader.Arrow/**'
       - 'src/ExcelReader.Native/include/excelreader.h'
+      - 'python/src/**'
+      - 'python/scripts/api_markdown.py'
       - 'docs/**'
       - '**.md'
       - 'docfx.json'
@@ -30,6 +32,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+
+      # Importing excelreader loads the native library lazily, so this needs only the sources.
+      - name: Build Python API reference
+        run: python3 python/scripts/api_markdown.py
 
       - name: Build site
         run: |
