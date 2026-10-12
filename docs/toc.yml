@@ -22,6 +22,8 @@
   items:
     - name: Python
       href: ../python/README.md
+    - name: Python API
+      href: python-api/
     - name: Rust
       href: ../rust/excelreader/README.md
     - name: Rust API (docs.rs)
