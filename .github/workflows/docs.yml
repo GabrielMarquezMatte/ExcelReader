@@ -49,10 +49,11 @@ jobs:
           sudo apt-get install --yes --no-install-recommends doxygen
           python3 cpp/scripts/api_markdown.py
 
+      # Fails on a broken page link or an xref naming a member that no longer exists.
       - name: Build site
         run: |
           dotnet tool install --global docfx --version 2.81.0
-          docfx docfx.json
+          docfx docfx.json --warningsAsErrors
 
       # keep_files leaves dev/bench (benchmark-pages.yml) in place; pages removed from the docs
       # stay on the branch until deleted by hand.

@@ -5,18 +5,18 @@ See also [reading.md](reading.md#parallel-reading-opt-in) for the full guide.
 
 ## What changed
 
-Parallel reading now takes a sheet, and it works on XLSX and XLSB as well as CSV. `CsvParallel` is gone: its eighteen path, memory and stream methods became six `SheetParallel` methods that take any `IExcelSheet`. You open the workbook yourself, pass its sheet, and the library parallelises as far as the format allows. The contract types lost their `Csv` prefix because they now serve every format.
+Parallel reading now takes a sheet, and it works on XLSX and XLSB as well as CSV. `CsvParallel` is gone: its eighteen path, memory and stream methods became six [`SheetParallel`](xref:ExcelReader.Core.Reader.SheetParallel) methods that take any [`IExcelSheet`](xref:ExcelReader.Core.Reader.IExcelSheet). You open the workbook yourself, pass its sheet, and the library parallelises as far as the format allows. The contract types lost their `Csv` prefix because they now serve every format.
 
 ## Types
 
 | v6 | v7 |
 |---|---|
 | `CsvParallel` | `SheetParallel` |
-| `CsvParallelOptions` | `SheetParallelOptions` (no `Reader` property) |
-| `ICsvRecord<TSelf>` | `IRowRecord<TSelf>` |
-| `ICsvAccumulator<TSelf, TModel>` | `IRowAccumulator<TSelf, TModel>` |
-| `CsvAggregation<TState>` | `RowAggregation<TState>` |
-| `CsvRowAction<TState>` | `RowAction<TState>` |
+| `CsvParallelOptions` | [`SheetParallelOptions`](xref:ExcelReader.Core.Reader.SheetParallelOptions) (no `Reader` property) |
+| `ICsvRecord<TSelf>` | [`IRowRecord<TSelf>`](xref:ExcelReader.Core.Reader.IRowRecord%601) |
+| `ICsvAccumulator<TSelf, TModel>` | [`IRowAccumulator<TSelf, TModel>`](xref:ExcelReader.Core.Reader.IRowAccumulator%602) |
+| `CsvAggregation<TState>` | [`RowAggregation<TState>`](xref:ExcelReader.Core.Reader.RowAggregation%601) |
+| `CsvRowAction<TState>` | [`RowAction<TState>`](xref:ExcelReader.Core.Reader.RowAction%601) |
 
 The old names are removed, with no `[Obsolete]` forwarders. Members, contracts and results are unchanged.
 
@@ -86,9 +86,9 @@ await foreach (Sale s in SheetParallel.ParseAsync(workbook.FirstSheet, parser, n
 ## Behavior changes
 
 - The caller owns the workbook and keeps it open until the task completes or the enumeration ends. v6 opened and closed its own source.
-- The CSV dialect is given when the workbook is opened (`ExcelReaderOptions.Csv`), not in the parallel options.
-- A CSV in a `MemoryStream` is no longer partitioned: the stream overload of `Excel.FromCsv` reads it sequentially. Pass the bytes as `ReadOnlyMemory<byte>` to keep partitioning.
-- `HeaderRow` rules are the same as v6. `ParseAsync` takes the header from `ExcelParserOptions.HeaderRow` and rejects a non-zero `SheetParallelOptions.HeaderRow`; the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
+- The CSV dialect is given when the workbook is opened ([`ExcelReaderOptions.Csv`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.Csv)), not in the parallel options.
+- A CSV in a `MemoryStream` is no longer partitioned: the stream overload of [`Excel.FromCsv`](xref:ExcelReader.Core.Reader.Excel.FromCsv*) reads it sequentially. Pass the bytes as `ReadOnlyMemory<byte>` to keep partitioning.
+- `HeaderRow` rules are the same as v6. `ParseAsync` takes the header from [`ExcelParserOptions.HeaderRow`](xref:ExcelReader.Core.Parser.ExcelParserOptions.HeaderRow) and rejects a non-zero [`SheetParallelOptions.HeaderRow`](xref:ExcelReader.Core.Reader.SheetParallelOptions.HeaderRow); the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
 - XLSX and XLSB sheets are now read on several threads when `DegreeOfParallelism` allows it. XLS, a table view (`ExcelTable.AsSheet()`), a sheet under 256 KB uncompressed and a CSV that cannot be partitioned still read sequentially with the same results.
 - `PrefetchDecompression` does not apply to a parallel XLSX or XLSB read; the pipeline already overlaps inflate and parse.
 
@@ -98,7 +98,7 @@ These changes replace positional parameters and loose arguments with types that 
 
 | v6 | v7 |
 |---|---|
-| `ExcelParserConfig` | `ExcelParserOptions`; the `ExcelParser` factories' parameter is `options` |
+| `ExcelParserConfig` | [`ExcelParserOptions`](xref:ExcelReader.Core.Parser.ExcelParserOptions); the [`ExcelParser`](xref:ExcelReader.Core.Parser.ExcelParser) factories' parameter is `options` |
 | `IExcelCellConverter<T>.TryConvert(in Cell, bool isDate1904, IFormatProvider provider, out T)` | `TryConvert(in Cell, in ExcelRowContext context, out T)` |
 | `ExcelCellReader<T>`, `ExcelRowParser<T>`, `ExcelCellReaders.*`: `(…, bool isDate1904, IFormatProvider provider, …)` | `(…, in ExcelRowContext context, …)` |
 | `Excel.InferSchema(sheet, headerRow, sampleSize, parseText)` returning `ExcelColumnSchema[]` | `Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = …, SampleSize = …, ParseText = … })` returning `IReadOnlyList<ExcelColumnSchema>` |
@@ -107,9 +107,9 @@ These changes replace positional parameters and loose arguments with types that 
 | `WriteRecordBatch(batch, sheetName, writeHeader)` and the async form | `WriteRecordBatch(batch, new ArrowWriteOptions { SheetName = …, WriteHeader = … })` |
 | `XlsWorkbookWriter.Create(stream, leaveOpen, date1904)` | `XlsWorkbookWriter.Create(stream, leaveOpen, new XlsWriterOptions { Date1904 = … })` |
 | `Excel.FromCsv*(…, CsvReaderOptions options)` | `Excel.FromCsv*(…, new ExcelReaderOptions { Csv = options })` |
-| `CsvReaderOptions.MaxCellBytes`, `CsvReaderOptions.InternStrings` | `ExcelReaderOptions.MaxCellBytes`, `ExcelReaderOptions.InternStrings` |
+| `CsvReaderOptions.MaxCellBytes`, `CsvReaderOptions.InternStrings` | [`ExcelReaderOptions.MaxCellBytes`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.MaxCellBytes), [`ExcelReaderOptions.InternStrings`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.InternStrings) |
 | `CellType.Formula` | Removed. A formula cell reports its cached result's type: `Number`, `Date`, `ExcelString`, `Boolean` or `Error` |
-| `ExcelDataReader` (its name collided with Sylvan.Data.Excel and the ExcelDataReader package) | `SheetDataReader` |
+| `ExcelDataReader` (its name collided with Sylvan.Data.Excel and the ExcelDataReader package) | [`SheetDataReader`](xref:ExcelReader.Core.Reader.SheetDataReader) |
 | `Cell.TryGetDateTime(out DateTime)`, which silently assumed the 1900 date system | `Cell.TryGetDateTime(workbook.IsDate1904, out DateTime)` |
 
 A converter reads the date system and culture from the context:
@@ -128,10 +128,10 @@ To unit-test a converter, build the context with an initializer: `new ExcelRowCo
 
 Two behavior changes come with them:
 
-- `Excel.Open` with `ExcelFileFormat.Csv` now applies `ExcelReaderOptions.MaxCellBytes` and `InternStrings`. v6 ignored both and used the CSV defaults.
+- [`Excel.Open`](xref:ExcelReader.Core.Reader.Excel.Open*) with [`ExcelFileFormat.Csv`](xref:ExcelReader.Core.Reader.ExcelFileFormat.Csv) now applies `ExcelReaderOptions.MaxCellBytes` and `InternStrings`. v6 ignored both and used the CSV defaults.
 - Formula cells are typed by their cached result in every format. v6 reported an XLSX text result and an XLS numeric result as `Formula`, so an XLS formula with a date style lost its `Date` type, and XLSB never used `Formula`.
 - The CLI `convert` command no longer shifts dates by four years when the source workbook uses the 1904 date system.
-- `XlsxWriterOptions` gains `Date1904`, which v6 lacked. It defaults to `false`, so existing output is unchanged.
+- [`XlsxWriterOptions`](xref:ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions) gains `Date1904`, which v6 lacked. It defaults to `false`, so existing output is unchanged.
 
 ## Native bindings
 
@@ -141,4 +141,4 @@ The C ABI is unchanged: no signature moved, and `XL_ABI_VERSION` stays 6. Behavi
 
 `xl_write_options.date1904` now applies to XLSX as well as XLSB and XLS; v6 ignored it for XLSX.
 
-`xl_csv_aggregate` keeps its signature. Inside, it opens a `CsvReader` with the dialect from the native struct and calls `SheetParallel`.
+`xl_csv_aggregate` keeps its signature. Inside, it opens a [`CsvReader`](xref:ExcelReader.Core.Reader.Csv.CsvReader) with the dialect from the native struct and calls `SheetParallel`.

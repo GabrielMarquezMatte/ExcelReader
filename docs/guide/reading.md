@@ -26,11 +26,11 @@ foreach (var row in workbook.FirstSheet)
 }
 ```
 
-An opened workbook (`XlsxWorkbook`, `XlsbWorkbook`, `XlsWorkbook`, `CsvReader`) hands out its sheets: `FirstSheet` is the first one, `Sheets[i]` any of them. A sheet holds no resources of its own; iterating it starts a new, independent read. Dispose the workbook, not the sheets.
+An opened workbook ([`XlsxWorkbook`](xref:ExcelReader.Core.Reader.Xlsx.XlsxWorkbook), [`XlsbWorkbook`](xref:ExcelReader.Core.Reader.Xlsb.XlsbWorkbook), [`XlsWorkbook`](xref:ExcelReader.Core.Reader.Xls.XlsWorkbook), [`CsvReader`](xref:ExcelReader.Core.Reader.Csv.CsvReader)) hands out its sheets: `FirstSheet` is the first one, `Sheets[i]` any of them. A sheet holds no resources of its own; iterating it starts a new, independent read. Dispose the workbook, not the sheets.
 
 ### Parallel reading (opt-in)
 
-`SheetParallel` reads one sheet on several threads. It takes any sheet, so it works the same on XLSX, XLSB and CSV:
+[`SheetParallel`](xref:ExcelReader.Core.Reader.SheetParallel) reads one sheet on several threads. It takes any sheet, so it works the same on XLSX, XLSB and CSV:
 
 ```csharp
 using XlsxWorkbook workbook = Excel.FromXlsxFile("big.xlsx");
@@ -81,7 +81,7 @@ UnitTotal total = await SheetParallel.AggregateAsync<UnitTotal, SaleRow>(
     new SheetParallelOptions { HeaderRow = 1 });
 ```
 
-The same call takes a `RowAggregation<TState>` when you would rather pass delegates than write a type, and an `IRowRecord<TRecord>` type in place of the parser.
+The same call takes a [`RowAggregation<TState>`](xref:ExcelReader.Core.Reader.RowAggregation%601) when you would rather pass delegates than write a type, and an `IRowRecord<TRecord>` type in place of the parser.
 
 A per-row callback:
 
@@ -98,7 +98,7 @@ await SheetParallel.ForEachAsync(
 
 Unlike `ParseAsync`, the callback runs on the worker threads, so records arrive in no particular order and the callback must be safe to call from several threads at once. Spans are valid only for the duration of the call.
 
-`HeaderRow` follows the same rule as before: `ParseAsync` takes the header from the parser's `ExcelParserOptions.HeaderRow` and rejects a non-zero `SheetParallelOptions.HeaderRow`, while the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
+`HeaderRow` follows the same rule as before: `ParseAsync` takes the header from the parser's [`ExcelParserOptions.HeaderRow`](xref:ExcelReader.Core.Parser.ExcelParserOptions.HeaderRow) and rejects a non-zero [`SheetParallelOptions.HeaderRow`](xref:ExcelReader.Core.Reader.SheetParallelOptions.HeaderRow), while the parser-based `ForEachAsync` and `AggregateAsync` use `SheetParallelOptions.HeaderRow`.
 
 #### When it reads sequentially
 
@@ -121,7 +121,7 @@ These cases read on one thread with the same results and no error:
 
 A callback that writes to a database or sends messages must be idempotent on CSV, and on XLSX if the sheet may be malformed, and must also tolerate records that do not exist: deduplicating on a key does not filter those out.
 
-`ExcelParseException.Row` on `ParseAsync` counts the rows emitted so far. On `ForEachAsync` and `AggregateAsync` it is the exact row when the read is sequential and `0` when it was partitioned.
+[`ExcelParseException.Row`](xref:ExcelReader.Core.Parser.ExcelParseException.Row) on `ParseAsync` counts the rows emitted so far. On `ForEachAsync` and `AggregateAsync` it is the exact row when the read is sequential and `0` when it was partitioned.
 
 See the [parallel sheet benchmarks](../performance/benchmarks.md#parallel-sheet-reading) and the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. On a real-data XLSX the sheet stage drops from 29 ms (prefetched, sequential) to about 18 ms, and on XLSB from 16 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its `AggregateAsync` at dop 16 is ~2.8x faster than the typed path while allocating ~410x less, with zero garbage collections.
 
@@ -141,7 +141,7 @@ using var workbook = Excel.FromXlsxFile("report.xlsx");
 Apache.Arrow.RecordBatch batch = workbook.FirstSheet.ToArrowRecordBatch();
 ```
 
-The schema defaults to `Excel.InferSchema`'s guess; pass one in `new ArrowReadOptions { Schema = ... }` to skip inference, and set `HeaderRow` there (default 1, 0 for none). The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet. Inference costs about the same time and ~1.8x the allocation of an explicit schema on the same file. See [Arrow conversion](../performance/benchmarks.md#arrow-conversion) in the benchmarks.
+The schema defaults to [`Excel.InferSchema`](xref:ExcelReader.Core.Reader.Excel.InferSchema*)'s guess; pass one in `new ArrowReadOptions { Schema = ... }` to skip inference, and set `HeaderRow` there (default 1, 0 for none). The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet. Inference costs about the same time and ~1.8x the allocation of an explicit schema on the same file. See [Arrow conversion](../performance/benchmarks.md#arrow-conversion) in the benchmarks.
 
 `WriteRecordBatch`/`WriteRecordBatchAsync` are the write-side mirror — one call from a `RecordBatch` to a sheet, for XLSX, XLSB, XLS, and CSV:
 
@@ -158,7 +158,7 @@ Supports string, large string, string view, every integer width (signed and unsi
 
 ## Open by auto-detecting the format
 
-`Excel.Open` picks the workbook type from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelWorkbook`. `FirstSheet` gives the first sheet, and a sheet iterates its rows directly, so no pattern-match is needed for basic row iteration.
+[`Excel.Open`](xref:ExcelReader.Core.Reader.Excel.Open*) picks the workbook type from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an [`IExcelWorkbook`](xref:ExcelReader.Core.Reader.IExcelWorkbook). `FirstSheet` gives the first sheet, and a sheet iterates its rows directly, so no pattern-match is needed for basic row iteration.
 
 ```csharp
 using ExcelReader.Core.Reader;
@@ -171,7 +171,7 @@ foreach (var row in workbook.FirstSheet)
 }
 ```
 
-`SheetCount`, `SheetAt(index)` and `TryGetSheet(name)` are on `IExcelWorkbook` itself, so you can walk every sheet without knowing the format. Each `IExcelSheet` carries its own `Index`, `Name` and `Visibility`:
+`SheetCount`, `SheetAt(index)` and `TryGetSheet(name)` are on `IExcelWorkbook` itself, so you can walk every sheet without knowing the format. Each [`IExcelSheet`](xref:ExcelReader.Core.Reader.IExcelSheet) carries its own `Index`, `Name` and `Visibility`:
 
 ```csharp
 using IExcelWorkbook workbook = Excel.Open("report.xlsx");
@@ -199,7 +199,7 @@ if (workbook.TryGetSheet("Totals", out var totals))
 }
 ```
 
-When you open a format directly (`Excel.FromXlsxFile` and the like) the workbook's `Sheets` is a typed, indexable list (`Sheets.Count`, `Sheets[i]`, `foreach`) of `XlsxSheet`, `XlsbSheet` or `XlsSheet` values, so walking it boxes nothing. Reaching a sheet only looks up a name and an index; the file is not read until you iterate the sheet.
+When you open a format directly ([`Excel.FromXlsxFile`](xref:ExcelReader.Core.Reader.Excel.FromXlsxFile*) and the like) the workbook's `Sheets` is a typed, indexable list (`Sheets.Count`, `Sheets[i]`, `foreach`) of [`XlsxSheet`](xref:ExcelReader.Core.Reader.Xlsx.XlsxSheet), [`XlsbSheet`](xref:ExcelReader.Core.Reader.Xlsb.XlsbSheet) or [`XlsSheet`](xref:ExcelReader.Core.Reader.Xls.XlsSheet) values, so walking it boxes nothing. Reaching a sheet only looks up a name and an index; the file is not read until you iterate the sheet.
 
 `Visibility` reports whether a sheet is shown in the workbook's tab bar, read from the format's own encoding of it (XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState`). It is reported, never enforced — a hidden sheet enumerates its rows like any other, so converters and exporters filter on it themselves:
 
@@ -217,13 +217,13 @@ for (int i = 0; i < workbook.SheetCount; i++)
 }
 ```
 
-`ExcelSheetVisibility.VeryHidden` is the state Excel's own unhide dialog does not offer; both it and `Hidden` come back here. A sheet whose format says nothing about its state — or says something no producer agrees on — reads as `Visible`.
+[`ExcelSheetVisibility.VeryHidden`](xref:ExcelReader.Core.ExcelSheetVisibility.VeryHidden) is the state Excel's own unhide dialog does not offer; both it and `Hidden` come back here. A sheet whose format says nothing about its state — or says something no producer agrees on — reads as `Visible`.
 
 CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `Name == ""`, always `Visible`). Pattern-match to the concrete type only for workbook-specific internals beyond this surface.
 
 `OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
 
-Detection covers the signed formats only. To open a source whose format you already know — including CSV, which has no signature to detect — pass an `ExcelFileFormat` and let `ExcelReaderOptions.Csv` carry the dialect; see [CSV](csv.md#read-csv).
+Detection covers the signed formats only. To open a source whose format you already know — including CSV, which has no signature to detect — pass an [`ExcelFileFormat`](xref:ExcelReader.Core.Reader.ExcelFileFormat) and let [`ExcelReaderOptions.Csv`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.Csv) carry the dialect; see [CSV](csv.md#read-csv).
 
 ```csharp
 using IExcelWorkbook workbook = Excel.Open("report.csv", ExcelFileFormat.Csv);
@@ -250,8 +250,8 @@ if (workbook.TryGetTable("Sales", out ExcelTable? sales))
 - `FirstRow`, `FirstColumn`, `LastRow` and `LastColumn` are zero-based and include the header and totals
   rows; `Ref` is the same range in A1 notation.
 - Column indexes inside `AsSheet()` rows stay those of the sheet: a table starting at column C reports
-  its first cell at index 2. `Excel.InferSchema` keeps those indexes in `ExcelColumnSchema.Index` but
-  lists only the table's columns. `SheetDataReader` ordinals are relative to the table: ordinal 0 is
+  its first cell at index 2. `Excel.InferSchema` keeps those indexes in [`ExcelColumnSchema.Index`](xref:ExcelReader.Core.Reader.Schema.ExcelColumnSchema.Index) but
+  lists only the table's columns. [`SheetDataReader`](xref:ExcelReader.Core.Reader.SheetDataReader) ordinals are relative to the table: ordinal 0 is
   its first column.
 - A table whose header row is turned off (`HeaderRowCount == 0`) still enumerates, but `Parse` throws
   `InvalidOperationException` for every map, and `SheetDataReader` and `InferSchema` throw it when
@@ -299,7 +299,7 @@ await foreach (var row in workbook.FirstSheet)
 }
 ```
 
-`await foreach` binds to the sheet's `GetAsyncEnumerator(CancellationToken ct = default)` by pattern. The call itself does no I/O: opening the sheet part (and, for XLSX, loading shared strings) happens asynchronously on the first `MoveNextAsync`. Because `Row` and `Cell` are `ref struct` types, the current row cannot be held across an `await` inside the loop body: read its cells (or copy the values out) before awaiting anything else.
+`await foreach` binds to the sheet's `GetAsyncEnumerator(CancellationToken ct = default)` by pattern. The call itself does no I/O: opening the sheet part (and, for XLSX, loading shared strings) happens asynchronously on the first `MoveNextAsync`. Because [`Row`](xref:ExcelReader.Core.Reader.Row) and [`Cell`](xref:ExcelReader.Core.Reader.Cell) are `ref struct` types, the current row cannot be held across an `await` inside the loop body: read its cells (or copy the values out) before awaiting anything else.
 
 `await foreach` does not accept `.WithCancellation(ct)`: `Row` being a `ref struct` rules out `IAsyncEnumerable<Row>`, so the loop binds to the pattern rather than the interface. To pass a token, or to `await` while a row is in scope, drive the enumerator manually:
 
@@ -319,7 +319,7 @@ Errors from opening the sheet, such as cancellation or a corrupt part, surface f
 ## Prefetch decompression (XLSX/XLSB)
 
 XLSX and XLSB are ZIP-backed, and inflating a sheet's compressed bytes competes for
-wall-clock time with parsing it. `ExcelReaderOptions.PrefetchDecompression` overlaps the
+wall-clock time with parsing it. [`ExcelReaderOptions.PrefetchDecompression`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.PrefetchDecompression) overlaps the
 two: a background thread inflates ahead while the calling thread parses. It is **opt-in,
 defaults to `false`**, and only affects XLSX/XLSB — XLS and CSV have nothing to
 decompress, so the option is silently ignored for them.
