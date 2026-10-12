@@ -229,7 +229,6 @@ pub struct RowCursor<'w> {
 }
 
 // SAFETY: the cursor owns its native enumerator and ABI v6 lets one thread at a time use it;
-// every method that touches it takes `&mut self`.
 unsafe impl Send for RowCursor<'_> {}
 
 impl<'w> RowCursor<'w> {
@@ -337,7 +336,6 @@ impl Drop for DecodedRows {
 }
 
 // SAFETY: plain native allocations, read only through &self, released by xl_free_rows, which any
-// thread may call.
 unsafe impl Send for DecodedRows {}
 unsafe impl Sync for DecodedRows {}
 

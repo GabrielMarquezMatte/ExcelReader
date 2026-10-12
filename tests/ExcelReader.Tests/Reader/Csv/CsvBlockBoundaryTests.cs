@@ -167,10 +167,10 @@ namespace ExcelReader.Tests.Reader.Csv
             var options = CsvReaderOptions.Default with { Delimiter = (byte)',', Quote = (byte)',' };
             byte[] bytes = Encoding.UTF8.GetBytes("a,,b,c\n,d,\ne");
 
-            Assert.Throws<ArgumentException>(() => Excel.FromCsv(bytes, options));
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(bytes, new ExcelReaderOptions { Csv = options }));
 
             using var ms = new MemoryStream(bytes);
-            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: new ExcelReaderOptions { Csv = options }));
         }
     }
 }

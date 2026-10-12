@@ -257,7 +257,6 @@ namespace ExcelReader.Tests
             };
         }
 
-        // Every span/async write on a derived MemoryStream funnels into this overload.
         public override void Write(byte[] buffer, int offset, int count)
         {
             OnWrite?.Invoke();
@@ -447,7 +446,8 @@ namespace ExcelReader.Tests
             (string Name, string Rows)[] sheets,
             string? sharedStrings = null,
             string? styles = null,
-            bool date1904 = false)
+            bool date1904 = false,
+            (string Path, string Content)[]? extraParts = null)
         {
             var sheetXml = new string[sheets.Length];
             var relXml = new string[sheets.Length];
@@ -477,6 +477,10 @@ namespace ExcelReader.Tests
                     string withNs = styles.Replace("<styleSheet>",
                         $"""<styleSheet xmlns="{Main}">""", StringComparison.Ordinal);
                     Write(zip, "xl/styles.xml", $"""<?xml version="1.0"?>{withNs}""");
+                }
+                foreach ((string path, string content) in extraParts ?? [])
+                {
+                    Write(zip, path, content);
                 }
             }
             ms.Position = 0;

@@ -488,9 +488,12 @@ starts. Typed models, allocating, own interleave:
 | dop 6 | 5.068 ms (2.80x) |
 | dop 12 | 4.107 ms (3.46x) |
 
-This is the one place in the library where parallelism converts, and it converts because CSV has no
-inflate floor. It is only available on the typed path: `Row` and `Cell` are `ref struct`s and cannot
-cross a thread boundary, so raw row enumeration hits the same wall as XLSX.
+This was the one place in the library where parallelism converted, and it converted because CSV has no
+inflate floor. Since v7 `SheetParallel` also reads XLSX and XLSB on several threads (see "Parallel intra-sheet
+parsing" below), with a smaller gain because inflate is still sequential. Parallel reading is only available on
+the typed path: `Row` and `Cell` are `ref struct`s and cannot cross a thread boundary, so raw row enumeration
+hits the same wall. `CsvParallel` is named `SheetParallel` in v7; the entries in this file keep the names they
+were measured under.
 
 ## Approaches measured and rejected
 
@@ -524,6 +527,37 @@ because inflate is then all that is left.
 It would also only ever serve the typed-parsing layer: `Row`/`Cell` are `ref struct` and cannot cross
 a thread boundary.
 
+**Update 2026-10-10: built.** `InflateStream` moved the inflate floor, so the prefetched XLSX read became
+parse-bound and the reasoning above no longer holds. A spike (Ryzen 7 5700X, real-data 65K corpus, min of 30
+interleaved rounds, sheet stage only, outputs identical to sequential) measured:
+
+| | XLSX (6.7 → 34.4 MB) | XLSB (3.7 → 15.9 MB) |
+|---|---|---|
+| read today, no prefetch / prefetch | 44.6 / 29.2 ms | 26.5 / 15.8 ms |
+| inflate only, whole buffer | 14.9 ms | 9.5 ms |
+| parse only, dop 1 / 2 / 4 / 8 | 29.0 / 14.8 / 7.8 / 4.2 ms | 15.4 / 7.8 / 4.0 / 2.3 ms |
+| A: 1 inflate thread + N parse workers (N ≥ 2) | 16.0 ms (1.8x) | 12.5 ms (1.25x) |
+| B oracle: parallel inflate + parse, 8 threads | 7.7 ms | 3.6 ms |
+
+A is what shipped: `SheetParallel` over XLSX and XLSB, one producer that inflates and cuts row-aligned chunks,
+`dop - 1` parse workers, an ordered merge (see ARCHITECTURE.md). The spike's consumer was light and its buffers
+were pre-touched, so those numbers are the shape of the gain, not a promise. Measured on the built pipeline
+(JIT harness, same corpus and method, light consumer, 256 KB chunks):
+
+| | XLSX | XLSB |
+|---|---|---|
+| prefetched sequential read | 28.35 ms | 15.65 ms |
+| pipeline, dop 3 to 16 | 17.6 ms (1.61x) | 13.3 ms (1.18x) |
+| typed `ParseAsync`, sequential / dop 4 | 55.4 / 18.9 ms | 37.6 / 14.4 ms |
+| `xl_parse_typed` over the published NativeAOT DLL, dop 1 / dop 0 | 54.1 / 20.3 ms (2.6x) | 28.2 / 15.2 ms (1.85x) |
+
+Under the JIT the sheet stage stops scaling at dop 3, one producer plus two workers: dop 2 is a plain overlap of inflate and parse and gains
+nothing. The chunk size defaults to 256 KB, down from 1 MB: it removes ~0.5 ms of serial tail, and 4 MB adds
+~3.7 ms. XLSB stops at ~13 ms against a 9.6 ms inflate floor because the producer walks every BIFF12 record
+(~2.2 ms) and `InflateStream.Read` adds a copy (~0.7 ms). Only parallel inflate moves that. The
+BenchmarkDotNet tables for this are in `benchmarks.md`; they were taken on a loaded machine and are pending an
+idle rerun.
+
 ### Faster inflate — measured separately, no gain
 
 libdeflate was measured against `System.IO.Compression` on this workload before this investigation:
@@ -531,8 +565,11 @@ no faster, and slower in places. libdeflate is whole-buffer only — no streamin
 the entire sheet to be materialized before parsing starts and destroys the inflate/parse overlap
 `PrefetchStream` exists to provide.
 
-**The inflate floor does not move by swapping compression libraries.** Since XLSX and XLSB are both
-bounded by it, this is the single most important negative result here.
+**The inflate floor does not move by swapping in a whole-buffer compression library.** That is what
+this measurement showed, and it was read too broadly: the decoder itself was never at the floor.
+Measured on its own libdeflate is about twice as fast as `DeflateStream` on these entries; what cost
+it the win end to end was having no streaming API. "Fourth round" below measures decoders in
+isolation and replaces `DeflateStream` with a managed streaming one.
 
 ### Lazy number parsing — a trade, not a win
 
@@ -982,26 +1019,199 @@ before publishing.
 The C++ binding's full XLSX read moved from 93.2 to ~85.4 ms with no native change, from the
 XLSX changes above.
 
+### NativeAOT XLSX gap, re-checked (2026-10-09, Ryzen 7 5700X)
+
+The gap quoted under "NativeAOT, again" (JIT 74.1 ms, NativeAOT 84.0 ms) predates `InflateStream`, the
+regenerated profile and the native column buffers, so it was re-measured first. The python binding
+reads `65K_Records_Data.xlsx` with `parse_typed` in 58.0–58.5 ms from the shipped library. The same
+`ReadApi.OpenMemory` + `TypedApi.ParseTyped` calls in a scratch console, JIT against NativeAOT built
+with the library's settings (`OptimizationPreference=Speed`, `x86-64-v3`, the `.mibc`), min of 40
+rounds:
+
+| stage | JIT | NativeAOT |
+|---|---|---|
+| inflate `sheet1.xml` (`InflateStream`) | 16.0 ms | 16.0 ms |
+| rows only, no prefetch | 39.1 ms | 43.5 ms |
+| rows + `TryGetDouble` on every number | 42.8 ms | 47.9 ms |
+| `xl_parse_typed` | 54.0 ms | 60.7 ms |
+
+So the gap is ~12% in the harness and ~7% against the shipped library. **Inflate is at parity**, so
+the decode loop is not part of it. About two thirds is the worksheet scan and a third is the typed
+conversions after it.
+
+**A first harness left out `OptimizationPreference=Speed`** and read 66.5 ms for NativeAOT: ILC's
+default blended mode inlines much less. Check a harness's ILC settings against the project's before
+trusting a gap measured in it.
+
+The disassembly, with `--codegenopt:JitDisasm=ParseRowInWindow` and `JitStdOutFile` given to ILC as
+`IlcArg` items through a `CustomAfterMicrosoftCommonTargets` file: ILC's `ParseRowInWindow` is 846
+bytes with 15 inlinees and **a call to `ParseCellSpan`**. The JIT's Tier1 listing is 3,906 bytes with
+202 inlinees and no such call; it pulled `ParseCellSpan` and its callees into the row loop. (Earlier
+notes found `NoInlining` on `ParseCellSpan` costs the JIT 5–8%, so the inlined shape is the fast one.)
+`[MethodImpl(MethodImplOptions.AggressiveInlining)]` on `ParseCellSpan` makes ILC do the same:
+
+| | NativeAOT before | after | JIT before | after |
+|---|---|---|---|---|
+| rows only | 43.5 ms | 41.8 ms | 39.2 ms | 39.5 ms |
+| `xl_parse_typed` | 60.7 ms | 58.9 ms | 54.0 ms | 54.0 ms |
+
+That is 3–4% in the harness and neutral under the JIT. **It does not reach the shipped library**: the
+real `ExcelReader.Native.dll` built with and without the attribute, alternated three times through the
+python binding, measured 57.9–58.5 ms and 58.4–58.7 ms. The C++ `BM_ExcelReader_Xlsx_ParseOnly` agreed
+(55.9–56.8 ms against 56.6–56.8). The real library's `ParseCellSpan` was a call in its baseline too, so
+the attribute applies there; the Core-level harness just does not predict the end-to-end number, most
+likely because the C ABI layer and the typed column writers dominate what the scan saves. Not kept.
+
+What is left is spread thin: ~0.7 ms in the consumer's double parse (`TryGetDouble` over every number
+costs 4.4 ms under ILC and 3.7 ms under the JIT, with listings of about the same size, 662 and 641
+bytes), ~2.5 ms in the typed conversions, and the rest in the scan. No hot spot is visible in either
+listing.
+
+### Fourth round (2026-10-08, i7-1365U): a managed inflate decoder
+
+Measured on the laptop, so only the ratios mean anything; the published tables need the Ryzen run.
+Harnesses were throwaway console apps: interleaved rounds, minimum of 30 to 60, outputs compared
+byte for byte.
+
+Inflate only, single thread pinned to one core, against `DeflateStream` (.NET 10):
+
+| decoder | XLSX `sheet1.xml`, 6.7 → 34.4 MB | XLSB `sheet1.bin`, 3.7 → 15.9 MB |
+|---|---|---|
+| libdeflate 1.19, whole buffer | 2.14–2.18x | 1.64–1.67x |
+| ISA-L 2.30, whole buffer | 1.48–1.49x | 1.29–1.33x |
+| ISA-L 2.30, streaming, 64 KB | 1.39–1.42x | 1.23–1.25x |
+| `InflateStream` | 1.56–1.61x | 1.35–1.41x |
+
+`InflateStream` is a C# port of libdeflate's decoder design made resumable. It reaches roughly
+three quarters of libdeflate's speed on XLSX and four fifths on XLSB, and passes ISA-L without a
+native dependency. An earlier throwaway version that decoded a whole buffer in one call measured
+1.74–1.78x on XLSX, so streaming costs under a tenth.
+
+End to end in the reader, in-process A/B over the real-data corpus, identical checksums. The
+`InflateStream` column is one run of 30 rounds; the ISA-L column spans four runs:
+
+| read | `InflateStream` | ISA-L behind the same seam |
+|---|---|---|
+| XLSX, no prefetch | 1.25–1.26x | 1.19–1.21x |
+| XLSB, no prefetch | 1.13–1.15x | 1.10–1.14x |
+| XLSX, prefetch | 1.11–1.12x | 1.09–1.15x |
+| XLSB, prefetch | 1.05–1.06x | 1.03–1.07x |
+
+This is the `I + P` model again. Without prefetch a faster `I` converts directly. With prefetch the
+read is `max(I, P)`, both decoders land together, and what is left is the parse.
+
+`InflateBenchmark`, BenchmarkDotNet `--job Short`, in-process, same laptop:
+
+| entry | `DeflateStream` | `InflateStream` | ratio |
+|---|---|---|---|
+| XLSX sheet | 34.91 ms, 541 B | 21.71 ms, 332 B | 0.62 |
+| XLSB sheet | 19.40 ms, 404 B | 13.68 ms, 270 B | 0.71 |
+| string-heavy `sharedStrings.xml` | 16.10 ms, 280 B | 10.32 ms, 270 B | 0.64 |
+
+Measured and not kept:
+
+| attempt | result |
+|---|---|
+| `AggressiveOptimization` on the decode loop | no change, so the loop does not depend on dynamic PGO |
+| `Vector128` match copy for offsets of 16 and up | no change on XLSX, slightly slower on XLSB |
+
+#### The decode loop's Tier1 disassembly (2026-10-09, Ryzen 7 5700X)
+
+`DOTNET_JitDisasm=FastLoop` on a scratch harness that inflates the XLSX sheet 150 times. The `(Tier1)`
+listing is 955 bytes, and the loop **keeps every live value in a register**: `bitbuf`, `bitsleft`, both
+cursors, the limits, the table base and the mask are all in registers, with eight callee-saved pushes in the
+prologue and no stack traffic inside the loop. The spill problem the CSV scanner had is not here. Two
+earlier listings are `Instrumented Tier0` and `Tier1-OSR`; the OSR one is the method's first long call,
+so read the last listing.
+
+Where the time goes, from timestamps around the pieces, one XLSX sheet, 16.6 ms in total:
+
+| piece | ms | |
+|---|---|---|
+| `FastLoop` (1,042 calls) | 14.6 | 88% |
+| 417 dynamic block headers and table builds | 0.7 | 4% |
+| copy to the caller and slide the window (isolated) | 0.8 | 5% |
+
+So the streaming overhead the "Fourth round" blamed for part of the gap is ~5%, and the table builds
+are not it either. The gap to libdeflate is inside the loop, at ~2.4 GB/s of output.
+
+What the listing does show is small. Each decoded entry pays a zero-extending `mov r12d, r15d` before
+`sub rsi, r12`, because `bitsleft` is a `long` and the entry a `uint`. Making `bitsleft` a `uint`, as
+libdeflate has it, removes that and measured 15.87–15.99 ms → 15.63–15.77 ms on XLSX (~1.5%) and nothing on XLSB.
+Not applied. The literal path takes four jumps per run of literals because the JIT laid the second and
+third literal out of line, and several `mov r13, rbx` / `shrx rbx, r13, r15` pairs keep the pre-shift
+`saved` value alive for the match path whether or not it is used. None of that is something source
+changes reach reliably; what is left is the JIT's block layout and register copies. Not worth chasing.
+
+**A behavior change came with it.** `DeflateStream` does not reject a stream that ends before its
+final block: it returns what it decoded and reports end of stream. A sheet entry cut short therefore
+used to yield a silent prefix of its rows. `InflateStream` throws `InvalidDataException`.
+
 ## Known open items
 
-- NativeAOT XLSX is ~13% behind the JIT, and the static profile does not close it (see "NativeAOT,
-  again"). Next step: diff the JIT's Tier1 code for `ParseRowInWindow` against ILC's output.
-- 17-digit numbers are parsed twice in XLSX: emit rejects them to keep the text exact, and the
-  consumer parses them again. A `Cell` flag for an approximate double would save ~3 ms per
-  real-data read, at the cost of a wider `Cell`.
+- **Parallel inflate is the open lead (spec B, not built).** It replaces the pipeline's producer only; the
+  queue, workers and merge stay. The oracle ceilings at 8 threads, parallel inflate plus parse, are 7.7 ms for
+  XLSX and 3.6 ms for XLSB, against 17.6 and 13.3 ms for the shipped pipeline. A deflate block finder costs
+  0.4–1 ms per split point, with no false positives in 14 hits. The marker finding: XLSX back-references stop
+  depending on the unknown window after about 1 MB, but XLSB ones never do, so about 65–70% of XLSB output bytes depend on the unknown window. The cost of the 16-bit marker decode loop is unmeasured, and it decides whether
+  XLSB gains much.
+- `InflateStream` reaches about three quarters of libdeflate's inflate speed on XLSX. The Tier1
+  disassembly shows no spills and 88% of the time in `FastLoop` itself (see "The decode loop's Tier1
+  disassembly"); the remainder is JIT codegen. A `uint bitsleft` is worth ~1.5% if anyone wants it.
+- "Fourth round" is from the i7-1365U. The Ryzen 7 5700X re-run (2026-10-09, `--job Medium`) is in
+  `benchmarks.md`: `InflateStream` is 0.70x / 0.78x / 0.63x of `DeflateStream` on the XLSX sheet, XLSB
+  sheet and string-heavy `sharedStrings.xml`, against 0.62 / 0.71 / 0.64 on the laptop. The
+  non-prefetched reads moved with it (real-data XLSX 49.7 → 43.8 ms, XLSB 27.7 → 25.7 ms; string-heavy
+  XLSX 41.2 → 33.2 ms) and the prefetched ones did not (27.8 → 29.5 ms, 16.9 → 17.4 ms), as the
+  `max(I, P)` model predicts. The native C ABI table in `benchmarks.md` has not been re-run since.
+- NativeAOT XLSX is ~7–10% behind the JIT, down from the ~13% in "NativeAOT, again"; the diff of the
+  JIT's Tier1 `ParseRowInWindow` against ILC's is done (see "NativeAOT XLSX gap, re-checked"). The one
+  difference found does not move the shipped library.
+- **17-digit numbers parsed twice in XLSX: prototyped 2026-10-09 (Ryzen 7 5700X), not kept.** Emit
+  rejects them to keep the text exact and the consumer parses them again. The prototype parsed up to
+  19 digits at emit, had `FastDouble` report whether the result keeps every digit (15 or fewer), and
+  carried that as a `NumberApproximate` flag through `CellAccumulator`, `CellDesc` and `Cell`.
+  `TryGetDouble` and `TryParse<double>` used the number; every other `T` ignored an approximate one and
+  read the text, so `long` and `decimal` stayed exact. The flag costs nothing in size: `CellDesc` stays
+  32 bytes (the new `bool` fills the last padding byte) and `Cell` has padding to spare, so "a wider
+  `Cell`" was wrong. Real-data XLSX, 49,799 17-digit cells of 589,815, min of 35 rounds, base and new
+  `ExcelReader.Core.dll` alternated three times in separate processes, identical checksums:
+
+  | consumer | before | after |
+  |---|---|---|
+  | `TryParse<double>` on every number | 43.3–43.6 ms | 42.1–43.1 ms (~2%) |
+  | `TryGetDouble` on every number | 42.4–43.0 ms | 42.2–42.4 ms (~1%) |
+  | `TryParse<decimal>` | 53.5–54.5 ms | 54.3–54.8 ms (~+1%) |
+  | no number parsed | 41.5–41.9 ms | 42.1–43.0 ms (~+1.5%) |
+
+  A trade, like lazy number parsing: the double consumers win ~1 ms, not the ~3 ms estimated, because
+  the 36 ns parse moves to emit and the consumers that never ask for a double (`decimal`, `long`,
+  text) now pay it for nothing. Not worth a flag threaded through three structs and a `Cell`
+  semantics rule. Reopen only if double columns dominate real workloads.
 - `PrefetchStream` handoff: ~2.7 ms on the i7, ≤2.1 ms on the Ryzen string-heavy sheet, of which
   the copy itself is ~0.3 ms. Removing it means replacing the `Stream` seam with a buffer-exchange
   protocol — and that seam is where the decompressed-byte limit counters sit, so it is a trust
   boundary, not just a copy.
-- **Needs re-measuring.** This reading predates `CsvStructuralScanner` (de49a45, 2026-09-22), which
-  moved the enumerator off `CsvControlScanner` and made `Reset` per buffer rather than per record,
-  so the write barrier named below is likely already gone. The 1BRC re-run above found 1.36x on
-  rows-only enumeration over the same period, so the gap quoted here is stale.
-  After `DrainFields`, rows-only enumeration of wide rows still runs ~1.75x the framing prototype.
-  What remains is per record rather than per field (the `MoveNext` → `TryParseRecordFromBuffer` →
-  `TryParseSimpleRecord` call chain, `BeginRecord`, the write barrier from `CsvControlScanner.Continue`
-  storing the buffer reference every record) plus the consumer side: `Row` indexer access costs
-  about as much again as enumeration on the wide shape.
+- **CSV enumerator overhead, re-measured 2026-10-09 (Ryzen 7 5700X).** The earlier reading is
+  superseded: it predates `CsvStructuralScanner` and its per-record diagnosis no longer holds.
+  Scratch harness, min of 50 interleaved rounds, 50,000 rows, the scanner driven directly for the
+  framing floor (drain the field-end bits, emit a descriptor per field):
+
+  | | wide, 32 fields (9.8 MB) | narrow, 4 fields (1.2 MB) |
+  |---|---|---|
+  | scanner only, popcount | 0.79 ms | 0.10 ms |
+  | scan + drain + emit a 32-byte descriptor | 2.93 ms | 0.38 ms |
+  | reader, rows only | 5.37 ms (1.83x) | 0.88 ms (2.3x) |
+  | reader + `row[i].Value.Length` on every cell | 7.72 ms | 1.10 ms |
+
+  The overhead above framing is **per field, not per record**: fitting the two shapes gives ~1.4 ns
+  per field and ~4 ns per row. Per field, `DrainFields` also loads `buf[stop]` to find the record end,
+  `buf[start]` to test for a quote, and builds a `CellDesc` with a branch on empty; the prototype does
+  none of that. The indexer adds ~1.4 ns per cell on top, about 45% of rows-only, not "as much again".
+  Hoisting `_delimiter` and `_quote` into locals made it **slower** (5.37 → 5.6–5.7 ms), the register
+  pressure result from the CSV enumerator section again. Telling quoted from unquoted fields from a
+  scanner quote-start mask instead of the `buf[start]` load is the one idea left; it is worth at most
+  ~0.5 ns of a ~3.3 ns field, which is a few percent of any read that converts values.
 - Reading a CSV from an already-resident buffer is slower than from a stream for spans only, and
   faster for full conversion. Reproduced in both directions across four runs, unexplained.
 

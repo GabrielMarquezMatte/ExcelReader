@@ -859,6 +859,89 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.Equal(-1, stream.ReadByte());
         }
 
+        [Fact]
+        public void DeflatedEntryCutShortIsRejectedWhenOpenedAsAPart()
+        {
+            byte[] zipBytes = BuildZipWithCutDeflatedEntry("data.xml");
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("data.xml"u8, out ZipEntryRef entry));
+            Assert.Equal((ushort)8, entry.Method);
+            Assert.Throws<InvalidDataException>(() => index.OpenPart(entry, new DecompressedByteCounter(0)));
+        }
+
+        [Fact]
+        public void DeflatedEntryCutShortIsRejectedWhenStreamedInsteadOfEndingEarly()
+        {
+            byte[] zipBytes = BuildZipWithCutDeflatedEntry("data.xml");
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("data.xml"u8, out ZipEntryRef entry));
+            using LimitedReadStream stream = index.OpenEntryStream(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default);
+            Assert.Throws<InvalidDataException>(() => stream.CopyTo(Stream.Null));
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(-1)]
+        public void StreamedEntryWhoseLengthDiffersFromItsDeclaredSizeIsRejected(int declaredDelta)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("<row><c><v>12345</v></c></row>", 4000)));
+            byte[] zipBytes = BuildZipWithOneEntry("data.xml", payload, CompressionLevel.Optimal);
+            PatchCentralDirectoryUInt32(zipBytes, "data.xml", fieldOffset: 24, (uint)(payload.Length + declaredDelta));
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("data.xml"u8, out ZipEntryRef entry));
+            using LimitedReadStream stream = index.OpenEntryStream(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(() => stream.CopyTo(Stream.Null));
+            Assert.Contains(declaredDelta > 0 ? "less data" : "more data", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(-1)]
+        public async Task StreamedEntryWhoseLengthDiffersFromItsDeclaredSizeIsRejectedAsync(int declaredDelta)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("<row><c><v>12345</v></c></row>", 4000)));
+            byte[] zipBytes = BuildZipWithOneEntry("data.xml", payload, CompressionLevel.Optimal);
+            PatchCentralDirectoryUInt32(zipBytes, "data.xml", fieldOffset: 24, (uint)(payload.Length + declaredDelta));
+            CancellationToken ct = TestContext.Current.CancellationToken;
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("data.xml"u8, out ZipEntryRef entry));
+            await using LimitedReadStream stream = await index.OpenEntryStreamAsync(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default, ct);
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => stream.CopyToAsync(Stream.Null, ct));
+        }
+
+        [Fact]
+        public void StreamedEntryOfExactlyItsDeclaredSizeReadsToTheEnd()
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("<row><c><v>12345</v></c></row>", 4000)));
+            byte[] zipBytes = BuildZipWithOneEntry("data.xml", payload, CompressionLevel.Optimal);
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("data.xml"u8, out ZipEntryRef entry));
+            using LimitedReadStream stream = index.OpenEntryStream(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default);
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+
+            Assert.Equal(payload, copy.ToArray());
+            Assert.Equal(0, stream.Read(new byte[16]));
+        }
+
+        private static byte[] BuildZipWithCutDeflatedEntry(string entryName)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat("<row><c><v>12345</v></c></row>", 4000)));
+            byte[] zipBytes = BuildZipWithOneEntry(entryName, payload, CompressionLevel.Optimal);
+            int cdOffset = FindCentralDirectoryOffset(zipBytes, entryName);
+            uint compressedSize = BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(cdOffset + 20, 4));
+            Assert.True(compressedSize > 8);
+            PatchCentralDirectoryUInt32(zipBytes, entryName, fieldOffset: 20, compressedSize / 2);
+            return zipBytes;
+        }
+
         private static uint ReadDeclaredUncompressedSize(byte[] zipBytes, string entryName)
         {
             int cdOffset = FindCentralDirectoryOffset(zipBytes, entryName);

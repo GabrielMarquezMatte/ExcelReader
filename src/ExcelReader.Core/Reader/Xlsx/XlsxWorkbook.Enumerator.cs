@@ -14,7 +14,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         /// <remarks>Low-memory: streams the sheet through a refillable pooled buffer, growing it as needed so a single <c>&lt;c&gt;...&lt;/c&gt;</c> element is always guaranteed contiguous.</remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
+        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator, IRowIndexedEnumerator
         {
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxWorkbook _reader;
@@ -23,6 +23,10 @@ namespace ExcelReader.Core.Reader.Xlsx
             private readonly Utf8StringCache? _contentCache;
             private readonly ZipEntryRef _entry;
             private int _nextCol;
+            private bool _trackRowIndex;
+            private int _rowIndex = -1;
+            private bool _reachedEnd;
+            private bool _endedMidMarkup;
 
             private NsTokens? _ns;
             private bool _nsChecked;
@@ -52,24 +56,66 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _lease = reader.Lifetime;
             }
 
+            internal Enumerator(XlsxWorkbook reader, ReadOnlyMemory<byte> chunk, NsTokens? ns, CancellationToken ct)
+                : base(chunk, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), ct)
+            {
+                _reader = reader;
+                _styleIsDate = reader._styleIsDate;
+                _sharedOffsets = reader._sharedOffsets;
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _ns = ns;
+                _nsChecked = true;
+            }
+
             private protected override Stream OpenSource()
             {
                 _reader.EnsureSharedLoaded();
                 _sharedOffsets = _reader._sharedOffsets;
-                return _reader._zip.OpenEntryStream(_entry, _reader._decompressedBytes, _reader._options);
+                return _reader._zip.OpenEntryStream(_entry, _reader._decompressedBytes.ForRead(), _reader._options);
             }
 
             private protected override async ValueTask<Stream> OpenSourceAsync()
             {
                 await _reader.EnsureSharedLoadedAsync(_ct).ConfigureAwait(false);
                 _sharedOffsets = _reader._sharedOffsets;
-                return await _reader._zip.OpenEntryStreamAsync(_entry, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
+                return await _reader._zip.OpenEntryStreamAsync(_entry, _reader._decompressedBytes.ForRead(), _reader._options, _ct).ConfigureAwait(false);
             }
 
             /// <inheritdoc/>
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _buf.AsSpan(0, _len), _reader.SharedStringCache, _contentCache);
 
+            internal NsTokens? Namespace
+            {
+                get
+                {
+                    if (!_nsChecked)
+                    {
+                        DetectNamespace();
+                    }
+                    return _ns;
+                }
+            }
+
+            internal long Offset => _io.BaseOffset + _pos;
+
+            internal bool ReachedEnd => _reachedEnd;
+
+            // True once the end of the input cut a row or a tag short: what was read last is not what a longer input would give.
+            internal bool EndedMidMarkup => _endedMidMarkup;
+
+            int IRowIndexedEnumerator.RowIndex
+            {
+                get
+                {
+                    return _rowIndex;
+                }
+            }
+
+            void IRowIndexedEnumerator.EnableRowIndex()
+            {
+                _trackRowIndex = true;
+            }
 
             /// <inheritdoc/>
             public bool MoveNext()
@@ -90,6 +136,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     switch (ClassifyHead())
                     {
                         case HeadKind.End:
+                            _reachedEnd = true;
                             return false;
                         case HeadKind.Row:
                             if (!BeginRow())
@@ -100,6 +147,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                         default:
                             if (!SkipMarkup())
                             {
+                                _endedMidMarkup = true;
                                 return false;
                             }
                             break;
@@ -164,13 +212,26 @@ namespace ExcelReader.Core.Reader.Xlsx
                 ValueTask<bool> beginTask = BeginRowAsync();
                 if (!beginTask.IsCompletedSuccessfully)
                 {
-                    return AwaitThenRestartAsync(beginTask);
+                    return ReadRowBodyAfterAsync(beginTask);
                 }
                 if (beginTask.Result)
                 {
                     return new ValueTask<bool>(true);
                 }
+                return ReadRowBodyAsync();
+            }
 
+            private async ValueTask<bool> ReadRowBodyAfterAsync(ValueTask<bool> beginTask)
+            {
+                if (await beginTask.ConfigureAwait(false))
+                {
+                    return true;
+                }
+                return await ReadRowBodyAsync().ConfigureAwait(false);
+            }
+
+            private ValueTask<bool> ReadRowBodyAsync()
+            {
                 int rowStart = _pos;
                 if (ParseRowInWindow())
                 {
@@ -256,6 +317,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private void ParseTruncatedRow(int rowStart)
             {
+                _endedMidMarkup = true;
                 RestartRowAt(rowStart);
                 ParseRow(_len);
             }
@@ -448,13 +510,13 @@ namespace ExcelReader.Core.Reader.Xlsx
                     return -1;
                 }
                 int textStart = p + 7;
-                int rel = buf.AsSpan(textStart, len - textStart).IndexOfAny((byte)'<', (byte)'&');
+                int rel = XlsxXml.IndexOfMarkup(buf.AsSpan(textStart, len - textStart), out bool mayEscape);
                 if (rel < 0)
                 {
                     return -1;
                 }
                 int lt = textStart + rel;
-                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8))
+                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8) || (mayEscape && buf.AsSpan(textStart, rel).IndexOf("_x"u8) >= 0))
                 {
                     return -1;
                 }
@@ -548,6 +610,10 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private bool BeginRowAt(int gt)
             {
+                if (_trackRowIndex)
+                {
+                    AdvanceRowIndex(_buf.AsSpan(_pos, gt - _pos));
+                }
                 _pos = gt + 1;
                 _acc.Reset();
                 _nextCol = 0;
@@ -556,14 +622,29 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private bool MissingRowOpenTag()
             {
+                _endedMidMarkup = true;
+                if (_trackRowIndex)
+                {
+                    _rowIndex++;
+                }
                 _pos = _len;
                 _acc.Reset();
                 _nextCol = 0;
                 return true;
             }
 
-            // Accepts only ` r="A1"`, ` s="12"`, ` t="s"` (any order, one space, double quotes); anything else goes generic.
-            // Inlined so col/style/kind/gt stay in registers instead of five out-params through the stack per cell.
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void AdvanceRowIndex(ReadOnlySpan<byte> rowTag)
+            {
+                int rowNumber = XlsxXml.ParseIntOr(XlsxXml.Attr(rowTag, " r="u8), 0);
+                if (rowNumber > 0)
+                {
+                    _rowIndex = rowNumber - 1;
+                    return;
+                }
+                _rowIndex++;
+            }
+
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static bool TryScanCanonicalCellTag(byte[] buf, int len, int i, out int gt, out int col, out int style, out Kind kind)
             {
@@ -778,7 +859,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
-                    Kind.Formula => CellType.Formula,
+                    Kind.Formula => CellType.ExcelString,
                     _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 int vStart = _acc.ValueLength;
@@ -797,7 +878,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private void EmitScalarValueFast(Kind kind, ReadOnlySpan<byte> v, int valueStart, int col, int style)
             {
-                if (kind == Kind.IsoDate || (kind == Kind.Formula && v.IndexOf((byte)'&') >= 0))
+                if (kind == Kind.IsoDate || (kind == Kind.Formula && (v.IndexOf((byte)'&') >= 0 || v.IndexOf("_x"u8) >= 0)))
                 {
                     EmitScalarValue(kind, v, col, style);
                     return;
@@ -806,7 +887,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
-                    Kind.Formula => CellType.Formula,
+                    Kind.Formula => CellType.ExcelString,
                     _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 double number = 0;
@@ -883,7 +964,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     return;
                 }
                 Span<byte> dst = _acc.ReserveValueSpan(src.Length);
-                _acc.Advance(XlsxXml.Decode(src, dst));
+                _acc.Advance(XlsxXml.UnescapeXString(dst[..XlsxXml.Decode(src, dst)]));
             }
 
             private void AppendRaw(ReadOnlySpan<byte> src)
@@ -971,7 +1052,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return true;
             }
 
-            private static bool IsBoundary(byte b)
+            internal static bool IsBoundary(byte b)
             {
                 return b is (byte)' ' or (byte)'>' or (byte)'/' or (byte)'\t' or (byte)'\r' or (byte)'\n';
             }

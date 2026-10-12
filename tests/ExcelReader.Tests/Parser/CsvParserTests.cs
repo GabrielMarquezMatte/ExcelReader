@@ -66,9 +66,9 @@ namespace ExcelReader.Tests.Parser
 
         private sealed class IsoDateConverter : IExcelCellConverter<DateTime>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out DateTime value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out DateTime value)
             {
-                return DateTime.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
+                return DateTime.TryParse(cell.GetString(), context.FormatProvider, DateTimeStyles.None, out value);
             }
         }
 
@@ -125,7 +125,7 @@ namespace ExcelReader.Tests.Parser
         {
             using var ms = Csv("Name,Amount\nConta,\"1.234,56\"\n");
             using var reader = Excel.FromCsv(ms);
-            var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
+            var config = new ExcelParserOptions { Culture = CultureInfo.GetCultureInfo("pt-BR") };
 
             MoneyRow row = ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader.FirstSheet).Single();
 
@@ -174,7 +174,7 @@ namespace ExcelReader.Tests.Parser
         public void HeaderRowGreaterThanOneSkipsPrecedingRows()
         {
             using var ms = Csv("ignore me\nName,Age,Score,Active,Balance\nAlice,42,95.5,true,12345.67\n");
-            var config = new ExcelParserConfig { HeaderRow = 2 };
+            var config = new ExcelParserOptions { HeaderRow = 2 };
 
             PersonRow row = ExcelParser.FromAttributes<PersonRow>(config).Parse(Excel.FromCsv(ms).FirstSheet).Single();
 
@@ -215,7 +215,7 @@ namespace ExcelReader.Tests.Parser
         {
             using var ms = Csv("Name,Amount\nConta,not-a-number\n");
             using var reader = Excel.FromCsv(ms);
-            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader.FirstSheet).ToList());
@@ -263,7 +263,7 @@ namespace ExcelReader.Tests.Parser
         {
             using var ms = Csv($"Start\n{text}\n");
             using var reader = Excel.FromCsv(ms);
-            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(reader.FirstSheet).ToList());
@@ -311,7 +311,7 @@ namespace ExcelReader.Tests.Parser
         {
             using var ms = Csv("Created,Day\n02/07/2026,02/07/2026\n");
             using var reader = Excel.FromCsv(ms);
-            var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
+            var config = new ExcelParserOptions { Culture = CultureInfo.GetCultureInfo("pt-BR") };
 
             DateRow row = ExcelParser.FromAttributes<DateRow>(config).Parse(reader.FirstSheet).Single();
 

@@ -4,6 +4,7 @@ Run from anywhere:  python python/scripts/build_native.py
 """
 
 import argparse
+import os
 import platform
 import shutil
 import subprocess
@@ -32,6 +33,17 @@ def default_rid() -> str:
     return f"linux-{arch}"
 
 
+def publish_environment() -> dict[str, str]:
+    """The NativeAOT linker step finds MSVC through vswhere, which the installer keeps off PATH."""
+    environment = dict(os.environ)
+    if platform.system() == "Windows" and shutil.which("vswhere") is None:
+        program_files = environment.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        installer = Path(program_files) / "Microsoft Visual Studio" / "Installer"
+        if (installer / "vswhere.exe").exists():
+            environment["PATH"] = environment.get("PATH", "") + os.pathsep + str(installer)
+    return environment
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rid", default=default_rid(), help="dotnet runtime identifier")
@@ -41,6 +53,7 @@ def main() -> int:
     subprocess.run(
         ["dotnet", "publish", str(CSPROJ), "-c", "Release", "-f", args.framework, "-r", args.rid],
         check=True,
+        env=publish_environment(),
     )
 
     publish_dir = CSPROJ.parent / "bin" / "Release" / args.framework / args.rid / "publish"

@@ -12,6 +12,13 @@ namespace ExcelReader.Core.Reader.Zip
             _limitName = limitName;
         }
 
+        // A sheet read counts from what the workbook's one-time loads (metadata, styles, shared strings)
+        // inflated, so a single read stays within the limit while a re-read does not pay for earlier ones.
+        internal DecompressedByteCounter ForRead()
+        {
+            return new DecompressedByteCounter(_limit, _limitName) { _total = Interlocked.Read(ref _total) };
+        }
+
         internal void Add(long bytes)
         {
             if (bytes <= 0 || _limit <= 0)
@@ -33,14 +40,20 @@ namespace ExcelReader.Core.Reader.Zip
         private readonly Stream _inner;
         private readonly DecompressedByteCounter? _totalCounter;
         private readonly DecompressedByteCounter? _entryCounter;
+        private readonly long _declaredLength;
+        private long _produced;
 
+        // declaredLength is the entry's size from the central directory. Neither raw deflate nor a stored
+        // entry can tell a cut-short stream from a complete one, so the length is the only end-of-data check.
         internal LimitedReadStream(
             Stream inner,
+            long declaredLength,
             DecompressedByteCounter? totalCounter,
             string entryLimitName = "",
             long entryLimit = 0)
         {
             _inner = inner;
+            _declaredLength = declaredLength;
             _totalCounter = totalCounter;
             _entryCounter = entryLimit > 0 ? new DecompressedByteCounter(entryLimit, entryLimitName) : null;
         }
@@ -63,23 +76,17 @@ namespace ExcelReader.Core.Reader.Zip
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            int read = _inner.Read(buffer, offset, count);
-            Count(read);
-            return read;
+            return Count(_inner.Read(buffer, offset, count), count);
         }
 
         public override int Read(Span<byte> buffer)
         {
-            int read = _inner.Read(buffer);
-            Count(read);
-            return read;
+            return Count(_inner.Read(buffer), buffer.Length);
         }
 
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            int read = await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-            Count(read);
-            return read;
+            return Count(await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false), buffer.Length);
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -117,14 +124,24 @@ namespace ExcelReader.Core.Reader.Zip
             await base.DisposeAsync().ConfigureAwait(false);
         }
 
-        private void Count(int read)
+        private int Count(int read, int requested)
         {
             if (read <= 0)
             {
-                return;
+                if (requested > 0 && _produced != _declaredLength)
+                {
+                    throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.");
+                }
+                return read;
+            }
+            _produced += read;
+            if (_produced > _declaredLength)
+            {
+                throw new InvalidDataException("The ZIP entry produced more data than its declared uncompressed size.");
             }
             _totalCounter?.Add(read);
             _entryCounter?.Add(read);
+            return read;
         }
     }
 }

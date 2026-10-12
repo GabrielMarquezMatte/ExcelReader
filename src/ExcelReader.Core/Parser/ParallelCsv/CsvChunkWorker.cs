@@ -48,9 +48,9 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             if (IsMemory)
             {
-                return Excel.FromCsv(SliceAt(0), options);
+                return Excel.OpenCsv(SliceAt(0), options);
             }
-            return Excel.FromCsv(OpenAt(0), leaveOpen: false, options);
+            return Excel.OpenCsv(OpenAt(0), leaveOpen: false, options);
         }
 
         internal int ReadWindow(long offset, Span<byte> buffer)
@@ -112,7 +112,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvBoundColumnMap<T> map,
             TypeMapInfo<T> info,
             CsvReaderOptions readerOptions,
-            ExcelParserConfig config,
+            ExcelParserOptions config,
             List<T> models,
             CancellationToken ct)
         {
@@ -134,7 +134,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvBoundColumnMap<T> map,
             TypeMapInfo<T> info,
             CsvReaderOptions options,
-            ExcelParserConfig config,
+            ExcelParserOptions config,
             CancellationToken ct)
         {
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);

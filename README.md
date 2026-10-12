@@ -1,3 +1,5 @@
+![ExcelReader logo](https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png)
+
 # ExcelReader
 
 [![CI](https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/ci.yml)
@@ -40,6 +42,8 @@ foreach (Row row in workbook.FirstSheet)
 - [Writing workbooks](docs/guide/writing.md) — XLSX, XLSB (BIFF12) and XLS (BIFF8) writers, cell styles, typed records, and prefetch compression.
 - [CSV](docs/guide/csv.md) — reading, dialect sniffing, parallel parsing, and writing delimited text.
 - [Encrypted workbooks](docs/guide/encryption.md) — opening password-protected packages and encrypting written ones.
+- [Reading untrusted files](docs/guide/untrusted-input.md) — the resource limits that bound what one hostile file can cost, and how to reject one cleanly.
+- [Migrating to v7](docs/guide/migrating-to-v7.md) — porting `CsvParallel` code to `SheetParallel`, which now reads XLSX and XLSB on several threads too.
 - [Migrating to v6](docs/guide/migrating-to-v6.md) — porting v5 reader code to workbooks and sheets, and reading sheets in parallel.
 - [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
 
@@ -75,7 +79,7 @@ errors to stderr, so `convert` is safe to pipe.
 - Reads `.xlsx`, `.xlsb` (BIFF12), `.xls` (BIFF8), and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
 - `Excel.Open`/`OpenAsync` auto-detect XLSX/XLSB/XLS from the file signature. CSV has none, so pass `ExcelFileFormat.Csv` to open delimited text through the same entry point; `ExcelReaderOptions.Csv` carries the dialect, and `CsvReaderOptions.SniffDialect` infers it from the source.
 - A workbook hands out its sheets: `FirstSheet`, `Sheets[index]` or `SheetAt(index)`, and `TryGetSheet(name)`. CSV is a workbook with one unnamed sheet. Coming from v5? See [Migrating to v6](docs/guide/migrating-to-v6.md).
-- Sheets of one workbook can be read in parallel, one enumerator per thread.
+- Sheets of one workbook can be read in parallel, one enumerator per thread. One sheet of any format (XLSX, XLSB or CSV) can also be read on several threads with `SheetParallel`.
 - `sheet.Visibility` reports whether a sheet is hidden (`Visible`, `Hidden`, `VeryHidden`). Hidden sheets still enumerate their rows — filter on the value if you want them skipped. The writers take the same value via `AddSheet(name, visibility)`, and reject a workbook whose sheets would all be hidden.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.

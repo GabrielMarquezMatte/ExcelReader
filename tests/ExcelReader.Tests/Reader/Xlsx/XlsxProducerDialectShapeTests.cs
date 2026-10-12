@@ -72,7 +72,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                     [
                         new ExpectedCell(0, 0, CellType.Date, "45292"),
                         new ExpectedCell(0, 1, CellType.Empty, ""),
-                        new ExpectedCell(0, 2, CellType.Formula, "AB"),
+                        new ExpectedCell(0, 2, CellType.ExcelString, "AB"),
                         new ExpectedCell(0, 3, CellType.Empty, ""),
                         new ExpectedCell(0, 4, CellType.Error, "#N/A"),
                     ])

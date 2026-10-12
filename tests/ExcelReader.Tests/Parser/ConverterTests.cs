@@ -10,7 +10,7 @@ namespace ExcelReader.Tests.Parser
 
         private sealed class BrlMoneyConverter : IExcelCellConverter<decimal>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out decimal value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out decimal value)
             {
                 string text = cell.GetString().Replace("R$", string.Empty, StringComparison.Ordinal).Trim();
                 return decimal.TryParse(text, NumberStyles.Currency, CultureInfo.GetCultureInfo("pt-BR"), out value);
@@ -19,10 +19,10 @@ namespace ExcelReader.Tests.Parser
 
         private sealed class PercentConverter : IExcelCellConverter<Percent>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Percent value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out Percent value)
             {
                 string text = cell.GetString().TrimEnd('%');
-                if (double.TryParse(text, NumberStyles.Any, provider, out double pct))
+                if (double.TryParse(text, NumberStyles.Any, context.FormatProvider, out double pct))
                 {
                     value = new Percent(pct / 100.0);
                     return true;
@@ -34,10 +34,10 @@ namespace ExcelReader.Tests.Parser
 
         private sealed class NullablePercentConverter : IExcelCellConverter<Percent?>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Percent? value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out Percent? value)
             {
                 string text = cell.GetString().TrimEnd('%');
-                if (double.TryParse(text, NumberStyles.Any, provider, out double pct))
+                if (double.TryParse(text, NumberStyles.Any, context.FormatProvider, out double pct))
                 {
                     value = new Percent(pct / 100.0);
                     return true;
@@ -49,9 +49,9 @@ namespace ExcelReader.Tests.Parser
 
         private sealed class YearConverter : IExcelCellConverter<int>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out int value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out int value)
             {
-                if (cell.TryGetDateTime(isDate1904, out DateTime dt))
+                if (cell.TryGetDateTime(context.IsDate1904, out DateTime dt))
                 {
                     value = dt.Year;
                     return true;
@@ -86,7 +86,7 @@ namespace ExcelReader.Tests.Parser
 
         private sealed class MismatchedConverter : IExcelCellConverter<int>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out int value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out int value)
             {
                 value = 0;
                 return false;

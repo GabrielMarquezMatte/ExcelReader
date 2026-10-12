@@ -10,7 +10,6 @@ namespace ExcelReader.Core.Parser.Internal
     internal delegate bool ColumnParser<TModel>(
         ref TModel model,
         in Cell cell,
-        bool isDate1904,
-        IFormatProvider provider)
+        in ExcelRowContext context)
         where TModel : allows ref struct;
 }

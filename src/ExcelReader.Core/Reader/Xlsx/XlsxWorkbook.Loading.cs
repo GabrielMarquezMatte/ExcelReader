@@ -271,14 +271,14 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return -1;
             }
             ReadOnlySpan<byte> text = window[7..];
-            int rel = text.IndexOfAny((byte)'<', (byte)'&');
+            int rel = XlsxXml.IndexOfMarkup(text, out bool mayEscape);
             if (rel < 0 || !text[rel..].StartsWith("</t></si>"u8))
             {
                 return -1;
             }
             EnsureSharedFlat(flat + rel, flat);
             text[..rel].CopyTo(_sharedFlat.AsSpan(flat));
-            flat += rel;
+            flat += mayEscape ? XlsxXml.UnescapeXString(_sharedFlat.AsSpan(flat, rel)) : rel;
             return io.Pos + 7 + rel + 9;
         }
 

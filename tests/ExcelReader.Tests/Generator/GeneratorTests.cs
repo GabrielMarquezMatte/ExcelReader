@@ -224,7 +224,7 @@ namespace ExcelReader.Tests.Generator
                 {
                     public sealed class WrongConverter : IExcelCellConverter<int>
                     {
-                        public bool TryConvert(in Cell cell, bool isDate1904, System.IFormatProvider provider, out int value)
+                        public bool TryConvert(in Cell cell, in ExcelRowContext context, out int value)
                         {
                             value = 0;
                             return true;
@@ -258,7 +258,7 @@ namespace ExcelReader.Tests.Generator
                 {
                     public sealed class UpperCaseConverter : IExcelCellConverter<string>, IExcelCellWriter<string>
                     {
-                        public bool TryConvert(in Cell cell, bool isDate1904, System.IFormatProvider provider, out string value)
+                        public bool TryConvert(in Cell cell, in ExcelRowContext context, out string value)
                         {
                             value = cell.GetString().ToUpperInvariant();
                             return true;
@@ -645,6 +645,42 @@ namespace ExcelReader.Tests.Generator
         }
 
         [Fact]
+        public void RequiredMembersCompile()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.RequiredMembers
+                {
+                    public class Base
+                    {
+                        public required string Inherited { get; set; }
+                    }
+
+                    [ExcelSerializable]
+                    public partial class Model : Base
+                    {
+                        public required int Id { get; set; }
+                        [ExcelRequired]
+                        public required string Name { get; init; }
+                        public string? Note { get; set; }
+                    }
+
+                    [ExcelSerializable]
+                    public partial struct StructModel
+                    {
+                        public StructModel() { }
+                        public required int Id { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+        }
+
+        [Fact]
         public void RequiredPropertyWithoutPublicSetterReportsEXR009()
         {
             const string source = """
@@ -753,7 +789,7 @@ namespace ExcelReader.Tests.Generator
                         return ms;
                     }
 
-                    private static async Task<string> ParseAsync<T>(ExcelParserConfig? config, string[] header, string[] row, Func<T, string> describe)
+                    private static async Task<string> ParseAsync<T>(ExcelParserOptions? config, string[] header, string[] row, Func<T, string> describe)
                         where T : IExcelRowMap<T>
                     {
                         using MemoryStream ms = await BuildAsync(header, row);
@@ -775,7 +811,7 @@ namespace ExcelReader.Tests.Generator
 
                     public static async Task<string[]> RunAsync()
                     {
-                        var ordinal = new ExcelParserConfig { ColumnNameComparer = StringComparer.Ordinal };
+                        var ordinal = new ExcelParserOptions { ColumnNameComparer = StringComparer.Ordinal };
                         return new[]
                         {
                             await ParseAsync<CaseModel>(null, new[] { "Name" }, new[] { "A" }, static m => m.Upper + "," + m.Lower),
@@ -904,7 +940,7 @@ namespace ExcelReader.Tests.Generator
             Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
             Assert.Contains("ref partial struct Reading : global::ExcelReader.Core.Parser.IExcelRowMap<", generated, StringComparison.Ordinal);
             Assert.Contains("global::ExcelReader.Core.Writer.IExcelRecordMap<", generated, StringComparison.Ordinal);
-            Assert.Contains("global::ExcelReader.Core.Parser.ExcelCellReaders.Utf8(in c, d, pr, out global::System.ReadOnlySpan<byte> v)", generated, StringComparison.Ordinal);
+            Assert.Contains("global::ExcelReader.Core.Parser.ExcelCellReaders.Utf8(in c, in x, out global::System.ReadOnlySpan<byte> v)", generated, StringComparison.Ordinal);
             Assert.Contains("row.Write(global::System.Text.Encoding.UTF8.GetString(m.Station))", generated, StringComparison.Ordinal);
         }
     }

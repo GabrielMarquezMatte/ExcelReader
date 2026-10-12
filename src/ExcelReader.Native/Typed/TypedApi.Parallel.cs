@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using ExcelReader.Core.Parser.ParallelCsv;
+using ExcelReader.Core.Parser.SheetPipeline;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
@@ -30,7 +32,76 @@ namespace ExcelReader.Native.Typed
                 LastParseRanInParallel = true;
                 return ParseCsvInParallel(handle, source, csv.Options, specs, headerRow, degreeOfParallelism, chunkSizeOverride, out table);
             }
+            if (dop > 1 && sheet >= 0 && sheet < handle.Workbook.SheetCount
+                && SheetPipelineSource.TryCreate(handle.Workbook.SheetAt(sheet), dop) is { } pipeline)
+            {
+                LastParseRanInParallel = true;
+                return ParseSheetInParallel(handle, sheet, pipeline, specs, headerRow, dop, chunkSizeOverride, out table);
+            }
             return ParseSequential(handle, sheet, specs, headerRow, out table);
+        }
+
+        private static int ParseSheetInParallel(NativeHandle handle, int sheet, SheetPipelineSource pipeline, NativeColumnSpec[] specs,
+            int headerRow, int dop, int chunkSizeOverride, out NativeTable table)
+        {
+            table = default;
+            if (!TryValidateArguments(specs, headerRow, out string? argumentError))
+            {
+                NativeApi.SetLastError(argumentError);
+                return NativeStatus.InvalidArgument;
+            }
+            NativeApi.ClearLastError();
+            var seeded = new ConcurrentBag<PartitionTable>();
+            try
+            {
+                int[] columnIndices = new int[specs.Length];
+                using (IExcelRowEnumerator rows = handle.Workbook.SheetAt(sheet).GetEnumerator())
+                {
+                    if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
+                    {
+                        NativeApi.SetLastError(resolveError);
+                        return NativeStatus.InvalidArgument;
+                    }
+                }
+
+                bool isDate1904 = handle.Workbook.IsDate1904;
+                RowAggregation<PartitionTable> aggregation = new()
+                {
+                    Seed = () =>
+                    {
+                        var partition = new PartitionTable(specs);
+                        seeded.Add(partition);
+                        return partition;
+                    },
+                    Accumulate = (ref PartitionTable state, Row row) => state.Append(row, columnIndices, isDate1904),
+                    Combine = PartitionTable.Combine,
+                };
+                int chunkBytes = chunkSizeOverride > 0 ? chunkSizeOverride : SheetPipelineSource.DefaultChunkBytes;
+                PartitionTable merged = Task.Run(() => SheetPipelineRunner.AggregateAsync(
+                    pipeline, aggregation, null, headerRow, dop, chunkBytes, CancellationToken.None)).GetAwaiter().GetResult();
+                if (merged.FailedColumn >= 0)
+                {
+                    NativeApi.SetLastError(DescribeFailedColumn(specs, merged.FailedColumn));
+                    return NativeStatus.Error;
+                }
+                table = BuildTable([.. merged.Parts], dop);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                table = default;
+                return NativeStatus.Error;
+            }
+            finally
+            {
+                // The runner drops states on failure and recovery, and Combine folds builders into another state:
+                // every seeded state is disposed, and disposing a builder twice is a no-op.
+                foreach (PartitionTable partition in seeded)
+                {
+                    partition.Dispose();
+                }
+            }
         }
 
         private static int ParseCsvInParallel(NativeHandle handle, CsvChunkSource source, CsvReaderOptions reader, NativeColumnSpec[] specs,
@@ -57,22 +128,28 @@ namespace ExcelReader.Native.Typed
                 }
 
                 bool isDate1904 = handle.Workbook.IsDate1904;
-                CsvAggregation<PartitionTable> aggregation = new()
+                RowAggregation<PartitionTable> aggregation = new()
                 {
                     Seed = () => new PartitionTable(specs),
                     Accumulate = (ref PartitionTable state, Row row) => state.Append(row, columnIndices, isDate1904),
                     Combine = PartitionTable.Combine,
                 };
-                CsvParallelOptions options = new() { DegreeOfParallelism = degreeOfParallelism, HeaderRow = headerRow, Reader = reader };
                 PartitionTable merged = Task.Run(() => ParallelCsvProcessor.RunPartitionedAsync(
-                    source, aggregation, options, chunkSizeOverride, CancellationToken.None)).GetAwaiter().GetResult();
-                if (merged.FailedColumn >= 0)
+                    source, aggregation, reader, headerRow, degreeOfParallelism, chunkSizeOverride, CancellationToken.None)).GetAwaiter().GetResult();
+                try
                 {
-                    NativeApi.SetLastError(DescribeFailedColumn(specs, merged.FailedColumn));
-                    return NativeStatus.Error;
+                    if (merged.FailedColumn >= 0)
+                    {
+                        NativeApi.SetLastError(DescribeFailedColumn(specs, merged.FailedColumn));
+                        return NativeStatus.Error;
+                    }
+                    table = BuildTable([.. merged.Parts], ParallelCsvFactory.Normalize(degreeOfParallelism));
+                    return NativeStatus.Ok;
                 }
-                table = BuildTable([.. merged.Parts], ParallelCsvFactory.Normalize(degreeOfParallelism));
-                return NativeStatus.Ok;
+                finally
+                {
+                    merged.Dispose();
+                }
             }
             catch (Exception exception)
             {
@@ -92,7 +169,15 @@ namespace ExcelReader.Native.Typed
             return builders;
         }
 
-        private sealed class PartitionTable
+        private static void DisposeAll(ColumnBuilder[] builders)
+        {
+            foreach (ColumnBuilder builder in builders)
+            {
+                builder.Dispose();
+            }
+        }
+
+        private sealed class PartitionTable : IDisposable
         {
             private readonly ColumnBuilder[] _builders;
 
@@ -114,14 +199,24 @@ namespace ExcelReader.Native.Typed
                 }
             }
 
+            public void Dispose()
+            {
+                foreach (ColumnBuilder[] part in Parts)
+                {
+                    DisposeAll(part);
+                }
+            }
+
             internal static PartitionTable Combine(PartitionTable left, PartitionTable right)
             {
                 if (left.FailedColumn >= 0)
                 {
+                    right.Dispose();
                     return left;
                 }
                 if (right.FailedColumn >= 0)
                 {
+                    left.Dispose();
                     return right;
                 }
                 left.Parts.AddRange(right.Parts);

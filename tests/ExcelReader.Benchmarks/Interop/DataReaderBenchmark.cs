@@ -48,7 +48,7 @@ namespace ExcelReader.Benchmarks
         public long DataReader_GetValue()
         {
             using IExcelWorkbook reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
+            using IDataReader data = new SheetDataReader(reader.FirstSheet);
             long acc = 0;
             while (data.Read())
             {
@@ -64,7 +64,7 @@ namespace ExcelReader.Benchmarks
         public long DataReader_TypedGetters()
         {
             using IExcelWorkbook reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
+            using IDataReader data = new SheetDataReader(reader.FirstSheet);
             long acc = 0;
             while (data.Read())
             {
@@ -80,7 +80,7 @@ namespace ExcelReader.Benchmarks
         public long DataReader_GetBytes()
         {
             using IExcelWorkbook reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
+            using IDataReader data = new SheetDataReader(reader.FirstSheet);
             long acc = 0;
             while (data.Read())
             {
@@ -93,7 +93,7 @@ namespace ExcelReader.Benchmarks
         public int DataTable_Load()
         {
             using IExcelWorkbook reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
+            using IDataReader data = new SheetDataReader(reader.FirstSheet);
             var table = new DataTable();
             table.Load(data);
             return table.Rows.Count;

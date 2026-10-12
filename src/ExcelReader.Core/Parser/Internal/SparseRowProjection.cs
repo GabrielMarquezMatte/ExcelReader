@@ -73,8 +73,7 @@ namespace ExcelReader.Core.Parser.Internal
             ColumnBinding<TModel>[] bindings,
             scoped Span<bool> seen,
             bool track,
-            bool isDate1904,
-            IFormatProvider provider,
+            in ExcelRowContext context,
             bool throwOnParseFailure,
             int rowNumber,
             ref TModel model)
@@ -107,7 +106,7 @@ namespace ExcelReader.Core.Parser.Internal
                     bindingIndex++;
                     continue;
                 }
-                if (binding.Parser(ref model, in cell, isDate1904, provider))
+                if (binding.Parser(ref model, in cell, in context))
                 {
                     if (track && binding.RequireValue)
                     {

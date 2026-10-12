@@ -6,15 +6,56 @@ using System.Text;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Reader.Zip;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 using ExcelReader.Tests.Crypto;
+using ExcelReader.Tests.Reader.Tables;
 using ExcelReader.Tests.Reader.Xls;
+using B = ExcelReader.Tests.Reader.Xlsb.Biff12Build;
 
 namespace ExcelReader.Tests.Reader
 {
     public class ReaderLimitTests
     {
+        [Theory]
+        [InlineData("A1:B2", "")]
+        [InlineData("nonsense", "")]
+        [InlineData("A0:A2", "")]
+        [InlineData("A1:A2", " headerRowCount=\"2\"")]
+        [InlineData("A1:A2", " totalsRowCount=\"x\"")]
+        [InlineData("A1:A1", " totalsRowCount=\"1\"")]
+        public void MalformedXlsxTablePartThrowsInvalidData(string reference, string attributes)
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsx(
+                """<row r="1"><c r="A1"><v>1</v></c></row>""",
+                TableWorkbooks.Table(reference, """<tableColumn id="1" name="A"/>""", attributes));
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(ms));
+        }
+
+        [Fact]
+        public void XlsxTablePartWithoutATableElementThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsx("""<row r="1"><c r="A1"><v>1</v></c></row>""", "<nothing/>");
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(ms));
+        }
+
+        [Fact]
+        public void XlsxTableRelationshipToAMissingPartThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsx(
+                """<row r="1"><c r="A1"><v>1</v></c></row>""",
+                TableWorkbooks.Table("A1:A1", """<tableColumn id="1" name="A"/>"""),
+                target: "../tables/table9.xml");
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(ms));
+            Assert.Contains("xl/tables/table9.xml", ex.Message, StringComparison.Ordinal);
+        }
+
         [Fact]
         public void CellAccumulatorRejectsColumnIndexAtOrAboveExcelLimit()
         {
@@ -352,11 +393,99 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal(value.Length, e.Current[0].GetString().Length);
         }
 
+        private const int BudgetRows = 5_000;
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void RereadingASheetStartsAFreshTotalDecompressedBudget(bool xlsb, bool fromStream)
+        {
+            byte[] package = WriteTextRows(xlsb, sharedStrings: false);
+            (long total, long sheet) = EntrySizes(package, xlsb);
+            var options = new ExcelReaderOptions { MaxTotalDecompressedBytes = total + (sheet / 2) };
+
+            using MemoryStream stream = new(package);
+            using IExcelWorkbook workbook = fromStream
+                ? Excel.Open(stream, options: options)
+                : Excel.Open(package, options);
+            for (int pass = 0; pass < 3; pass++)
+            {
+                Assert.Equal(BudgetRows, CountRows(workbook.FirstSheet));
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void OneSheetReadStillCountsTheSharedStringsTowardTheTotalBudget(bool xlsb)
+        {
+            byte[] package = WriteTextRows(xlsb, sharedStrings: true);
+            (long total, long sheet) = EntrySizes(package, xlsb);
+            var options = new ExcelReaderOptions { MaxTotalDecompressedBytes = total - (sheet / 2) };
+
+            using IExcelWorkbook workbook = Excel.Open(package, options);
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => CountRows(workbook.FirstSheet));
+            Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
+        }
+
+        private static byte[] WriteTextRows(bool xlsb, bool sharedStrings)
+        {
+            using MemoryStream ms = new();
+            if (xlsb)
+            {
+                using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(ms, leaveOpen: true, new XlsbWriterOptions { UseSharedStrings = sharedStrings });
+                using (XlsbSheetWriter sheet = workbook.AddSheet("S"))
+                {
+                    for (int i = 0; i < BudgetRows; i++)
+                    {
+                        using XlsbRowWriter row = sheet.StartRow();
+                        row.Write(string.Create(CultureInfo.InvariantCulture, $"value {i:D6} padding padding padding"));
+                    }
+                }
+                workbook.End();
+            }
+            else
+            {
+                using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(ms, leaveOpen: true, new XlsxWriterOptions { UseSharedStrings = sharedStrings });
+                using (XlsxSheetWriter sheet = workbook.AddSheet("S"))
+                {
+                    for (int i = 0; i < BudgetRows; i++)
+                    {
+                        using XlsxRowWriter row = sheet.StartRow();
+                        row.Write(string.Create(CultureInfo.InvariantCulture, $"value {i:D6} padding padding padding"));
+                    }
+                }
+                workbook.End();
+            }
+            return ms.ToArray();
+        }
+
+        private static (long Total, long Sheet) EntrySizes(byte[] package, bool xlsb)
+        {
+            using MemoryStream ms = new(package);
+            using ZipArchive zip = new(ms, ZipArchiveMode.Read);
+            long total = zip.Entries.Sum(entry => entry.Length);
+            long sheet = zip.GetEntry(xlsb ? "xl/worksheets/sheet1.bin" : "xl/worksheets/sheet1.xml")!.Length;
+            return (total, sheet);
+        }
+
+        private static int CountRows(IExcelSheet sheet)
+        {
+            int rows = 0;
+            foreach (Row row in sheet)
+            {
+                rows++;
+            }
+            return rows;
+        }
+
         [Fact]
         public async Task LimitedReadStreamCoversUnsupportedOperationsAndByteArrayAsyncRead()
         {
             await using MemoryStream inner = new([1, 2, 3, 4, 5]);
-            await using LimitedReadStream limited = new(inner, new DecompressedByteCounter(limit: 10));
+            await using LimitedReadStream limited = new(inner, declaredLength: 5, new DecompressedByteCounter(limit: 10));
 
             Assert.True(limited.CanRead);
             Assert.False(limited.CanSeek);
@@ -382,6 +511,7 @@ namespace ExcelReader.Tests.Reader
             using MemoryStream inner = new([1, 2, 3, 4]);
             using LimitedReadStream limited = new(
                 inner,
+                declaredLength: 4,
                 totalCounter: null,
                 entryLimitName: nameof(ExcelReaderOptions.MaxCellBytes),
                 entryLimit: 2);
@@ -608,5 +738,89 @@ namespace ExcelReader.Tests.Reader
             Assert.Throws<InvalidDataException>(() =>
                 CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 0, size: 256));
         }
+
+        [Fact]
+        public void SyntheticXlsbTableParses()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(
+            [
+                .. TableWorkbooks.BeginList(0, 1, 0, 0, 1, 0, "T"),
+                .. TableWorkbooks.ListColumn(1, "H"),
+                .. TableWorkbooks.StyleClient("TableStyleLight1"),
+            ]);
+            using XlsbWorkbook workbook = Excel.FromXlsb(ms);
+
+            ExcelTable table = Assert.Single(workbook.Tables);
+            Assert.Equal(("T", "A1:A2", "TableStyleLight1"), (table.Name, table.Ref, table.StyleName));
+            Assert.Equal(["H"], table.ColumnNames);
+        }
+
+        [Fact]
+        public void TruncatedXlsbBeginListThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(B.Record(Brt.BeginList, new byte[10]));
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
+        }
+
+        [Fact]
+        public void XlsbTablePartWithoutBeginListThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(TableWorkbooks.ListColumn(1, "H"));
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
+        }
+
+        [Fact]
+        public void XlsbTableWithNegativeRowsThrowsInvalidData()
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(
+            [
+                .. TableWorkbooks.BeginList(0xFFFFFFFF, 1, 0, 0, 1, 0, "T"),
+                .. TableWorkbooks.ListColumn(1, "H"),
+            ]);
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(ms));
+        }
+
+        [Theory]
+        [InlineData(0xFFFFFFFFu)]
+        [InlineData(0u)]
+        public void XlsbTableOverMalformedRowNumbersThrowsInvalidData(uint badRow)
+        {
+            using MemoryStream ms = TableWorkbooks.Xlsb(
+                [.. TableWorkbooks.BeginList(0, 3, 0, 0, 1, 0, "T"), .. TableWorkbooks.ListColumn(1, "H")],
+                [
+                    .. B.Record(Brt.RowHdr, B.U32(0)),
+                    .. B.Record(Brt.CellSt, B.CellSt(0, 0, "H")),
+                    .. B.Record(Brt.RowHdr, B.U32(1)),
+                    .. B.Record(Brt.CellRk, B.CellRk(0, 0, (1u << 2) | 0x02)),
+                    .. B.Record(Brt.RowHdr, B.U32(badRow)),
+                    .. B.Record(Brt.CellRk, B.CellRk(0, 0, (2u << 2) | 0x02)),
+                    .. B.Record(Brt.RowHdr, B.U32(2)),
+                    .. B.Record(Brt.CellRk, B.CellRk(0, 0, (3u << 2) | 0x02)),
+                    .. B.Record(Brt.EndSheetData),
+                ]);
+            using XlsbWorkbook workbook = Excel.FromXlsb(ms);
+            using IExcelRowEnumerator rows = Assert.Single(workbook.Tables).AsSheet().GetEnumerator();
+
+            Assert.Throws<InvalidDataException>(() =>
+            {
+                while (rows.MoveNext())
+                {
+                }
+            });
+        }
+
+        [Fact]
+        public async Task MalformedXlsbTableFromStreamingSourceThrowsInvalidData()
+        {
+            byte[] bytes = TableWorkbooks.Xlsb(TableWorkbooks.ListColumn(1, "H")).ToArray();
+
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(new StreamBackedMemory(bytes)));
+            await Assert.ThrowsAsync<InvalidDataException>(async () => await Excel.FromXlsbAsync(new StreamBackedMemory(bytes), leaveOpen: false, ct: TestContext.Current.CancellationToken));
+        }
+
+        private sealed class StreamBackedMemory(byte[] bytes) : MemoryStream(bytes);
     }
 }

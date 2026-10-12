@@ -1,0 +1,445 @@
+using System.Data;
+using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Schema;
+
+namespace ExcelReader.Core.Reader
+{
+    /// <summary>
+    /// Adapts one <see cref="IExcelSheet"/> to <see cref="IDataReader"/>, so it
+    /// can feed <c>SqlBulkCopy</c>, <c>DataTable.Load</c>, Dapper, or any other ADO.NET consumer directly.
+    /// </summary>
+    /// <remarks>
+    /// The column shape is fixed once, at construction time, from the header row (or from the first data
+    /// row when <see cref="SheetDataReaderOptions.HeaderRow"/> is 0) — it never grows as later, wider rows come in. There is no schema
+    /// pass, so <see cref="GetFieldType"/>, <see cref="GetValue"/>, and the typed getters all read the
+    /// <em>current</em> row's own cell type; a consumer that builds a schema from the first
+    /// <see cref="Read"/> (e.g. <c>DataTable.Load</c>) locks in that row's types for the whole load.
+    /// <para>
+    /// One <see cref="SheetDataReader"/> reads one sheet: <see cref="NextResult"/> always returns
+    /// <see langword="false"/>. To read every sheet, construct one per <see cref="IExcelWorkbook.SheetAt"/>.
+    /// </para>
+    /// <para>
+    /// Disposing this reader disposes the row enumerator it created, not the workbook the sheet came
+    /// from — the caller still owns that.
+    /// </para>
+    /// </remarks>
+    public sealed class SheetDataReader : IDataReader
+    {
+        private readonly IExcelRowEnumerator _rows;
+        private readonly bool _isDate1904;
+        private readonly string _sheetName;
+        private readonly int _firstColumn;
+        private readonly string?[] _names;
+        private readonly Dictionary<string, int> _ordinals;
+        private readonly bool _hasPendingRow;
+        private bool _pendingConsumed;
+        private bool _rowAvailable;
+        private bool _disposed;
+
+        /// <summary>
+        /// Wraps <paramref name="sheet"/>.
+        /// </summary>
+        /// <param name="sheet">The sheet to read. Its workbook stays owned by the caller.</param>
+        /// <param name="options">The header row; <see cref="SheetDataReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><see cref="SheetDataReaderOptions.HeaderRow"/> is negative.</exception>
+        /// <exception cref="InvalidOperationException"><see cref="SheetDataReaderOptions.HeaderRow"/> is positive and <paramref name="sheet"/> is a table view (<see cref="ExcelTable.AsSheet"/>) of a table without a header row.</exception>
+        public SheetDataReader(IExcelSheet sheet, SheetDataReaderOptions? options = null)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            int headerRow = (options ?? SheetDataReaderOptions.Default).HeaderRow;
+            ArgumentOutOfRangeException.ThrowIfNegative(headerRow, nameof(options));
+            if (headerRow > 0)
+            {
+                ExcelTableSheet.ThrowIfHeaderless(sheet);
+            }
+
+            _isDate1904 = sheet.IsDate1904;
+            _sheetName = sheet.Name;
+            _firstColumn = ExcelTableSheet.FirstColumnOf(sheet);
+            _rows = sheet.GetEnumerator();
+            _pendingConsumed = true;
+            try
+            {
+                if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
+                {
+                    _names = ReadHeaderNames(_rows.Current, _firstColumn);
+                }
+                else if (headerRow > 0)
+                {
+                    _names = [];
+                }
+                else
+                {
+                    _hasPendingRow = _rows.MoveNext();
+                    _pendingConsumed = false;
+                    _names = _hasPendingRow ? new string?[Math.Max(0, _rows.Current.ColumnCount - _firstColumn)] : [];
+                }
+                _ordinals = BuildOrdinals(_names);
+            }
+            catch
+            {
+                _rows.Dispose();
+                throw;
+            }
+        }
+
+        private static string?[] ReadHeaderNames(Row header, int firstColumn)
+        {
+            string?[] names = new string?[Math.Max(0, header.ColumnCount - firstColumn)];
+            foreach (RowCell cell in header.Cells)
+            {
+                string text = cell.Value.GetString().Trim();
+                names[cell.ColumnIndex - firstColumn] = text.Length == 0 ? null : text;
+            }
+            return names;
+        }
+
+        private static Dictionary<string, int> BuildOrdinals(string?[] names)
+        {
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (names[i] is { } name)
+                {
+                    map[name] = i;
+                }
+            }
+            return map;
+        }
+
+        /// <inheritdoc/>
+        public int FieldCount => _names.Length;
+
+        /// <inheritdoc/>
+        public int Depth => 0;
+
+        /// <inheritdoc/>
+        public bool IsClosed => _disposed;
+
+        /// <inheritdoc/>
+        public int RecordsAffected => -1;
+
+        /// <inheritdoc/>
+        public object this[int i] => GetValue(i);
+
+        /// <inheritdoc/>
+        public object this[string name] => GetValue(GetOrdinal(name));
+
+        /// <inheritdoc/>
+        public bool Read()
+        {
+            if (_pendingConsumed)
+            {
+                return _rowAvailable = _rows.MoveNext();
+            }
+            _pendingConsumed = true;
+            _rowAvailable = _hasPendingRow;
+            return _rowAvailable;
+        }
+
+        /// <summary>Always returns <see langword="false"/> — see the type-level remarks.</summary>
+        public bool NextResult()
+        {
+            return false;
+        }
+
+        /// <inheritdoc/>
+        public void Close()
+        {
+            Dispose();
+        }
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            _rows.Dispose();
+        }
+
+        /// <inheritdoc/>
+        public string GetName(int i)
+        {
+            return _names[i] ?? $"Column{i}";
+        }
+
+        /// <inheritdoc/>
+        public int GetOrdinal(string name)
+        {
+            return _ordinals.TryGetValue(name, out int i) ? i : throw new KeyNotFoundException($"Column '{name}' was not found.");
+        }
+
+        /// <inheritdoc/>
+        public string GetDataTypeName(int i)
+        {
+            return GetFieldType(i).Name;
+        }
+
+        /// <inheritdoc/>
+        [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
+        public Type GetFieldType(int i)
+        {
+            return CurrentCell(i).Type switch
+            {
+                CellType.Number => typeof(double),
+                CellType.Date => typeof(DateTime),
+                CellType.Boolean => typeof(bool),
+                _ => typeof(string),
+            };
+        }
+
+        /// <inheritdoc/>
+        public object GetValue(int i)
+        {
+            Cell cell = CurrentCell(i);
+            return cell.Type switch
+            {
+                CellType.Empty => DBNull.Value,
+                CellType.Number => cell.TryGetDouble(out double d) ? d : cell.GetString(),
+                CellType.Date => cell.TryGetDateTime(_isDate1904, out DateTime dt) ? dt : cell.GetString(),
+                CellType.Boolean => ExcelCellReaders.Bool(in cell, default, out bool b) ? b : cell.GetString(),
+                _ => cell.GetString(),
+            };
+        }
+
+        /// <inheritdoc/>
+        public int GetValues(object[] values)
+        {
+            ArgumentNullException.ThrowIfNull(values);
+            int n = Math.Min(values.Length, FieldCount);
+            for (int i = 0; i < n; i++)
+            {
+                values[i] = GetValue(i);
+            }
+            return n;
+        }
+
+        /// <inheritdoc/>
+        public bool IsDBNull(int i)
+        {
+            return CurrentCell(i).Type == CellType.Empty;
+        }
+
+        /// <inheritdoc/>
+        public string GetString(int i)
+        {
+            return CurrentCell(i).GetString();
+        }
+
+        /// <inheritdoc/>
+        public bool GetBoolean(int i)
+        {
+            Cell cell = CurrentCell(i);
+            return ExcelCellReaders.Bool(in cell, default, out bool value)
+                ? value
+                : throw new FormatException($"Column {i} is not a valid boolean.");
+        }
+
+        /// <inheritdoc/>
+        public DateTime GetDateTime(int i)
+        {
+            Cell cell = CurrentCell(i);
+            return cell.TryGetDateTime(_isDate1904, out DateTime value)
+                ? value
+                : throw new FormatException($"Column {i} is not a valid date/time.");
+        }
+
+        /// <inheritdoc/>
+        public byte GetByte(int i)
+        {
+            return GetParsed<byte>(i);
+        }
+
+        /// <inheritdoc/>
+        public short GetInt16(int i)
+        {
+            return GetParsed<short>(i);
+        }
+
+        /// <inheritdoc/>
+        public int GetInt32(int i)
+        {
+            return GetParsed<int>(i);
+        }
+
+        /// <inheritdoc/>
+        public long GetInt64(int i)
+        {
+            return GetParsed<long>(i);
+        }
+
+        /// <inheritdoc/>
+        public float GetFloat(int i)
+        {
+            return GetParsed<float>(i);
+        }
+
+        /// <inheritdoc/>
+        public double GetDouble(int i)
+        {
+            return GetParsed<double>(i);
+        }
+
+        /// <inheritdoc/>
+        public decimal GetDecimal(int i)
+        {
+            return GetParsed<decimal>(i);
+        }
+
+        /// <inheritdoc/>
+        public Guid GetGuid(int i)
+        {
+            Cell cell = CurrentCell(i);
+            return cell.TryParse(CultureInfo.InvariantCulture, out Guid value)
+                ? value
+                : throw new FormatException($"Column {i} is not a valid Guid.");
+        }
+
+        /// <inheritdoc/>
+        public char GetChar(int i)
+        {
+            string s = GetString(i);
+            return s.Length > 0 ? s[0] : throw new InvalidCastException($"Column {i} is empty; no char value.");
+        }
+
+        /// <inheritdoc/>
+        [SkipLocalsInit]
+        public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length)
+        {
+            Cell cell = CurrentCell(i);
+            if (cell.Type == CellType.Empty)
+            {
+                return CopyBytesSlice(default, fieldOffset, buffer, bufferoffset, length);
+            }
+            if (!cell.Value.IsEmpty)
+            {
+                return CopyBytesSlice(cell.Value, fieldOffset, buffer, bufferoffset, length);
+            }
+            Span<byte> scratch = stackalloc byte[32];
+            ReadOnlySpan<byte> formatted = cell.TryFormat(scratch, out int written) ? scratch[..written] : default;
+            return CopyBytesSlice(formatted, fieldOffset, buffer, bufferoffset, length);
+        }
+
+        private static long CopyBytesSlice(ReadOnlySpan<byte> source, long fieldOffset, byte[]? buffer, int bufferoffset, int length)
+        {
+            if (buffer is null)
+            {
+                return source.Length;
+            }
+            int available = (int)Math.Max(0, source.Length - fieldOffset);
+            int toCopy = Math.Max(0, Math.Min(length, available));
+            if (toCopy > 0)
+            {
+                source.Slice((int)fieldOffset, toCopy).CopyTo(buffer.AsSpan(bufferoffset, toCopy));
+            }
+            return toCopy;
+        }
+
+        /// <inheritdoc/>
+        public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length)
+        {
+            string s = GetString(i);
+            if (buffer is null)
+            {
+                return s.Length;
+            }
+            int available = (int)Math.Max(0, s.Length - fieldoffset);
+            int toCopy = Math.Max(0, Math.Min(length, available));
+            if (toCopy > 0)
+            {
+                s.CopyTo((int)fieldoffset, buffer, bufferoffset, toCopy);
+            }
+            return toCopy;
+        }
+
+        /// <inheritdoc/>
+        public IDataReader GetData(int i)
+        {
+            throw new NotSupportedException("SheetDataReader has no nested result sets.");
+        }
+
+        /// <inheritdoc/>
+        [UnconditionalSuppressMessage("Trimming", "IL2111",
+            Justification = "typeof(Type) as the 'DataType' schema column's own type is a metadata literal, never reflected over.")]
+        public DataTable GetSchemaTable()
+        {
+            var table = new DataTable();
+            table.Columns.Add(SchemaTableColumn.ColumnName, typeof(string));
+            table.Columns.Add(SchemaTableColumn.ColumnOrdinal, typeof(int));
+            table.Columns.Add(SchemaTableColumn.ColumnSize, typeof(int));
+            table.Columns.Add(SchemaTableColumn.NumericPrecision, typeof(short));
+            table.Columns.Add(SchemaTableColumn.NumericScale, typeof(short));
+            table.Columns.Add(SchemaTableColumn.DataType, typeof(Type));
+            table.Columns.Add(SchemaTableColumn.IsLong, typeof(bool));
+            table.Columns.Add(SchemaTableColumn.AllowDBNull, typeof(bool));
+            table.Columns.Add(SchemaTableColumn.IsUnique, typeof(bool));
+            table.Columns.Add(SchemaTableColumn.IsKey, typeof(bool));
+            table.Columns.Add(SchemaTableOptionalColumn.IsAutoIncrement, typeof(bool));
+            table.Columns.Add(SchemaTableOptionalColumn.IsReadOnly, typeof(bool));
+            table.Columns.Add(SchemaTableOptionalColumn.IsRowVersion, typeof(bool));
+            table.Columns.Add(SchemaTableOptionalColumn.IsHidden, typeof(bool));
+            table.Columns.Add(SchemaTableColumn.IsExpression, typeof(bool));
+            table.Columns.Add(SchemaTableColumn.IsAliased, typeof(bool));
+            table.Columns.Add(SchemaTableColumn.BaseSchemaName, typeof(string));
+            table.Columns.Add(SchemaTableOptionalColumn.BaseCatalogName, typeof(string));
+            table.Columns.Add(SchemaTableColumn.BaseTableName, typeof(string));
+            table.Columns.Add(SchemaTableColumn.BaseColumnName, typeof(string));
+            for (int i = 0; i < FieldCount; i++)
+            {
+                Type type = _rowAvailable ? GetFieldType(i) : typeof(string);
+                string name = GetName(i);
+                DataRow row = table.NewRow();
+                row[SchemaTableColumn.ColumnName] = name;
+                row[SchemaTableColumn.ColumnOrdinal] = i;
+                row[SchemaTableColumn.ColumnSize] = -1;
+                row[SchemaTableColumn.NumericPrecision] = (short)0;
+                row[SchemaTableColumn.NumericScale] = (short)0;
+                row[SchemaTableColumn.DataType] = type;
+                row[SchemaTableColumn.IsLong] = false;
+                row[SchemaTableColumn.AllowDBNull] = true;
+                row[SchemaTableColumn.IsUnique] = false;
+                row[SchemaTableColumn.IsKey] = false;
+                row[SchemaTableOptionalColumn.IsAutoIncrement] = false;
+                row[SchemaTableOptionalColumn.IsReadOnly] = true;
+                row[SchemaTableOptionalColumn.IsRowVersion] = false;
+                row[SchemaTableOptionalColumn.IsHidden] = false;
+                row[SchemaTableColumn.IsExpression] = false;
+                row[SchemaTableColumn.IsAliased] = false;
+                row[SchemaTableColumn.BaseSchemaName] = DBNull.Value;
+                row[SchemaTableOptionalColumn.BaseCatalogName] = DBNull.Value;
+                row[SchemaTableColumn.BaseTableName] = _sheetName;
+                row[SchemaTableColumn.BaseColumnName] = name;
+                table.Rows.Add(row);
+            }
+            return table;
+        }
+
+        private Cell CurrentCell(int i)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(i);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(i, FieldCount);
+            if (!_rowAvailable)
+            {
+                throw new InvalidOperationException("No current row; call Read() first.");
+            }
+            return _rows.Current[_firstColumn + i];
+        }
+
+        private T GetParsed<T>(int i) where T : struct, IUtf8SpanParsable<T>
+        {
+            Cell cell = CurrentCell(i);
+            return cell.TryParse(CultureInfo.InvariantCulture, out T value)
+                ? value
+                : throw new FormatException($"Column {i} is not a valid {typeof(T).Name}.");
+        }
+    }
+}

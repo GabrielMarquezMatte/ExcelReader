@@ -14,8 +14,6 @@ namespace ExcelReader.Core.Reader.Internal
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool TryParse(ReadOnlySpan<byte> s, out double value) => TryParse(s, MaxMantissaDigits, out value);
 
-        // Rejects text with more significant digits than a double round-trips, so a caller that keeps
-        // the double in place of the text never loses digits a decimal or long parse of the text would see.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool TryParseLossless(ReadOnlySpan<byte> s, out double value) => TryParse(s, MaxLosslessDigits, out value);
 
@@ -34,8 +32,6 @@ namespace ExcelReader.Core.Reader.Internal
                 i = 1;
             }
 
-            // Integer digits, then fraction digits, each in its own tight loop: one loop over both paid a
-            // mispredicted branch at the dot and on every digit's dot/leading-zero checks.
             ulong mantissa = 0;
             int integerStart = i;
             for (; i < s.Length; i++)
@@ -93,8 +89,6 @@ namespace ExcelReader.Core.Reader.Internal
             return true;
         }
 
-        // Eisel-Lemire as ported from fast_float's compute_float for binary64. Returns false for
-        // subnormals, overflow and powers outside the table so the caller's double.TryParse decides.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static bool EiselLemire(ulong w, int q, bool neg, out double value)
         {
@@ -155,7 +149,6 @@ namespace ExcelReader.Core.Reader.Internal
             return true;
         }
 
-        // Leading zeros add nothing to the mantissa, so they neither overflow it nor count toward the limit.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int SignificantDigits(ReadOnlySpan<byte> number)
         {
@@ -214,7 +207,6 @@ namespace ExcelReader.Core.Reader.Internal
         ];
 
         // ponytail: fast_float's 128-bit truncated 5^q table cut to q in [-64, 64]; widen to its full
-        // [-342, 308] if inputs outside that range ever show up often enough to matter.
         private static ReadOnlySpan<ulong> PowersOfFive =>
         [
             0xA87FEA27A539E9A5, 0x3F2398D747B36224, 0xD29FE4B18E88640E, 0x8EEC7F0D19A03AAD,

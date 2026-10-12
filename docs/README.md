@@ -14,7 +14,7 @@ changes. A document with the numbers, the machine and the corpus can be reproduc
   valuable documents here** — they are what stops the same idea being rebuilt next year.
 - A performance ceiling and what it is bounded by.
 
-- Usage documentation under [`guide/`](guide/), split out of the root README so the NuGet landing
+- Usage documentation under [`guide/`](#index), split out of the root README so the NuGet landing
   page stays short. This is prose for a caller deciding *how* to use the library, not a substitute
   for the `///` comments that document *what* each member does.
 
@@ -42,6 +42,7 @@ invariant) without restating the evidence for it.
   each format, the ceiling on each, and the optimizations measured and rejected.
 - [`performance/benchmarks.md`](performance/benchmarks.md) — throughput and allocation against
   Sep, Sylvan, OfficeIMO and SpreadCheetah.
-- [`guide/`](guide/) — usage documentation: [reading](guide/reading.md),
-  [parsing](guide/parsing.md), [writing](guide/writing.md), [csv](guide/csv.md),
-  [encryption](guide/encryption.md).
+- `guide/` — usage documentation: [reading](./guide/reading.md),
+  [parsing](./guide/parsing.md), [writing](./guide/writing.md), [csv](./guide/csv.md),
+  [encryption](./guide/encryption.md), [errors](./guide/errors.md),
+  [untrusted input](./guide/untrusted-input.md).

@@ -6,11 +6,11 @@ namespace ExcelReader.Core.Parser
     /// <summary>
     /// Thrown when a bound column's cell is non-empty but fails to parse into the target property type
     /// and the parser is configured to throw on parse failures (rather than silently keep the property
-    /// at its default). See <see cref="ExcelParserConfig.ThrowOnParseFailure"/>.
+    /// at its default). See <see cref="ExcelParserOptions.ThrowOnParseFailure"/>.
     /// </summary>
     /// <remarks>
     /// A parse failure on an <c>[ExcelRequired]</c> column always surfaces as a missing-required-value
-    /// error instead, regardless of <see cref="ExcelParserConfig.ThrowOnParseFailure"/>, since the column
+    /// error instead, regardless of <see cref="ExcelParserOptions.ThrowOnParseFailure"/>, since the column
     /// has no usable value either way.
     /// </remarks>
     public sealed class ExcelParseException : Exception

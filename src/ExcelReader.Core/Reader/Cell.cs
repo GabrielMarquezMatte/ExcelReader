@@ -272,18 +272,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
-        /// Interprets the cell's numeric value as an Excel serial date under the 1900 date system, or,
-        /// when the value is not numeric, parses it as an ISO-8601 date or date-time. Works on any cell,
-        /// not only cells whose <see cref="Type"/> is <see cref="CellType.Date"/> — text formats such as
-        /// CSV carry dates as text rather than serials. Use the
-        /// <see cref="TryGetDateTime(bool, out DateTime)"/> overload for workbooks using the 1904 date system.
-        /// </summary>
-        public bool TryGetDateTime(out DateTime result)
-        {
-            return TryGetDateTime(isDate1904: false, out result);
-        }
-
-        /// <summary>
         /// Interprets the cell's numeric value as an Excel serial date, falling back to an ISO-8601
         /// text date (<c>yyyy-MM-dd</c>, optionally followed by <c>T</c> or a space, a time, and up to
         /// seven fractional-second digits) when the value is not numeric. A trailing zone designator is

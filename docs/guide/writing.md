@@ -5,6 +5,7 @@ typed records, and prefetch compression. See [csv.md](csv.md) for CSV output.
 
 ## Write XLSX workbooks
 
+<!-- snippet: writing-xlsx -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
@@ -35,28 +36,31 @@ await workbook.EndAsync();
 By default, the XLSX writer emits inline strings to keep memory usage flat while rows stream out.
 If your workbook repeats many strings and smaller files matter more than the extra lookup table, opt in to shared strings:
 
+<!-- snippet: writing-xlsx-shared-strings -->
 ```csharp
 await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = true });
 ```
 
 ## Hidden sheets
 
-Every `IWorkbookWriter<TSheet>` takes an optional `ExcelSheetVisibility` alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`IExcelSheet.Visibility`](reading.md#open-by-auto-detecting-the-format):
+Every [`IWorkbookWriter<TSheet>`](xref:ExcelReader.Core.Writer.IWorkbookWriter%601) takes an optional [`ExcelSheetVisibility`](xref:ExcelReader.Core.ExcelSheetVisibility) alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`IExcelSheet.Visibility`](reading.md#open-by-auto-detecting-the-format):
 
+<!-- snippet: writing-hidden-sheets -->
 ```csharp
 using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
 
-await using var data = workbook.AddSheet("Data");                                 // visible
-await using var lookups = workbook.AddSheet("Lookups", ExcelSheetVisibility.Hidden);
-await using var audit = workbook.AddSheet("Audit", ExcelSheetVisibility.VeryHidden); // not in Excel's unhide dialog
+await using (var data = workbook.AddSheet("Data")) { /* rows */ } // visible
+await using (var lookups = workbook.AddSheet("Lookups", ExcelSheetVisibility.Hidden)) { /* rows */ }
+await using (var audit = workbook.AddSheet("Audit", ExcelSheetVisibility.VeryHidden)) { /* rows */ } // not in Excel's unhide dialog
 ```
 
 A workbook whose sheets are *all* hidden is rejected when it is ended (`InvalidOperationException`): the formats allow it, but Excel reports such a file as damaged, so it is caught at write time rather than shipped to a user. CSV accepts the argument and ignores it — delimited text has no tab bar to hide from.
 
 ## Cell styles on write
 
-Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a `CellStyle` once with `AddStyle` and apply its returned index to a column (before the first row) or to a whole row (when starting it):
+Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a [`CellStyle`](xref:ExcelReader.Core.Writer.CellStyle) once with `AddStyle` and apply its returned index to a column (before the first row) or to a whole row (when starting it):
 
+<!-- snippet: writing-styles -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
@@ -90,8 +94,9 @@ Cell-level styling (one specific cell rather than a whole column or row) is out 
 
 ## Read and write XLSB workbooks (BIFF12)
 
-Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel.FromXlsbAsync` to open XLSB directly. For writing, use `XlsbWorkbookWriter`, `XlsbSheetWriter`, and `XlsbRowWriter`.
+Use [`Excel.FromXlsbFile`](xref:ExcelReader.Core.Reader.Excel.FromXlsbFile*), [`Excel.FromXlsb`](xref:ExcelReader.Core.Reader.Excel.FromXlsb*), [`Excel.FromXlsbFileAsync`](xref:ExcelReader.Core.Reader.Excel.FromXlsbFileAsync*), or [`Excel.FromXlsbAsync`](xref:ExcelReader.Core.Reader.Excel.FromXlsbAsync*) to open XLSB directly. For writing, use [`XlsbWorkbookWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter), [`XlsbSheetWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter), and [`XlsbRowWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbRowWriter).
 
+<!-- snippet: writing-xlsb -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsb;
@@ -112,12 +117,13 @@ await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary"))
 await workbook.EndAsync();
 ```
 
-The XLSB writer also defaults to inline string cells. Set `XlsbWriterOptions.UseSharedStrings` to deduplicate repeated text into `sharedStrings.bin`.
+The XLSB writer also defaults to inline string cells. Set [`XlsbWriterOptions.UseSharedStrings`](xref:ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.UseSharedStrings) to deduplicate repeated text into `sharedStrings.bin`.
 
 ## Write XLS workbooks (BIFF8)
 
-`XlsWorkbookWriter` emits a binary BIFF8 `.xls` file. The sheet and row APIs are synchronous; only the final `EndAsync` (which assembles and flushes the OLE container) is async. BIFF8 is capped at 65,536 rows × 256 columns per sheet.
+[`XlsWorkbookWriter`](xref:ExcelReader.Core.Writer.Xls.XlsWorkbookWriter) emits a binary BIFF8 `.xls` file. The sheet and row APIs are synchronous; only the final `EndAsync` (which assembles and flushes the OLE container) is async. BIFF8 is capped at 65,536 rows × 256 columns per sheet.
 
+<!-- snippet: writing-xls -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xls;
@@ -147,8 +153,9 @@ await workbook.EndAsync();
 
 ## Write typed records
 
-The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `sheet.WriteRecordsAsync(records, layout)` writes a header row followed by one row per record, with the columns coming from an `ExcelRecordLayout<T>`. `ExcelRecordLayout.FromAttributes<T>()` maps each public readable property to a column by reflection. It is an extension on `ISheetWriter<TRow>`, so the same call works on a sheet from any of the writers above — XLSX, XLSB, XLS, and CSV.
+The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `sheet.WriteRecordsAsync(records, layout)` writes a header row followed by one row per record, with the columns coming from an [`ExcelRecordLayout<T>`](xref:ExcelReader.Core.Writer.ExcelRecordLayout%601). `ExcelRecordLayout.FromAttributes<T>()` maps each public readable property to a column by reflection. It is an extension on [`ISheetWriter<TRow>`](xref:ExcelReader.Core.Writer.ISheetWriter%601), so the same call works on a sheet from any of the writers above — XLSX, XLSB, XLS, and CSV.
 
+<!-- snippet: writing-records -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
@@ -175,17 +182,56 @@ await using (var sheet = workbook.AddSheet("Sales"))
 }
 ```
 
-Disposing the sheet ends it; add the next sheet after that (a duplicate name throws, ignoring case), so one workbook can hold sheets of different record types. The sheet stays open after `WriteRecordsAsync`, so you can append more rows before disposing it. `CsvWorkbookWriter` is the exception: a CSV file is a single sheet, so a second `AddSheet` throws (the sheet name is ignored). An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
+Disposing the sheet ends it; add the next sheet after that (a duplicate name throws, ignoring case), so one workbook can hold sheets of different record types. The sheet stays open after `WriteRecordsAsync`, so you can append more rows before disposing it. [`CsvWorkbookWriter`](xref:ExcelReader.Core.Writer.Csv.CsvWorkbookWriter) is the exception: a CSV file is a single sheet, so a second `AddSheet` throws (the sheet name is ignored). An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through [`ExcelParser<T>`](xref:ExcelReader.Core.Parser.ExcelParser%601) because the headers are the property names.
 
 Column behavior mirrors the parser attributes:
 
 - **`[ExcelColumn("Header")]`** — use a custom header instead of the property name (the first alias wins).
 - **`[ExcelIgnore]`** — exclude a property from both writing and parsing (for computed/transient members).
-- **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements `IExcelCellWriter<T>`, it controls how the value is written, so a custom type round-trips through the same converter it reads with.
+- **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements [`IExcelCellWriter<T>`](xref:ExcelReader.Core.Writer.IExcelCellWriter%601), it controls how the value is written, so a custom type round-trips through the same converter it reads with.
 
 `DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties (including `Half`) become number cells; any other type is written as text formatted with the invariant culture — `DateTimeOffset` as ISO 8601 (`"O"`), enums by name — so the file parses back the same whatever the writing machine's culture. `Int128`/`UInt128` stay text because a number cell is a double and would drop their low digits. (`CsvWorkbookWriter` follows the CSV rules instead — see [Write CSV](csv.md#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
 For a model marked `[ExcelSerializable]`, pass `ExcelRecordLayout.Generated<T>()` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](parsing.md#generate-typed-maps-at-compile-time-native-aot--trimming).
+
+## Write an Excel table
+
+The XLSX and XLSB sheet writers implement [`ITableSheetWriter<TRow>`](xref:ExcelReader.Core.Writer.ITableSheetWriter%601). `BeginTable` writes the header row
+and opens a table there; every row written until `EndTable` (or the end of the sheet) belongs to it. The
+file opens in Excel already formatted as a table, with filter buttons and the chosen built-in style, and
+reads back through [`IExcelWorkbook.Tables`](xref:ExcelReader.Core.Reader.IExcelWorkbook.Tables).
+
+<!-- snippet: writing-table -->
+```csharp
+using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("report.xlsx"));
+XlsxSheetWriter sheet = workbook.AddSheet("Report");
+sheet.BeginTable("Sales", ["Region", "Units", "Revenue"]);
+foreach (Sale s in sales)
+{
+    using XlsxRowWriter row = sheet.StartRow();
+    row.Write(s.Region);
+    row.Write(s.Units);
+    row.Write(s.Revenue);
+}
+sheet.EndTable();
+```
+
+For records, `WriteTableAsync` does all three steps with the same layouts as `WriteRecordsAsync`:
+
+<!-- snippet: writing-table-records -->
+```csharp
+await sheet.WriteTableAsync(sales, "Sales", ExcelRecordLayout.FromAttributes<Sale>());
+```
+
+- [`ExcelTableOptions`](xref:ExcelReader.Core.Writer.ExcelTableOptions) sets `FirstColumn`, `StyleName` (a built-in `TableStyleLight1`–`21`,
+  `TableStyleMedium1`–`28` or `TableStyleDark1`–`11`, or `null` for none; default `TableStyleMedium2`) and
+  the banding flags `ShowRowStripes`, `ShowColumnStripes`, `ShowFirstColumn`, `ShowLastColumn`.
+- With `FirstColumn > 0`, rows you write yourself must `Skip(FirstColumn)` to reach the table;
+  `WriteTableAsync` does it for you.
+- One table can be open per sheet at a time; write as many as you like one after another. Table names
+  must be valid Excel names, must not read as cell references (`A1`, `R1C1`), and must be unique in the
+  workbook, ignoring case. A table with no data rows gets one empty row, as Excel requires.
+- Totals rows, custom table styles, and tables in XLS or CSV are not supported.
 
 ## Prefetch compression (XLSX/XLSB writing)
 
@@ -195,6 +241,7 @@ and by default that happens on the calling thread. Set `PrefetchWrite` on the wr
 onto a background thread, so the caller keeps building the next batch of rows while the previous one
 compresses:
 
+<!-- snippet: writing-prefetch -->
 ```csharp
 await using var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true });
 XlsxSheetWriter sheet = wb.AddSheet("S1");
@@ -209,7 +256,7 @@ foreach (var record in records)
 await sheet.EndAsync();
 ```
 
-`XlsbWriterOptions` has the same property. XLS and CSV are uncompressed, so
+[`XlsbWriterOptions`](xref:ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions) has the same property. XLS and CSV are uncompressed, so
 they have nothing to overlap and do not offer it.
 
 Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):

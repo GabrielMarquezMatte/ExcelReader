@@ -79,10 +79,10 @@ namespace ExcelReader.Tests.Reader
                     Excel.FromXlsbFile(_path).Dispose();
                     break;
                 case "FromCsvFile":
-                    Excel.FromCsvFile(_path, DelimiterEqualsQuote).Dispose();
+                    Excel.FromCsvFile(_path, new ExcelReaderOptions { Csv = DelimiterEqualsQuote }).Dispose();
                     break;
                 case "FromCsvFileAsync":
-                    (await Excel.FromCsvFileAsync(_path, DelimiterEqualsQuote)).Dispose();
+                    (await Excel.FromCsvFileAsync(_path, new ExcelReaderOptions { Csv = DelimiterEqualsQuote })).Dispose();
                     break;
                 default:
                     (await Excel.FromCsvFileAsync(_path, ct: new CancellationToken(canceled: true))).Dispose();

@@ -23,7 +23,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind(
                 reader,
-                new ExcelParserConfig(),
+                new ExcelParserOptions(),
                 TypeMapper<Person>.GetCsvInfo(),
                 out long firstDataRecordOffset);
 
@@ -42,7 +42,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             using var headerReader = Excel.FromCsv(all);
             CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind(
                 headerReader,
-                new ExcelParserConfig(),
+                new ExcelParserOptions(),
                 TypeMapper<Person>.GetCsvInfo(),
                 out long dataStart);
 
@@ -77,7 +77,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             using var headerReader = Excel.FromCsv(all);
             CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind(
                 headerReader,
-                new ExcelParserConfig(),
+                new ExcelParserOptions(),
                 TypeMapper<Person>.GetCsvInfo(),
                 out long dataStart);
 

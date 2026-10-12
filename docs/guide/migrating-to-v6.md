@@ -11,12 +11,12 @@ A v5 reader owned one "current sheet" that you moved with `MoveToSheet`; in v6 t
 
 | v5 | v6 |
 |---|---|
-| `XlsxReader`, `XlsbReader`, `XlsReader` | `XlsxWorkbook`, `XlsbWorkbook`, `XlsWorkbook` |
-| `XlsxReader.Enumerator` (and the other two) | `XlsxWorkbook.Enumerator` (and `XlsbWorkbook.Enumerator`, `XlsWorkbook.Enumerator`) |
-| `IExcelRowReader` | `IExcelWorkbook` and `IExcelSheet` |
-| `IExcelRowReader<TEnumerator>` | `IExcelSheet<TEnumerator>` |
-| `ExcelSheet`, `reader.Sheets()` | `XlsxSheet` / `XlsbSheet` / `XlsSheet` / `CsvSheet`, `workbook.Sheets` |
-| `CsvReader` | `CsvReader` (same name; now a workbook with one sheet) |
+| `XlsxReader`, `XlsbReader`, `XlsReader` | [`XlsxWorkbook`](xref:ExcelReader.Core.Reader.Xlsx.XlsxWorkbook), [`XlsbWorkbook`](xref:ExcelReader.Core.Reader.Xlsb.XlsbWorkbook), [`XlsWorkbook`](xref:ExcelReader.Core.Reader.Xls.XlsWorkbook) |
+| `XlsxReader.Enumerator` (and the other two) | [`XlsxWorkbook.Enumerator`](xref:ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator) (and [`XlsbWorkbook.Enumerator`](xref:ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator), [`XlsWorkbook.Enumerator`](xref:ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator)) |
+| `IExcelRowReader` | [`IExcelWorkbook`](xref:ExcelReader.Core.Reader.IExcelWorkbook) and [`IExcelSheet`](xref:ExcelReader.Core.Reader.IExcelSheet) |
+| `IExcelRowReader<TEnumerator>` | [`IExcelSheet<TEnumerator>`](xref:ExcelReader.Core.Reader.IExcelSheet%601) |
+| `ExcelSheet`, `reader.Sheets()` | [`XlsxSheet`](xref:ExcelReader.Core.Reader.Xlsx.XlsxSheet) / [`XlsbSheet`](xref:ExcelReader.Core.Reader.Xlsb.XlsbSheet) / [`XlsSheet`](xref:ExcelReader.Core.Reader.Xls.XlsSheet) / [`CsvSheet`](xref:ExcelReader.Core.Reader.Csv.CsvSheet), `workbook.Sheets` |
+| [`CsvReader`](xref:ExcelReader.Core.Reader.Csv.CsvReader) | `CsvReader` (same name; now a workbook with one sheet) |
 
 An explicit `ExcelEnumerable<T, XlsReader, XlsReader.Enumerator>` declaration becomes `ExcelEnumerable<T, XlsSheet, XlsWorkbook.Enumerator>` (likewise for XLSX and XLSB).
 
@@ -88,7 +88,7 @@ for (int i = 0; i < workbook.SheetCount; i++)
 }
 ```
 
-When you open a format directly (`Excel.FromXlsxFile` and the like), `workbook.Sheets` is a typed list: `foreach (XlsxSheet sheet in workbook.Sheets)` walks every sheet without boxing.
+When you open a format directly ([`Excel.FromXlsxFile`](xref:ExcelReader.Core.Reader.Excel.FromXlsxFile*) and the like), `workbook.Sheets` is a typed list: `foreach (XlsxSheet sheet in workbook.Sheets)` walks every sheet without boxing.
 
 v5's `ExcelSheet` had a positional `Deconstruct`, so `foreach (var (i, name) in reader.Sheets())` worked. The v6 sheets do not deconstruct; read the properties instead:
 

@@ -1,0 +1,48 @@
+- name: Guide
+  items:
+    - name: Reading rows
+      href: guide/reading.md
+    - name: Typed parsing
+      href: guide/parsing.md
+    - name: Writing workbooks
+      href: guide/writing.md
+    - name: CSV
+      href: guide/csv.md
+    - name: Encrypted workbooks
+      href: guide/encryption.md
+    - name: Errors across languages
+      href: guide/errors.md
+    - name: Reading untrusted files
+      href: guide/untrusted-input.md
+- name: API
+  href: api/
+- name: Bindings
+  items:
+    - name: Python
+      href: ../python/README.md
+    - name: Python API
+      href: python-api/
+    - name: Rust
+      href: ../rust/excelreader/README.md
+    - name: Rust API (docs.rs)
+      href: https://docs.rs/excelreader
+    - name: C++
+      href: ../cpp/README.md
+    - name: C++ API
+      href: cpp-api/
+- name: Performance
+  items:
+    - name: Benchmarks
+      href: performance/benchmarks.md
+    - name: Reader performance
+      href: performance/reader-performance.md
+    - name: Live results
+      href: https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/
+- name: Releases
+  items:
+    - name: Release notes
+      href: https://github.com/GabrielMarquezMatte/ExcelReader/releases
+    - name: Migrating to v7
+      href: guide/migrating-to-v7.md
+    - name: Migrating to v6
+      href: guide/migrating-to-v6.md

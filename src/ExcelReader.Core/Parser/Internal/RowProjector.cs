@@ -11,8 +11,7 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly StringComparer _comparer;
         private readonly HeaderNormalization _normalization;
         private readonly int _headerRow;
-        private readonly bool _isDate1904;
-        private readonly IFormatProvider _provider;
+        private readonly ExcelRowContext _context;
         private readonly bool _throwOnParseFailure;
         private ColumnBinding<T>[]? _bindings;
         private bool[] _seen;
@@ -25,8 +24,7 @@ namespace ExcelReader.Core.Parser.Internal
             _comparer = comparer;
             _normalization = normalization;
             _headerRow = headerRow;
-            _isDate1904 = isDate1904;
-            _provider = provider;
+            _context = new ExcelRowContext { IsDate1904 = isDate1904, FormatProvider = provider };
             _throwOnParseFailure = throwOnParseFailure;
             _seen = [];
         }
@@ -51,7 +49,6 @@ namespace ExcelReader.Core.Parser.Internal
             return ProjectionStep.Skip;
         }
 
-        // Kept out of line so the caller's foreach tier-1 compile can't inline the whole projection and spill its hot loop.
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal readonly T Project(Row row)
         {
@@ -85,7 +82,7 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly void ParseCurrentRow(in Row row, ref T model)
         {
             bool track = _requireValueCount > 0;
-            SparseRowProjection.ParseRow(in row, _bindings!, _seen, track, _isDate1904, _provider, _throwOnParseFailure, _rowNumber, ref model);
+            SparseRowProjection.ParseRow(in row, _bindings!, _seen, track, in _context, _throwOnParseFailure, _rowNumber, ref model);
         }
     }
 }

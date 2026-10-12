@@ -175,7 +175,7 @@ namespace ExcelReader.Arrow
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (ExcelCellReaders.Bool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool value))
+                if (ExcelCellReaders.Bool(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out bool value))
                 {
                     _builder.Append(value);
                 }
@@ -210,7 +210,7 @@ namespace ExcelReader.Arrow
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (ExcelCellReaders.DateOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value))
+                if (ExcelCellReaders.DateOnlyAuto(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out DateOnly value))
                 {
                     _builder.Append(value);
                 }
@@ -247,7 +247,7 @@ namespace ExcelReader.Arrow
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (ExcelCellReaders.TimeOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out TimeOnly value))
+                if (ExcelCellReaders.TimeOnlyAuto(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out TimeOnly value))
                 {
                     _builder.Append(value.ToTimeSpan().Ticks / 10);
                 }
@@ -284,7 +284,7 @@ namespace ExcelReader.Arrow
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (ExcelCellReaders.DateTimeAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateTime value))
+                if (ExcelCellReaders.DateTimeAuto(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out DateTime value))
                 {
                     DateTime normalized = value.Kind == DateTimeKind.Unspecified
                         ? value

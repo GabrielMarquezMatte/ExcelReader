@@ -95,9 +95,8 @@ namespace ExcelReader.Tests.Reader
         [Fact]
         public void CsvInternStringsTrueEnablesDedupAcrossRows()
         {
-            var options = new CsvReaderOptions { InternStrings = true };
             using MemoryStream ms = new(Encoding.UTF8.GetBytes("alpha,1\nalpha,2\nbeta,3\n"));
-            using CsvReader reader = Excel.FromCsv(ms, options: options);
+            using CsvReader reader = Excel.FromCsv(ms, options: new ExcelReaderOptions { InternStrings = true });
             using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());

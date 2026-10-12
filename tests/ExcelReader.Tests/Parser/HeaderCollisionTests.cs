@@ -6,7 +6,6 @@ namespace ExcelReader.Tests.Parser
 {
     public partial class HeaderCollisionTests
     {
-        // EXR006 fires for these two, so their Generated path is covered by GeneratorTests' in-memory compilation instead.
         private sealed class CaseModel
         {
             [ExcelColumn("Name")]
@@ -42,9 +41,9 @@ namespace ExcelReader.Tests.Parser
             public string Name { get; set; } = "";
         }
 
-        private static readonly ExcelParserConfig Ordinal = new() { ColumnNameComparer = StringComparer.Ordinal };
+        private static readonly ExcelParserOptions Ordinal = new() { ColumnNameComparer = StringComparer.Ordinal };
 
-        private static ExcelParser<CaseModel>[] CaseParsers(ExcelParserConfig? config)
+        private static ExcelParser<CaseModel>[] CaseParsers(ExcelParserOptions? config)
         {
             return
             [
@@ -56,7 +55,7 @@ namespace ExcelReader.Tests.Parser
             ];
         }
 
-        private static ExcelParser<AliasModel>[] AliasParsers(ExcelParserConfig? config)
+        private static ExcelParser<AliasModel>[] AliasParsers(ExcelParserOptions? config)
         {
             return
             [
@@ -68,7 +67,7 @@ namespace ExcelReader.Tests.Parser
             ];
         }
 
-        private static ExcelParser<DiacriticModel>[] DiacriticParsers(ExcelParserConfig? config)
+        private static ExcelParser<DiacriticModel>[] DiacriticParsers(ExcelParserOptions? config)
         {
             return
             [
@@ -131,7 +130,7 @@ namespace ExcelReader.Tests.Parser
         [Fact]
         public async Task NormalizationEquivalentHeadersThrowOnlyWhenNormalizationMakesThemEqual()
         {
-            foreach (ExcelParser<DiacriticModel> parser in DiacriticParsers(new ExcelParserConfig { HeaderNormalization = HeaderNormalization.RemoveDiacritics }))
+            foreach (ExcelParser<DiacriticModel> parser in DiacriticParsers(new ExcelParserOptions { HeaderNormalization = HeaderNormalization.RemoveDiacritics }))
             {
                 await Assert.ThrowsAsync<InvalidOperationException>(() => ParseAsync(parser, ["Cafe"], ["x"]));
             }

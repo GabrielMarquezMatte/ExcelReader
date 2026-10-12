@@ -1,0 +1,9 @@
+#logo {
+  height: 32px;
+  width: auto;
+}
+
+/* The binding READMEs open with the logo for their GitHub/PyPI/crates.io pages; the navbar already shows it. */
+article img[alt="ExcelReader logo"] {
+  display: none;
+}

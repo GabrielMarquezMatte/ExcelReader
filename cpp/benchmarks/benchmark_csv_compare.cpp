@@ -1,8 +1,6 @@
 #include <xl/excelreader.hpp>
 
 #include <benchmark/benchmark.h>
-// zsv's headers are plain C99: no extern "C" guard, and `restrict`, which GCC and Clang spell
-// `__restrict` in C++.
 #define restrict __restrict
 extern "C"
 {
@@ -135,8 +133,6 @@ namespace
         return {reinterpret_cast<const char *>(cell.str), cell.len};
     }
 
-    // The same conversions parse_sheet<FullRow> makes: text into owned std::string, ISO dates, integers
-    // and doubles, one FullRow per data row, header skipped.
     void zsv_typed_row(void *context)
     {
         auto *run = static_cast<ZsvRun *>(context);
@@ -146,8 +142,6 @@ namespace
             return;
         }
         const size_t count = zsv_cell_count(run->parser);
-        // zsv reports the empty line after the file's final CRLF as a one-cell row; ExcelReader skips
-        // blank lines.
         if (count == 1 && zsv_get_cell(run->parser, 0).len == 0)
         {
             return;

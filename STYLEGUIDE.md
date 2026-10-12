@@ -181,7 +181,7 @@ Never reference the task, the ticket, or the caller.
 ### Findings do not belong in code
 
 Measurements, benchmark results, memory-footprint numbers, and the reasoning that picked one
-approach over another are **not comments**. They go in [`docs/`](docs/).
+approach over another are **not comments**. They go in [`docs/`](docs/README.md).
 
 This includes the whole class of "why it is this way" content: a throughput figure that justified a
 buffer size, an allocation count that motivated pooling, a design that was prototyped and measured
@@ -209,7 +209,7 @@ Comments carry maintenance cost. Two failure modes are specifically banned:
 - **Do not cite a file that can disappear.** Never point a comment at a plan, a spec, or a section
   marker ("see step Z4") as the authoritative explanation. Those are working artifacts: they get
   renamed, merged and deleted, and the comment then sends a reader to nothing, which is worse than
-  silence. A committed document under [`docs/`](docs/) is different in kind — it is permanent, and
+  silence. A committed document under [`docs/`](docs/README.md) is different in kind — it is permanent, and
   pointing at one is how a finding stays out of the code. The test is whether the target is expected
   to still exist in a year, not whether a link is involved.
 
@@ -329,7 +329,7 @@ These rules apply only when a function is on a measured hot path (cell parsing, 
 - Avoid LINQ in hot paths; use `IndexOf` on spans which benefits from SIMD.
 - Split cold paths (growth, throw helpers) into `[MethodImpl(MethodImplOptions.NoInlining)]` methods so
   they do not bloat the hot caller's IL and cost it inlining.
-- Optimize against a measurement, and record what it showed in [`docs/`](docs/) — never in a comment.
+- Optimize against a measurement, and record what it showed in [`docs/`](docs/README.md) — never in a comment.
   An optimization with no number behind it is a guess that costs readability. Caches in particular are
   a trade, not a win: document the workload where the cache pays and the one where it does not, with
   the numbers that showed it.

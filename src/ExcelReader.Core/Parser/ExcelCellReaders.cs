@@ -56,28 +56,28 @@ namespace ExcelReader.Core.Parser
         public static readonly ExcelCellReader<TimeOnly> TimeOnlyAuto = ReadTimeOnlyAuto;
 
 
-        private static bool ReadString(in Cell cell, bool isDate1904, IFormatProvider provider, out string value)
+        private static bool ReadString(in Cell cell, in ExcelRowContext context, out string value)
         {
             value = cell.GetString();
             return true;
         }
 
-        private static bool ReadDateTimeAuto(in Cell cell, bool isDate1904, IFormatProvider provider, out DateTime value)
+        private static bool ReadDateTimeAuto(in Cell cell, in ExcelRowContext context, out DateTime value)
         {
-            return ColumnParserFactory.ReadDateTime(in cell, isDate1904, provider, out value)
-                || ColumnParserFactory.ReadTextDateTime(in cell, isDate1904, provider, out value);
+            return ColumnParserFactory.ReadDateTime(in cell, in context, out value)
+                || ColumnParserFactory.ReadTextDateTime(in cell, in context, out value);
         }
 
-        private static bool ReadDateOnlyAuto(in Cell cell, bool isDate1904, IFormatProvider provider, out DateOnly value)
+        private static bool ReadDateOnlyAuto(in Cell cell, in ExcelRowContext context, out DateOnly value)
         {
-            return ColumnParserFactory.ReadDateOnly(in cell, isDate1904, provider, out value)
-                || ColumnParserFactory.ReadTextDateOnly(in cell, isDate1904, provider, out value);
+            return ColumnParserFactory.ReadDateOnly(in cell, in context, out value)
+                || ColumnParserFactory.ReadTextDateOnly(in cell, in context, out value);
         }
 
-        private static bool ReadTimeOnlyAuto(in Cell cell, bool isDate1904, IFormatProvider provider, out TimeOnly value)
+        private static bool ReadTimeOnlyAuto(in Cell cell, in ExcelRowContext context, out TimeOnly value)
         {
-            return ColumnParserFactory.ReadTimeOnly(in cell, isDate1904, provider, out value)
-                || ColumnParserFactory.ReadTextTimeOnly(in cell, isDate1904, provider, out value);
+            return ColumnParserFactory.ReadTimeOnly(in cell, in context, out value)
+                || ColumnParserFactory.ReadTextTimeOnly(in cell, in context, out value);
         }
 
         /// <summary>
@@ -86,10 +86,10 @@ namespace ExcelReader.Core.Parser
         /// <see cref="Guid"/>.
         /// </summary>
         /// <typeparam name="TValue">The value type to parse.</typeparam>
-        public static bool Parsable<TValue>(in Cell cell, bool isDate1904, IFormatProvider provider, [MaybeNullWhen(false)] out TValue value)
+        public static bool Parsable<TValue>(in Cell cell, in ExcelRowContext context, [MaybeNullWhen(false)] out TValue value)
             where TValue : IUtf8SpanParsable<TValue>
         {
-            return cell.TryParse(provider, out value);
+            return cell.TryParse(context.FormatProvider, out value);
         }
 
         /// <summary>
@@ -97,14 +97,14 @@ namespace ExcelReader.Core.Parser
         /// for types such as <see cref="TimeSpan"/> and <see cref="DateTimeOffset"/> that have no UTF-8 parser.
         /// </summary>
         /// <typeparam name="TValue">The value type to parse.</typeparam>
-        public static bool SpanParsable<TValue>(in Cell cell, bool isDate1904, IFormatProvider provider, [MaybeNullWhen(false)] out TValue value)
+        public static bool SpanParsable<TValue>(in Cell cell, in ExcelRowContext context, [MaybeNullWhen(false)] out TValue value)
             where TValue : ISpanParsable<TValue>
         {
-            return ColumnParserFactory.TryParseSpanParsable(in cell, provider, out value);
+            return ColumnParserFactory.TryParseSpanParsable(in cell, context.FormatProvider, out value);
         }
 
         /// <summary>Reads a cell's raw UTF-8 bytes without allocating. The span aliases the reader's buffer and is valid only until the reader advances.</summary>
-        public static bool Utf8(scoped in Cell cell, bool isDate1904, IFormatProvider provider, out ReadOnlySpan<byte> value)
+        public static bool Utf8(scoped in Cell cell, scoped in ExcelRowContext context, out ReadOnlySpan<byte> value)
         {
             value = cell.Value;
             return true;
@@ -112,7 +112,7 @@ namespace ExcelReader.Core.Parser
 
         /// <summary>Reads a cell as an enum, by its declared value name (case-insensitive) or its underlying numeric value.</summary>
         /// <typeparam name="TEnum">The enum type to parse.</typeparam>
-        public static bool Enum<TEnum>(in Cell cell, bool isDate1904, IFormatProvider provider, out TEnum value)
+        public static bool Enum<TEnum>(in Cell cell, in ExcelRowContext context, out TEnum value)
             where TEnum : struct, Enum
         {
             return ColumnParserFactory.TryParseEnum(in cell, out value);

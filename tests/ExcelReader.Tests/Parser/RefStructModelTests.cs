@@ -32,7 +32,7 @@ namespace ExcelReader.Tests.Parser
 
         private sealed class UpperCaseConverter : IExcelCellConverter<string>
         {
-            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out string value)
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out string value)
             {
                 value = cell.GetString().ToUpperInvariant();
                 return true;
@@ -179,7 +179,7 @@ namespace ExcelReader.Tests.Parser
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Name", "Id", "Value", "Date"],
                 ["Alice", "oops", 10.5, SampleDate]);
-            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
             var enumerator = ExcelParser.FromAttributes<SaleNamedRef>(config).Parse(reader.FirstSheet).GetEnumerator();

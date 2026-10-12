@@ -12,7 +12,7 @@ namespace ExcelReader.Core.Parser
     public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxSheet, XlsxWorkbook.Enumerator>
         where T : allows ref struct
     {
-        internal ExcelEnumerable(XlsxSheet sheet, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+        internal ExcelEnumerable(XlsxSheet sheet, ExcelParserOptions config, TypeMapInfo<T> explicitInfo)
             : base(sheet, config, explicitInfo)
         {
         }
@@ -31,10 +31,10 @@ namespace ExcelReader.Core.Parser
         where TEnumerator : class, IExcelRowEnumerator
     {
         private readonly TSheet _sheet;
-        private readonly ExcelParserConfig _config;
+        private readonly ExcelParserOptions _config;
         private readonly TypeMapInfo<T> _info;
 
-        internal ExcelEnumerable(TSheet sheet, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+        internal ExcelEnumerable(TSheet sheet, ExcelParserOptions config, TypeMapInfo<T> explicitInfo)
         {
             _sheet = sheet;
             _config = config;

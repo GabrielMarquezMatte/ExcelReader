@@ -60,6 +60,73 @@ namespace ExcelReader.Core.Writer
             await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Writes <paramref name="records"/> as an Excel table named <paramref name="name"/>: a header row from
+        /// <paramref name="layout"/>, then one row per record, then closes the table. The sheet stays open.
+        /// </summary>
+        /// <typeparam name="T">The record type being written.</typeparam>
+        /// <typeparam name="TRow">The concrete row writer type.</typeparam>
+        /// <param name="sheet">The XLSX or XLSB sheet to write to.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="name">The table name; see <see cref="ITableSheetWriter{TRow}.BeginTable"/>.</param>
+        /// <param name="layout">The columns to write, from <see cref="ExcelRecordLayout"/>.</param>
+        /// <param name="options">Position and style. Defaults to <see cref="ExcelTableOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel the operation between rows.</param>
+        public static async ValueTask WriteTableAsync<T, TRow>(this ITableSheetWriter<TRow> sheet, IEnumerable<T> records,
+                                                               string name, ExcelRecordLayout<T> layout,
+                                                               ExcelTableOptions? options = null, CancellationToken ct = default)
+                                                               where TRow : IRowWriter
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
+            await sheet.BeginTableAsync(name, headers, options, ct).ConfigureAwait(false);
+            await sheet.WriteRecordsAsync(records, ShiftToTable(writeRow, options), ct).ConfigureAwait(false);
+            sheet.EndTable();
+        }
+
+        /// <summary>
+        /// Writes the records produced by <paramref name="records"/> as an Excel table named <paramref name="name"/>,
+        /// as <see cref="WriteTableAsync{T, TRow}(ITableSheetWriter{TRow}, IEnumerable{T}, string, ExcelRecordLayout{T}, ExcelTableOptions?, CancellationToken)"/> does.
+        /// </summary>
+        /// <typeparam name="T">The record type being written.</typeparam>
+        /// <typeparam name="TRow">The concrete row writer type.</typeparam>
+        /// <param name="sheet">The XLSX or XLSB sheet to write to.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="name">The table name; see <see cref="ITableSheetWriter{TRow}.BeginTable"/>.</param>
+        /// <param name="layout">The columns to write, from <see cref="ExcelRecordLayout"/>.</param>
+        /// <param name="options">Position and style. Defaults to <see cref="ExcelTableOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel the operation between rows, and passed to the source enumerable.</param>
+        public static async ValueTask WriteTableAsync<T, TRow>(this ITableSheetWriter<TRow> sheet, IAsyncEnumerable<T> records,
+                                                               string name, ExcelRecordLayout<T> layout,
+                                                               ExcelTableOptions? options = null, CancellationToken ct = default)
+                                                               where TRow : IRowWriter
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
+            await sheet.BeginTableAsync(name, headers, options, ct).ConfigureAwait(false);
+            await sheet.WriteRecordsAsync(records, ShiftToTable(writeRow, options), ct).ConfigureAwait(false);
+            sheet.EndTable();
+        }
+
+        private static Action<TRow, T> ShiftToTable<TRow, T>(Action<TRow, T> writeRow, ExcelTableOptions? options)
+            where TRow : IRowWriter
+        {
+            int firstColumn = (options ?? ExcelTableOptions.Default).FirstColumn;
+            if (firstColumn == 0)
+            {
+                return writeRow;
+            }
+            return (row, item) =>
+            {
+                row.Skip(firstColumn);
+                writeRow(row, item);
+            };
+        }
+
         private static async ValueTask WriteHeaderAsync<TRow>(ISheetWriter<TRow> sheet, string[] headers, CancellationToken ct)
             where TRow : IRowWriter
         {

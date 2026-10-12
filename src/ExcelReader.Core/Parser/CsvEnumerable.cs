@@ -22,12 +22,12 @@ namespace ExcelReader.Core.Parser
         where T : allows ref struct
     {
         private readonly CsvSheet _sheet;
-        private readonly ExcelParserConfig _config;
+        private readonly ExcelParserOptions _config;
         private readonly CancellationToken _ct;
         private readonly TypeMapInfo<T> _info;
         private readonly CsvReader? _ownedReader;
 
-        internal CsvEnumerable(CsvSheet sheet, ExcelParserConfig config, TypeMapInfo<T> info, CsvReader? ownedReader, CancellationToken ct)
+        internal CsvEnumerable(CsvSheet sheet, ExcelParserOptions config, TypeMapInfo<T> info, CsvReader? ownedReader, CancellationToken ct)
         {
             _sheet = sheet;
             _config = config;
@@ -36,7 +36,7 @@ namespace ExcelReader.Core.Parser
             _ownedReader = ownedReader;
         }
 
-        internal CsvEnumerable(CsvSheet sheet, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+        internal CsvEnumerable(CsvSheet sheet, ExcelParserOptions config, TypeMapInfo<T> explicitInfo)
         {
             _sheet = sheet;
             _config = config;
@@ -178,7 +178,7 @@ namespace ExcelReader.Core.Parser
         private readonly StringComparer _comparer;
         private readonly HeaderNormalization _normalization;
         private readonly int _headerRow;
-        private readonly IFormatProvider _provider;
+        private readonly ExcelRowContext _context;
         private readonly bool _throwOnParseFailure;
         private ColumnParser<T>[]? _fieldParsers;
         private string?[] _fieldNames;
@@ -192,7 +192,7 @@ namespace ExcelReader.Core.Parser
             _comparer = comparer;
             _normalization = normalization;
             _headerRow = headerRow;
-            _provider = provider;
+            _context = new ExcelRowContext { FormatProvider = provider };
             _throwOnParseFailure = throwOnParseFailure;
             _fieldNames = [];
             _fieldRequired = [];
@@ -205,7 +205,7 @@ namespace ExcelReader.Core.Parser
             _comparer = StringComparer.Ordinal;
             _normalization = HeaderNormalization.None;
             _headerRow = -1;
-            _provider = provider;
+            _context = new ExcelRowContext { FormatProvider = provider };
             _throwOnParseFailure = throwOnParseFailure;
             _fieldParsers = map.FieldParsers;
             _fieldNames = map.FieldNames;
@@ -362,7 +362,7 @@ namespace ExcelReader.Core.Parser
                     continue;
                 }
                 Cell cell = rows.FieldAt(i);
-                if (cell.Type == CellType.Empty || parser(ref model, in cell, false, _provider))
+                if (cell.Type == CellType.Empty || parser(ref model, in cell, in _context))
                 {
                     continue;
                 }

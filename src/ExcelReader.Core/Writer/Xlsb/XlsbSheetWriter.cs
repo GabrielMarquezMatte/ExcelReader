@@ -8,7 +8,7 @@ using ExcelReader.Core.Writer.Internal;
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
-    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
+    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>
     {
         private const int SpillThreshold = 64 * 1024;
 
@@ -18,6 +18,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private readonly CompressionLevel _compression;
         private readonly bool _offloadWrite;
         private readonly BiffBuffer _records = new(4096);
+        private readonly TableTracker _tables = new();
         private Stream? _stream;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
@@ -63,6 +64,14 @@ namespace ExcelReader.Core.Writer.Xlsb
         internal BiffBuffer Payload { get; } = new(256);
         internal bool UseSharedStrings => _owner.UseSharedStrings;
         internal bool ResourcesReleased => _stream is null && _buffersDisposed;
+
+        internal IReadOnlyList<WrittenTable> Tables
+        {
+            get
+            {
+                return _tables.Finished;
+            }
+        }
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
@@ -212,8 +221,9 @@ namespace ExcelReader.Core.Writer.Xlsb
             try
             {
                 EnsureStarted();
+                _tables.CloseOpen(_rowNumber);
                 WriteRecord(Brt.EndSheetData);
-                WriteSheetMetadata();
+                WriteListParts();
                 WriteRecord(Brt.EndSheet);
                 if (_stream is null)
                 {
@@ -243,8 +253,9 @@ namespace ExcelReader.Core.Writer.Xlsb
             try
             {
                 EnsureStarted();
+                _tables.CloseOpen(_rowNumber);
                 WriteRecord(Brt.EndSheetData);
-                WriteSheetMetadata();
+                WriteListParts();
                 WriteRecord(Brt.EndSheet);
                 if (_stream is null)
                 {
@@ -265,8 +276,60 @@ namespace ExcelReader.Core.Writer.Xlsb
             Release(faulted: false);
         }
 
-        // Ended is only ever set by Release, after cleanup, so an already-ended sheet has nothing left
-        // to release: a fault raised inside a nested step (flush) is handled exactly once.
+        private void WriteListParts()
+        {
+            IReadOnlyList<WrittenTable> tables = _tables.Finished;
+            if (tables.Count == 0)
+            {
+                return;
+            }
+            Payload.Reset();
+            Payload.WriteU32((uint)tables.Count);
+            WriteRecord(Brt.BeginListParts, Payload.Span);
+            for (int i = 0; i < tables.Count; i++)
+            {
+                Payload.Reset();
+                Biff12RecordWriter.WriteWideString(Payload, TablePackage.RelationshipId(i));
+                WriteRecord(Brt.ListPart, Payload.Span);
+            }
+            WriteRecord(Brt.EndListParts);
+        }
+
+        /// <inheritdoc/>
+        public void BeginTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null)
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            ExcelTableOptions effective = options ?? ExcelTableOptions.Default;
+            string[] names = TableValidation.Validate(name, columns, effective);
+            _tables.RequireNoneOpen();
+            _owner.Tables.RequireAvailable(name);
+            TableTracker.RequireRoom(_rowNumber + 1);
+            using (XlsbRowWriter row = StartRow())
+            {
+                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+            }
+            _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber);
+        }
+
+        /// <inheritdoc/>
+        public ValueTask BeginTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            BeginTable(name, columns, options);
+            return ValueTask.CompletedTask;
+        }
+
+        /// <inheritdoc/>
+        public void EndTable()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            if (_tables.End(_rowNumber))
+            {
+                BeginRow(styleId: 0);
+                _rowActive = false;
+            }
+        }
+
         private void Fault()
         {
             if (_state == WriterState.Ended)
@@ -526,16 +589,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriteRecord(Brt.EndWsView);
             WriteRecord(Brt.EndWsViews);
         }
-        private static ReadOnlySpan<byte> SheetMetadataPayload => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
-        private static ReadOnlySpan<byte> TableStyleClientPayload => [0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
-        private void WriteSheetMetadata()
-        {
-            WriteBlobRecord(Brt.BeginCellMetadata, SheetMetadataPayload);
-            WriteRecord(Brt.EndCellMetadata);
-            WriteRecord(Brt.BeginTableStyles);
-            WriteBlobRecord(Brt.TableStyleClient, TableStyleClientPayload);
-            WriteRecord(Brt.EndTableStyles);
-        }
 
         private void WriteCell(int columnIndex, XlsbCell cell)
         {
@@ -653,7 +706,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return false;
             }
-            // Excel writes an integer as the float form whenever it is exact; calamine ignores a date style on the int form.
             ulong bits = BitConverter.DoubleToUInt64Bits(value);
             rk = (bits & 0x3_FFFF_FFFFUL) == 0 ? (uint)(bits >> 32) : ((uint)(int)value << 2) | 0x02;
             return true;

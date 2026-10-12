@@ -205,7 +205,7 @@ namespace ExcelReader.Tests.Writer.Xlsb
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Boolean, e.Current[0].Type);
             Assert.Equal(CellType.Empty, e.Current[1].Type);
-            Assert.True(e.Current[2].TryGetDateTime(out DateTime parsed));
+            Assert.True(e.Current[2].TryGetDateTime(isDate1904: false, out DateTime parsed));
             Assert.Equal(date, parsed);
             Assert.Equal(CellType.Empty, e.Current[3].Type);
             Assert.True(e.Current[4].TryParse(null, out double nullableFloat));
