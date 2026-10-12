@@ -24,7 +24,8 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ExcelLimitExceededException">The sheet has no room left for a header row and a data row.</exception>
         void BeginTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null);
 
-        /// <inheritdoc cref="BeginTable"/>
+        /// <inheritdoc cref="BeginTable" path="/summary"/>
+        /// <inheritdoc cref="BeginTable" path="/exception"/>
         /// <param name="name">The table name: unique in the workbook, ignoring case, and valid as an Excel name.</param>
         /// <param name="columns">The column names, written as the header row.</param>
         /// <param name="options">Position and style. Defaults to <see cref="ExcelTableOptions.Default"/>.</param>
