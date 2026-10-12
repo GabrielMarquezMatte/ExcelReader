@@ -58,7 +58,7 @@ jobs:
       # FailedToResolveAnalyzer.
       - name: Build site
         run: |
-          dotnet build src/ExcelReader.Generator/ExcelReader.Generator.csproj --configuration Release
+          dotnet build src/ExcelReader.Generator/ExcelReader.Generator.csproj --configuration Release -p:RunAnalyzers=false
           dotnet tool install --global docfx --version 2.81.0
           docfx docfx.json --warningsAsErrors
 
