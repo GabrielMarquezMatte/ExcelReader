@@ -3,7 +3,7 @@ name: Docs -> GitHub Pages
 on:
   push:
     branches: [master]
-    paths:
+    paths: &docs-paths
       - 'src/ExcelReader.Core/**'
       - 'src/ExcelReader.Arrow/**'
       - 'src/ExcelReader.Native/include/**'
@@ -15,17 +15,21 @@ on:
       - 'docfx.json'
       - 'assets/**'
       - '.github/workflows/docs.yml'
+  # Builds without publishing, so a broken page or a Doxygen @param that no longer matches its
+  # signature fails the pull request instead of the next publish.
+  pull_request:
+    paths: *docs-paths
   workflow_dispatch:
 
 concurrency:
-  group: docs-pages
+  group: docs-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  publish:
+  docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -38,6 +42,7 @@ jobs:
       - name: Build Python API reference
         run: python3 python/scripts/api_markdown.py
 
+      # Fails on any Doxygen documentation warning, such as an @param naming no parameter.
       - name: Build C++ API reference
         run: |
           sudo apt-get update
@@ -52,6 +57,7 @@ jobs:
       # keep_files leaves dev/bench (benchmark-pages.yml) in place; pages removed from the docs
       # stay on the branch until deleted by hand.
       - name: Publish to gh-pages
+        if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
