@@ -42,6 +42,7 @@ foreach (Row row in workbook.FirstSheet)
 - [Writing workbooks](docs/guide/writing.md) — XLSX, XLSB (BIFF12) and XLS (BIFF8) writers, cell styles, typed records, and prefetch compression.
 - [CSV](docs/guide/csv.md) — reading, dialect sniffing, parallel parsing, and writing delimited text.
 - [Encrypted workbooks](docs/guide/encryption.md) — opening password-protected packages and encrypting written ones.
+- [Reading untrusted files](docs/guide/untrusted-input.md) — the resource limits that bound what one hostile file can cost, and how to reject one cleanly.
 - [Migrating to v7](docs/guide/migrating-to-v7.md) — porting `CsvParallel` code to `SheetParallel`, which now reads XLSX and XLSB on several threads too.
 - [Migrating to v6](docs/guide/migrating-to-v6.md) — porting v5 reader code to workbooks and sheets, and reading sheets in parallel.
 - [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
