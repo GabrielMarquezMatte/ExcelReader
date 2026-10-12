@@ -36,6 +36,7 @@ jobs:
             dotnet:
               - 'src/**'
               - 'tests/**'
+              - 'docs/snippets/**'
               - 'Directory.Build.props'
               - 'global.json'
               - 'ExcelReader.slnx'

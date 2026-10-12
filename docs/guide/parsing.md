@@ -7,6 +7,7 @@ generator, the fluent API, converters, and the zero-copy `ref struct` path.
 
 `ExcelParser.FromAttributes<T>()` maps worksheet columns to the public settable properties of `T`. Columns match on the property name, or on `[ExcelColumn("header")]` aliases — repeat the attribute to accept several headers. The first row is the header by default.
 
+<!-- snippet: parsing-attributes -->
 ```csharp
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -33,6 +34,7 @@ Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `
 
 `Parse` also accepts the [`IExcelSheet`](xref:ExcelReader.Core.Reader.IExcelSheet) of the [`IExcelWorkbook`](xref:ExcelReader.Core.Reader.IExcelWorkbook) from [`Excel.Open`](xref:ExcelReader.Core.Reader.Excel.Open*), so you can parse without knowing the concrete format:
 
+<!-- snippet: parsing-attributes-open -->
 ```csharp
 using IExcelWorkbook workbook = Excel.Open("changes.xlsx"); // or .xlsb / .xls
 foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(workbook.FirstSheet)) { /* ... */ }
@@ -42,6 +44,7 @@ foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(workbook.Firs
 
 [`ExcelParser.FromAttributes<T>`](xref:ExcelReader.Core.Parser.ExcelParser.FromAttributes*) and [`ExcelRecordLayout.FromAttributes<T>`](xref:ExcelReader.Core.Writer.ExcelRecordLayout.FromAttributes*) reflect over `T` (`GetProperties`, `MakeGenericMethod`), which trimming can break and Native AOT cannot run at all. The raw `Excel.From*` readers already use no reflection; mark a model `[ExcelSerializable]` to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own `[ExcelColumn]`/`[ExcelRequired]`/`[ExcelConverter]`/`[ExcelIgnore]` attributes, and [`ExcelParser.Generated<T>`](xref:ExcelReader.Core.Parser.ExcelParser.Generated*)/[`ExcelRecordLayout.Generated<T>`](xref:ExcelReader.Core.Writer.ExcelRecordLayout.Generated*) read and write through that map instead of reflection:
 
+<!-- snippet: parsing-generated -->
 ```csharp
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -66,8 +69,8 @@ foreach (var item in ExcelParser.Generated<ChangeRow>().Parse(workbook.FirstShee
 
 var changes = new[] { new ChangeRow { File = "README.md", LinesAdded = 12 } };
 await using var stream = File.Create("changes.xlsx");
-await using var workbook = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
-await using (var sheet = workbook.AddSheet("Changes"))
+await using var writer = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
+await using (var sheet = writer.AddSheet("Changes"))
 {
     await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>());
 }
@@ -85,6 +88,7 @@ Notes:
 
 `[ExcelColumn]`/`[ExcelRequired]` fix the mapping at compile time. When the mapping itself is a runtime decision — loaded from a config file, chosen by a user in a UI, or different per input file — build it with [`ExcelRowMapBuilder<T>`](xref:ExcelReader.Core.Parser.ExcelRowMapBuilder%601) through `ExcelParser.Build<T>` instead:
 
+<!-- snippet: parsing-fluent -->
 ```csharp
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -111,6 +115,7 @@ The map is built once, when `Build` is called, from a fresh builder instance —
 
 Bind a fixed column index instead of a header name with `PropertyAt` — for files with no header row at all:
 
+<!-- snippet: parsing-fluent-index -->
 ```csharp
 var parser = ExcelParser.Build<ChangeRow>(builder => builder
     .Factory(() => new ChangeRow())
@@ -122,6 +127,7 @@ A builder that uses `PropertyAt` skips the header-row step entirely — the firs
 
 [`ExcelParser.BuildWithAttributeFallback<T>`](xref:ExcelReader.Core.Parser.ExcelParser.BuildWithAttributeFallback*) merges the builder's bindings with `[ExcelColumn]`/`[ExcelRequired]`-driven ones reflected from `T`: a builder binding replaces every attribute-driven property that shares one of its header names; a property whose header names none of the builder's bindings mention keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model — reuse one of the property's existing `[ExcelColumn]` names in the builder:
 
+<!-- snippet: parsing-fluent-fallback -->
 ```csharp
 var parser = ExcelParser.BuildWithAttributeFallback<ChangeRow>(builder => builder
     .Property(["file"], ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v.ToUpperInvariant()));
@@ -135,6 +141,7 @@ The match is by header name, not by property identity: configuring a *different*
 
 Pass an [`ExcelParserOptions`](xref:ExcelReader.Core.Parser.ExcelParserOptions) to control header handling and culture:
 
+<!-- snippet: parsing-options -->
 ```csharp
 using System.Globalization;
 using ExcelReader.Core.Parser;
@@ -156,6 +163,7 @@ var parser = ExcelParser.FromAttributes<ChangeRow>(options);
 
 Mark a property `[ExcelRequired]` to assert its column exists and carries a value:
 
+<!-- snippet: parsing-required -->
 ```csharp
 public sealed class Order
 {
@@ -175,6 +183,7 @@ public sealed class Order
 
 For types the built-in parsers do not handle — money strings, custom formats, domain value objects — implement [`IExcelCellConverter<T>`](xref:ExcelReader.Core.Parser.IExcelCellConverter%601) and attach it with `[ExcelConverter]`. `T` must be the property's exact type. One instance is created and reused across all rows, so converters must be stateless.
 
+<!-- snippet: parsing-converter -->
 ```csharp
 using System.Globalization;
 using ExcelReader.Core.Parser;
@@ -202,6 +211,7 @@ Return `false` to signal a parse failure (the property keeps its default). Empty
 
 `ExcelParser.FromAttributes<T>` takes a `ref struct` model just as it takes a class or a struct — same attribute-driven column matching (`[ExcelColumn]`, `[ExcelRequired]`, `[ExcelConverter]`), but a `ReadOnlySpan<byte>` property binds directly to the cell's raw bytes instead of allocating a `string`:
 
+<!-- snippet: parsing-ref-struct -->
 ```csharp
 using System.Text;
 using ExcelReader.Core.Parser;
@@ -223,6 +233,7 @@ foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(w
 
 The result of `Parse` supports `await foreach` (add `.WithCancellation(ct)` to pass a token), so a `ref struct` model can be parsed asynchronously — the rows are streamed via `MoveNextAsync` while the model stays a zero-copy `ref struct`:
 
+<!-- snippet: parsing-ref-struct-async -->
 ```csharp
 await using var workbook = await Excel.FromXlsxFileAsync("changes.xlsx");
 

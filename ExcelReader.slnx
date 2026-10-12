@@ -13,4 +13,7 @@
     <Project Path="tests/ExcelReader.AotSanity/ExcelReader.AotSanity.csproj" />
     <Project Path="tests/ExcelReader.NativePgoTrainer/ExcelReader.NativePgoTrainer.csproj" />
   </Folder>
+  <Folder Name="/docs/">
+    <Project Path="docs/snippets/ExcelReader.Snippets.csproj" />
+  </Folder>
 </Solution>

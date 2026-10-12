@@ -7,6 +7,7 @@ Parallel CSV parsing is covered in [reading.md](reading.md#parallel-reading-opt-
 
 [`CsvReader`](xref:ExcelReader.Core.Reader.Csv.CsvReader) is a workbook with exactly one, unnamed sheet (`csv.FirstSheet`, the same sheet as `csv.Sheets[0]`). It streams RFC 4180 CSV (quoted fields, embedded delimiters/newlines, `""`-escaped quotes) through the same [`Row`](xref:ExcelReader.Core.Reader.Row)/[`Cell`](xref:ExcelReader.Core.Reader.Cell) model as the Excel workbooks, so [`ExcelParser<T>`](xref:ExcelReader.Core.Parser.ExcelParser%601) works on it unchanged.
 
+<!-- snippet: csv-read -->
 ```csharp
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -27,6 +28,7 @@ foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(csv.FirstShee
 
 [`Excel.FromCsv`](xref:ExcelReader.Core.Reader.Excel.FromCsv*)/`FromCsvFile`/`FromCsvAsync`/`FromCsvFileAsync` mirror the other formats' factory shape and take the same [`ExcelReaderOptions`](xref:ExcelReader.Core.Reader.ExcelReaderOptions). Its `Csv` property, a [`CsvReaderOptions`](xref:ExcelReader.Core.Reader.Csv.CsvReaderOptions), changes the delimiter/quote character, supplies a non-UTF-8 `Encoding` (transcoded to UTF-8 internally), or turns off BOM detection; `MaxCellBytes` and `InternStrings` stay on `ExcelReaderOptions`, as for every format:
 
+<!-- snippet: csv-read-options -->
 ```csharp
 var options = new ExcelReaderOptions { Csv = new CsvReaderOptions { Delimiter = (byte)';' } };
 using var csv = Excel.FromCsvFile("relatorio.csv", options);
@@ -38,6 +40,7 @@ A `CsvReader` over memory, a file path or a seekable stream allows several enume
 
 [`Excel.Open`](xref:ExcelReader.Core.Reader.Excel.Open*)/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff. Name the format instead: every `Open`/`OpenAsync` overload takes an optional [`ExcelFileFormat`](xref:ExcelReader.Core.Reader.ExcelFileFormat), and [`ExcelReaderOptions.Csv`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.Csv) carries the dialect, so a caller that decides the format from an extension or a content-type header configures both families through one options object:
 
+<!-- snippet: csv-open-by-format -->
 ```csharp
 ExcelFileFormat format = Path.GetExtension(path) is ".csv" ? ExcelFileFormat.Csv : ExcelFileFormat.Unknown;
 
@@ -54,6 +57,7 @@ using IExcelWorkbook workbook = Excel.Open(path, format, new ExcelReaderOptions
 
 [`CsvSniffer.Detect`](xref:ExcelReader.Core.Reader.Csv.CsvSniffer.Detect*) infers the delimiter, quote character, and encoding (from a leading byte-order mark) from a sample of bytes, so a `;`-separated pt-BR export or a TSV can be read without the caller knowing the dialect up front. It is deterministic (ties break by candidate order) and never throws on arbitrary input — an indecisive sample returns [`CsvDialect.Default`](xref:ExcelReader.Core.Reader.Csv.CsvDialect.Default) (comma, `"`, UTF-8).
 
+<!-- snippet: csv-sniff -->
 ```csharp
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
@@ -66,6 +70,7 @@ using var csv = Excel.FromCsvFile("export.csv", new ExcelReaderOptions { Csv = C
 
 [`CsvReaderOptions.SniffDialect`](xref:ExcelReader.Core.Reader.Csv.CsvReaderOptions.SniffDialect) does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, and `Excel.Open` with [`ExcelFileFormat.Csv`](xref:ExcelReader.Core.Reader.ExcelFileFormat.Csv). The dialect of a parallel read is the one the CSV workbook was opened with:
 
+<!-- snippet: csv-sniff-on-open -->
 ```csharp
 using var csv = Excel.FromCsvFile("export.csv", new ExcelReaderOptions { Csv = CsvReaderOptions.Default with { SniffDialect = true } });
 ```
@@ -76,6 +81,7 @@ An explicitly set `Encoding` survives sniffing unless the source carries a byte-
 
 [`CsvWorkbookWriter`](xref:ExcelReader.Core.Writer.Csv.CsvWorkbookWriter) emits RFC 4180 CSV: no styles or shared strings, so rows stream straight to the output. A CSV file is a single sheet, so `AddSheet` is called once (the name is ignored).
 
+<!-- snippet: csv-write -->
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Csv;
@@ -103,6 +109,7 @@ Fields are quoted only when they contain the delimiter, quote character, `\r`, o
 
 [`CsvWriterOptions`](xref:ExcelReader.Core.Writer.Csv.CsvWriterOptions) mirrors `CsvReaderOptions`'s delimiter, quote and encoding, so a file written with one set of settings reads back with the matching set:
 
+<!-- snippet: csv-write-options -->
 ```csharp
 using var workbook = CsvWorkbookWriter.Create(stream, leaveOpen: false, new CsvWriterOptions
 {
