@@ -32,7 +32,7 @@ pub struct WriterHandle {
 
 impl WriterHandle {
     /// Creates `path` (truncating it if it already exists), inferring the format from its
-    /// extension via [`format_from_path`](crate::writer::format_from_path).
+    /// extension via [`crate::writer::format_from_path`].
     pub fn open(path: &str, options: Option<&WriteOptions>) -> Result<Self, Error> {
         Self::open_with(path, format_from_path(path), options)
     }

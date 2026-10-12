@@ -20,6 +20,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=EXCELREADER_NATIVE_LIB_DIR");
     println!("cargo:rerun-if-changed=excelreader.def");
 
+    // docs.rs builds offline and rustdoc never links, so the native library is not needed there.
+    if env::var_os("DOCS_RS").is_some() {
+        return;
+    }
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
