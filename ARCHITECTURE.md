@@ -6,7 +6,7 @@ directly rather than looking for a commentary alongside it.
 
 What the code deliberately does *not* carry is the evidence behind a decision — benchmark numbers,
 memory-footprint measurements, approaches that were tried and rejected. That lives in
-[`docs/`](docs/), and [`STYLEGUIDE.md`](STYLEGUIDE.md#comments) says why.
+[`docs/`](docs/README.md), and [`STYLEGUIDE.md`](STYLEGUIDE.md#comments) says why.
 
 ## The four format families
 

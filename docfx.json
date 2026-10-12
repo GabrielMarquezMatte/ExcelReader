@@ -1,0 +1,48 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/docfx/main/schemas/docfx.schema.json",
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "src",
+          "files": [
+            "ExcelReader.Core/ExcelReader.Core.csproj",
+            "ExcelReader.Arrow/ExcelReader.Arrow.csproj"
+          ]
+        }
+      ],
+      "output": "docs/api"
+    }
+  ],
+  "build": {
+    "content": [
+      { "files": [ "index.md", "toc.yml", "api/**.{yml,md}" ], "src": "docs" },
+      {
+        "files": [
+          "docs/README.md",
+          "docs/guide/**.md",
+          "docs/performance/**.md",
+          "python/README.md",
+          "rust/excelreader/README.md",
+          "cpp/README.md",
+          "ARCHITECTURE.md",
+          "CONTRIBUTING.md",
+          "CODE_OF_CONDUCT.md",
+          "SECURITY.md",
+          "STYLEGUIDE.md"
+        ]
+      }
+    ],
+    "resource": [
+      { "files": [ "assets/icon.png", "LICENSE", "src/ExcelReader.Native/include/excelreader.h" ] }
+    ],
+    "output": "docs/_site",
+    "template": [ "default", "modern", "docs/template" ],
+    "globalMetadata": {
+      "_appName": "ExcelReader",
+      "_appTitle": "ExcelReader",
+      "_appLogoPath": "assets/icon.png",
+      "_enableSearch": true
+    }
+  }
+}

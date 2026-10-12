@@ -506,3 +506,6 @@ python/src/excelreader/_lib/*
 build/
 # Subagent-driven-development scratch (per-plan ledgers, briefs, review packages)
 .superpowers/
+# docfx output (docfx.json); CI builds and publishes it to gh-pages
+docs/_site/
+docs/api/
