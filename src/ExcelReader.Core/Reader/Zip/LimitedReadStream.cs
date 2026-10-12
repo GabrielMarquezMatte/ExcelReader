@@ -12,6 +12,13 @@ namespace ExcelReader.Core.Reader.Zip
             _limitName = limitName;
         }
 
+        // A sheet read counts from what the workbook's one-time loads (metadata, styles, shared strings)
+        // inflated, so a single read stays within the limit while a re-read does not pay for earlier ones.
+        internal DecompressedByteCounter ForRead()
+        {
+            return new DecompressedByteCounter(_limit, _limitName) { _total = Interlocked.Read(ref _total) };
+        }
+
         internal void Add(long bytes)
         {
             if (bytes <= 0 || _limit <= 0)

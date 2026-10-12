@@ -15,7 +15,7 @@ All of them live on [`ExcelReaderOptions`](xref:ExcelReader.Core.Reader.ExcelRea
 
 | Option | Default | Bounds | Formats |
 |---|---:|---|---|
-| `MaxTotalDecompressedBytes` | 512 MiB | Every byte the workbook inflates or loads from its container: sheets, shared strings, styles, and the decrypted package | XLSX, XLSB, XLS, encrypted |
+| `MaxTotalDecompressedBytes` | 512 MiB | What one read of a sheet inflates or loads from its container, counting the workbook's metadata, styles, shared strings and decrypted package | XLSX, XLSB, XLS, encrypted |
 | `MaxSharedStringBytes` | 128 MiB | The shared-string table, which is held in memory for the whole read | XLSX, XLSB, XLS |
 | `MaxCellBytes` | 32 MiB | Each buffer that grows to hold one cell value, or one CSV record | all |
 | `MaxZipEntries` | 65,536 | Entries in the ZIP directory | XLSX, XLSB |
@@ -27,10 +27,10 @@ with `LimitName == "Columns"`, and no single buffer may exceed .NET's array size
 
 How they count:
 
-- **`MaxTotalDecompressedBytes` belongs to the opened workbook, not to one read.** Every sheet you
-  read, and every re-read of the same sheet, draws from the same budget. A workbook kept open and
-  read repeatedly will eventually hit it, so open one per job, or size the budget for all the
-  reads you make.
+- **`MaxTotalDecompressedBytes` is per read of a sheet.** The workbook's one-time loads (its
+  metadata, styles and shared strings) count toward every read, and each read adds the sheet it
+  inflates. Reading a sheet again starts from the one-time loads, so a workbook kept open and read
+  repeatedly never runs out.
 - **XLS has nothing to inflate, but it is not streamed:** the whole Workbook stream is read into
   memory, up to `MaxTotalDecompressedBytes`.
 - **CSV has no total limit.** It streams, so the size of what you hand it is the bound; only
@@ -38,7 +38,8 @@ How they count:
 - **Zero or a negative value turns a byte or entry limit off.** `MaxPasswordSpinCount` has no off
   switch. In the Python, Rust and C++ bindings and the C ABI, `0` means the default instead, and a
   limit cannot be turned off.
-- **The limits are per workbook.** Ten uploads read at once can hold ten times the budget.
+- **Reads running at once each have their own budget.** Ten uploads read together, or several sheets
+  of one workbook read on different threads, can inflate ten times the budget between them.
 
 ## A profile for uploads
 

@@ -64,12 +64,12 @@ namespace ExcelReader.Core.Reader.Xlsb
 
             private protected override Stream OpenSource()
             {
-                return _reader._zip!.OpenEntryStream(_entry, _reader._decompressedBytes, _reader._options);
+                return _reader._zip!.OpenEntryStream(_entry, _reader._decompressedBytes.ForRead(), _reader._options);
             }
 
             private protected override async ValueTask<Stream> OpenSourceAsync()
             {
-                return await _reader._zip!.OpenEntryStreamAsync(_entry, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
+                return await _reader._zip!.OpenEntryStreamAsync(_entry, _reader._decompressedBytes.ForRead(), _reader._options, _ct).ConfigureAwait(false);
             }
 
             /// <inheritdoc/>
