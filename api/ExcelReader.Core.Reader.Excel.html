@@ -1,0 +1,2076 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Excel | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Excel | ExcelReader ">
+      
+      <meta name="description" content="Entry point for opening Excel and CSV workbooks. /  and their async counterparts auto-detect XLSX/XLSB/XLS from the file&#39;s signature and return a format-agnostic ; the From*/FromXls*/FromXlsb*/FromCsv* methods open a specific, known format directly.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Reader_Excel.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Reader.Excel%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Reader.Excel">
+
+
+
+  <h1 id="ExcelReader_Core_Reader_Excel" data-uid="ExcelReader.Core.Reader.Excel" class="text-break">
+Class Excel  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.Encrypt.cs/#L5"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Reader.html">Reader</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Entry point for opening Excel and CSV workbooks. <a class="xref" href="ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_">Open(string, ExcelReaderOptions?)</a>/
+<a class="xref" href="ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_">Open(Stream, bool, ExcelReaderOptions?)</a> and their async counterparts auto-detect XLSX/XLSB/XLS
+from the file's signature and return a format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>; the
+<code>From*</code>/<code>FromXls*</code>/<code>FromXlsb*</code>/<code>FromCsv*</code> methods open a specific, known format directly.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class Excel</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Excel</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_Excel_DetectFileFormat_" data-uid="ExcelReader.Core.Reader.Excel.DetectFileFormat*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_DetectFileFormat_System_IO_Stream_" data-uid="ExcelReader.Core.Reader.Excel.DetectFileFormat(System.IO.Stream)">
+  DetectFileFormat(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L628"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ExcelFileFormat DetectFileFormat(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>A seekable stream containing the workbook data. The stream's position is restored after detection.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a></dt>
+    <dd><p>The detected <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a>, or <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> if the signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">stream</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">stream</code> does not support seeking.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_DetectFileFormat_" data-uid="ExcelReader.Core.Reader.Excel.DetectFileFormat*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_DetectFileFormat_System_ReadOnlyMemory_System_Byte__" data-uid="ExcelReader.Core.Reader.Excel.DetectFileFormat(System.ReadOnlyMemory{System.Byte})">
+  DetectFileFormat(ReadOnlyMemory&lt;byte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L640"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from an in-memory buffer's signature, without consuming it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ExcelFileFormat DetectFileFormat(ReadOnlyMemory&lt;byte&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>A buffer containing the workbook data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a></dt>
+    <dd><p>The detected <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a>, or <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> if the signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_DetectFileFormatAsync_" data-uid="ExcelReader.Core.Reader.Excel.DetectFileFormatAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_DetectFileFormatAsync_System_IO_Stream_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.DetectFileFormatAsync(System.IO.Stream,System.Threading.CancellationToken)">
+  DetectFileFormatAsync(Stream, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L653"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;ExcelFileFormat&gt; DetectFileFormatAsync(Stream stream, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>A seekable stream containing the workbook data. The stream's position is restored after detection.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the detection operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a>&gt;</dt>
+    <dd><p>The detected <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a>, or <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> if the signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">stream</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">stream</code> does not support seeking.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_EncryptPackage_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackage*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_EncryptPackage_System_IO_Stream_System_IO_Stream_ExcelReader_Core_Reader_ExcelPassword_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackage(System.IO.Stream,System.IO.Stream,ExcelReader.Core.Reader.ExcelPassword)">
+  EncryptPackage(Stream, Stream, ExcelPassword)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.Encrypt.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Wraps a finished plaintext OOXML package (XLSX or XLSB) in a password-encrypted CFB
+container, using agile encryption (ECMA-376 4.4): AES-256-CBC, SHA-512, 100,000 spin
+iterations, with a <code>dataIntegrity</code> HMAC.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void EncryptPackage(Stream package, Stream destination, ExcelPassword password)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>package</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The plaintext package, positioned at its first byte. Must be readable and seekable — it is
+read twice. Not disposed by this method.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>Where the encrypted container is written. Need not be seekable. Not disposed by this method.</p>
+</dd>
+    <dt><code>password</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelPassword.html">ExcelPassword</a></dt>
+    <dd><p>The password required to open the result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Any argument is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">package</code> is unreadable, not seekable, empty, or does not begin with the
+<code>PK\x03\x04</code> package signature; or <code class="paramref">password</code> is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_EncryptPackage_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackage*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_EncryptPackage_System_String_System_String_ExcelReader_Core_Reader_ExcelPassword_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackage(System.String,System.String,ExcelReader.Core.Reader.ExcelPassword)">
+  EncryptPackage(string, string, ExcelPassword)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.Encrypt.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads the plaintext package at <code class="paramref">packagePath</code> and writes its encrypted
+counterpart to <code class="paramref">destinationPath</code>, overwriting an existing file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void EncryptPackage(string packagePath, string destinationPath, ExcelPassword password)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>packagePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the plaintext XLSX/XLSB package.</p>
+</dd>
+    <dt><code>destinationPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to write the encrypted workbook to.</p>
+</dd>
+    <dt><code>password</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelPassword.html">ExcelPassword</a></dt>
+    <dd><p>The password required to open the result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">packagePath</code> or <code class="paramref">destinationPath</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> or empty;
+or the package at <code class="paramref">packagePath</code> is unreadable, empty, or does not begin with the
+<code>PK\x03\x04</code> package signature; or <code class="paramref">password</code> is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_EncryptPackageAsync_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackageAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_EncryptPackageAsync_System_IO_Stream_System_IO_Stream_ExcelReader_Core_Reader_ExcelPassword_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackageAsync(System.IO.Stream,System.IO.Stream,ExcelReader.Core.Reader.ExcelPassword,System.Threading.CancellationToken)">
+  EncryptPackageAsync(Stream, Stream, ExcelPassword, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.Encrypt.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronous counterpart to <a class="xref" href="ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_EncryptPackage_System_IO_Stream_System_IO_Stream_ExcelReader_Core_Reader_ExcelPassword_">EncryptPackage(Stream, Stream, ExcelPassword)</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask EncryptPackageAsync(Stream package, Stream destination, ExcelPassword password, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>package</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The plaintext package. Must be readable and seekable; not disposed here.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>Where the encrypted container is written; not disposed here.</p>
+</dd>
+    <dt><code>password</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelPassword.html">ExcelPassword</a></dt>
+    <dd><p>The password required to open the result.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Any argument is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">package</code> is unreadable, not seekable, empty, or does not begin with the
+<code>PK\x03\x04</code> package signature; or <code class="paramref">password</code> is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_EncryptPackageAsync_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackageAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_EncryptPackageAsync_System_String_System_String_ExcelReader_Core_Reader_ExcelPassword_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.EncryptPackageAsync(System.String,System.String,ExcelReader.Core.Reader.ExcelPassword,System.Threading.CancellationToken)">
+  EncryptPackageAsync(string, string, ExcelPassword, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.Encrypt.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronous counterpart to <a class="xref" href="ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_EncryptPackage_System_String_System_String_ExcelReader_Core_Reader_ExcelPassword_">EncryptPackage(string, string, ExcelPassword)</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask EncryptPackageAsync(string packagePath, string destinationPath, ExcelPassword password, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>packagePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the plaintext XLSX/XLSB package.</p>
+</dd>
+    <dt><code>destinationPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to write the encrypted workbook to.</p>
+</dd>
+    <dt><code>password</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelPassword.html">ExcelPassword</a></dt>
+    <dd><p>The password required to open the result.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">packagePath</code> or <code class="paramref">destinationPath</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> or empty;
+or the package at <code class="paramref">packagePath</code> is unreadable, empty, or does not begin with the
+<code>PK\x03\x04</code> package signature; or <code class="paramref">password</code> is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromCsv_" data-uid="ExcelReader.Core.Reader.Excel.FromCsv*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromCsv_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromCsv(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromCsv(Stream, bool, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a CSV (or other delimited-text) source from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the CSV data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Size limits and interning, plus the delimiter, quote and encoding in <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a>; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Csv.CsvReader.html">CsvReader</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromCsv_" data-uid="ExcelReader.Core.Reader.Excel.FromCsv*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromCsv_System_ReadOnlyMemory_System_Byte__ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromCsv(System.ReadOnlyMemory{System.Byte},ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromCsv(ReadOnlyMemory&lt;byte&gt;, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a CSV (or other delimited-text) source directly from an in-memory buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CsvReader FromCsv(ReadOnlyMemory&lt;byte&gt; data, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>The whole CSV source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Size limits and interning, plus the delimiter, quote and encoding in <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a>; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Csv.CsvReader.html">CsvReader</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromCsvAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromCsvAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromCsvAsync_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromCsvAsync(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromCsvAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;CsvReader&gt; FromCsvAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the CSV data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Size limits and interning, plus the delimiter, quote and encoding in <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a>; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Csv.CsvReader.html">CsvReader</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromCsvFile_" data-uid="ExcelReader.Core.Reader.Excel.FromCsvFile*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromCsvFile_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromCsvFile(System.String,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromCsvFile(string, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CsvReader FromCsvFile(string path, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the CSV file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Size limits and interning, plus the delimiter, quote and encoding in <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a>; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Csv.CsvReader.html">CsvReader</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromCsvFileAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromCsvFileAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromCsvFileAsync_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromCsvFileAsync(System.String,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromCsvFileAsync(string, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;CsvReader&gt; FromCsvFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the CSV file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Size limits and interning, plus the delimiter, quote and encoding in <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a>; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Csv.CsvReader.html">CsvReader</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXls_" data-uid="ExcelReader.Core.Reader.Excel.FromXls*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXls_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXls(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXls(Stream, bool, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a legacy binary (XLS) workbook from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsWorkbook FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the XLS data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.html">XlsWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXls_" data-uid="ExcelReader.Core.Reader.Excel.FromXls*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXls_System_ReadOnlyMemory_System_Byte__ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXls(System.ReadOnlyMemory{System.Byte},ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXls(ReadOnlyMemory&lt;byte&gt;, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a legacy binary (XLS) workbook directly from an in-memory buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsWorkbook FromXls(ReadOnlyMemory&lt;byte&gt; data, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>The whole XLS file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.html">XlsWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsAsync_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsAsync(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromXlsAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a legacy binary (XLS) workbook from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;XlsWorkbook&gt; FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the XLS data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.html">XlsWorkbook</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsFile_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsFile*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsFile_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsFile(System.String,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXlsFile(string, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsWorkbook FromXlsFile(string path, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the XLS file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.html">XlsWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsFileAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsFileAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsFileAsync_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsFileAsync(System.String,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromXlsFileAsync(string, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;XlsWorkbook&gt; FromXlsFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the XLS file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.html">XlsWorkbook</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsb_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsb*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsb_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsb(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXlsb(Stream, bool, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens an XLSB (Excel binary) workbook from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsbWorkbook FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the XLSB data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html">XlsbWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsb_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsb*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsb_System_ReadOnlyMemory_System_Byte__ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsb(System.ReadOnlyMemory{System.Byte},ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXlsb(ReadOnlyMemory&lt;byte&gt;, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
+central directory without a <code>ZipArchive</code>. Small parts (workbook, styles, shared strings)
+are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+without <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_PrefetchDecompression">PrefetchDecompression</a> enumeration never suspends, even
+under <code>await foreach</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsbWorkbook FromXlsb(ReadOnlyMemory&lt;byte&gt; data, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>The whole XLSB file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>. <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_PrefetchDecompression">PrefetchDecompression</a> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html">XlsbWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsbAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsbAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsbAsync_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsbAsync(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromXlsbAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;XlsbWorkbook&gt; FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the XLSB data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html">XlsbWorkbook</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsbFile_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsbFile*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsbFile_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsbFile(System.String,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXlsbFile(string, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsbWorkbook FromXlsbFile(string path, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the XLSB file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html">XlsbWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsbFileAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsbFileAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsbFileAsync_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsbFileAsync(System.String,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromXlsbFileAsync(string, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;XlsbWorkbook&gt; FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the XLSB file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html">XlsbWorkbook</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsx_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsx*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsx_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsx(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXlsx(Stream, bool, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens an XLSX workbook from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsxWorkbook FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the XLSX data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html">XlsxWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsx_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsx*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsx_System_ReadOnlyMemory_System_Byte__ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsx(System.ReadOnlyMemory{System.Byte},ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXlsx(ReadOnlyMemory&lt;byte&gt;, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
+central directory without a <code>ZipArchive</code>. Small parts (workbook, styles, shared strings)
+are decompressed whole; each sheet is decompressed as it is enumerated. Nothing waits on I/O, so
+without <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_PrefetchDecompression">PrefetchDecompression</a> enumeration never suspends, even
+under <code>await foreach</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsxWorkbook FromXlsx(ReadOnlyMemory&lt;byte&gt; data, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>The whole XLSX file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>. <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_PrefetchDecompression">PrefetchDecompression</a> applies here too: a background thread inflates each sheet ahead of the parser, and async enumeration may then wait for it.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html">XlsxWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsxAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsxAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsxAsync_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsxAsync(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromXlsxAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens an XLSX workbook from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;XlsxWorkbook&gt; FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the XLSX data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html">XlsxWorkbook</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsxFile_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsxFile*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsxFile_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsxFile(System.String,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  FromXlsxFile(string, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens an XLSX workbook from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static XlsxWorkbook FromXlsxFile(string path, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the XLSX file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html">XlsxWorkbook</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_FromXlsxFileAsync_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsxFileAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_FromXlsxFileAsync_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.FromXlsxFileAsync(System.String,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  FromXlsxFileAsync(string, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;XlsxWorkbook&gt; FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the XLSX file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html">XlsxWorkbook</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_InferSchema_" data-uid="ExcelReader.Core.Reader.Excel.InferSchema*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_InferSchema_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_Schema_SchemaInferenceOptions_" data-uid="ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Reader.Schema.SchemaInferenceOptions)">
+  InferSchema(IExcelSheet, SchemaInferenceOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Guesses a column schema for <code class="paramref">sheet</code> by sampling it from the first row.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IReadOnlyList&lt;ExcelColumnSchema&gt; InferSchema(IExcelSheet sheet, SchemaInferenceOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html">SchemaInferenceOptions</a></dt>
+    <dd><p>Header row, sample size and text parsing; <a class="xref" href="ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html#ExcelReader_Core_Reader_Schema_SchemaInferenceOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.Schema.ExcelColumnSchema.html">ExcelColumnSchema</a>&gt;</dt>
+    <dd><p>One <a class="xref" href="ExcelReader.Core.Reader.Schema.ExcelColumnSchema.html">ExcelColumnSchema</a> per column, in column order.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_Excel_InferSchema_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_Schema_SchemaInferenceOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is a guess over a bounded sample, not a guarantee about the whole sheet — a column
+whose first <a class="xref" href="ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html#ExcelReader_Core_Reader_Schema_SchemaInferenceOptions_SampleSize">SampleSize</a> rows are all integers is reported as
+<a class="xref" href="ExcelReader.Core.Reader.Schema.ExcelColumnType.html#ExcelReader_Core_Reader_Schema_ExcelColumnType_Int64Column">Int64Column</a> even if row 10,000 holds text. Verify it fits
+before trusting it, and feed the result into <a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Build__1_System_Action_ExcelReader_Core_Parser_ExcelRowMapBuilder___0___ExcelReader_Core_Parser_ExcelParserOptions_">Build&lt;T&gt;(Action&lt;ExcelRowMapBuilder&lt;T&gt;&gt;, ExcelParserOptions?)</a> to
+build a real map.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html#ExcelReader_Core_Reader_Schema_SchemaInferenceOptions_HeaderRow">HeaderRow</a> is negative, or
+<a class="xref" href="ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html#ExcelReader_Core_Reader_Schema_SchemaInferenceOptions_SampleSize">SampleSize</a> is not positive.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The sheet has fewer rows than <a class="xref" href="ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html#ExcelReader_Core_Reader_Schema_SchemaInferenceOptions_HeaderRow">HeaderRow</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html#ExcelReader_Core_Reader_Schema_SchemaInferenceOptions_HeaderRow">HeaderRow</a> is positive and <code class="paramref">sheet</code> is a table view (<a class="xref" href="ExcelReader.Core.Reader.ExcelTable.html#ExcelReader_Core_Reader_ExcelTable_AsSheet">AsSheet()</a>) of a table without a header row.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_Open_" data-uid="ExcelReader.Core.Reader.Excel.Open*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_Open_System_IO_Stream_ExcelReader_Core_Reader_ExcelFileFormat_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.Open(System.IO.Stream,ExcelReader.Core.Reader.ExcelFileFormat,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  Open(Stream, ExcelFileFormat, bool, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L493"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a workbook of a known format from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IExcelWorkbook Open(Stream stream, ExcelFileFormat format, bool leaveOpen = true, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the workbook data. Must be seekable when
+<code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a>.</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a></dt>
+    <dd><p>The format to read <code class="paramref">stream</code> as. <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a>
+auto-detects XLSX/XLSB/XLS from the signature.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>. <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a> supplies the dialect when
+<code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv">Csv</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a></dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">stream</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_EncryptedOoxml">EncryptedOoxml</a> or not a defined value.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> and <code class="paramref">stream</code> does not support seeking.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> and the stream's signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_Open_" data-uid="ExcelReader.Core.Reader.Excel.Open*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_Open_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.Open(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  Open(Stream, bool, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L339"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a workbook from an existing seekable stream, auto-detecting its format (XLSX/XLSB/XLS) from the
+stream's signature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IExcelWorkbook Open(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>A seekable stream containing the workbook data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a></dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a> backed by the concrete workbook that matches the detected format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">stream</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">stream</code> does not support seeking.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p>The stream's signature does not match a supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_Open_" data-uid="ExcelReader.Core.Reader.Excel.Open*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_Open_System_ReadOnlyMemory_System_Byte__ExcelReader_Core_Reader_ExcelFileFormat_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory{System.Byte},ExcelReader.Core.Reader.ExcelFileFormat,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  Open(ReadOnlyMemory&lt;byte&gt;, ExcelFileFormat, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L519"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a workbook of a known format from an in-memory buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IExcelWorkbook Open(ReadOnlyMemory&lt;byte&gt; data, ExcelFileFormat format, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>The whole source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a></dt>
+    <dd><p>The format to read <code class="paramref">data</code> as. <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a>
+auto-detects XLSX/XLSB/XLS from the signature.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>. <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a> supplies the dialect when
+<code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv">Csv</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a></dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_EncryptedOoxml">EncryptedOoxml</a> or not a defined value.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> and the buffer's signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_Open_" data-uid="ExcelReader.Core.Reader.Excel.Open*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_Open_System_ReadOnlyMemory_System_Byte__ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory{System.Byte},ExcelReader.Core.Reader.ExcelReaderOptions)">
+  Open(ReadOnlyMemory&lt;byte&gt;, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
+signature. XLSX/XLSB route through <span class="xref">ExcelReader.Core.Reader.Zip.ZipIndex</span> instead of
+a <code>ZipArchive</code>/<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a>, so the returned workbook never
+suspends, even under <code>await foreach</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IExcelWorkbook Open(ReadOnlyMemory&lt;byte&gt; data, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd><p>The whole workbook file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a></dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a> backed by the concrete workbook that matches the detected format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p>The buffer's signature does not match a supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_Open_" data-uid="ExcelReader.Core.Reader.Excel.Open*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_Open_System_String_ExcelReader_Core_Reader_ExcelFileFormat_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.Open(System.String,ExcelReader.Core.Reader.ExcelFileFormat,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  Open(string, ExcelFileFormat, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L463"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a workbook of a known format from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IExcelWorkbook Open(string path, ExcelFileFormat format, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the workbook file.</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a></dt>
+    <dd><p>The format to open <code class="paramref">path</code> as. <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a>
+auto-detects XLSX/XLSB/XLS from the signature, exactly as <a class="xref" href="ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_">Open(string, ExcelReaderOptions?)</a> does.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>. <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a> supplies the dialect when
+<code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv">Csv</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a></dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_Excel_Open_System_String_ExcelReader_Core_Reader_ExcelFileFormat_ExcelReader_Core_Reader_ExcelReaderOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>CSV carries no signature, so auto-detection never reports it; opening delimited text
+means naming <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv">Csv</a> here.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">path</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_EncryptedOoxml">EncryptedOoxml</a> or not a defined value.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> and the file's signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_Open_" data-uid="ExcelReader.Core.Reader.Excel.Open*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_Open_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_" data-uid="ExcelReader.Core.Reader.Excel.Open(System.String,ExcelReader.Core.Reader.ExcelReaderOptions)">
+  Open(string, ExcelReaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the file's signature
+and taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IExcelWorkbook Open(string path, ExcelReaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the workbook file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a></dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a> backed by the concrete workbook that matches the detected format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_Excel_Open_System_String_ExcelReader_Core_Reader_ExcelReaderOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Pattern-match on the returned workbook against its concrete type (<a class="xref" href="ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html">XlsxWorkbook</a> / <a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.html">XlsWorkbook</a> / <a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html">XlsbWorkbook</a>) to access format-specific members.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">path</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p>The file's signature does not match a supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_OpenAsync_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_OpenAsync_System_IO_Stream_ExcelReader_Core_Reader_ExcelFileFormat_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync(System.IO.Stream,ExcelReader.Core.Reader.ExcelFileFormat,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  OpenAsync(Stream, ExcelFileFormat, bool, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L577"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a workbook of a known format from an existing stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;IExcelWorkbook&gt; OpenAsync(Stream stream, ExcelFileFormat format, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream containing the workbook data. Must be seekable when
+<code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a>.</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a></dt>
+    <dd><p>The format to read <code class="paramref">stream</code> as. <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a>
+auto-detects XLSX/XLSB/XLS from the signature.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>. <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a> supplies the dialect when
+<code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv">Csv</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>&gt;</dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">stream</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_EncryptedOoxml">EncryptedOoxml</a> or not a defined value.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> and <code class="paramref">stream</code> does not support seeking.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> and the stream's signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_OpenAsync_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_OpenAsync_System_IO_Stream_System_Boolean_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync(System.IO.Stream,System.Boolean,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  OpenAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L442"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a workbook from an existing seekable stream, auto-detecting its format
+(XLSX/XLSB/XLS) from the stream's signature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;IExcelWorkbook&gt; OpenAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>A seekable stream containing the workbook data.</p>
+</dd>
+    <dt><code>leaveOpen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>When <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> (the default), <code class="paramref">stream</code> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>&gt;</dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a> backed by the concrete workbook that matches the detected format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">stream</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">stream</code> does not support seeking.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p>The stream's signature does not match a supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_OpenAsync_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_OpenAsync_System_String_ExcelReader_Core_Reader_ExcelFileFormat_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync(System.String,ExcelReader.Core.Reader.ExcelFileFormat,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  OpenAsync(string, ExcelFileFormat, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L546"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a workbook of a known format from a file path, taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;IExcelWorkbook&gt; OpenAsync(string path, ExcelFileFormat format, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the workbook file.</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html">ExcelFileFormat</a></dt>
+    <dd><p>The format to open <code class="paramref">path</code> as. <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a>
+auto-detects XLSX/XLSB/XLS from the signature.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when
+<a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>. <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv">Csv</a> supplies the dialect when
+<code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Csv">Csv</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>&gt;</dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">path</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_EncryptedOoxml">EncryptedOoxml</a> or not a defined value.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p><code class="paramref">format</code> is <a class="xref" href="ExcelReader.Core.Reader.ExcelFileFormat.html#ExcelReader_Core_Reader_ExcelFileFormat_Unknown">Unknown</a> and the file's signature matches no supported format.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_Excel_OpenAsync_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Excel_OpenAsync_System_String_ExcelReader_Core_Reader_ExcelReaderOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.Excel.OpenAsync(System.String,ExcelReader.Core.Reader.ExcelReaderOptions,System.Threading.CancellationToken)">
+  OpenAsync(string, ExcelReaderOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the
+file's signature and taking ownership of the file stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask&lt;IExcelWorkbook&gt; OpenAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the workbook file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html">ExcelReaderOptions</a></dt>
+    <dd><p>Resource limits and behavior toggles; <a class="xref" href="ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the open operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>&gt;</dt>
+    <dd><p>A format-agnostic <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a> backed by the concrete workbook that matches the detected format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">path</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a></dt>
+    <dd><p>The file's signature does not match a supported format.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Excel.Encrypt.cs/#L5" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

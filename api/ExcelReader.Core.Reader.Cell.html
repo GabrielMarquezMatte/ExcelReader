@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Struct Cell | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct Cell | ExcelReader ">
+      
+      <meta name="description" content="A single worksheet cell&#39;s value, exposed as a zero-allocation view over the reader&#39;s underlying buffers. Only valid for the lifetime of the row it was read from — do not store it past that point.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Reader_Cell.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Reader.Cell%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Reader.Cell">
+
+
+
+  <h1 id="ExcelReader_Core_Reader_Cell" data-uid="ExcelReader.Core.Reader.Cell" class="text-break">
+Struct Cell  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Reader.html">Reader</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A single worksheet cell's value, exposed as a zero-allocation view over the reader's underlying
+buffers. Only valid for the lifetime of the row it was read from — do not store it past that point.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly ref struct Cell</code></pre>
+  </div>
+
+
+
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.equals">ValueType.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetype.gethashcode">ValueType.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_Cell__ctor_" data-uid="ExcelReader.Core.Reader.Cell.#ctor*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell__ctor_ExcelReader_Core_Reader_CellType_System_ReadOnlySpan_System_Byte__System_Int32_" data-uid="ExcelReader.Core.Reader.Cell.#ctor(ExcelReader.Core.Reader.CellType,System.ReadOnlySpan{System.Byte},System.Int32)">
+  Cell(CellType, ReadOnlySpan&lt;byte&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a cell with the given type, text bytes, and optional style index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Cell(CellType type, ReadOnlySpan&lt;byte&gt; value, int styleIndex = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>type</code> <a class="xref" href="ExcelReader.Core.Reader.CellType.html">CellType</a></dt>
+    <dd></dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>styleIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_Cell_StyleIndex_" data-uid="ExcelReader.Core.Reader.Cell.StyleIndex*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_StyleIndex" data-uid="ExcelReader.Core.Reader.Cell.StyleIndex">
+  StyleIndex
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The worksheet's <code>s</code> style index for this cell (0 when absent). Callers can map this to a
+number format to detect dates themselves, since date cells arrive with <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_Type">Type</a> of
+<a class="xref" href="ExcelReader.Core.Reader.CellType.html#ExcelReader_Core_Reader_CellType_Number">Number</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int StyleIndex { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Cell_Type_" data-uid="ExcelReader.Core.Reader.Cell.Type*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_Type" data-uid="ExcelReader.Core.Reader.Cell.Type">
+  Type
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The kind of value this cell holds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CellType Type { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Reader.CellType.html">CellType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Cell_Value_" data-uid="ExcelReader.Core.Reader.Cell.Value*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_Value" data-uid="ExcelReader.Core.Reader.Cell.Value">
+  Value
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The cell's raw UTF-8 text bytes. Empty for binary-numeric cells (XLS Number/RK/Date/Formula);
+use <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_TryGetDouble_System_Double__">TryGetDouble(out double)</a>, <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_TryParse__1_System_IFormatProvider___0__">TryParse&lt;T&gt;(IFormatProvider?, out T)</a>, <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_TryFormat_System_Span_System_Byte__System_Int32__">TryFormat(Span&lt;byte&gt;, out int)</a>, or
+<a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_GetString">GetString()</a> to read those instead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReadOnlySpan&lt;byte&gt; Value { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_Cell_GetString_" data-uid="ExcelReader.Core.Reader.Cell.GetString*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_GetString" data-uid="ExcelReader.Core.Reader.Cell.GetString">
+  GetString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L333"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the cell's value as a string, allocating a new instance unless it is a repeated
+shared string served from the reader's dedup cache. Only call this when a string is required.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_Cell_GetString_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A repeated value — the common case for categorical columns — returns the same cached instance
+instead of decoding UTF-8 and allocating again. See the constructor for how the dedup cache is supplied.</p>
+</div>
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Cell_ToString_" data-uid="ExcelReader.Core.Reader.Cell.ToString*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_ToString" data-uid="ExcelReader.Core.Reader.Cell.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the cell's value as a string. Equivalent to <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_GetString">GetString()</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Cell_TryFormat_" data-uid="ExcelReader.Core.Reader.Cell.TryFormat*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_TryFormat_System_Span_System_Byte__System_Int32__" data-uid="ExcelReader.Core.Reader.Cell.TryFormat(System.Span{System.Byte},System.Int32@)">
+  TryFormat(Span&lt;byte&gt;, out int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes the cell's text into <code class="paramref">destination</code> as UTF-8, without allocating;
+returns false if the buffer is too small.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryFormat(Span&lt;byte&gt; destination, out int bytesWritten)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>bytesWritten</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Cell_TryGetDateTime_" data-uid="ExcelReader.Core.Reader.Cell.TryGetDateTime*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_TryGetDateTime_System_Boolean_System_DateTime__" data-uid="ExcelReader.Core.Reader.Cell.TryGetDateTime(System.Boolean,System.DateTime@)">
+  TryGetDateTime(bool, out DateTime)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Interprets the cell's numeric value as an Excel serial date, falling back to an ISO-8601
+text date (<code>yyyy-MM-dd</code>, optionally followed by <code>T</code> or a space, a time, and up to
+seven fractional-second digits) when the value is not numeric. A trailing zone designator is
+not accepted.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryGetDateTime(bool isDate1904, out DateTime result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isDate1904</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Pass true for workbooks using the 1904 date system (e.g. when the reader's IsDate1904 is true)
+so the epoch offset is applied correctly. Ignored for a text date, which carries its own calendar.</p>
+</dd>
+    <dt><code>result</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a></dt>
+    <dd><p>The parsed date, when this method returns true.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Cell_TryGetDouble_" data-uid="ExcelReader.Core.Reader.Cell.TryGetDouble*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_TryGetDouble_System_Double__" data-uid="ExcelReader.Core.Reader.Cell.TryGetDouble(System.Double@)">
+  TryGetDouble(out double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads the cell's value as a <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>; returns false if it isn't numeric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryGetDouble(out double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_Cell_TryGetDouble_System_Double___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Numeric cells from binary formats (XLS) carry the raw double, so this avoids the
+format-then-parse round trip. Text-backed cells (XLSX, strings) parse <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_Value">Value</a> as a fallback.</p>
+</div>
+
+
+
+
+  <a id="ExcelReader_Core_Reader_Cell_TryParse_" data-uid="ExcelReader.Core.Reader.Cell.TryParse*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_Cell_TryParse__1_System_IFormatProvider___0__" data-uid="ExcelReader.Core.Reader.Cell.TryParse``1(System.IFormatProvider,``0@)">
+  TryParse&lt;T&gt;(IFormatProvider?, out T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses the cell's value as <code class="typeparamref">T</code>, using the stored binary double directly
+when available instead of round-tripping through text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryParse&lt;T&gt;(IFormatProvider? provider, out T result) where T : IUtf8SpanParsable&lt;T&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>provider</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iformatprovider">IFormatProvider</a></dt>
+    <dd><p>The format provider used for text parsing and for deciding whether '.' is the decimal separator;
+null means <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.globalization.cultureinfo.invariantculture">InvariantCulture</a>, the culture XLSX and XLSB store numbers in.</p>
+</dd>
+    <dt><code>result</code> <span class="xref">T</span></dt>
+    <dd><p>The parsed value, when this method returns true.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L14" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

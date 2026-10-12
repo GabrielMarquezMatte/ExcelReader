@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Functions | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Functions | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/functions.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="functions">Functions</h1>
+
+<p>Free functions in namespace <code>xl</code>.</p>
+<h2 id="abi_version">abi_version</h2>
+<pre><code class="lang-cpp">int32_t abi_version() noexcept
+</code></pre>
+<p>ABI revision of the loaded native library.</p>
+<p>Every open checks it against the <code>XL_ABI_VERSION</code> this header was compiled with and fails on a mismatch.</p>
+<p><strong>Returns</strong> int32_t</p>
+<h2 id="format_from_path">format_from_path</h2>
+<pre><code class="lang-cpp">constexpr int32_t format_from_path(std::string_view path) noexcept
+</code></pre>
+<p>The format a file name's extension names.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>File name or path. Only its extension is read: .xlsx, .xlsb, .xls or .csv, in any case.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> int32_t: The matching <code>XL_FORMAT_*</code> constant, or <code>XL_FORMAT_AUTO</code> when none matches, which every writer rejects.</p>
+<h2 id="i64_column">i64_column</h2>
+<pre><code class="lang-cpp">constexpr ColumnRef i64_column(
+    std::string_view name,
+    std::span&lt;const int64_t&gt; values,
+    std::span&lt;const uint8_t&gt; validity = {}) noexcept
+</code></pre>
+<p>An <code>XL_T_I64</code> column.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Header text. Either every column of a table has one or none does.</td>
+</tr>
+<tr>
+<td><code>values</code></td>
+<td>std::span&lt;const int64_t&gt;</td>
+<td></td>
+<td>One value per row.</td>
+</tr>
+<tr>
+<td><code>validity</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td><code>{}</code></td>
+<td>Optional LSB-first bitmap, one bit per row, set where the row has a value. Empty means every row has one.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>values</code> and <code>validity</code>.</p>
+<h2 id="f64_column">f64_column</h2>
+<pre><code class="lang-cpp">constexpr ColumnRef f64_column(
+    std::string_view name,
+    std::span&lt;const double&gt; values,
+    std::span&lt;const uint8_t&gt; validity = {}) noexcept
+</code></pre>
+<p>An <code>XL_T_F64</code> column.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Header text, as for i64_column.</td>
+</tr>
+<tr>
+<td><code>values</code></td>
+<td>std::span&lt;const double&gt;</td>
+<td></td>
+<td>One value per row.</td>
+</tr>
+<tr>
+<td><code>validity</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td><code>{}</code></td>
+<td>Optional null bitmap, as for i64_column.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>values</code> and <code>validity</code>.</p>
+<h2 id="bool_column">bool_column</h2>
+<pre><code class="lang-cpp">constexpr ColumnRef bool_column(
+    std::string_view name,
+    std::span&lt;const uint8_t&gt; values,
+    std::span&lt;const uint8_t&gt; validity = {}) noexcept
+</code></pre>
+<p>An <code>XL_T_BOOL</code> column.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Header text, as for i64_column.</td>
+</tr>
+<tr>
+<td><code>values</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td></td>
+<td>One byte per row, 0 or 1.</td>
+</tr>
+<tr>
+<td><code>validity</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td><code>{}</code></td>
+<td>Optional null bitmap, as for i64_column.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>values</code> and <code>validity</code>.</p>
+<h2 id="date_column">date_column</h2>
+<pre><code class="lang-cpp">constexpr ColumnRef date_column(
+    std::string_view name,
+    std::span&lt;const int32_t&gt; days_since_epoch,
+    std::span&lt;const uint8_t&gt; validity = {}) noexcept
+</code></pre>
+<p>An <code>XL_T_DATE</code> column.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Header text, as for i64_column.</td>
+</tr>
+<tr>
+<td><code>days_since_epoch</code></td>
+<td>std::span&lt;const int32_t&gt;</td>
+<td></td>
+<td>Days since 1970-01-01, one per row.</td>
+</tr>
+<tr>
+<td><code>validity</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td><code>{}</code></td>
+<td>Optional null bitmap, as for i64_column.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>days_since_epoch</code> and <code>validity</code>.</p>
+<h2 id="time_column">time_column</h2>
+<pre><code class="lang-cpp">constexpr ColumnRef time_column(
+    std::string_view name,
+    std::span&lt;const int64_t&gt; micros_since_midnight,
+    std::span&lt;const uint8_t&gt; validity = {}) noexcept
+</code></pre>
+<p>An <code>XL_T_TIME</code> column.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Header text, as for i64_column.</td>
+</tr>
+<tr>
+<td><code>micros_since_midnight</code></td>
+<td>std::span&lt;const int64_t&gt;</td>
+<td></td>
+<td>Microseconds since midnight, one per row.</td>
+</tr>
+<tr>
+<td><code>validity</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td><code>{}</code></td>
+<td>Optional null bitmap, as for i64_column.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>micros_since_midnight</code> and <code>validity</code>.</p>
+<h2 id="timestamp_column">timestamp_column</h2>
+<pre><code class="lang-cpp">constexpr ColumnRef timestamp_column(
+    std::string_view name,
+    std::span&lt;const int64_t&gt; micros_since_epoch,
+    std::span&lt;const uint8_t&gt; validity = {}) noexcept
+</code></pre>
+<p>An <code>XL_T_TIMESTAMP</code> column.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Header text, as for i64_column.</td>
+</tr>
+<tr>
+<td><code>micros_since_epoch</code></td>
+<td>std::span&lt;const int64_t&gt;</td>
+<td></td>
+<td>Microseconds since 1970-01-01T00:00:00Z, one per row.</td>
+</tr>
+<tr>
+<td><code>validity</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td><code>{}</code></td>
+<td>Optional null bitmap, as for i64_column.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>micros_since_epoch</code> and <code>validity</code>.</p>
+<h2 id="string_column">string_column</h2>
+<pre><code class="lang-cpp">constexpr ColumnRef string_column(
+    std::string_view name,
+    std::span&lt;const int32_t&gt; offsets,
+    std::span&lt;const uint8_t&gt; data,
+    std::span&lt;const uint8_t&gt; validity = {}) noexcept
+</code></pre>
+<p>An <code>XL_T_STRING</code> column.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Header text, as for i64_column.</td>
+</tr>
+<tr>
+<td><code>offsets</code></td>
+<td>std::span&lt;const int32_t&gt;</td>
+<td></td>
+<td>One entry per row plus one: row <code>i</code> is <code>data[offsets[i], offsets[i + 1])</code>.</td>
+</tr>
+<tr>
+<td><code>data</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td></td>
+<td>The UTF-8 text of every row, back to back.</td>
+</tr>
+<tr>
+<td><code>validity</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td><code>{}</code></td>
+<td>Optional null bitmap, as for i64_column.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>offsets</code>, <code>data</code> and <code>validity</code>.</p>
+<h2 id="make_field">make_field</h2>
+<pre><code class="lang-cpp">template &lt;typename Class, typename T&gt;
+constexpr FieldBinding&lt;Class, T&gt; make_field(const char *name, T Class::*member)
+template &lt;typename Class, typename T, std::size_t N&gt;
+constexpr FieldBinding&lt;Class, T, N&gt; make_field(const char *(&amp;&amp;names)[N], T Class::*member)
+</code></pre>
+<p>Binds a member to the column with one header.</p>
+<p>Binds a member to the column headed by any of several names.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>const char *</td>
+<td></td>
+<td>Header text.</td>
+</tr>
+<tr>
+<td><code>member</code></td>
+<td>T Class::*</td>
+<td></td>
+<td>The member to fill or write.</td>
+</tr>
+<tr>
+<td><code>names</code></td>
+<td>const char *(&amp;&amp;)</td>
+<td></td>
+<td>Accepted header texts.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="FieldBinding.html">FieldBinding</a>&lt;Class, T, N&gt;, <a href="FieldBinding.html">FieldBinding</a>&lt;Class, T&gt;: The binding, for ExcelMapper::get_bindings.</p>
+<h2 id="parse_sheet">parse_sheet</h2>
+<pre><code class="lang-cpp">template &lt;typename T&gt;
+std::expected&lt;TableView&lt;T&gt;, Error&gt; parse_sheet(
+    Sheet sheet,
+    int32_t header_row = 1,
+    int32_t degree_of_parallelism = 1)
+</code></pre>
+<p>Reads a whole sheet as <code>T</code>.</p>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T</code></td>
+<td>Row type, mapped by <code>ExcelMapper&lt;T&gt;</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sheet</code></td>
+<td><a href="Sheet.html">Sheet</a></td>
+<td></td>
+<td>The sheet to read.</td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int32_t</td>
+<td><code>1</code></td>
+<td>1-based row holding the headers; 0 when the sheet has none.</td>
+</tr>
+<tr>
+<td><code>degree_of_parallelism</code></td>
+<td>int32_t</td>
+<td><code>1</code></td>
+<td>Threads to split an XLSX, XLSB or CSV across: 0 uses every processor, 1 runs sequentially. The result is the same either way.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="TableView.html">TableView</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;: Every row after the header.</p>
+<h2 id="typed_reader">typed_reader</h2>
+<pre><code class="lang-cpp">template &lt;typename T&gt;
+std::expected&lt;TypedReader&lt;T&gt;, Error&gt; typed_reader(
+    Sheet sheet,
+    int32_t header_row = 1,
+    int64_t batch_size = 10000)
+</code></pre>
+<p>Opens a TypedReader over a sheet.</p>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T</code></td>
+<td>Row type, mapped by <code>ExcelMapper&lt;T&gt;</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sheet</code></td>
+<td><a href="Sheet.html">Sheet</a></td>
+<td></td>
+<td>The sheet to read.</td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int32_t</td>
+<td><code>1</code></td>
+<td>As for parse_sheet.</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int64_t</td>
+<td><code>10000</code></td>
+<td>Rows per batch: 0 makes one batch of the whole sheet; negative is an error.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="TypedReader.html">TypedReader</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;</p>
+<h2 id="write_columns">write_columns</h2>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; write_columns(
+    std::string_view path,
+    int32_t format,
+    std::span&lt;const ColumnRef&gt; columns,
+    const WriteOptions * options = nullptr)
+std::expected&lt;void, Error&gt; write_columns(
+    std::string_view path,
+    std::span&lt;const ColumnRef&gt; columns,
+    const WriteOptions * options = nullptr)
+</code></pre>
+<p>Writes columns as one sheet, copying nothing.</p>
+<p>write_columns with the format taken from the file's extension.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>File to create.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td></td>
+<td>An <code>XL_FORMAT_*</code> constant. <code>XL_FORMAT_AUTO</code> is rejected: a file being created has no signature to detect.</td>
+</tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
+<td></td>
+<td>Columns of equal length, borrowed for the call. Either every column has a name, written as a header row, or none does.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h2 id="write_columns_to_memory">write_columns_to_memory</h2>
+<pre><code class="lang-cpp">std::expected&lt;std::vector&lt;uint8_t&gt;, Error&gt; write_columns_to_memory(
+    int32_t format,
+    std::span&lt;const ColumnRef&gt; columns,
+    const WriteOptions * options = nullptr)
+</code></pre>
+<p>write_columns into memory.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td></td>
+<td>As for write_columns. There is no default: no file name to infer it from.</td>
+</tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
+<td></td>
+<td>As for write_columns.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;std::vector&lt;uint8_t&gt;, <a href="Error.html">Error</a>&gt;: The file's bytes.</p>
+<h2 id="encrypt_package">encrypt_package</h2>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; encrypt_package(
+    std::string_view package_path,
+    std::string_view destination_path,
+    std::string_view password)
+</code></pre>
+<p>Encrypts a finished XLSX or XLSB.</p>
+<p>The encryption parameters are fixed at Excel's own defaults; the result opens in Excel, and in Workbook::open given the same password.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>package_path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>The plaintext package. Read twice, so it must already be a finished file.</td>
+</tr>
+<tr>
+<td><code>destination_path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Where to write the encrypted file.</td>
+</tr>
+<tr>
+<td><code>password</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>The password, as UTF-8.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h2 id="write_sheet">write_sheet</h2>
+<pre><code class="lang-cpp">template &lt;std::ranges::input_range R&gt;
+std::expected&lt;void, Error&gt; write_sheet(
+    std::string_view path,
+    int32_t format,
+    R &amp;&amp; rows,
+    const WriteOptions * options = nullptr)
+template &lt;std::ranges::input_range R&gt;
+std::expected&lt;void, Error&gt; write_sheet(
+    std::string_view path,
+    R &amp;&amp; rows,
+    const WriteOptions * options = nullptr)
+</code></pre>
+<p>Writes rows as one sheet.</p>
+<p>write_sheet with the format taken from the file's extension.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>File to create.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td></td>
+<td>As for write_columns.</td>
+</tr>
+<tr>
+<td><code>rows</code></td>
+<td>R &amp;&amp;</td>
+<td></td>
+<td>Input range of a row type with an ExcelMapper, the mapping parse_sheet reads with. An empty std::optional field writes a blank cell.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h2 id="write_sheet_to_memory">write_sheet_to_memory</h2>
+<pre><code class="lang-cpp">template &lt;std::ranges::input_range R&gt;
+std::expected&lt;std::vector&lt;uint8_t&gt;, Error&gt; write_sheet_to_memory(
+    int32_t format,
+    R &amp;&amp; rows,
+    const WriteOptions * options = nullptr)
+</code></pre>
+<p>write_sheet into memory.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td></td>
+<td>As for write_columns. There is no default: no file name to infer it from.</td>
+</tr>
+<tr>
+<td><code>rows</code></td>
+<td>R &amp;&amp;</td>
+<td></td>
+<td>As for write_sheet.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;std::vector&lt;uint8_t&gt;, <a href="Error.html">Error</a>&gt;: The file's bytes.</p>
+<h2 id="aggregate_csv_file">aggregate_csv_file</h2>
+<pre><code class="lang-cpp">template &lt;CsvAccumulator Acc, typename Seed&gt;
+std::expected&lt;Acc, Error&gt; aggregate_csv_file(
+    std::string_view path,
+    Seed &amp;&amp; seed,
+    const CsvParallelOptions * options = nullptr)
+template &lt;CsvAccumulator Acc&gt;
+std::expected&lt;Acc, Error&gt; aggregate_csv_file(
+    std::string_view path,
+    const CsvParallelOptions * options = nullptr)
+</code></pre>
+<p>Folds the CSV file at <code>path</code> into one <code>Acc</code> across several threads.</p>
+<p><code>seed</code> is called at least once per partition, on worker threads, and may be called again for a partition that has to be re-read - a seeded accumulator can therefore be destroyed without ever being combined. The call blocks until the run finishes, so <code>seed</code> may capture locals freely. It must be const-callable: the C ABI shares one <code>user_data</code> across every worker and requires it to be read-only or internally synchronized, so the shims invoke it through a reference to const. A capturing <code>mutable</code> lambda therefore fails this constraint cleanly instead of hard-erroring inside a shim. The <code>remove_cvref_t</code> is load-bearing - <code>Seed</code> deduces to an lvalue reference for a named callable, and <code>const Seed &amp;</code> would collapse the <code>const</code> away.</p>
+<p>Folds the CSV file at <code>path</code> into one <code>Acc</code>, seeding each partition with <code>Acc()</code>.</p>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Acc</code></td>
+<td>The accumulator; see CsvAccumulator.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>CSV file to read.</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td>Seed &amp;&amp;</td>
+<td></td>
+<td>Makes a fresh <code>Acc</code> for a partition.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="CsvParallelOptions.html">CsvParallelOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>Threads, header row and CSV dialect, or null for the defaults.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;Acc, <a href="Error.html">Error</a>&gt;: The combined accumulator.</p>
+<h2 id="aggregate_csv_memory">aggregate_csv_memory</h2>
+<pre><code class="lang-cpp">template &lt;CsvAccumulator Acc, typename Seed&gt;
+std::expected&lt;Acc, Error&gt; aggregate_csv_memory(
+    std::span&lt;const uint8_t&gt; data,
+    Seed &amp;&amp; seed,
+    const CsvParallelOptions * options = nullptr)
+template &lt;CsvAccumulator Acc&gt;
+std::expected&lt;Acc, Error&gt; aggregate_csv_memory(
+    std::span&lt;const uint8_t&gt; data,
+    const CsvParallelOptions * options = nullptr)
+</code></pre>
+<p>Folds an in-memory CSV buffer into one <code>Acc</code>.</p>
+<p>Otherwise identical to aggregate_csv_file.</p>
+<p>Folds an in-memory CSV buffer into one <code>Acc</code>, seeding each partition with <code>Acc()</code>.</p>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Acc</code></td>
+<td>The accumulator; see CsvAccumulator.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td></td>
+<td>The CSV bytes. Not copied, so they must stay valid for the call.</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td>Seed &amp;&amp;</td>
+<td></td>
+<td>As for aggregate_csv_file.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="CsvParallelOptions.html">CsvParallelOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>Threads, header row and CSV dialect, or null for the defaults.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;Acc, <a href="Error.html">Error</a>&gt;: The combined accumulator.</p>
+<h2 id="parse_arrow">parse_arrow</h2>
+<pre><code class="lang-cpp">template &lt;typename T&gt;
+std::expected&lt;ArrowTable, Error&gt; parse_arrow(
+    Sheet sheet,
+    int32_t header_row = 1,
+    int32_t degree_of_parallelism = 1)
+</code></pre>
+<p>parse_sheet into Arrow instead of <code>T</code>.</p>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T</code></td>
+<td>Row type, mapped by <code>ExcelMapper&lt;T&gt;</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sheet</code></td>
+<td><a href="Sheet.html">Sheet</a></td>
+<td></td>
+<td>The sheet to read.</td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int32_t</td>
+<td><code>1</code></td>
+<td>As for parse_sheet.</td>
+</tr>
+<tr>
+<td><code>degree_of_parallelism</code></td>
+<td>int32_t</td>
+<td><code>1</code></td>
+<td>As for parse_sheet.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="ArrowTable.html">ArrowTable</a>, <a href="Error.html">Error</a>&gt;</p>
+<h2 id="arrow_stream">arrow_stream</h2>
+<pre><code class="lang-cpp">template &lt;typename T&gt;
+std::expected&lt;ArrowStream, Error&gt; arrow_stream(
+    Sheet sheet,
+    int32_t header_row = 1,
+    int64_t batch_size = 10000)
+</code></pre>
+<p>Opens an ArrowStream over a sheet.</p>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T</code></td>
+<td>Row type, mapped by <code>ExcelMapper&lt;T&gt;</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sheet</code></td>
+<td><a href="Sheet.html">Sheet</a></td>
+<td></td>
+<td>The sheet to read.</td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int32_t</td>
+<td><code>1</code></td>
+<td>As for parse_sheet.</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int64_t</td>
+<td><code>10000</code></td>
+<td>As for typed_reader.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="ArrowStream.html">ArrowStream</a>, <a href="Error.html">Error</a>&gt;</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/functions.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

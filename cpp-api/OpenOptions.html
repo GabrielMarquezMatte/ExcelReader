@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Struct OpenOptions | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct OpenOptions | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/OpenOptions.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="struct-openoptions">Struct OpenOptions</h1>
+
+<p>Reader limits and CSV dialect for the Workbook::open family.</p>
+<p>A field left at 0 or <code>XL_OPT_DEFAULT</code> keeps the library default; on/off fields take <code>XL_OPT_TRUE</code> or <code>XL_OPT_FALSE</code>. The <code>max_*</code> fields bound what a malformed or hostile file can make the reader allocate: lower them for untrusted input. An out-of-range value fails the open with <code>XL_INVALID_ARGUMENT</code>.</p>
+<pre><code class="lang-cpp">struct xl::OpenOptions
+</code></pre>
+<h2 id="fields">Fields</h2>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>csv_sniff_dialect</code></td>
+<td>int32_t</td>
+<td><code>XL_OPT_DEFAULT</code></td>
+<td>Infer delimiter and quote from the start of a CSV. Off by default.</td>
+</tr>
+<tr>
+<td><code>csv_delimiter</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>CSV field separator byte. Default <code>,</code>.</td>
+</tr>
+<tr>
+<td><code>csv_quote</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>CSV quote byte. Default <code>&quot;</code>.</td>
+</tr>
+<tr>
+<td><code>csv_detect_bom</code></td>
+<td>int32_t</td>
+<td><code>XL_OPT_DEFAULT</code></td>
+<td>Skip a leading UTF-8 byte-order mark. On by default.</td>
+</tr>
+<tr>
+<td><code>csv_max_cell_bytes</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>For CSV, replaces <code>max_cell_bytes</code>.</td>
+</tr>
+<tr>
+<td><code>csv_intern_strings</code></td>
+<td>int32_t</td>
+<td><code>XL_OPT_DEFAULT</code></td>
+<td>For CSV, replaces <code>intern_strings</code>.</td>
+</tr>
+<tr>
+<td><code>max_total_decompressed_bytes</code></td>
+<td>int64_t</td>
+<td><code>0</code></td>
+<td>Bytes an XLSX/XLSB may inflate to, or an XLS workbook stream may declare. Default 512 MiB.</td>
+</tr>
+<tr>
+<td><code>max_cell_bytes</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>Largest cell value or buffered CSV record. Default 32 MiB.</td>
+</tr>
+<tr>
+<td><code>max_shared_string_bytes</code></td>
+<td>int64_t</td>
+<td><code>0</code></td>
+<td>Largest shared-string table. Default 128 MiB.</td>
+</tr>
+<tr>
+<td><code>max_zip_entries</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>Most entries an XLSX/XLSB archive may hold. Default 65,536.</td>
+</tr>
+<tr>
+<td><code>prefetch_decompression</code></td>
+<td>int32_t</td>
+<td><code>XL_OPT_DEFAULT</code></td>
+<td>Inflate XLSX/XLSB sheet data on a background thread ahead of parsing. Off by default.</td>
+</tr>
+<tr>
+<td><code>intern_strings</code></td>
+<td>int32_t</td>
+<td><code>XL_OPT_DEFAULT</code></td>
+<td>Deduplicate repeated text outside the shared-string table. Off by default; pays off only for low-cardinality text.</td>
+</tr>
+<tr>
+<td><code>source_cache_bytes</code></td>
+<td>int64_t</td>
+<td><code>0</code></td>
+<td>Block cache of Workbook::open_source. Default 64 MiB.</td>
+</tr>
+<tr>
+<td><code>max_buffered_bytes</code></td>
+<td>int64_t</td>
+<td><code>0</code></td>
+<td>Most bytes Workbook::open_stream reads before an XLSX, XLSB or XLS opens.</td>
+</tr>
+<tr>
+<td><code>source_block_size</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>Block size of Workbook::open_source's cache. Default 4 MiB; negative turns the cache off.</td>
+</tr>
+<tr>
+<td><code>password_</code></td>
+<td>std::string</td>
+<td><code>{}</code></td>
+<td>Set through password().</td>
+</tr>
+</tbody>
+</table>
+<h2 id="methods">Methods</h2>
+<h3 id="password">password</h3>
+<pre><code class="lang-cpp">OpenOptions &amp; password(std::string_view value)
+</code></pre>
+<p>Sets the password that unlocks an encrypted OOXML workbook (.xlsx/.xlsb/.xlsm).</p>
+<p>Open the workbook with <code>XL_FORMAT_AUTO</code>: <code>XL_FORMAT_XLSX</code> reads the encrypted container as a plain ZIP and fails before the password is checked.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>The password, as UTF-8.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="OpenOptions.html">OpenOptions</a> &amp;: <code>*this</code>, for chaining.</p>
+<h3 id="to_c">to_c</h3>
+<pre><code class="lang-cpp">xl_open_options to_c() const noexcept
+</code></pre>
+<p>These options as the C ABI's <code>xl_open_options</code>.</p>
+<p><strong>Returns</strong> xl_open_options: A struct pointing into this object, valid while it lives unchanged.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/OpenOptions.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

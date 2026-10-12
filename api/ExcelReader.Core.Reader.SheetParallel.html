@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SheetParallel | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SheetParallel | ExcelReader ">
+      
+      <meta name="description" content="Reads a sheet of any format across several threads: ParseAsync yields typed rows in source order, ForEachAsync hands each row to a callback on the worker threads, and AggregateAsync folds rows into one accumulator per partition.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Reader_SheetParallel.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Reader.SheetParallel%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Reader.SheetParallel">
+
+
+
+  <h1 id="ExcelReader_Core_Reader_SheetParallel" data-uid="ExcelReader.Core.Reader.SheetParallel" class="text-break">
+Class SheetParallel  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Reader.html">Reader</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Reads a sheet of any format across several threads: <code>ParseAsync</code> yields typed rows in source
+order, <code>ForEachAsync</code> hands each row to a callback on the worker threads, and
+<code>AggregateAsync</code> folds rows into one accumulator per partition.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class SheetParallel</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SheetParallel</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="ExcelReader_Core_Reader_SheetParallel_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The caller owns the workbook and keeps it open until the returned task completes or the
+enumeration ends. The CSV dialect is the <a class="xref" href="ExcelReader.Core.Reader.Csv.CsvReaderOptions.html">CsvReaderOptions</a> the workbook was opened with.
+</p>
+<p>
+A read falls back to one sequential pass, with the same results and no error, when
+<a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_DegreeOfParallelism">DegreeOfParallelism</a> is 1, the sheet is too small to partition
+usefully, the sheet is an XLS sheet or a table view, or a CSV cannot be partitioned (a stream that is not a file
+or a non-UTF-8 encoding).
+</p>
+<p>
+Delivery guarantees. The general contract is the weaker CSV one: <code>ForEachAsync</code> is at-least-once,
+and a partition whose start was guessed wrongly is discarded and read again. XLSB delivers every row
+exactly once, in <code>ForEachAsync</code> too. XLSX delivers exactly once for a well-formed sheet; a
+malformed one can make <code>ForEachAsync</code> deliver a row twice. <code>ParseAsync</code> yields the same items in
+the same order as the sequential <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser&lt;T&gt;</a> on every format, and
+<code>AggregateAsync</code> and <code>ForEachAsync</code> equal their own single-thread run.
+</p>
+<p>
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a>: <code>ParseAsync</code> renumbers it from the count emitted at the
+merge; <code>ForEachAsync</code> and <code>AggregateAsync</code> report the exact row when sequential and 0 when partitioned.
+</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_RowAggregation___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync``1(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Reader.RowAggregation{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
+  AggregateAsync&lt;TState&gt;(IExcelSheet, RowAggregation&lt;TState&gt;, SheetParallelOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L247"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a sheet across several threads and folds every row with the functions of
+<code class="paramref">aggregation</code>, one accumulator per partition, combined in sheet order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Task&lt;TState&gt; AggregateAsync&lt;TState&gt;(IExcelSheet sheet, RowAggregation&lt;TState&gt; aggregation, SheetParallelOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to read. The caller keeps ownership and keeps its workbook open until the task completes.</p>
+</dd>
+    <dt><code>aggregation</code> <a class="xref" href="ExcelReader.Core.Reader.RowAggregation-1.html">RowAggregation</a>&lt;TState&gt;</dt>
+    <dd><p>The seed, accumulate and combine functions. They carry the same contract as <a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html">IRowAccumulator&lt;TSelf, TModel&gt;</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html">SheetParallelOptions</a></dt>
+    <dd><p>Parallelism and header options. Defaults to <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel processing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;TState&gt;</dt>
+    <dd><p>The combined accumulator.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TState</code></dt>
+    <dd><p>The accumulator type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_RowAggregation___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Carries the same fallbacks as the <a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html">IRowAccumulator&lt;TSelf, TModel&gt;</a> overloads.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> or <code class="paramref">aggregation</code>, or one of its functions, is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>A numeric option is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___1__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync``2(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Parser.ExcelParser{``1},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
+  AggregateAsync&lt;TAccumulator, TModel&gt;(IExcelSheet, ExcelParser&lt;TModel&gt;, SheetParallelOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L220"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a sheet across several threads, binds every row to a <code class="typeparamref">TModel</code>
+through <code class="paramref">parser</code> and folds it into a <code class="typeparamref">TAccumulator</code>, one
+instance per partition, merged in sheet order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Task&lt;TAccumulator&gt; AggregateAsync&lt;TAccumulator, TModel&gt;(IExcelSheet sheet, ExcelParser&lt;TModel&gt; parser, SheetParallelOptions? options = null, CancellationToken ct = default) where TAccumulator : IRowAccumulator&lt;TAccumulator, TModel&gt;, new() where TModel : allows ref struct</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to read. The caller keeps ownership and keeps its workbook open until the task completes.</p>
+</dd>
+    <dt><code>parser</code> <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser</a>&lt;TModel&gt;</dt>
+    <dd><p>How columns bind to <code class="typeparamref">TModel</code>; created with <a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html">ExcelParser</a>. Its <a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_HeaderRow">HeaderRow</a> is ignored in favour of <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow">HeaderRow</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html">SheetParallelOptions</a></dt>
+    <dd><p>Parallelism and header options. Defaults to <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel processing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;TAccumulator&gt;</dt>
+    <dd><p>The accumulator holding every record.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TAccumulator</code></dt>
+    <dd><p>The accumulator type. See <a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html">IRowAccumulator&lt;TSelf, TModel&gt;</a> for the contract it must honor.</p>
+</dd>
+    <dt><code>TModel</code></dt>
+    <dd><p>The model type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___1__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The header is bound once, before any row is folded. A property that fails to parse keeps its
+default unless <a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_ThrowOnParseFailure">ThrowOnParseFailure</a> is set; a missing
+<code>[ExcelRequired]</code> column or value throws <a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html">ExcelParseException</a>; empty rows are skipped.
+</p>
+<p>
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a> is exact when the sheet is read sequentially and 0 when it is
+partitioned, since a partition does not know how many rows precede it.
+</p>
+<p>Otherwise carries the same contract and fallbacks as the <a class="xref" href="ExcelReader.Core.Reader.IRowRecord-1.html">IRowRecord&lt;TSelf&gt;</a> overload.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> or <code class="paramref">parser</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">parser</code> binds columns by header name and <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow">HeaderRow</a> is 0.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>A numeric option is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync``2(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
+  AggregateAsync&lt;TAccumulator, TRecord&gt;(IExcelSheet, SheetParallelOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a sheet across several threads, parses every row into a <code class="typeparamref">TRecord</code>
+and folds it into a <code class="typeparamref">TAccumulator</code>, one instance per partition, merged in sheet order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Task&lt;TAccumulator&gt; AggregateAsync&lt;TAccumulator, TRecord&gt;(IExcelSheet sheet, SheetParallelOptions? options = null, CancellationToken ct = default) where TAccumulator : IRowAccumulator&lt;TAccumulator, TRecord&gt;, new() where TRecord : IRowRecord&lt;TRecord&gt;, allows ref struct</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to read. The caller keeps ownership and keeps its workbook open until the task completes.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html">SheetParallelOptions</a></dt>
+    <dd><p>Parallelism and header options. Defaults to <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel processing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;TAccumulator&gt;</dt>
+    <dd><p>The accumulator holding every record.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TAccumulator</code></dt>
+    <dd><p>The accumulator type. See <a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html">IRowAccumulator&lt;TSelf, TModel&gt;</a> for the contract it must honor.</p>
+</dd>
+    <dt><code>TRecord</code></dt>
+    <dd><p>The record type. A record whose <a class="xref" href="ExcelReader.Core.Reader.IRowRecord-1.html#ExcelReader_Core_Reader_IRowRecord_1_TryParse_ExcelReader_Core_Reader_Row__0__">TryParse(Row, out TSelf)</a> returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> is skipped.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A partition read from a wrongly guessed start is read again into a new accumulator. The result
+holds every record exactly once, but <a class="xref" href="ExcelReader.Core.Reader.IRowRecord-1.html#ExcelReader_Core_Reader_IRowRecord_1_TryParse_ExcelReader_Core_Reader_Row__0__">TryParse(Row, out TSelf)</a> and
+<a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html#ExcelReader_Core_Reader_IRowAccumulator_2_Add__1_">Add(TModel)</a> may already have run for the discarded pass's records, as
+<a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html">IRowAccumulator&lt;TSelf, TModel&gt;</a> describes. A sequential fallback uses a single accumulator and never calls
+<a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html#ExcelReader_Core_Reader_IRowAccumulator_2_Merge__0_">Merge(TSelf)</a>.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>A numeric option is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync_" data-uid="ExcelReader.Core.Reader.SheetParallel.ForEachAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___0__System_Action___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.ForEachAsync``1(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Parser.ExcelParser{``0},System.Action{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
+  ForEachAsync&lt;TModel&gt;(IExcelSheet, ExcelParser&lt;TModel&gt;, Action&lt;TModel&gt;, SheetParallelOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a sheet across several threads, binds every row to a <code class="typeparamref">TModel</code>
+through <code class="paramref">parser</code> and hands it to <code class="paramref">body</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Task ForEachAsync&lt;TModel&gt;(IExcelSheet sheet, ExcelParser&lt;TModel&gt; parser, Action&lt;TModel&gt; body, SheetParallelOptions? options = null, CancellationToken ct = default) where TModel : allows ref struct</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to read. The caller keeps ownership and keeps its workbook open until the task completes.</p>
+</dd>
+    <dt><code>parser</code> <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser</a>&lt;TModel&gt;</dt>
+    <dd><p>How columns bind to <code class="typeparamref">TModel</code>; created with <a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html">ExcelParser</a>. Its <a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_HeaderRow">HeaderRow</a> is ignored in favour of <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow">HeaderRow</a>.</p>
+</dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;TModel&gt;</dt>
+    <dd><p>Receives each record. See the remarks for the contract it must honor.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html">SheetParallelOptions</a></dt>
+    <dd><p>Parallelism and header options. Defaults to <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel processing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task that completes when every record has been delivered.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TModel</code></dt>
+    <dd><p>The model type. May be a <code>ref struct</code> with <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan&lt;T&gt;</a> of <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a> properties.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___0__System_Action___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Carries the same concurrency, delivery and span-lifetime contract as the
+<a class="xref" href="ExcelReader.Core.Reader.IRowRecord-1.html">IRowRecord&lt;TSelf&gt;</a> overload: <code class="paramref">body</code> runs concurrently, delivery is
+at least once in general (exactly once on XLSB, and on a well-formed XLSX sheet), and records arrive
+in no particular order. A property that fails to parse keeps its default unless
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_ThrowOnParseFailure">ThrowOnParseFailure</a> is set; a missing <code>[ExcelRequired]</code> column or
+value throws <a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html">ExcelParseException</a>; empty rows are skipped.
+</p>
+<p>
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a> is exact when the sheet is read sequentially and
+0 when it is partitioned, since a partition does not know how many rows precede it.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">parser</code> or <code class="paramref">body</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><code class="paramref">parser</code> binds columns by header name and <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow">HeaderRow</a> is 0.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>A numeric option is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync_" data-uid="ExcelReader.Core.Reader.SheetParallel.ForEachAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync__1_ExcelReader_Core_Reader_IExcelSheet_System_Action___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.ForEachAsync``1(ExcelReader.Core.Reader.IExcelSheet,System.Action{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
+  ForEachAsync&lt;TRecord&gt;(IExcelSheet, Action&lt;TRecord&gt;, SheetParallelOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads a sheet across several threads, parses every row into a <code class="typeparamref">TRecord</code>
+and hands it to <code class="paramref">body</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Task ForEachAsync&lt;TRecord&gt;(IExcelSheet sheet, Action&lt;TRecord&gt; body, SheetParallelOptions? options = null, CancellationToken ct = default) where TRecord : IRowRecord&lt;TRecord&gt;, allows ref struct</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to read. The caller keeps ownership and keeps its workbook open until the task completes.</p>
+</dd>
+    <dt><code>body</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;TRecord&gt;</dt>
+    <dd><p>Receives each record. See the remarks for the contract it must honor.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html">SheetParallelOptions</a></dt>
+    <dd><p>Parallelism and header options. Defaults to <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel processing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task that completes when every record has been delivered.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TRecord</code></dt>
+    <dd><p>The record type. A record whose <a class="xref" href="ExcelReader.Core.Reader.IRowRecord-1.html#ExcelReader_Core_Reader_IRowRecord_1_TryParse_ExcelReader_Core_Reader_Row__0__">TryParse(Row, out TSelf)</a> returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> is skipped.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync__1_ExcelReader_Core_Reader_IExcelSheet_System_Action___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<code class="paramref">body</code> runs concurrently on worker threads and must be safe to call from
+several at once; the caller owns any synchronization. Records arrive in no particular order.
+</p>
+<p>
+Delivery is at least once in general: <code class="paramref">body</code> may be invoked more than once for the
+same record. On CSV, a partition whose start was guessed wrongly is read again from the confirmed
+offset, and the discarded speculative pass may already have delivered a whole partition's worth of
+records, which may also be misparsed: a wrong start shifts every field boundary. An exception
+<code class="paramref">body</code> throws during a discarded pass is discarded with it. A start is only guessed
+wrongly inside a quoted field, so a CSV in which the quote character never appears delivers every
+record exactly once. XLSB delivers every row exactly once. XLSX does too for a well-formed sheet; on
+a malformed one, workers may already have called <code class="paramref">body</code> for rows that are then
+dropped, so a row can be delivered twice or be one the sequential reader would not produce.
+</p>
+<p>
+A <code class="paramref">body</code> with side effects must therefore be idempotent and tolerate records that
+do not exist. For exactly-once on any source, use
+<a class="xref" href="ExcelReader.Core.Reader.SheetParallel.html#ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_">AggregateAsync&lt;TAccumulator, TRecord&gt;(IExcelSheet, SheetParallelOptions?, CancellationToken)</a>, where the
+discarded partition's accumulator is thrown away, and apply the side effects once it returns.
+</p>
+<p>
+A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan&lt;T&gt;</a> column points into a pooled buffer the worker reuses once
+<code class="paramref">body</code> returns. Copy anything that must outlive the call.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> or <code class="paramref">body</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>A numeric option is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Reader_SheetParallel_ParseAsync_" data-uid="ExcelReader.Core.Reader.SheetParallel.ParseAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_SheetParallel_ParseAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.ParseAsync``1(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Parser.ExcelParser{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
+  ParseAsync&lt;T&gt;(IExcelSheet, ExcelParser&lt;T&gt;, SheetParallelOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses a sheet into <code class="typeparamref">T</code> instances across several threads, yielding the
+same sequence, in the same order, that the sequential <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser&lt;T&gt;</a> produces.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IAsyncEnumerable&lt;T&gt; ParseAsync&lt;T&gt;(IExcelSheet sheet, ExcelParser&lt;T&gt; parser, SheetParallelOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to read. The caller keeps ownership and keeps its workbook open until the enumeration ends.</p>
+</dd>
+    <dt><code>parser</code> <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser</a>&lt;T&gt;</dt>
+    <dd><p>How columns bind to <code class="typeparamref">T</code>; created with <a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html">ExcelParser</a>. Its <a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_HeaderRow">HeaderRow</a> locates the header.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html">SheetParallelOptions</a></dt>
+    <dd><p>Parallelism options. Defaults to <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_Default">Default</a>. <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow">HeaderRow</a> does not apply here and must be left at <code>0</code>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel enumeration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>An enumerable that yields one <code class="typeparamref">T</code> per data row.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The row model type to bind each row to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_SheetParallel_ParseAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Parsing and type conversion run in parallel; whatever the caller does per row does not. A caller
+whose per-row work dominates will see little gain from raising <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_DegreeOfParallelism">DegreeOfParallelism</a>.
+For CSV, <span class="xref">ExcelReader.Core.Reader.Csv.CsvReaderOptions.InternStrings</span> yields substantially less here than sequentially,
+since each partition keeps its own dedup cache. A partition read from a wrongly guessed start is
+discarded before any of its rows are yielded, but its cells have already passed through the parser's
+converters and property setters, which must therefore be free of side effects.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> or <code class="paramref">parser</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow">HeaderRow</a> is not 0.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>A numeric option is negative.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

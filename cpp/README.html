@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>excelreader (C++) | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="excelreader (C++) | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/cpp/README.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+
+<p><img src="https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png" alt="ExcelReader logo"></p>
+<h1 id="excelreader-c">excelreader (C++)</h1>
+<p>Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path or
+memory, with the full open-options surface), sheet navigation, schema inference, schema-driven
+typed table parsing, schema-driven writing, row-by-row decoded reads, and Arrow export.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>CMake 3.16+, a C++23 compiler (<code>std::expected</code>).</li>
+<li>Git symlink support: this package's <code>include/xl</code> is a symlink into <code>src/ExcelReader.Native/include</code>
+at the repo root. On Windows, either enable Developer Mode (Windows 10 1703+) or clone with
+<code>git -c core.symlinks=true clone ...</code> from an elevated shell — otherwise the symlink checks out as
+a plain text file containing the target path, and the build fails with &quot;excelreader.h not found&quot;.</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<pre><code class="lang-cmake">include(FetchContent)
+FetchContent_Declare(excelreader
+    GIT_REPOSITORY https://github.com/GabrielMarquezMatte/ExcelReader.git
+    GIT_TAG v4.0.1
+    SOURCE_SUBDIR cpp)
+FetchContent_MakeAvailable(excelreader)
+
+target_link_libraries(your_app PRIVATE xl::excelreader)
+excelreader_copy_native_library(your_app)
+</code></pre>
+<p><code>FetchContent_MakeAvailable</code> downloads the matching native binary for your platform from that tag's
+GitHub Release automatically (see <code>cmake/FetchNativeLib.cmake</code>).</p>
+<p><code>excelreader_copy_native_library</code> puts that binary next to your executable once it links. On Windows
+it is required: the DLL is loaded by name at startup, and one that sits neither beside the executable
+nor on <code>PATH</code> makes the process exit with <code>0xc0000135</code> (<code>STATUS_DLL_NOT_FOUND</code>) before <code>main</code> runs.
+The call is a no-op elsewhere, where the rpath baked in at link time already resolves the library.</p>
+<h3 id="install-once-find_package-after">Install once, <code>find_package</code> after</h3>
+<p>Building <code>cpp</code> as its own project installs the headers, the native binary and a config package, so
+downstream projects find it without re-downloading anything:</p>
+<pre><code class="lang-bash">cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
+cmake --install build/cpp --config Release --prefix /your/prefix
+</code></pre>
+<pre><code class="lang-cmake">find_package(excelreader 3.0 REQUIRED)
+target_link_libraries(your_app PRIVATE xl::excelreader)
+</code></pre>
+<p>Point <code>CMAKE_PREFIX_PATH</code> at the prefix you installed into. The native binary is resolved once, at
+install time — <code>find_package</code> never touches the network. The package version comes from
+<code>EXCELREADER_VERSION</code>, so a checkout that isn't on a tag installs as <code>0.0.0</code> and any versioned
+<code>find_package</code> request against it fails; pass <code>-DEXCELREADER_VERSION=v3.0.2</code> to install under a real
+version. On Windows the generated import library is installed next to the DLL, and the package ships
+<code>excelreader_copy_native_library</code> as well, so a <code>find_package</code> consumer copies the DLL next to its
+executable the same way a <code>FetchContent</code> one does.</p>
+<p>Pass <code>-DEXCELREADER_INSTALL=OFF</code> to skip the install rules. They default off when <code>cpp</code> is pulled in
+with <code>add_subdirectory</code>/<code>FetchContent</code>, so a parent project's <code>install</code> step never picks them up.</p>
+<h2 id="build-notes">Build notes</h2>
+<p>Two variables control where <code>FetchNativeLib.cmake</code> gets the native binary and which release it
+downloads from:</p>
+<ul>
+<li><strong><code>EXCELREADER_NATIVE_LIB</code></strong> (environment variable) — path to a locally-built
+<code>ExcelReader.Native.{dll,so,dylib}</code> (e.g. from <code>dotnet publish src/ExcelReader.Native -r win-x64</code>)
+to use instead of downloading a release asset. Useful for local development and for CI, which
+builds the native lib fresh per PR (see <code>.github/workflows/cpp.yml</code>) rather than depending on a
+tag already being released.</li>
+<li><strong><code>EXCELREADER_VERSION</code></strong> (CMake cache variable) — the release tag whose assets to download when
+<code>EXCELREADER_NATIVE_LIB</code> isn't set. Auto-detected from <code>git describe --tags --exact-match</code> when
+left empty; falls back to <code>v0.0.0</code> when the checkout isn't exactly on a tag (e.g. a normal
+development branch).</li>
+</ul>
+<h2 id="example">Example</h2>
+<pre><code class="lang-cpp">#include &lt;xl/excelreader.hpp&gt;
+
+struct Row { std::string_view Name; double Value; };
+
+template&lt;&gt; struct xl::ExcelMapper&lt;Row&gt; {
+    static constexpr auto get_bindings() {
+        return std::make_tuple(
+            xl::make_field(&quot;Name&quot;, &amp;Row::Name),
+            xl::make_field(&quot;Value&quot;, &amp;Row::Value));
+    }
+};
+
+auto workbook = xl::Workbook::open(&quot;book.xlsx&quot;);
+auto table = xl::parse_sheet&lt;Row&gt;(workbook-&gt;sheet(0));
+for (const auto&amp; row : *table) { /* ... */ }
+</code></pre>
+<h3 id="sheets-and-schema-inference">Sheets and schema inference</h3>
+<pre><code class="lang-cpp">for (const auto&amp; name : *workbook-&gt;sheet_names()) { /* ... */ }
+
+// Guess a schema from the header row plus a sample of the data, before committing to one.
+for (const auto&amp; column : *workbook-&gt;sheet(1).infer_schema(1, 100)) {
+    // column.name is nullopt when the column must be resolved by column.index instead.
+}
+</code></pre>
+<p>Every entry point returns <code>std::expected&lt;T, xl::Error&gt;</code> — this header throws nothing.</p>
+<p>A workbook hands out sheets. An <code>xl::Sheet</code> is the workbook handle and an index: it owns nothing,
+it is cheap to copy, and every read on it opens its own cursor. <code>workbook-&gt;sheet(i)</code> makes no native
+call; an index outside the workbook is reported by the first read on the returned sheet.</p>
+<pre><code class="lang-cpp">auto workbook = xl::Workbook::open(&quot;report.xlsx&quot;);
+if (!workbook) { /* workbook.error().message */ }
+
+auto sheets = workbook-&gt;sheets().value();
+for (xl::Sheet sheet : sheets)
+{
+    std::println(&quot;{} {}&quot;, sheet.index(), sheet.name().value());
+}
+
+if (auto totals = workbook-&gt;sheet_by_name(&quot;Totals&quot;).value())
+{
+    auto cursor = totals-&gt;rows().value();
+    while (auto row = cursor.next_row())
+    {
+        // ...
+    }
+}
+</code></pre>
+<p>One open workbook can be read from several threads, which loads the shared-string table once:</p>
+<pre><code class="lang-cpp">std::vector&lt;std::thread&gt; threads;
+for (xl::Sheet sheet : sheets)
+{
+    threads.emplace_back([sheet] { auto table = xl::parse_sheet&lt;Row&gt;(sheet); /* ... */ });
+}
+for (std::thread &amp;thread : threads)
+{
+    thread.join();
+}
+</code></pre>
+<p>A cursor, a typed reader and an Arrow stream are each used by one thread at a time, and keep
+working after the workbook is destroyed. A <code>Sheet</code> does not: take what you need from it first.</p>
+<h2 id="reading-rows-one-at-a-time">Reading rows one at a time</h2>
+<p><code>Sheet::rows()</code> returns a cursor over that sheet. Each row borrows a buffer the cursor
+reuses, so iterating allocates nothing per row. A clean end of sheet arrives as an error carrying
+<code>XL_EOF</code>:</p>
+<pre><code class="lang-cpp">auto workbook = xl::Workbook::open(&quot;book.xlsx&quot;).value();
+auto cursor = workbook.sheet(0).rows().value();
+while (auto row = cursor.next_row())
+{
+    for (auto cell : *row)
+    {
+        std::print(&quot;{}\t&quot;, cell.value);
+    }
+    std::println();
+}
+</code></pre>
+<p>Each row is invalidated by the next <code>next_row()</code>. To hold every row at once, use
+<code>read_all_decoded()</code>, which decodes the whole sheet in one native call and owns it until
+destroyed (<code>RowCursor::read_all_decoded()</code> does the same for the rows a cursor has left):</p>
+<pre><code class="lang-cpp">auto rows = workbook.sheet(0).read_all_decoded().value();
+for (auto row : rows)
+{
+    std::println(&quot;{} cells&quot;, row.size());
+}
+</code></pre>
+<p><code>xl::parse_sheet&lt;T&gt;</code> remains the fastest way to read a sheet whose columns you know.</p>
+<h3 id="chunked-reads">Chunked reads</h3>
+<p>For a sheet too large to hold in memory at once, <code>xl::typed_reader&lt;T&gt;</code> is <code>xl::parse_sheet&lt;T&gt;</code>
+delivered a batch at a time:</p>
+<pre><code class="lang-cpp">auto workbook = xl::Workbook::open(&quot;book.xlsx&quot;).value();
+auto reader = xl::typed_reader&lt;Row&gt;(workbook.sheet(0), 1, 10'000).value();
+for (auto &amp;batch : reader)
+{
+    if (!batch) { break; }
+    for (const auto &amp;row : *batch) { /* ... */ }
+}
+</code></pre>
+<p><code>typed_reader</code> returns <code>std::expected&lt;xl::TypedReader&lt;T&gt;, xl::Error&gt;</code>; <code>next()</code> returns
+<code>std::expected&lt;std::optional&lt;TableView&lt;T&gt;&gt;, Error&gt;</code>, an empty optional at end of sheet, and
+<code>TypedReader</code> is also an input range, so the range-<code>for</code> above works directly. <code>batch_size</code> is rows
+per batch — <code>0</code> means one unbounded batch, identical to <code>parse_sheet</code>; negative is an error. Each
+batch is independent and outlives the reader.</p>
+<p>Several typed readers and Arrow streams may be open on one workbook at once; each read is
+independent.</p>
+<h3 id="encrypted-workbooks">Encrypted workbooks</h3>
+<p><code>OpenOptions::password(std::string_view)</code> unlocks a password-protected OOXML workbook
+(.xlsx/.xlsb/.xlsm) through <code>Workbook::open</code>/<code>open_memory</code>:</p>
+<pre><code class="lang-cpp">xl::OpenOptions options{};
+options.password(&quot;hunter2&quot;);
+auto workbook = xl::Workbook::open(&quot;protected.xlsx&quot;, XL_FORMAT_AUTO, &amp;options);
+if (!workbook) {
+    if (workbook.error().code == XL_STATUS_PASSWORD_REQUIRED) { /* no password was supplied */ }
+    else if (workbook.error().code == XL_STATUS_PASSWORD_INCORRECT) { /* ask again */ }
+    else { /* workbook.error().message - unsupported scheme or a corrupt file; not worth retrying */ }
+}
+</code></pre>
+<p>Unlike the Rust/Python bindings, this header never throws — <code>XL_STATUS_PASSWORD_REQUIRED</code> and
+<code>XL_STATUS_PASSWORD_INCORRECT</code> (from <code>excelreader.h</code>) are reported as ordinary <code>xl::Error::code</code>
+values on the <code>std::unexpected</code> returned from <code>open</code>/<code>open_memory</code>, distinguishable from any other
+failure without parsing <code>error().message</code>.</p>
+<p>The <code>password_</code> string this builds into <code>xl_open_options::password</code> must outlive the open call;
+keeping it in the <code>OpenOptions</code> object (which owns its own copy) is what makes
+<code>options.password(&quot;hunter2&quot;)</code> safe to call with a temporary, as above.</p>
+<p>Writing an encrypted workbook is a second step: write the plaintext package with <code>write_columns</code>/
+<code>write_sheet</code>, then wrap it with <code>xl::encrypt_package</code>, which produces an agile-encrypted (ECMA-376
+4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a <code>dataIntegrity</code> HMAC:</p>
+<pre><code class="lang-cpp">auto written = xl::write_columns(&quot;plain.xlsx&quot;, XL_FORMAT_XLSX, columns);
+auto encrypted = xl::encrypt_package(&quot;plain.xlsx&quot;, &quot;secret.xlsx&quot;, &quot;hunter2&quot;);
+if (!encrypted) { /* encrypted.error().message */ }
+</code></pre>
+<p><code>package_path</code> is read twice (it is not disposed or removed), so it must already be a finished file.
+Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
+packages can be encrypted, matching what <code>Workbook::open</code>/<code>open_memory</code> can decrypt.</p>
+<h3 id="reading-from-your-own-bytes">Reading from your own bytes</h3>
+<p>Derive from <code>xl::Source</code> to read from anything you can read at an offset; <code>read_at</code> is called from
+several threads, in cached 4 MiB blocks. Derive from <code>xl::InputStream</code> for a stream that cannot
+seek: a CSV is read as it arrives, an XLSX, XLSB or XLS is read whole first.</p>
+<pre><code class="lang-cpp">class StdinStream final : public xl::InputStream
+{
+public:
+    std::expected&lt;std::size_t, std::string&gt; read(std::span&lt;std::byte&gt; buffer) override
+    {
+        std::cin.read(reinterpret_cast&lt;char *&gt;(buffer.data()), static_cast&lt;std::streamsize&gt;(buffer.size()));
+        if (std::cin.bad())
+        {
+            return std::unexpected(std::string(&quot;reading stdin failed&quot;));
+        }
+        return static_cast&lt;std::size_t&gt;(std::cin.gcount());
+    }
+};
+
+auto workbook = xl::Workbook::open_stream(std::make_unique&lt;StdinStream&gt;(), XL_FORMAT_CSV);
+</code></pre>
+<p>The workbook owns the object you pass and deletes it once nothing needs it. A returned error
+string or a thrown exception becomes the <code>xl::Error</code> of the call that needed the bytes.</p>
+<h3 id="arrow-export">Arrow export</h3>
+<p><code>&lt;xl/excelreader_arrow.hpp&gt;</code> is a separate header — including <code>&lt;xl/excelreader.hpp&gt;</code> never pulls the
+Arrow C Data Interface declarations in. It does not depend on the Apache Arrow C++ library: you get
+the raw <code>ArrowArray</code>/<code>ArrowSchema</code> pair, owned by an RAII <code>xl::ArrowTable</code>, to hand to whichever
+Arrow implementation you already link.</p>
+<pre><code class="lang-cpp">#include &lt;xl/excelreader_arrow.hpp&gt;
+
+auto workbook = xl::Workbook::open(&quot;book.xlsx&quot;);
+auto table = xl::parse_arrow&lt;Row&gt;(workbook-&gt;sheet(0));
+// table-&gt;array / table-&gt;schema are a top-level struct array; both release in ~ArrowTable.
+</code></pre>
+<p>Batched: <code>xl::arrow_stream&lt;T&gt;</code> is <code>xl::parse_arrow&lt;T&gt;</code> delivered a batch at a time. <code>schema()</code> and
+<code>next()</code> return RAII guards (<code>ArrowSchemaGuard</code>, <code>ArrowArrayGuard</code>) that release exactly once, and
+each batch outlives the stream that produced it:</p>
+<pre><code class="lang-cpp">auto stream = xl::arrow_stream&lt;Row&gt;(workbook-&gt;sheet(0), 1, 10'000);
+while (true)
+{
+    auto batch = stream-&gt;next();
+    if (!batch || !batch-&gt;has_value()) { break; }
+    // (*batch)-&gt;array is this one batch
+}
+</code></pre>
+<p>Same <code>header_row</code>/<code>batch_size</code> meaning as <code>xl::typed_reader</code> above.</p>
+<h2 id="writing">Writing</h2>
+<p>Two layers, mirroring the two on the reading side.</p>
+<p><code>xl::write_sheet&lt;T&gt;</code> uses the same <code>xl::ExcelMapper&lt;T&gt;</code> specialization <code>xl::parse_sheet&lt;T&gt;</code> reads
+with, so a round trip needs one mapping, not two:</p>
+<pre><code class="lang-cpp">std::vector&lt;Row&gt; rows = /* ... */;
+auto written = xl::write_sheet(&quot;out.xlsx&quot;, rows);   // format inferred from the extension
+if (!written) {
+    std::fprintf(stderr, &quot;%s\n&quot;, written.error().message.c_str());
+}
+</code></pre>
+<p>If you already hold columnar buffers, <code>xl::write_columns</code> hands them to the ABI with <strong>no copy</strong> —
+they are borrowed for the duration of the call and must outlive it:</p>
+<pre><code class="lang-cpp">std::vector&lt;int64_t&gt; ids{1, 2, 3};
+std::vector&lt;double&gt; values{0.5, 1.5, 2.5};
+std::array&lt;xl::ColumnRef, 2&gt; columns{
+    xl::i64_column(&quot;id&quot;, ids),
+    xl::f64_column(&quot;value&quot;, values)};
+
+auto written = xl::write_columns(&quot;out.xlsx&quot;, XL_FORMAT_XLSX, columns);
+</code></pre>
+<p>One constructor per column type: <code>i64_column</code>, <code>f64_column</code>, <code>bool_column</code>, <code>date_column</code>,
+<code>time_column</code>, <code>timestamp_column</code>, and <code>string_column</code> (which takes an <code>int32</code> offsets span of
+<code>rows + 1</code> entries plus the UTF-8 blob).</p>
+<p>A nullable column is a values buffer plus an LSB-first validity bitmap — bit set means the row is
+valid — passed as the last argument to any of those constructors. <code>write_columns</code> checks the bitmap
+is long enough for the row count before calling: the ABI takes it without a length and reads
+<code>(rows + 7) / 8</code> bytes on trust, so a short one would be a buffer overrun. On the struct side,
+declare the field <code>std::optional&lt;T&gt;</code> and <code>write_sheet</code> builds the bitmap for you.</p>
+<p><code>xl::WriteOptions</code> sets the sheet name, the CSV dialect, and the XLS/XLSB and XLSX/XLSB toggles.
+<code>XL_FORMAT_AUTO</code> is rejected — a file being created has no signature bytes to sniff — so
+<code>xl::format_from_path</code> returning <code>XL_FORMAT_AUTO</code> for an unrecognized extension surfaces as a failed
+write rather than a silently chosen format.</p>
+<p><code>write_sheet</code> walks the range once and appends each field to its own column buffer, with the
+per-field dispatch resolved at compile time. That transpose is the only copy it makes, and it is
+what the ABI's columnar shape costs a row-shaped caller; <code>write_columns</code> pays nothing.</p>
+<h2 id="bounds-and-abi">Bounds and ABI</h2>
+<p><code>TableView::operator[]</code> is unchecked, like <code>std::vector</code>'s. Use <code>TableView::at(row)</code>, which returns
+<code>std::optional&lt;T&gt;</code> and is <code>nullopt</code> outside <code>[0, size())</code>.</p>
+<p><code>xl::Workbook::open</code>/<code>open_memory</code> first check the loaded library's <code>xl_abi_version()</code> against the
+<code>XL_ABI_VERSION</code> this header was compiled against, and fail with an explanatory <code>xl::Error</code> rather
+than reading native memory through a layout that may have changed. <code>xl::abi_version()</code> exposes the
+loaded revision directly.</p>
+<h2 id="benchmarks">Benchmarks</h2>
+<p>Google Benchmark suite in <code>benchmarks/</code>, opt-in via <code>-DEXCELREADER_BUILD_BENCHMARKS=ON</code>. Measured
+on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz, MSVC 19.51 (Release), Google Benchmark v1.9.1,
+<code>--benchmark_repetitions=10</code> (means shown).</p>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th style="text-align: right;">RealExcel.xlsb (100 rows)</th>
+<th style="text-align: right;">65K_Records_Data.xlsb (65,535 rows)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>open</code> (<code>open_memory</code>)</td>
+<td style="text-align: right;">24.0 µs</td>
+<td style="text-align: right;">1.17 ms</td>
+</tr>
+<tr>
+<td><code>parse_sheet</code> (4 or 6 bound columns)</td>
+<td style="text-align: right;">47.8 µs</td>
+<td style="text-align: right;">24.7 ms</td>
+</tr>
+<tr>
+<td><code>typed_reader</code>, batches of 1,000 / 10,000 rows</td>
+<td style="text-align: right;">-</td>
+<td style="text-align: right;">23.8 ms / 23.8 ms</td>
+</tr>
+<tr>
+<td><code>infer_schema</code> (sample 100 / 1,000 rows)</td>
+<td style="text-align: right;">75.6 µs</td>
+<td style="text-align: right;">579.1 µs</td>
+</tr>
+</tbody>
+</table>
+<p><code>open</code> here is <code>open_memory</code>, which copies the caller's buffer before returning (the caller may free
+it afterwards), so it scales with file size: 1.17 ms is mostly copying the 3.7 MB fixture. Opening by
+path reads only the package directory and stays nearly flat — see the Rust suite below.
+<code>parse_sheet</code> scales linearly with rows × columns, at roughly 380 ns/row here. Draining the same
+sheet through the batched typed reader costs the same as one whole-sheet <code>parse_sheet</code> while holding
+only one batch in memory at a time. <code>infer_schema</code> scales with its sample size, not the file's total
+row count.</p>
+<p>A separate opt-in suite (<code>-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON</code>, gated separately because it
+pulls in <a href="https://github.com/tfussell/xlnt">xlnt</a> and <a href="https://github.com/brechtsanders/xlsxio">xlsxio</a>
+as heavy source builds — xlsxio's own dependencies, expat and minizip, are fetched and compiled
+directly against it) compares against both reading <code>65K_Records_Data.xlsx</code> in full (all 14
+columns, 65,535 rows; neither competitor reads <code>.xlsb</code>, so this comparison is xlsx-only). All three
+sides decode every cell into an owned value (<code>std::string</code> for text, not the zero-copy
+<code>std::string_view</code> used above) so none gets a zero-copy advantage the others can't take:</p>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th style="text-align: right;">Mean</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ExcelReader (<code>parse_sheet&lt;FullRow&gt;</code>)</td>
+<td style="text-align: right;">62.9 ms</td>
+</tr>
+<tr>
+<td>DuckDB (<code>read_xlsx</code>, summing every column in SQL)</td>
+<td style="text-align: right;">410.8 ms</td>
+</tr>
+<tr>
+<td>xlsxio (<code>xlsxioread_sheet_next_cell_*</code>)</td>
+<td style="text-align: right;">512.9 ms</td>
+</tr>
+<tr>
+<td>xlnt (<code>worksheet::rows()</code> + <code>cell::to_string()</code>/<code>value&lt;double&gt;()</code>)</td>
+<td style="text-align: right;">2,394.1 ms</td>
+</tr>
+</tbody>
+</table>
+<p>ExcelReader is ~6.5x faster than DuckDB, ~8.2x faster than xlsxio and ~38x faster than xlnt on this
+workload. xlsxio is a
+lean, purpose-built C streaming reader — the same abstraction level as ExcelReader's own native
+core — so it was the strongest of the two competitors tested, though still well behind.</p>
+<p>Run locally:</p>
+<pre><code class="lang-bash">cmake -S cpp -B build -DEXCELREADER_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --target excelreader_cpp_benchmarks
+./build/benchmarks/excelreader_cpp_benchmarks --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
+</code></pre>
+<p>Add <code>-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5</code> (xlnt's own
+<code>CMakeLists.txt</code> predates CMake's minimum-version floor) and build/run
+<code>excelreader_cpp_compare_benchmarks</code> for the xlnt/xlsxio comparison.</p>
+<h3 id="csv-against-zsv">CSV against zsv</h3>
+<p><code>excelreader_cpp_csv_compare_benchmarks</code> (<code>-DEXCELREADER_BUILD_BENCHMARKS_ZSV=ON</code>) reads
+<code>65K_Records_Data.csv</code> (8.2 MB, 65,535 rows × 14 columns, CRLF, UTF-8 BOM) against
+<a href="https://github.com/liquidaty/zsv">zsv</a> v1.4.3, a SIMD CSV parser in C, with both of its engines:
+the default (<code>compat</code>) and the branchless SIMD one (<code>fast</code>, <code>scan_engine = 3</code>). zsv uses GCC vector
+extensions MSVC cannot compile, so this target needs GCC or Clang, and it is its own executable
+because the DuckDB comparison above only links under MSVC.</p>
+<p>Two workloads:</p>
+<ul>
+<li><strong>Typed:</strong> <code>parse_sheet&lt;FullRow&gt;</code> against zsv plus the same conversions done by hand (<code>std::string</code>
+for text, ISO dates, <code>std::from_chars</code> for the integers and doubles), one owned <code>FullRow</code> per row.
+All three produce the same checksum.</li>
+<li><strong>Cells:</strong> every cell's bytes counted. ExcelReader goes through <code>RowCursor</code> (<code>xl_rows_next_view</code>), zsv
+through its row handler. zsv's checksum is 3 bytes higher because it keeps the BOM in the first
+header cell.</li>
+</ul>
+<p>Measured on the same machine as above, GCC 16.2.0 (MSYS2 UCRT64, <code>-O3 -mavx2</code> for zsv), Release,
+<code>--benchmark_repetitions=10</code> (means shown):</p>
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th style="text-align: right;">ExcelReader</th>
+<th style="text-align: right;">zsv <code>compat</code></th>
+<th style="text-align: right;">zsv <code>fast</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Typed, 14 columns into <code>FullRow</code></td>
+<td style="text-align: right;">27.2 ms</td>
+<td style="text-align: right;">23.4 ms</td>
+<td style="text-align: right;">20.4 ms</td>
+</tr>
+<tr>
+<td>Cells, byte count</td>
+<td style="text-align: right;">11.8 ms</td>
+<td style="text-align: right;">6.5 ms</td>
+<td style="text-align: right;">3.6 ms</td>
+</tr>
+</tbody>
+</table>
+<p><strong>zsv is faster on both.</strong> Typed, it is ~1.2x (<code>compat</code>) and ~1.3x (<code>fast</code>) faster than ExcelReader.
+Counting cells, it is ~1.8x and ~3.3x faster.</p>
+<p>The cells gap is the C ABI, not the CSV parser. <code>xl_rows_next_view</code> copies every cell's value into a
+native row the cursor owns, one call per row, and that alone costs ~10.6 ms here (calling it without
+reading any cell, measured separately). The managed reader reads the same file in ~5 ms under
+BenchmarkDotNet (<code>RealDataReadBenchmark.Csv_ExcelReader</code>), but that is a different harness and
+runtime, so it is context rather than a like-for-like number.</p>
+<p>The ExcelReader rows were 34.2 ms (typed) and 14.3 ms (cells) before the NativeAOT library's static
+PGO profile was regenerated (a namespace refactor had left it matching none of the hot methods) and
+its x64 build was pinned to <code>x86-64-v3</code>. The cells row was 30.5 ms before that, when <code>xl::RowView</code>
+still decoded each cell through <code>std::optional</code> helpers. The rows are from separate 10-repetition
+runs (typed CVs 2–5%, cells CVs ≤1.3%). A first run had CVs up to 20% and was discarded.</p>
+<p>Run locally, on Windows from an MSYS2 UCRT64 shell with <code>gcc</code> and <code>ninja</code>:</p>
+<pre><code class="lang-bash">cmake -S cpp -B build-zsv -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_DEFAULT_CMP0168=NEW \
+  -DEXCELREADER_BUILD_BENCHMARKS=ON -DEXCELREADER_BUILD_BENCHMARKS_ZSV=ON
+cmake --build build-zsv --target excelreader_cpp_csv_compare_benchmarks
+./build-zsv/benchmarks/excelreader_cpp_csv_compare_benchmarks --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
+</code></pre>
+<p>The MinGW Makefiles generator failed here inside FetchContent's sub-build. Configuring with Ninja and
+<code>CMAKE_POLICY_DEFAULT_CMP0168=NEW</code> worked. Under MinGW the executable links its runtime statically,
+so it does not pick up another toolchain's <code>libstdc++-6.dll</code> from <code>PATH</code>.</p>
+<h3 id="writing-1">Writing</h3>
+<p><code>excelreader_cpp_write_benchmarks</code> (same <code>-DEXCELREADER_BUILD_BENCHMARKS=ON</code> flag) measures the two
+write layers against each other over 7 columns of the same fixture. Both cases write the same
+columns, so the gap between them is only the cost of starting from row-shaped data: <code>BM_WriteColumns</code>
+is handed buffers that are already columnar, while <code>BM_WriteSheet</code> starts from a
+<code>std::vector&lt;Row&gt;</code> and pays the row-to-column transpose.</p>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th style="text-align: right;">Time</th>
+<th style="text-align: right;">Rows/s</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BM_WriteColumns</code> (pre-transposed)</td>
+<td style="text-align: right;">45.8 ms</td>
+<td style="text-align: right;">1.43 M/s</td>
+</tr>
+<tr>
+<td><code>BM_WriteSheet</code> (from <code>std::vector&lt;Row&gt;</code>)</td>
+<td style="text-align: right;">52.2 ms</td>
+<td style="text-align: right;">1.27 M/s</td>
+</tr>
+</tbody>
+</table>
+<p>The transpose costs ~14% here. It is not free, but it is not the dominant cost of producing the
+file — see the comparison below, where the same two cases over 14 columns land within ~12%.</p>
+<p><code>excelreader_cpp_write_compare_benchmarks</code> (under <code>-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON</code>) puts
+that against xlnt, xlsxio and <a href="https://github.com/duckdb/duckdb">DuckDB</a>'s <code>excel</code> extension, all
+writing the full 14-column, 65,535-row shape of <code>65K_Records_Data.xlsx</code> from the same in-memory
+rows.
+<a href="https://github.com/jmcnamara/libxlsxwriter">libxlsxwriter</a> — same author as rust_xlsxwriter, and,
+like xlsxio, a streaming C writer with no document-model overhead — is measured separately, by
+<code>excelreader_cpp_write_compare_lxw_benchmarks</code>: xlsxio and libxlsxwriter each vendor their own
+incompatible copy of minizip and export the same C symbols (<code>zipOpen</code>, <code>zipOpenNewFileInZip</code>, ...),
+so linking both into one binary let calls cross between the two implementations and corrupted
+xlsxio's output — see <a href="#known-issue-xlsxio--libxlsxwriter-cannot-share-a-binary">Known issue</a> below.
+Building both write-compare targets and running them back to back is required to see every
+competitor.</p>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th style="text-align: right;">Wall</th>
+<th style="text-align: right;">CPU</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ExcelReader (<code>xl::write_columns</code>, pre-transposed)</td>
+<td style="text-align: right;">85.4–86.5 ms</td>
+<td style="text-align: right;">85.1–87.1 ms</td>
+</tr>
+<tr>
+<td>ExcelReader (<code>xl::write_sheet&lt;FullRow&gt;</code>)</td>
+<td style="text-align: right;">95.5–96.5 ms</td>
+<td style="text-align: right;">96.0–98.2 ms</td>
+</tr>
+<tr>
+<td>DuckDB (<code>COPY ... TO ... WITH (FORMAT xlsx)</code>)</td>
+<td style="text-align: right;">828.9–833.2 ms</td>
+<td style="text-align: right;">828.1 ms</td>
+</tr>
+<tr>
+<td>libxlsxwriter (<code>worksheet_write_string</code>/<code>_number</code>)</td>
+<td style="text-align: right;">1,193.9 ms</td>
+<td style="text-align: right;">1,203.1 ms</td>
+</tr>
+<tr>
+<td>xlsxio (<code>xlsxiowrite_add_cell_*</code>)</td>
+<td style="text-align: right;">2,433.2 ms</td>
+<td style="text-align: right;">953.1 ms</td>
+</tr>
+<tr>
+<td>xlnt (<code>worksheet::cell().value()</code> + <code>save()</code>)</td>
+<td style="text-align: right;">5,436.3 ms</td>
+<td style="text-align: right;">5,437.5 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Same machine as above; Google Benchmark's own iteration counts, no <code>--benchmark_repetitions</code> (each
+iteration writes a whole 65,535-row file, so the slower cases run once or a handful of times). xlnt
+and xlsxio only build into <code>excelreader_cpp_write_compare_benchmarks</code>; libxlsxwriter only into
+<code>excelreader_cpp_write_compare_lxw_benchmarks</code> (see the known issue below) — the ExcelReader and
+DuckDB rows appear in both, and the small ranges above are those two independent runs, not repeated
+sampling within one run.</p>
+<p><code>write_sheet</code> — the matched-work number, since it starts from the same <code>std::vector&lt;FullRow&gt;</code> every
+competitor is handed — is ~8.6–8.7x faster than DuckDB, ~12.4x faster than libxlsxwriter, ~25x
+faster than xlsxio, and ~57x faster than xlnt on wall time.</p>
+<h3 id="known-issue-xlsxio--libxlsxwriter-cannot-share-a-binary">Known issue: xlsxio + libxlsxwriter cannot share a binary</h3>
+<p>An earlier version of <code>excelreader_cpp_write_compare_benchmarks</code> linked xlnt, xlsxio,
+libxlsxwriter and DuckDB into one executable. xlsxio (built against minizip-ng's compat layer,
+whose <code>zipOpenNewFileInZip</code> takes <code>uint16_t</code> extrafield sizes) and libxlsxwriter (which vendors
+classic minizip, whose same-named function takes 32-bit <code>uInt</code> sizes and starts with <code>if (size_extrafield_local &gt; 0xffff) return ZIP_PARAMERROR;</code> — a check that cannot exist in the
+minizip-ng version) both export identical C symbol names from a static library linked into that one
+binary. The linker kept exactly one definition of each name, so a call could resolve to the wrong
+implementation — a <code>zipFile</code> opened by one library's <code>zipOpen</code> got handed to the other library's
+<code>zipOpenNewFileInZip</code>, which read it through an incompatible struct layout. That is what produced
+<code>Error creating file &quot;xl/workbook.xml&quot; inside zip file</code> on xlsxio's background thread in Release
+builds (Debug's different link order happened not to trigger it) — and it was silent otherwise:
+<code>xlsxiowrite_close()</code> still returned success with the workbook.xml entry missing, so the benchmark
+published a timing for a file that was skipping work, not a valid xlsx.</p>
+<p>The fix is structural: xlsxio and libxlsxwriter now build into two separate executables
+(<code>excelreader_cpp_write_compare_benchmarks</code> and <code>excelreader_cpp_write_compare_lxw_benchmarks</code>,
+both compiled from <code>benchmark_write_compare.cpp</code> under an <code>#ifdef</code>) that are never linked together.
+Every case in both executables also reopens the file it just wrote, outside the timed loop, before
+trusting its own timing — a writer that silently drops a required part now fails the benchmark
+instead of publishing a number for a broken file.</p>
+<p><strong>libxlsxwriter's number barely moved after the fix</strong> (1,188.0 ms wall vs. 1,226.9 ms pre-fix, ~3%,
+inside normal run-to-run noise) and its CPU stayed essentially equal to wall time both before and
+after — consistent with the corruption running through xlsxio's calls resolving into
+libxlsxwriter's minizip, not the reverse: libxlsxwriter's own output was apparently never affected.
+That is a plausible explanation for the asymmetry, not a second confirmed fact — the collision could
+in principle run either direction depending on link order, and this project isn't going to re-derive
+MSVC's exact symbol-resolution algorithm to be certain which way it went here.</p>
+<p>Caveats, none of them optional when quoting these:</p>
+<ul>
+<li><strong>xlsxio's CPU time is not stable across runs.</strong> It read 843.8–906.3 ms before the fix (some
+runs missing the workbook.xml entry), 1,171.9 ms and 687.5 ms in the two runs after it,
+1,015.6 ms and 843.8 ms in the next two and 953.1 ms in the latest, while its wall time stayed at ~2.4 s throughout. Its wall time is dominated by I/O wait —
+CPU is well under half of wall, against every other case here being CPU-bound (wall ≈ CPU) — so
+quote the wall-time ratio, which is what a caller waits. Against this run's CPU time the gap from
+<code>write_sheet</code> to xlsxio is ~9.9x, not ~25x.</li>
+<li><strong>ExcelReader does slightly more work here</strong>, not less: it attaches a number format to the two
+date columns so Excel shows a date, while every competitor case writes those as bare serial
+numbers. That difference favours the competitors.</li>
+<li><strong>xlnt builds a full document model</strong> (styles, formats, formulas) before serializing, which is
+more than this library exposes at all. Its number reflects a different feature set, not only a
+slower path.</li>
+<li><strong>DuckDB's rows are loaded via its Appender API before the timed region</strong>, so its number measures
+<code>COPY ... TO ... xlsx</code> alone — the same treatment <code>write_columns</code> gets for its transpose. DuckDB is
+a full analytical query engine doing far more than any Excel-writing library here; this measures
+one narrow slice of it, not &quot;DuckDB&quot; as a whole.</li>
+</ul>
+<p>The two ExcelReader cases land within ~12–22% of each other. The transpose's share grew as producing
+the file got cheaper, but it is still a minority of the cost. Reach for
+<code>write_columns</code> when your data is already columnar, but <code>write_sheet</code> is not the slow path.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/cpp/README.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

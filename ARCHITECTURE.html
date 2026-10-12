@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Architecture | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Architecture | ExcelReader ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/ARCHITECTURE.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="architecture">Architecture</h1>
+
+<p>A map of how the codebase fits together, not a manual. Start here, then follow the file/type names
+into the source: the code is expected to carry its own meaning through naming and flow, so read it
+directly rather than looking for a commentary alongside it.</p>
+<p>What the code deliberately does <em>not</em> carry is the evidence behind a decision — benchmark numbers,
+memory-footprint measurements, approaches that were tried and rejected. That lives in
+<a href="docs/README.html"><code>docs/</code></a>, and <a href="STYLEGUIDE.html#comments"><code>STYLEGUIDE.md</code></a> says why.</p>
+<h2 id="the-four-format-families">The four format families</h2>
+<p>Each format has its own workbook (<code>CsvReader</code> for CSV) and a writer implementing
+<code>IWorkbookWriter&lt;TSheet&gt;</code> (<code>src/ExcelReader.Core/Writer/IWorkbookWriter.cs</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Workbook</th>
+<th>Writer</th>
+<th>Sheet/row writer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX</td>
+<td><code>XlsxWorkbook</code></td>
+<td><code>XlsxWorkbookWriter</code></td>
+<td><code>XlsxSheetWriter</code>/<code>XlsxRowWriter</code></td>
+</tr>
+<tr>
+<td>XLSB</td>
+<td><code>XlsbWorkbook</code></td>
+<td><code>XlsbWorkbookWriter</code></td>
+<td><code>XlsbSheetWriter</code>/<code>XlsbRowWriter</code></td>
+</tr>
+<tr>
+<td>XLS</td>
+<td><code>XlsWorkbook</code></td>
+<td><code>XlsWorkbookWriter</code></td>
+<td><code>XlsSheetWriter</code>/<code>XlsRowWriter</code></td>
+</tr>
+<tr>
+<td>CSV</td>
+<td><code>CsvReader</code></td>
+<td><code>CsvWorkbookWriter</code></td>
+<td><code>CsvSheetWriter</code>/<code>CsvRowWriter</code></td>
+</tr>
+</tbody>
+</table>
+<p>CSV has one extra layer: <code>CsvWriter</code> is the low-level RFC4180 writer (buffered rows straight to the
+stream, no sheets/styles/shared-strings machinery); <code>CsvWorkbookWriter</code> adapts it to the shared
+<code>IWorkbookWriter&lt;CsvSheetWriter&gt;</code> contract, exposing exactly one sheet.</p>
+<p>All four open through <code>Excel.Open</code>/<code>OpenAsync</code>, which return an <code>IExcelWorkbook</code> and take an
+optional <code>ExcelFileFormat</code>. The three signed formats are detected from the file's first bytes; CSV
+carries no signature, so it is named rather than detected, and its dialect rides along in
+<code>ExcelReaderOptions.Csv</code>. That one options object is what the native ABI's <code>xl_open_options</code> maps
+onto, so <code>ReadApi.Open</code> dispatches formats rather than reimplementing them.</p>
+<p>A workbook, a sheet and an enumerator are three separate things. The workbook (<code>XlsxWorkbook</code> and its
+siblings, <code>IExcelWorkbook</code>) owns the shared state: the file or stream, the sheet list, the shared
+strings and styles. A sheet (<code>XlsxSheet</code> and its siblings, <code>IExcelSheet</code>) is a <code>readonly struct</code> of
+workbook plus index; it holds no resources, and <code>workbook.Sheets</code>, <code>FirstSheet</code>, <code>SheetAt</code> and
+<code>TryGetSheet</code> hand them out without opening anything. Iterating a sheet creates an enumerator
+(<code>XlsxWorkbook.Enumerator</code>), the one place that streams rows and the only mutable part, used by one
+thread at a time. Lifetime is reference counted (<code>ReaderLifetime</code>): the workbook holds one reference
+and each live enumerator another, so disposing the workbook closes it to new sheets and enumerators but
+releases the file, stream and pooled buffers only when the last enumerator is disposed. Shared state is
+published lazily and race-safely, which is what lets sheets of one workbook be read in parallel.</p>
+<p>On top of all four workbooks sits the typed-parsing layer (<code>src/ExcelReader.Core/Parser/</code>):
+<code>ExcelParser&lt;T&gt;</code>, built by <code>ExcelParser.FromAttributes</code> (reflection), <code>ExcelParser.Generated</code> (the
+source-generated map) or <code>ExcelParser.Build</code> (a runtime-configured map). Its model may be a class, a struct or a <code>ref struct</code>;
+a <code>ref struct</code> model binds directly to <code>Cell.Value</code> spans — zero allocation for the container and,
+for span-typed columns, for the values too. It consumes <code>Row</code>/<code>Cell</code> from any sheet uniformly.</p>
+<h2 id="parallel-sheet-reading">Parallel sheet reading</h2>
+<p><code>SheetParallel</code> (<code>src/ExcelReader.Core/Reader/SheetParallel.cs</code>) reads one sheet on several threads. It is
+opt-in, takes any <code>IExcelSheet</code>, validates its arguments and dispatches on the sheet's concrete type:</p>
+<table>
+<thead>
+<tr>
+<th>sheet</th>
+<th>engine</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CsvSheet</code></td>
+<td>the CSV engine (<code>ParallelCsvProcessor</code>, <code>ParallelCsvEnumerable</code>), described below. Its source comes from <code>CsvReader.TryGetChunkSource</code>, which the native layer also uses.</td>
+</tr>
+<tr>
+<td><code>XlsxSheet</code>, <code>XlsbSheet</code></td>
+<td>the pipeline engine (<code>src/ExcelReader.Core/Parser/SheetPipeline</code>)</td>
+</tr>
+<tr>
+<td>anything else, and every fallback case</td>
+<td>one sequential runner over <code>IExcelRowEnumerator</code></td>
+</tr>
+</tbody>
+</table>
+<p>The fallback cases give the same results with no error: a degree of parallelism of 1, a sheet under 256 KB
+uncompressed, XLS, a table view (<code>ExcelTable.AsSheet</code>), and a CSV that cannot be partitioned (a stream that is not a file
+or a non-UTF-8 encoding). The caller owns the workbook; the engine holds a <code>ReaderLifetime</code> lease
+until the task completes or the enumeration ends.</p>
+<p>The CSV engine is not folded into a shared partition abstraction. It is tuned, and its model, a static
+byte-range plan with speculative starts and re-reads, differs from the pipeline's dynamic, exact chunks. What
+the two share is the contract types (<code>IRowRecord</code>, <code>IRowAccumulator</code>, <code>RowAggregation</code>, <code>RowAction</code>) and the
+binders in <code>Parser/ParallelCsv</code> (<code>MappedProjection</code>, <code>MappedAggregation</code>, <code>MappedCallback</code>, <code>RecordAggregation</code>,
+<code>RecordCallback</code>), which pick the parser's CSV type map for a <code>CsvSheet</code> and the general one otherwise.</p>
+<h3 id="the-pipeline-engine">The pipeline engine</h3>
+<pre><code>zip entry -&gt; producer (1 thread) -&gt; bounded queue -&gt; N workers -&gt; ordered merge
+             inflate, cut at the     row-aligned      parse +      by chunk index
+             last row boundary       chunks, indexed  row action
+</code></pre>
+<p>Inflate is sequential, so the engine splits the work around it instead of through it. One producer thread
+owns the entry stream, opened through <code>ZipIndex.OpenEntryStream</code> so the decompressed-byte limits count where
+they do on the sequential path. It inflates into pooled buffers and cuts each at the last row boundary,
+copying the partial tail into the next buffer; chunks default to 256 KB (<code>SheetPipelineSource.DefaultChunkBytes</code>).
+In XLSX the boundary is the last <code>&lt;row</code> followed by a name boundary, and the producer stops at the sheet-data
+end tag, so the rest of the part is neither inflated nor buffered. XLSB has no sync marker, so the producer walks
+every record with <code>Biff12RecordReader</code> and remembers the last <code>BrtRowHdr</code>; it stops at <code>BrtEndSheetData</code>.</p>
+<p>Chunks go through a bounded <code>System.Threading.Channels</code> queue, about twice the worker count, so a full queue
+blocks the producer and peak memory is roughly capacity times chunk size whatever the sheet's size. <code>dop - 1</code>
+workers (at least one) each parse a chunk in place with the format's own enumerator over <code>ReadOnlyMemory&lt;byte&gt;</code>,
+call <code>Seed()</code>, then run the row action for each row. Shared strings are loaded before the pipeline starts, and a
+prologue reads up to <code>HeaderRow</code> with an ordinary enumerator, so header rows never reach a chunk. The engine's
+one primitive is an async stream of <code>(index, state, failure)</code> in chunk order, reordered through a ring of slots as
+<code>ParallelCsvEnumerable</code> does; <code>AggregateAsync</code> folds the states with <code>Combine</code>, <code>ForEachAsync</code> ignores them, and
+<code>ParseAsync</code> uses a <code>List&lt;T&gt;</code> per chunk and yields its items.</p>
+<p>The XLSX row boundary is a candidate, not a proof: the same bytes can sit in CDATA, a comment or malformed
+markup. So every chunk enumerator reports whether it ended cleanly, on a row boundary with no row or tag cut
+short. A run of clean chunks equals the sequential read by induction. A chunk that does not end cleanly stops
+before delivering its cut-short row; the merge keeps that chunk's rows, cancels the pipeline and reads the rest
+with one sequential enumerator, skipping the rows already delivered, and later chunks' results are dropped.
+This recovery re-inflates the sheet and only happens on such sheets. It leaves <code>ParseAsync</code> and <code>AggregateAsync</code>
+exact, but <code>ForEachAsync</code> may already have called back for dropped chunks, so it is exactly once only for a
+well-formed XLSX sheet. XLSB frames records from the first byte as the sequential reader does, so it has no
+such case.</p>
+<p>The measured gain is bounded by inflate, which stays on one thread: see &quot;Parallel intra-sheet parsing&quot; in
+<a href="docs/performance/reader-performance.html">reader-performance.md</a>. Parallel inflate would replace the producer
+only; the queue, workers and merge stay.</p>
+<h3 id="the-csv-engine">The CSV engine</h3>
+<p><code>CsvSheet</code> takes the older path (<code>src/ExcelReader.Core/Parser/ParallelCsv/ParallelCsv*.cs</code>), over the same
+typed-parsing machinery, for sources large enough that partitioning pays for itself. <code>ParallelCsvFactory</code>
+decides eligibility, a seekable, UTF-8, large-enough source, and falls back to the ordinary sequential
+<code>ExcelParser&lt;T&gt;</code> otherwise, so callers get identical output either way.</p>
+<p>When it partitions, <code>CsvChunkPlan</code> slices the data range into four chunks per worker (not one — see
+the file's comments on why one-per-worker would buffer up to the whole output) and hands them out
+through a lock-free pull queue. Each worker reads its chunk through a <code>RangedFileStream</code>, a
+positional, non-seeking view over one shared <code>SafeFileHandle</code> (<code>RandomAccess.Read</code>, thread-safe, no
+per-worker file handle). A chunk's <em>nominal</em> start is only a guess — record boundaries do not respect
+chunk boundaries — so <code>CsvBoundaryResolver</code> has each worker also resolve where its own first real
+record begins.</p>
+<p><code>ParallelCsvEnumerable&lt;T&gt;.GetAsyncEnumerator</code> is where the guesses get corrected and the output gets
+ordered. It walks chunks in index order; a chunk is only trusted once its predecessor has confirmed
+where the chunk actually starts, and a chunk whose guess was wrong is reparsed from the confirmed
+offset before anything downstream sees it. That correction can cascade into the following chunk, which
+the loop's confirmed-offset threading handles without special-casing. Boundary confirmation is
+therefore strictly ordered — it is a correctness requirement — but this also happens to be the merge
+that yields rows in file order, identical to the sequential parser.</p>
+<p>Whether a mode other than the ordered merge above would be worth adding as an opt-in was a measurement
+question the design left open, against a &gt;=10% throughput bar. It is now settled for the
+confirmation-decoupling variant, and the ordered merge stays the only shipped mode.</p>
+<p>The first measurement, on a thermally-limited mobile CPU, was discarded: flat-to-worse at mid-range
+degrees of parallelism and improving only at the extremes, which is throttling under sustained
+multi-threaded load rather than the algorithm's own scaling. The clean re-run (Ryzen 7 5700X, 8C/16T,
+<code>CsvParallelParseBenchmark</code>, MediumRun) shows the path scaling monotonically instead — 3.95x on the
+conversion-heavy corpus and 2.61x on narrow ints at dop 16, saturating past dop 8 as it becomes
+bandwidth-bound.</p>
+<p>With that baseline trustworthy, the variant itself was measured: confirmation decoupled from
+consumption, publishing confirmed rows to a bounded channel rather than yielding them inline, so
+confirmation can run ahead instead of lockstepping with a slow consumer. It lost at every consumer
+speed whose numbers were tight enough to read — 2.9% behind the ordered merge with a trivial consumer,
+23% and 28% behind as consumer cost rose past the pipeline's own — while allocating more. The slowest
+consumer leg produced no usable signal, because modelling a slow consumer with <code>Thread.SpinWait</code> makes
+it contend for the same cores as the workers; a blocking consumer would need a different harness. This
+reproduces the earlier ad hoc experiment's finding on hardware that can be trusted, so the variant is
+discarded rather than kept as a second mode.</p>
+<p>Still unresolved, and untested by any of the above: whether true unordered emission would fare
+differently. The ordered merge is the safer default and the only mode either public overload can
+reach, so it stays absent a specific reason to revisit.</p>
+<p><code>SheetParallel.ForEachAsync</code> exposes the same partitioning to a per-row callback rather than an
+accumulator type. It accepts a <code>ref struct</code> row, which the enumerating <code>SheetParallel.ParseAsync</code> cannot —
+not because of the interface (<code>IAsyncEnumerable&lt;T&gt;</code>'s <code>T</code> is declared <code>allows ref struct</code> on net9.0+),
+but because a row holding spans into a worker's buffer cannot cross to the consumer thread at all.</p>
+<p>That constraint also settles what an ordered <code>ref struct</code> enumerator would cost. Since a worker cannot
+convert a row it must hand onward, conversion would run on the consumer thread — and conversion is the
+floor here: the <code>ref struct</code> aggregate path, which shares this projection code, costs 833.8 ms
+single-threaded on the conversion-heavy corpus, against 272.5 ms for the typed path at dop 8. Such an
+API would be ~3.1x slower than what already ships while adding nothing over the
+sequential <code>ref struct</code> parse, so it was not built. Ordered delivery at full speed needs workers to
+convert into a per-chunk arena of packed fields that the consumer rehydrates; that remains unbuilt.</p>
+<p>Because partitions start at guessed record boundaries, a partition whose guess was wrong is read again
+and the callback sees a whole partition's records twice — 1 MiB to 64 MiB of them, not a handful near
+the seam. A wrong start also shifts every field boundary, so on a source with quoted fields the
+discarded pass can hand the callback values that appear nowhere in the file. For an accumulator both are
+invisible: the discarded instance is thrown away.</p>
+<p>A guess is only wrong when the offset falls inside a quoted field. <code>CsvChunkWorker.GuessStart</code> first
+reads the byte before the chunk start and returns the chunk start unchanged when it already sits on a
+record boundary, because <code>CsvBoundaryResolver.FindRecordStart</code> only ever scans past a terminator and
+would otherwise overshoot by a whole record on every chunk that happens to be aligned — which, at a
+1 MiB minimum chunk size, is every chunk of a fixed-width file. That leaves quote-free sources exact,
+and the repeat documented as a caller obligation for the rest rather than designed out. Removing it
+there too needs a quote-parity prefix pass over the bytes before any parsing starts; that pass is a
+barrier and would cost roughly half the dop-16 runtime unless pipelined, which is more machinery than
+the hazard currently warrants.</p>
+<h2 id="shared-plumbing">Shared plumbing</h2>
+<p>Reader internals that would otherwise be duplicated four times over live in one place:</p>
+<ul>
+<li><strong><code>CellAccumulator</code></strong> — pooled per-row cell storage (raw decoded UTF-8 text + a <code>CellDesc[]</code>
+describing each cell's column/type/style/offset). Used by every format's enumerator. Also hosts
+the shared BIFF numeric-error-code → text lookup (<code>#DIV/0!</code> etc.) for XLS/XLSB.</li>
+<li><strong><code>PooledStreamRowEnumerator</code></strong> — abstract base centralizing the pooled-buffer lifecycle
+(<code>BufferedStreamCursor</code> + <code>CellAccumulator</code>, <code>Fill</code>/<code>FillAsync</code>/<code>Ensure</code> wrappers) that every
+format's enumerator subclasses. <code>MoveNext</code>/<code>MoveNextAsync</code> stay concrete per format — this only
+removes the buffer-lifecycle boilerplate, not the parsing itself.</li>
+<li><strong><code>BufferedStreamCursor</code></strong> — the refill/compact-or-grow cursor behind the XLSX/XLSB/CSV
+forward-only stream enumerators. Has a second constructor for the in-memory-ZIP path that wraps an
+already-fully-decompressed <code>ReadOnlyMemory&lt;byte&gt;</code> instead of a <code>Stream</code> (<code>Eof = true</code> immediately,
+no refills).</li>
+<li><strong><code>WorkbookLookups</code></strong> — small lookups that were once duplicated identically across readers: sheet
+name→index, sheet-index bounds checks, date-style flags, shared-string offsets, and (ZIP formats
+only) worksheet entry resolution plus prefetch/limit-counting stream composition. Takes arrays as
+parameters rather than requiring a shared interface, since each format's backing arrays differ in
+shape.</li>
+<li><strong><code>LimitChecks</code></strong> — the DoS/resource-limit guards (<code>ExcelReaderOptions</code>/<code>CsvReaderOptions</code>), including
+the single buffer-growth-cap function (<code>NextBufferSize</code>) every pooled buffer in the stack grows
+through, so one limit policy governs all of them consistently.</li>
+</ul>
+<h2 id="encrypted-ooxml-workbooks">Encrypted OOXML workbooks</h2>
+<p>A password-protected <code>.xlsx</code>/<code>.xlsb</code> is not a ZIP: it is an OLE/CFB container holding an
+<code>EncryptionInfo</code> descriptor and an <code>EncryptedPackage</code> (the real ZIP, encrypted). <code>src/ExcelReader.Core/Crypto/</code>
+turns one back into a stream the ordinary readers consume:</p>
+<ul>
+<li><strong><code>CfbContainer</code></strong> — the CFB parse, factored out of <code>XlsCompoundFile</code> so one parse can yield
+<em>named</em> streams. <code>XlsCompoundFile.OpenWorkbook</code> is now a thin wrapper over it, which is why the XLS
+path kept its behavior and its fuzz coverage unchanged.</li>
+<li><strong><code>EncryptionDescriptor</code></strong> — parses <code>EncryptionInfo</code> and dispatches. Version 4.4 is agile
+(AES-CBC, 4096-byte segments, XML descriptor). Versions 2.2/3.2/4.2 share a binary
+header+verifier used by <em>both</em> ECMA-376 standard encryption (AES-ECB/SHA-1) and RC4 CryptoAPI, so
+the cipher is decided by <code>EncryptionHeader.algId</code>, not by the version — standard is supported,
+RC4 is rejected. Anything else is rejected outright. This is the one parser in the codebase that
+uses <code>XmlReader</code> rather than hand-rolled scanning; the file header explains why.</li>
+<li><strong><code>AgileKeyDerivation</code></strong> / <strong><code>StandardKeyDerivation</code></strong> — password to key, plus the verifier check
+that distinguishes &quot;wrong password&quot; from &quot;corrupt file&quot;. Standard's SHA-1 and 50,000 iterations
+are fixed by the scheme rather than stated in the file, which is why <code>MaxPasswordSpinCount</code> has
+nothing to bound there.</li>
+<li><strong><code>PackageCipher</code></strong> — the keyed half of a scheme: derive, decrypt one aligned window, verify
+integrity if the scheme has any. <code>DecryptedPackageStream</code> and <code>EncryptedPackageOpener</code> hold one
+of these and name no scheme, which is why adding standard encryption did not touch their
+segmenting or their ZIP handling.</li>
+<li><strong><code>DecryptedPackageStream</code></strong> — a read-only <em>seekable</em> <code>Stream</code>. Agile derives a per-segment IV
+from the segment index, so <code>ZipArchive</code> finds its central directory without the package ever
+being materialized. One 4 KiB segment is cached, which is enough because ZIP reads are sequential
+within an entry.</li>
+</ul>
+<p><code>XlsxWorkbook</code> and <code>XlsbWorkbook</code> are untouched by any of this: they receive a stream that happens to
+decrypt. Writing encrypted workbooks is a separate step, <code>Excel.EncryptPackage</code>/<code>EncryptPackageAsync</code>
+in <code>PackageEncryptor.cs</code> — it wraps a plaintext package (written by any of the ordinary writers) in
+an agile-encrypted CFB container, the inverse of <code>DecryptedPackageStream</code>. There is still no
+round-trip check between the two directions: they don't share a derivation implementation to guard
+against a shared bug, so the fixtures in <code>tests/ExcelReader.Tests/data/encrypted/</code> (paired with
+plaintext produced by an independent implementation) remain the only correctness oracle for
+decryption specifically.</p>
+<h2 id="the-excelreader-cli">The <code>excelreader</code> CLI</h2>
+<p><code>src/ExcelReader.Cli/</code> is a thin <code>dotnet tool</code> shell (<code>excelreader</code>) over Core's public API — it
+parses no spreadsheet bytes of its own. It splits in two on purpose: <code>Commands</code> is a one-line-per-
+command adapter whose XML doc comments ConsoleAppFramework's source generator turns into argument
+parsing, routing and <code>--help</code>, while <code>CliCommands</code> holds the bodies as plain functions over explicit
+writers. The split keeps the tested surface free of the framework's static output hooks, so the CLI
+tests run in parallel like every other test class. ConsoleAppFramework is compile-time only
+(<code>PrivateAssets</code>), so the published tool's only <em>runtime</em> dependency besides ExcelReader.Core is
+Spectre.Console, used for <code>sheets</code>/<code>schema</code>'s tables and <code>convert</code>'s progress spinner on a real
+terminal.</p>
+<p>Rendering follows <code>Commands</code>/<code>CliCommands</code>'s own split, one level further: <code>Commands</code> picks plain vs.
+interactive per call (<code>Console.IsOutputRedirected</code>/<code>IsErrorRedirected</code>), so a script gets the exact
+same tab-separated text and stderr line the tool always wrote, unchanged. Two small always-stderr
+helpers back that split - <code>ErrorConsole</code> (a Spectre <code>IAnsiConsole</code> pinned to <code>Console.Error</code>, since
+Spectre's own default instance targets stdout, which <code>convert</code> may be using for the converted bytes
+themselves) and <code>ColorizingErrorWriter</code> (a <code>TextWriter</code> that renders <code>CliCommands.Execute</code>'s one-line
+failure in red through <code>ErrorConsole</code> on a terminal, or passes it through byte-for-byte otherwise).
+Both live in <code>ExcelReader.Cli</code>, not <code>CliCommands.cs</code> - the interactive/plain decision is
+<code>Console</code>-shaped state, exactly what that file's tests are built to never touch.</p>
+<h2 id="why-workbooks-are-split-into-partial-classes">Why workbooks are split into partial classes</h2>
+<p><code>XlsxWorkbook</code> and <code>XlsbWorkbook</code> are large enough that one file would be unwieldy, so each is split by
+concern rather than by size:</p>
+<ul>
+<li><code>XlsxWorkbook.cs</code> / <code>XlsbWorkbook.cs</code> — fields, constructors, the sheet list, dispose.</li>
+<li><code>XlsbWorkbookParts.cs</code> (XLSB only) — parses <code>workbook.bin</code> for the sheet names, paths and visibility.</li>
+<li><code>*.Loading.cs</code> (XLSX only) — one-time workbook-level XML parsing (sheets, shared strings, date1904).</li>
+<li><code>XlsxWorkbook.Memory.cs</code> (XLSX only) — the shared-string parse over an already-decompressed in-memory
+part, so it never suspends even under <code>await foreach</code>.</li>
+<li><code>*.Styles.cs</code> (XLSX only) — builds the cellXfs-index → is-date-style table.</li>
+<li><code>*.Enumerator.cs</code> — the nested <code>Enumerator</code>: the actual streaming row/cell parser. By far the
+largest file in each workbook.</li>
+</ul>
+<p>All partials of one workbook share one field set (C# partial classes are one type), so e.g.
+<code>.Loading.cs</code>'s shared-string parse populates fields the nested <code>Enumerator</code> in <code>.Enumerator.cs</code>
+reads back. <code>XlsWorkbook</code> follows a reduced version of the same split (<code>.Strings.cs</code> for its string
+tables, no <code>.Loading.cs</code>/<code>.Memory.cs</code>). The sheet values live in their own small files
+(<code>XlsxSheet.cs</code>, <code>XlsbSheet.cs</code>, <code>XlsSheet.cs</code>, <code>CsvSheet.cs</code>).</p>
+<h2 id="the-syncasync-twin-convention">The sync/async twin convention</h2>
+<p>Hot-path search/refill primitives (e.g. <code>IndexOf</code>/<code>IndexOfAsync</code>/<code>IndexOfSlowAsync</code> in
+<code>XlsxWorkbook.Enumerator.cs</code>) come in three tiers, not one generic async method:</p>
+<ol>
+<li>A blocking sync loop for the sync caller.</li>
+<li>An async method whose common case — the data is already in the buffered window — is a synchronous
+check returning an already-completed <code>ValueTask</code>, so no async state machine is allocated on the
+hot path.</li>
+<li>A separate <code>...SlowAsync</code> method holding the actual <code>await</code>-in-a-loop, split out so the rare
+awaiting branch doesn't bloat the fast path's IL/JIT inlining.</li>
+</ol>
+<p>Parsing a row (<code>ParseRowInWindow</code>) has no async twin at all — it is pure span work over the
+buffered window, so both <code>MoveNext</code> and <code>MoveNextAsync</code> call the same synchronous parse. It finds
+the row's cells and its <code>&lt;/row</code> on one forward walk, and returns false without committing anything
+if the row runs past the window; only the refill loop around it (<code>ParseRowBody</code> /
+<code>ParseRowBodySlowAsync</code>) differs between the two callers.</p>
+<p>A parity test suite (<code>tests/ExcelReader.Tests/Reader/SyncAsyncParityTests.cs</code>) asserts identical cell
+snapshots across sync / async-open / <code>GetAsyncEnumerator</code> for all four formats, guarding against the
+twins drifting apart.</p>
+<h2 id="the-rowcell-ref-struct-lifetime-model">The <code>Row</code>/<code>Cell</code> ref-struct lifetime model</h2>
+<p><code>Row</code> and <code>Cell</code> are <code>public readonly ref struct</code>s: zero-allocation views aliasing the reader's own
+pooled buffers (the accumulator's cell/value arrays, the shared-string buffer, or — for XLSX's bare
+<code>&lt;v&gt;</code> fast path — the live read buffer directly). Being <code>ref struct</code> lets them hold <code>ReadOnlySpan&lt;T&gt;</code>
+fields, and the compiler physically prevents a caller from doing anything that would outlive them:
+they can't be boxed, stored in a field, captured in a closure, or crossed over an <code>await</code>/<code>yield</code>.</p>
+<p><strong>Validity window:</strong> exactly one enumeration step. <code>MoveNext</code>/<code>MoveNextAsync</code> resets the accumulator
+and may compact or resize the buffer, so a <code>Row</code>/<code>Cell</code> from step <em>N</em> is invalidated the instant step
+<em>N+1</em> starts.</p>
+<p><strong>Escape hatch:</strong> <code>Cell.GetString()</code> materializes the value as a real <code>string</code> (deduplicated for
+repeated shared-string cells via an internal cache), <code>TryFormat</code> copies raw text into a caller-owned
+buffer without allocating a <code>string</code>, and <code>TryGetDouble</code>/<code>TryParse&lt;T&gt;</code>/<code>TryGetDateTime</code> extract plain
+value types — all safe to keep past the row's lifetime since none of them are spans.</p>
+<h2 id="typed-model-instantiation-three-tiers-different-tradeoffs">Typed-model instantiation: three tiers, different tradeoffs</h2>
+<p><code>ExcelParser&lt;T&gt;</code>/<code>ExcelEnumerable&lt;T&gt;</code> create one row model per row via <code>TypeMapInfo&lt;T&gt;.CreateInstance()</code>
+(<code>Parser/Internal/TypeMapInfo.cs</code>), and how that instance gets created depends on how <code>T</code> was mapped:</p>
+<ul>
+<li><strong><code>[ExcelSerializable]</code> (source-generated) or a fluent map that called <code>.Factory(static () =&gt; new T())</code></strong>
+— the factory is a plain compiled <code>new T()</code>, the cheapest possible per-row allocation.</li>
+<li><strong>A plain struct with no explicit parameterless constructor</strong> — no factory at all; <code>default(T)</code> is
+used directly, since it's byte-for-byte what <code>new T()</code> would produce.</li>
+<li><strong>Attribute/reflection-driven mapping of a class <code>T</code></strong> (<code>TypeMapper&lt;T&gt;.Build</code>, <code>Parser/Internal/TypeMapper.cs</code>)
+— falls back to <code>Activator.CreateInstance&lt;T&gt;()</code> per row. This is deliberately <em>not</em> an
+<code>Expression.Compile()</code>-built factory: that was tried and reverted because the JIT/expression-tree
+compilation cost dominated cold start (first-use latency), which matters more for this reflection
+path's typical caller (one-off scripts, not long-running services) than the steady-state per-row
+cost of <code>Activator</code> dispatch.</li>
+</ul>
+<p>If per-row allocation throughput matters more than cold start for your workload, prefer
+<code>[ExcelSerializable]</code> or an explicit <code>.Factory(...)</code> over plain attribute/reflection binding on a
+class model — it sidesteps <code>Activator.CreateInstance&lt;T&gt;()</code> entirely.</p>
+<h2 id="further-reading">Further reading</h2>
+<ul>
+<li><a href="SECURITY.html"><code>SECURITY.md</code></a> — supported versions and how to report a vulnerability.</li>
+<li><a href="CONTRIBUTING.html"><code>CONTRIBUTING.md</code></a> — build expectations and how to submit a change.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/ARCHITECTURE.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

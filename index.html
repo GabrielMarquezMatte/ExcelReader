@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ExcelReader | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ExcelReader | ExcelReader ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/index.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="landing" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+
+<p><img src="https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png" alt="ExcelReader logo"></p>
+<h1 id="excelreader">ExcelReader</h1>
+<p><a href="https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/ci.yml"><img src="https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
+<a href="https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/codeql.yml"><img src="https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/codeql.yml/badge.svg?branch=master" alt="CodeQL"></a>
+<a href="https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/release.yml"><img src="https://github.com/GabrielMarquezMatte/ExcelReader/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+<a href="https://www.nuget.org/packages/ExcelReader.NET"><img src="https://img.shields.io/nuget/v/ExcelReader.NET.svg" alt="NuGet"></a>
+<a href="https://www.nuget.org/packages/ExcelReader.NET"><img src="https://img.shields.io/nuget/dt/ExcelReader.NET.svg" alt="Downloads"></a>
+<a href="LICENSE"><img src="https://img.shields.io/github/license/GabrielMarquezMatte/ExcelReader.svg" alt="License"></a>
+<a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/"><img src="https://img.shields.io/badge/benchmarks-GitHub%20Pages-informational" alt="Benchmarks"></a></p>
+<p>High-performance Excel reading and writing for .NET 10. Reads <code>.xlsx</code>, <code>.xlsb</code>, <code>.xls</code>, and <code>.csv</code>; writes <code>.xlsx</code>, <code>.xlsb</code>, <code>.xls</code>, and <code>.csv</code>.</p>
+<p>ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight <code>ref struct</code> values, resolves shared strings, recognizes date styles, and handles sparse cells. Workbooks open from a path, a <code>Stream</code>, or a caller-owned <code>ReadOnlyMemory&lt;byte&gt;</code> — the in-memory path decompresses parts directly, without a <code>ZipArchive</code> or an intermediate stream.</p>
+<h2 id="install">Install</h2>
+<pre><code class="lang-bash">dotnet add package ExcelReader.NET
+</code></pre>
+<pre><code class="lang-csharp">using ExcelReader.Core.Reader;
+
+using IExcelWorkbook workbook = Excel.Open(&quot;book.xlsx&quot;);
+foreach (Row row in workbook.FirstSheet)
+{
+    foreach (RowCell cell in row.Cells)
+    {
+        Console.Write(cell.Value.GetString());
+        Console.Write('\t');
+    }
+    Console.WriteLine();
+}
+</code></pre>
+<h2 id="guide">Guide</h2>
+<ul>
+<li><a href="docs/guide/reading.html">Reading rows</a> — opening a workbook, enumerating rows, auto-detecting the format, async reads, prefetch decompression, and the ADO.NET <code>IDataReader</code> bridge.</li>
+<li><a href="docs/guide/parsing.html">Typed parsing</a> — binding rows to your own types with attributes, the compile-time generator (Native AOT / trimming), the fluent API, required columns, custom converters, and the zero-copy <code>ref struct</code> path.</li>
+<li><a href="docs/guide/writing.html">Writing workbooks</a> — XLSX, XLSB (BIFF12) and XLS (BIFF8) writers, cell styles, typed records, and prefetch compression.</li>
+<li><a href="docs/guide/csv.html">CSV</a> — reading, dialect sniffing, parallel parsing, and writing delimited text.</li>
+<li><a href="docs/guide/encryption.html">Encrypted workbooks</a> — opening password-protected packages and encrypting written ones.</li>
+<li><a href="docs/guide/untrusted-input.html">Reading untrusted files</a> — the resource limits that bound what one hostile file can cost, and how to reject one cleanly.</li>
+<li><a href="docs/guide/migrating-to-v7.html">Migrating to v7</a> — porting <code>CsvParallel</code> code to <code>SheetParallel</code>, which now reads XLSX and XLSB on several threads too.</li>
+<li><a href="docs/guide/migrating-to-v6.html">Migrating to v6</a> — porting v5 reader code to workbooks and sheets, and reading sheets in parallel.</li>
+<li><a href="docs/performance/benchmarks.html">Benchmarks</a> — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/">Live results</a>.</li>
+</ul>
+<h2 id="command-line">Command line</h2>
+<pre><code class="lang-bash">dotnet tool install --global ExcelReader.NET.Cli
+</code></pre>
+<pre><code class="lang-bash">excelreader sheets  book.xlsb                        # 0&lt;TAB&gt;Sheet1
+excelreader schema  book.xlsb --sample-size 500      # 0&lt;TAB&gt;Id&lt;TAB&gt;Int64
+excelreader convert book.xlsb --output data.csv      # convert to another format, by extension
+excelreader convert book.xlsb --output data.xlsx     # .xlsx, .xlsb, .xls and .csv all work
+excelreader convert book.xlsb --format xlsx | head -c 4   # to stdout, --format picks it instead
+</code></pre>
+<p>Flags: <code>--sheet|-s &lt;name|index&gt;</code>, <code>--header-row N</code> (0 = no header), <code>--sample-size N</code>,
+<code>--output|-o &lt;file&gt;</code>, <code>--format|-f &lt;xlsx|xlsb|xls|csv&gt;</code> (defaults to <code>--output</code>'s extension, or csv
+for stdout), <code>--delimiter|-d &lt;char&gt;</code> (csv output), <code>--input-delimiter &lt;char&gt;</code> (csv input). Run
+<code>excelreader &lt;command&gt; --help</code> for the full list.</p>
+<p><code>--sheet</code> matches a sheet name first and falls back to a 0-based index, so a sheet literally named
+<code>2</code> is reachable by name. A <code>.csv</code> input has its dialect sniffed unless <code>--input-delimiter</code> names one,
+so a <code>;</code>-separated export reads as columns rather than as one field; <code>--delimiter</code> stays on the output
+side, so <code>convert data.csv -o out.csv -d ';'</code> still means &quot;read as sniffed, write semicolons&quot;.
+<code>sheets</code> and <code>schema</code> write plain tab-separated text. <code>convert</code> reports progress on stderr while it
+runs, unless stderr is redirected. Exit codes are <code>0</code> ok and <code>1</code> failure; results go to stdout and
+errors to stderr, so <code>convert</code> is safe to pipe.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Reads <code>.xlsx</code>, <code>.xlsb</code> (BIFF12), <code>.xls</code> (BIFF8), and <code>.csv</code>; writes <code>.xlsx</code>, <code>.xlsb</code>, <code>.xls</code>, and <code>.csv</code>.</li>
+<li><code>Excel.Open</code>/<code>OpenAsync</code> auto-detect XLSX/XLSB/XLS from the file signature. CSV has none, so pass <code>ExcelFileFormat.Csv</code> to open delimited text through the same entry point; <code>ExcelReaderOptions.Csv</code> carries the dialect, and <code>CsvReaderOptions.SniffDialect</code> infers it from the source.</li>
+<li>A workbook hands out its sheets: <code>FirstSheet</code>, <code>Sheets[index]</code> or <code>SheetAt(index)</code>, and <code>TryGetSheet(name)</code>. CSV is a workbook with one unnamed sheet. Coming from v5? See <a href="docs/guide/migrating-to-v6.html">Migrating to v6</a>.</li>
+<li>Sheets of one workbook can be read in parallel, one enumerator per thread. One sheet of any format (XLSX, XLSB or CSV) can also be read on several threads with <code>SheetParallel</code>.</li>
+<li><code>sheet.Visibility</code> reports whether a sheet is hidden (<code>Visible</code>, <code>Hidden</code>, <code>VeryHidden</code>). Hidden sheets still enumerate their rows — filter on the value if you want them skipped. The writers take the same value via <code>AddSheet(name, visibility)</code>, and reject a workbook whose sheets would all be hidden.</li>
+<li>Missing cells in sparse rows are exposed as empty cells.</li>
+<li>String conversion allocates only when you call <code>GetString()</code>.</li>
+<li>The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in <code>sheetData</code>, and CDATA text runs.</li>
+<li>Readers bound untrusted input by default: 512 MB total decompressed ZIP data, 32 MB per cell/row value buffer, and 128 MB for shared strings. Pass <code>ExcelReaderOptions</code> to the <code>Excel.From*</code>/<code>Excel.Open*</code> factories to tune these limits; set a limit to <code>0</code> to opt out and restore unlimited behavior for that limit. <code>CsvReader</code> has its own <code>CsvReaderOptions.MaxCellBytes</code> (default 32 MB) for the same purpose.</li>
+<li>The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells; shared strings are opt-in.</li>
+<li>The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package; shared strings are opt-in.</li>
+<li>The XLS writer buffers records in memory and assembles the OLE container at <code>EndAsync</code>; choose it when write throughput matters more than peak allocation.</li>
+<li><code>Excel.EncryptPackage</code>/<code>EncryptPackageAsync</code> wrap a written XLSX/XLSB package in agile ECMA-376 encryption; see <a href="docs/guide/encryption.html">Encrypted workbooks</a>.</li>
+</ul>
+<h2 id="build">Build</h2>
+<pre><code class="lang-bash">dotnet restore ExcelReader.slnx
+dotnet build ExcelReader.slnx --configuration Release
+dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release
+</code></pre>
+<h2 id="other-languages">Other languages</h2>
+<p>ExcelReader ships a NativeAOT shared library with a C ABI, so non-.NET languages can read and write
+XLSX, XLSB, XLS and CSV without a .NET runtime installed.</p>
+<ul>
+<li>C ABI header: <a href="src/ExcelReader.Native/include/excelreader.h"><code>src/ExcelReader.Native/include/excelreader.h</code></a></li>
+<li>Python package: <a href="python/README.html"><code>python/</code></a></li>
+<li>C++ package: header-only CMake wrapper, <code>xl::Workbook</code>/<code>xl::parse_sheet</code>/<code>xl::write_sheet</code> over the same ABI — see <a href="cpp/README.html"><code>cpp/README.md</code></a>.</li>
+<li>Rust crate: safe <code>Workbook</code>/<code>parse_sheet</code>/<code>write_sheet</code> bindings, downloadable via <code>cargo add excelreader</code> — see <a href="rust/excelreader/README.html"><code>rust/excelreader/README.md</code></a>.</li>
+</ul>
+<pre><code class="lang-python">from excelreader import open_workbook
+
+with open_workbook(&quot;book.xlsx&quot;) as workbook:
+    for row in workbook.sheets[0].rows():
+        print([cell.value for cell in row])
+</code></pre>
+<p>Writing goes through one export, <code>xl_write_typed</code>: a whole sheet in a single call, from columnar
+buffers the ABI borrows rather than copies. All three bindings expose it — Python as
+<code>write_workbook</code>/<code>write_arrow</code>/<code>write_pandas</code>/<code>write_polars</code>, C++ as <code>xl::write_columns</code> and
+<code>xl::write_sheet&lt;T&gt;</code>, Rust as <code>writer::write_columns</code> and <code>writer::write_sheet</code>. In C++ and Rust the
+same struct mapping drives both directions, so reading a sheet and writing it back needs one
+mapping, not two:</p>
+<pre><code class="lang-rust">use excelreader::writer::write_sheet;
+use excelreader::XL_FORMAT_XLSX;
+
+write_sheet(&quot;out.xlsx&quot;, XL_FORMAT_XLSX, &amp;rows, None)?;
+</code></pre>
+<pre><code class="lang-cpp">auto written = xl::write_sheet(&quot;out.xlsx&quot;, rows);   // format inferred from the extension
+</code></pre>
+<p>Row-by-row decoded reads are available from all three bindings — Python as <code>Sheet.rows()</code>, C++
+as <code>xl::Sheet::rows()</code>, Rust as <code>Sheet::rows()</code>. Python additionally exposes
+<code>read_all_columnar()</code> over <code>xl_rows_read_all_blob</code>, which the other two do not wrap.</p>
+<p>The Arrow export is available from Python
+(<code>to_arrow</code>/<code>to_record_batch</code>), C++ (<code>xl::parse_arrow&lt;T&gt;</code>, in the separate <code>&lt;xl/excelreader_arrow.hpp&gt;</code>
+header — no Apache Arrow C++ dependency, you get the raw C Data Interface pair), and Rust
+(<code>excelreader::arrow::parse_arrow</code>, behind the <code>arrow</code> cargo feature, returning an <code>arrow::array::RecordBatch</code>).</p>
+<p>All three bindings can also read a sheet a batch at a time instead of the whole sheet in one call, so
+peak memory is one batch rather than one sheet — Python as <code>iter_parse_typed</code>/
+<code>to_record_batch_reader</code> (plus <code>iter_pandas</code>/<code>iter_polars</code>), C++ as <code>xl::typed_reader&lt;T&gt;</code>/
+<code>xl::arrow_stream&lt;T&gt;</code>, Rust as <code>Workbook::typed_chunks</code>/<code>arrow::parse_arrow_stream</code>. The .NET reader
+above already streams row-by-row by construction, so there is nothing to add here for it; see each
+binding's README for the chunked-reading semantics (one chunked read per workbook, <code>batch_size</code>
+meaning, and what invalidates a live one).</p>
+<p>Encrypting a written package goes through one export too, <code>xl_encrypt_package</code> — wrap a finished
+plaintext XLSX/XLSB package in agile ECMA-376 encryption, given a password. All three bindings
+expose it: Python as <code>encrypt_package</code>, C++ as <code>xl::encrypt_package</code>, Rust as
+<code>writer::encrypt_package</code>; see each binding's README for the encrypted-workbooks section.</p>
+<h2 id="contributing">Contributing</h2>
+<p>See <a href="ARCHITECTURE.html">ARCHITECTURE.md</a> for a map of the codebase, <a href="STYLEGUIDE.html">STYLEGUIDE.md</a> for
+the code style, and <a href="CONTRIBUTING.html">CONTRIBUTING.md</a> for build expectations and how to submit a
+change. Security issues should go through the private channel in <a href="SECURITY.html">SECURITY.md</a>, not a
+public issue.</p>
+<h2 id="license">License</h2>
+<p>ExcelReader is licensed under the MIT License. See <a href="LICENSE">LICENSE</a>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/index.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

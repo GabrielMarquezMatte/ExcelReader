@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class XlsbSheetWriter | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class XlsbSheetWriter | ExcelReader ">
+      
+      <meta name="description" content="Writes a single worksheet&#39;s rows into an .xlsb workbook produced by .">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter">
+
+
+
+  <h1 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter" class="text-break">
+Class XlsbSheetWriter  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Writer.html">Writer</a>.<a class="xref" href="ExcelReader.Core.Writer.Xlsb.html">Xlsb</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Writes a single worksheet's rows into an .xlsb workbook produced by <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html">XlsbWorkbookWriter</a>.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class XlsbSheetWriter : ITableSheetWriter&lt;XlsbRowWriter&gt;, ISheetWriter&lt;XlsbRowWriter&gt;, IDisposable, IAsyncDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">XlsbSheetWriter</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html">ITableSheetWriter</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a>&gt;</div>
+      <div><a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html">ISheetWriter</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a>&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iasyncdisposable">IAsyncDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html#ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__2_ExcelReader_Core_Writer_ISheetWriter___1__System_Collections_Generic_IAsyncEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__System_Threading_CancellationToken_">SheetWriterExtensions.WriteRecordsAsync&lt;T, TRow&gt;(ISheetWriter&lt;TRow&gt;, IAsyncEnumerable&lt;T&gt;, ExcelRecordLayout&lt;T&gt;, CancellationToken)</a>
+  </div>
+  <div>
+      <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html#ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__2_ExcelReader_Core_Writer_ISheetWriter___1__System_Collections_Generic_IAsyncEnumerable___0__System_Action___1___0__System_Threading_CancellationToken_">SheetWriterExtensions.WriteRecordsAsync&lt;T, TRow&gt;(ISheetWriter&lt;TRow&gt;, IAsyncEnumerable&lt;T&gt;, Action&lt;TRow, T&gt;, CancellationToken)</a>
+  </div>
+  <div>
+      <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html#ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__2_ExcelReader_Core_Writer_ISheetWriter___1__System_Collections_Generic_IEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__System_Threading_CancellationToken_">SheetWriterExtensions.WriteRecordsAsync&lt;T, TRow&gt;(ISheetWriter&lt;TRow&gt;, IEnumerable&lt;T&gt;, ExcelRecordLayout&lt;T&gt;, CancellationToken)</a>
+  </div>
+  <div>
+      <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html#ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__2_ExcelReader_Core_Writer_ISheetWriter___1__System_Collections_Generic_IEnumerable___0__System_Action___1___0__System_Threading_CancellationToken_">SheetWriterExtensions.WriteRecordsAsync&lt;T, TRow&gt;(ISheetWriter&lt;TRow&gt;, IEnumerable&lt;T&gt;, Action&lt;TRow, T&gt;, CancellationToken)</a>
+  </div>
+  <div>
+      <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html#ExcelReader_Core_Writer_SheetWriterExtensions_WriteTableAsync__2_ExcelReader_Core_Writer_ITableSheetWriter___1__System_Collections_Generic_IAsyncEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_System_Threading_CancellationToken_">SheetWriterExtensions.WriteTableAsync&lt;T, TRow&gt;(ITableSheetWriter&lt;TRow&gt;, IAsyncEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, CancellationToken)</a>
+  </div>
+  <div>
+      <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html#ExcelReader_Core_Writer_SheetWriterExtensions_WriteTableAsync__2_ExcelReader_Core_Writer_ITableSheetWriter___1__System_Collections_Generic_IEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_System_Threading_CancellationToken_">SheetWriterExtensions.WriteTableAsync&lt;T, TRow&gt;(ITableSheetWriter&lt;TRow&gt;, IEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, CancellationToken)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_BeginTable_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.BeginTable*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_BeginTable_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.BeginTable(System.String,System.Collections.Generic.IReadOnlyList{System.String},ExcelReader.Core.Writer.ExcelTableOptions)">
+  BeginTable(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a header row with <code class="paramref">columns</code> at the sheet's next row and opens a table there.
+The table covers every row written until <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_EndTable">EndTable()</a> or the end of the sheet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void BeginTable(string name, IReadOnlyList&lt;string&gt; columns, ExcelTableOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The table name: unique in the workbook, ignoring case, and valid as an Excel name.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The column names, written as the header row.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
+    <dd><p>Position and style. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_Default">Default</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">name</code> or <code class="paramref">columns</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The name, a column name or the style is not valid, or the name is already used in this workbook.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_FirstColumn">FirstColumn</a> is negative.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A table is already open on this sheet, or a row is still active.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The sheet has no room left for a header row and a data row.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_BeginTableAsync_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.BeginTableAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_BeginTableAsync_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.BeginTableAsync(System.String,System.Collections.Generic.IReadOnlyList{System.String},ExcelReader.Core.Writer.ExcelTableOptions,System.Threading.CancellationToken)">
+  BeginTableAsync(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a header row with <code class="paramref">columns</code> at the sheet's next row and opens a table there.
+The table covers every row written until <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_EndTable">EndTable()</a> or the end of the sheet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask BeginTableAsync(string name, IReadOnlyList&lt;string&gt; columns, ExcelTableOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The table name: unique in the workbook, ignoring case, and valid as an Excel name.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The column names, written as the header row.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
+    <dd><p>Position and style. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the header write.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">name</code> or <code class="paramref">columns</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The name, a column name or the style is not valid, or the name is already used in this workbook.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_FirstColumn">FirstColumn</a> is negative.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A table is already open on this sheet, or a row is still active.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The sheet has no room left for a header row and a data row.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_Dispose_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.Dispose*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_Dispose" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L370"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_DisposeAsync">DisposeAsync()</a>, for native/unmanaged callers whose ABI
+is synchronous.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_DisposeAsync_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.DisposeAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_DisposeAsync" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.DisposeAsync">
+  DisposeAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L379"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or
+resetting unmanaged resources asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask DisposeAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd><p>A task that represents the asynchronous dispose operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_End_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.End*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_End" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.End">
+  End()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_EndAsync_System_Threading_CancellationToken_">EndAsync(CancellationToken)</a>, for native/unmanaged callers whose ABI is
+synchronous.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void End()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_EndAsync_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.EndAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_EndAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.EndAsync(System.Threading.CancellationToken)">
+  EndAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finalizes the sheet, writing any trailing structure so the sheet is complete within the
+workbook. The active row writer, if any, must already be disposed. No further rows may be
+started afterward.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask EndAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_EndTable_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.EndTable*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_EndTable" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.EndTable">
+  EndTable()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L323"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Closes the open table at the last row written. Writes nothing; the table is stored when the sheet ends.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void EndTable()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>No table is open on this sheet.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_SetColumnStyle_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetColumnStyle*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_SetColumnStyle_System_Int32_System_Int32_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetColumnStyle(System.Int32,System.Int32)">
+  SetColumnStyle(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies <code class="paramref">styleId</code> to every cell of column <code class="paramref">columnIndex</code>
+that does not carry its own row style. Must be called before the first row is started.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetColumnStyle(int columnIndex, int styleId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>columnIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The 0-based column index.</p>
+</dd>
+    <dt><code>styleId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The style to apply, from <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">columnIndex</code> is negative, or <code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The first row has already been started.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">columnIndex</code> is negative, or <code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The first row has already been started.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_SetColumnWidth_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetColumnWidth*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_SetColumnWidth_System_Int32_System_Double_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetColumnWidth(System.Int32,System.Double)">
+  SetColumnWidth(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the display width, in characters, of column <code class="paramref">columnIndex</code>. Must be
+called before the first row is started.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetColumnWidth(int columnIndex, double width)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>columnIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The 0-based column index.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The column width, in characters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">columnIndex</code> or <code class="paramref">width</code> is negative.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The first row has already been started.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">columnIndex</code> or <code class="paramref">width</code> is negative.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The first row has already been started.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRow_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRow" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow">
+  StartRow()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRow">StartRow()</a>, for native/unmanaged
+callers whose ABI is synchronous.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public XlsbRowWriter StartRow()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRow_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRow_System_Int32_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(System.Int32)">
+  StartRow(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRow_System_Int32_">StartRow(int)</a>, for native/unmanaged
+callers whose ABI is synchronous.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public XlsbRowWriter StartRow(int styleId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>styleId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRowAsync_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRowAsync_System_Int32_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(System.Int32,System.Threading.CancellationToken)">
+  StartRowAsync(int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Begins the next row, applying <code class="paramref">styleId</code> (from <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>)
+to its cells.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask&lt;XlsbRowWriter&gt; StartRowAsync(int styleId, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>styleId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The style to apply to every cell of this row.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a>&gt;</dt>
+    <dd><p>The writer for the new row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRowAsync_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRowAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(System.Threading.CancellationToken)">
+  StartRowAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Begins the next row, in order starting from the first, and returns its writer. Only one row
+may be open (started and not yet disposed) at a time; the previous row's writer must be
+disposed before starting the next one.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValueTask&lt;XlsbRowWriter&gt; StartRowAsync(CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask-1">ValueTask</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a>&gt;</dt>
+    <dd><p>The writer for the new row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_WriteRow_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.WriteRow*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_WriteRow_System_ReadOnlySpan_ExcelReader_Core_Writer_Xlsb_XlsbCell__" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.WriteRow(System.ReadOnlySpan{ExcelReader.Core.Writer.Xlsb.XlsbCell})">
+  WriteRow(ReadOnlySpan&lt;XlsbCell&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes an entire row in one call, mapping each element of <code class="paramref">values</code> to a column starting at 0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WriteRow(ReadOnlySpan&lt;XlsbCell&gt; values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbCell.html">XlsbCell</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbSheetWriter.cs/#L11" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

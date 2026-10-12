@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IRowAccumulator&lt;TSelf, TModel&gt; | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IRowAccumulator&lt;TSelf, TModel&gt; | ExcelReader ">
+      
+      <meta name="description" content="Folds typed rows read by SheetParallel.AggregateAsync into a result. Each partition of the sheet gets its own instance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Reader_IRowAccumulator_2.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Reader.IRowAccumulator%602%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Reader.IRowAccumulator`2">
+
+
+
+  <h1 id="ExcelReader_Core_Reader_IRowAccumulator_2" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2" class="text-break">
+Interface IRowAccumulator&lt;TSelf, TModel&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Reader.html">Reader</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Folds typed rows read by <code>SheetParallel.AggregateAsync</code> into a result. Each partition
+of the sheet gets its own instance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IRowAccumulator&lt;TSelf, TModel&gt; where TSelf : IRowAccumulator&lt;TSelf, TModel&gt; where TModel : allows ref struct</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TSelf</code></dt>
+    <dd><p>The implementing type.</p>
+</dd>
+    <dt><code>TModel</code></dt>
+    <dd><p>The record type, produced by <a class="xref" href="ExcelReader.Core.Reader.IRowRecord-1.html#ExcelReader_Core_Reader_IRowRecord_1_TryParse_ExcelReader_Core_Reader_Row__0__">TryParse(Row, out TSelf)</a> or by an <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser&lt;T&gt;</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="ExcelReader_Core_Reader_IRowAccumulator_2_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html#ExcelReader_Core_Reader_IRowAccumulator_2_Add__1_">Add(TModel)</a> runs concurrently across instances on worker threads, and must mutate only the
+instance it is called on. For CSV, a partition that started at a misguessed row boundary is read again
+into a new instance and the first one is discarded, so an instance may see rows that are later
+thrown away — including rows whose parse or <a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html#ExcelReader_Core_Reader_IRowAccumulator_2_Add__1_">Add(TModel)</a> threw, and rows misparsed from
+the wrong start that appear nowhere in the sheet. A side effect outside the instance is not undone.
+XLSX and XLSB never re-read a partition.
+</p>
+<p>
+<a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html#ExcelReader_Core_Reader_IRowAccumulator_2_Merge__0_">Merge(TSelf)</a> runs on a single thread, left to right in sheet order, folding each later
+partition into the accumulator of everything before it. It may receive an instance that saw no rows.
+</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Reader_IRowAccumulator_2_Add_" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2.Add*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_IRowAccumulator_2_Add__1_" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2.Add(`1)">
+  Add(TModel)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Folds one row into this instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Add(TModel model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <span class="xref">TModel</span></dt>
+    <dd><p>The row. Spans it holds are valid only for the duration of the call.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Reader_IRowAccumulator_2_Merge_" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2.Merge*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_IRowAccumulator_2_Merge__0_" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2.Merge(`0)">
+  Merge(TSelf)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Folds the rows of the partition that immediately follows this one into this instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Merge(TSelf following)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>following</code> <span class="xref">TSelf</span></dt>
+    <dd><p>The accumulator of the following partition. It is not used again afterwards.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

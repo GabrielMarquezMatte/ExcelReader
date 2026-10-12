@@ -1,0 +1,2402 @@
+{
+  "docfx_version": "2.81.0+ba844df625370a6bd7c1ecab0d0ec4d1d9128ac4",
+  "sitemap": {
+    "baseUrl": "https://gabrielmarquezmatte.github.io/ExcelReader/",
+    "changefreq": "weekly"
+  },
+  "source_base_path": "/home/runner/work/ExcelReader/ExcelReader",
+  "xrefmap": "xrefmap.yml",
+  "files": [
+    {
+      "type": "Resource",
+      "output": {
+        "resource": {
+          "relative_path": "index.json"
+        }
+      }
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "ARCHITECTURE.md",
+      "output": {
+        ".html": {
+          "relative_path": "ARCHITECTURE.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "CODE_OF_CONDUCT.md",
+      "output": {
+        ".html": {
+          "relative_path": "CODE_OF_CONDUCT.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "CONTRIBUTING.md",
+      "output": {
+        ".html": {
+          "relative_path": "CONTRIBUTING.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "LICENSE",
+      "output": {
+        "resource": {
+          "relative_path": "LICENSE"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "SECURITY.md",
+      "output": {
+        ".html": {
+          "relative_path": "SECURITY.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "STYLEGUIDE.md",
+      "output": {
+        ".html": {
+          "relative_path": "STYLEGUIDE.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "assets/icon.png",
+      "output": {
+        "resource": {
+          "relative_path": "assets/icon.png"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "cpp/README.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp/README.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "docs/404.html",
+      "output": {
+        "resource": {
+          "relative_path": "404.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/README.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/README.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Arrow.ArrowConversionExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Arrow.ArrowConversionExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Arrow.ArrowConversionExtensions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Arrow.ArrowConversionExtensions.yml\" sourcestartlinenumber=\"1\">Converts an <xref href=\"ExcelReader.Core.Reader.IExcelSheet\" data-throw-if-not-resolved=\"false\"></xref> into an Apache Arrow <xref href=\"Apache.Arrow.RecordBatch\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Arrow.ArrowReadOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Arrow.ArrowReadOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Arrow.ArrowReadOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Arrow.ArrowReadOptions.yml\" sourcestartlinenumber=\"1\">Options for converting a sheet with <xref href=\"ExcelReader.Arrow.ArrowConversionExtensions.ToArrowRecordBatch(ExcelReader.Core.Reader.IExcelSheet%2cExcelReader.Arrow.ArrowReadOptions)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Arrow.ArrowWriteExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Arrow.ArrowWriteExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Arrow.ArrowWriteExtensions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Arrow.ArrowWriteExtensions.yml\" sourcestartlinenumber=\"1\">Writes an Apache Arrow <xref href=\"Apache.Arrow.RecordBatch\" data-throw-if-not-resolved=\"false\"></xref> to a workbook as one sheet — the write-side\nmirror of <xref href=\"ExcelReader.Arrow.ArrowConversionExtensions.ToArrowRecordBatch(ExcelReader.Core.Reader.IExcelSheet%2cExcelReader.Arrow.ArrowReadOptions)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Arrow.ArrowWriteOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Arrow.ArrowWriteOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Arrow.ArrowWriteOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Arrow.ArrowWriteOptions.yml\" sourcestartlinenumber=\"1\">Options for writing a record batch with <xref href=\"ExcelReader.Arrow.ArrowWriteExtensions\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Arrow.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Arrow.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Arrow",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.ExcelSheetVisibility.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.ExcelSheetVisibility.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.ExcelSheetVisibility",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.ExcelSheetVisibility.yml\" sourcestartlinenumber=\"1\">Whether a sheet is shown in the workbook's tab bar. The values match the on-disk encoding every\nformat uses for it (XLSX's <code>state</code> attribute, XLSB's <code>BrtBundleSh.hsState</code>, XLS's\n<code>BoundSheet8.hsState</code>).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.CsvEnumerable-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.CsvEnumerable-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.CsvEnumerable<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.CsvEnumerable-1.yml\" sourcestartlinenumber=\"1\">Lazily projects CSV rows into <code class=\"typeparamref\">T</code> instances by binding each property to a fixed field index, for both synchronous and asynchronous enumeration.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelCellReader-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelCellReader-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelCellReader<TValue>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelCellReader-1.yml\" sourcestartlinenumber=\"1\">Reads a non-empty cell into a value of type <code class=\"typeparamref\">TValue</code>. Every built-in reader\nexposed by <xref href=\"ExcelReader.Core.Parser.ExcelCellReaders\" data-throw-if-not-resolved=\"false\"></xref> matches this shape, so a source-generated or\nhand-written <xref href=\"ExcelReader.Core.Parser.ExcelRowMapBuilder%601\" data-throw-if-not-resolved=\"false\"></xref> map can plug either a built-in reader or a\ncustom one into <xref href=\"ExcelReader.Core.Parser.ExcelRowMapBuilder%601.Property%60%601(System.String%5b%5d%2cExcelReader.Core.Parser.ExcelCellReader%7b%60%600%7d%2cExcelReader.Core.Parser.ExcelPropertySetter%7b%600%2c%60%600%7d%2cSystem.Boolean%2cSystem.Boolean)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelCellReaders.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelCellReaders.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelCellReaders",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelCellReaders.yml\" sourcestartlinenumber=\"1\">The built-in cell readers <code>ExcelParser&lt;T&gt;</code>'s reflection path already uses, exposed as\n<xref href=\"ExcelReader.Core.Parser.ExcelCellReader%601\" data-throw-if-not-resolved=\"false\"></xref> instances for a source-generated or hand-written\n<xref href=\"ExcelReader.Core.Parser.ExcelRowMapBuilder%601\" data-throw-if-not-resolved=\"false\"></xref> map to plug into <xref href=\"ExcelReader.Core.Parser.ExcelRowMapBuilder%601.Property%60%601(System.String%5b%5d%2cExcelReader.Core.Parser.ExcelCellReader%7b%60%600%7d%2cExcelReader.Core.Parser.ExcelPropertySetter%7b%600%2c%60%600%7d%2cSystem.Boolean%2cSystem.Boolean)\" data-throw-if-not-resolved=\"false\"></xref>\nwithout duplicating the conversion logic.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelColumnAttribute.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelColumnAttribute.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelColumnAttribute",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelColumnAttribute.yml\" sourcestartlinenumber=\"1\">Maps a property to a worksheet column by header name. Apply more than once to accept alternate\nheader spellings for the same property.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelConverterAttribute.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelConverterAttribute.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelConverterAttribute",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelConverterAttribute.yml\" sourcestartlinenumber=\"1\">Binds a custom <xref href=\"ExcelReader.Core.Parser.IExcelCellConverter%601\" data-throw-if-not-resolved=\"false\"></xref> to a property. The converter type must\nimplement <xref href=\"ExcelReader.Core.Parser.IExcelCellConverter%601\" data-throw-if-not-resolved=\"false\"></xref> for the property's exact type and expose a public\nparameterless constructor.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelEnumerable-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelEnumerable-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelEnumerable<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelEnumerable-1.yml\" sourcestartlinenumber=\"1\">Lazily projects XLSX rows into <code class=\"typeparamref\">T</code> instances, for both synchronous and asynchronous enumeration.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelIgnoreAttribute.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelIgnoreAttribute.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelIgnoreAttribute",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelIgnoreAttribute.yml\" sourcestartlinenumber=\"1\">Excludes a property from both parsing and record writing: no column is read into it and none is\nwritten from it. Use for computed or transient properties.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelParseException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelParseException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelParseException",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelParseException.yml\" sourcestartlinenumber=\"1\">Thrown when a bound column's cell is non-empty but fails to parse into the target property type\nand the parser is configured to throw on parse failures (rather than silently keep the property\nat its default). See <xref href=\"ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelParser-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelParser-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelParser<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelParser-1.yml\" sourcestartlinenumber=\"1\">Parses rows from an Excel or CSV sheet into instances of <code class=\"typeparamref\">T</code>. Create one with\n<xref href=\"ExcelReader.Core.Parser.ExcelParser\" data-throw-if-not-resolved=\"false\"></xref>: <xref href=\"ExcelReader.Core.Parser.ExcelParser.FromAttributes%60%601(ExcelReader.Core.Parser.ExcelParserOptions)\" data-throw-if-not-resolved=\"false\"></xref> reflects over\n<code>[ExcelColumn]</code>/<code>[ExcelRequired]</code>/<code>[ExcelConverter]</code> attributes,\n<xref href=\"ExcelReader.Core.Parser.ExcelParser.Generated%60%601(ExcelReader.Core.Parser.ExcelParserOptions)\" data-throw-if-not-resolved=\"false\"></xref> uses the <code>[ExcelSerializable]</code> source-generated map, and\n<xref href=\"ExcelReader.Core.Parser.ExcelParser.Build%60%601(System.Action%7bExcelReader.Core.Parser.ExcelRowMapBuilder%7b%60%600%7d%7d%2cExcelReader.Core.Parser.ExcelParserOptions)\" data-throw-if-not-resolved=\"false\"></xref> takes a map configured at runtime.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelParser.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelParser.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelParser",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelParser.yml\" sourcestartlinenumber=\"1\">Creates <xref href=\"ExcelReader.Core.Parser.ExcelParser%601\" data-throw-if-not-resolved=\"false\"></xref> instances.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelParserOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelParserOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelParserOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelParserOptions.yml\" sourcestartlinenumber=\"1\">Options controlling how <xref href=\"ExcelReader.Core.Parser.ExcelParser%601\" data-throw-if-not-resolved=\"false\"></xref> locates the header row, matches header\ntext to bound properties, and handles cells that fail to parse.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelPropertySetter-2.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelPropertySetter-2.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelPropertySetter-2.yml\" sourcestartlinenumber=\"1\">Assigns <code class=\"paramref\">value</code> to a property of <code class=\"paramref\">model</code>. The source generator\nemits this as a direct property assignment (e.g. <code>static (ref T m, V v) =&gt; m.Prop = v</code>) —\nno delegate compilation at runtime.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelRequiredAttribute.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelRequiredAttribute.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelRequiredAttribute",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelRequiredAttribute.yml\" sourcestartlinenumber=\"1\">Marks a property whose column must be present in the header row; parsing throws when the header\nis read if no matching name is found. By default every data row's cell must also be non-empty\n(and must parse successfully — a non-empty but unparsable cell fails the same way as a blank one),\nthrowing on the first row that fails either check. Set <xref href=\"ExcelReader.Core.Parser.ExcelRequiredAttribute.AllowEmpty\" data-throw-if-not-resolved=\"false\"></xref> to true to require\nonly the column's presence. Contrast with <xref href=\"ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure\" data-throw-if-not-resolved=\"false\"></xref>,\nwhich governs parse-failure behavior only for non-required columns.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelRowContext.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelRowContext.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelRowContext",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelRowContext.yml\" sourcestartlinenumber=\"1\">Settings a cell reader, converter or row parser needs to convert a cell, handed to every\n<xref href=\"ExcelReader.Core.Parser.ExcelCellReader%601\" data-throw-if-not-resolved=\"false\"></xref>, <xref href=\"ExcelReader.Core.Parser.ExcelRowParser%601\" data-throw-if-not-resolved=\"false\"></xref> and\n<xref href=\"ExcelReader.Core.Parser.IExcelCellConverter%601.TryConvert(ExcelReader.Core.Reader.Cell%40%2cExcelReader.Core.Parser.ExcelRowContext%40%2c%600%40)\" data-throw-if-not-resolved=\"false\"></xref> call.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelRowMapBuilder-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelRowMapBuilder<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelRowMapBuilder-1.yml\" sourcestartlinenumber=\"1\">Accumulates a row-to-property binding for <code class=\"typeparamref\">T</code>, fed either by the source\ngenerator (feature A) or by a hand-written <xref href=\"ExcelReader.Core.Parser.IExcelRowMap%601\" data-throw-if-not-resolved=\"false\"></xref> implementation. Mirrors,\nwithout reflection, exactly what <code>TypeMapper&lt;T&gt;.Build()</code> produces from attributes.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelRowParser-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelRowParser-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelRowParser<TModel>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelRowParser-1.yml\" sourcestartlinenumber=\"1\">Reads a matched, non-empty cell and assigns the result directly onto <code class=\"paramref\">model</code> in\none call, instead of going through a separate <xref href=\"ExcelReader.Core.Parser.ExcelCellReader%601\" data-throw-if-not-resolved=\"false\"></xref> +\n<xref href=\"ExcelReader.Core.Parser.ExcelPropertySetter%602\" data-throw-if-not-resolved=\"false\"></xref> pair. Plug this into\n<xref href=\"ExcelReader.Core.Parser.ExcelRowMapBuilder%601.PropertyRaw(System.String%5b%5d%2cExcelReader.Core.Parser.ExcelRowParser%7b%600%7d%2cSystem.Boolean%2cSystem.Boolean)\" data-throw-if-not-resolved=\"false\"></xref> when a single fused delegate (e.g. one emitted by\nthe <code>[ExcelSerializable]</code> source generator) should replace what would otherwise be two\nindirect calls per bound cell per row.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.ExcelSerializableAttribute.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.ExcelSerializableAttribute.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.ExcelSerializableAttribute",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.ExcelSerializableAttribute.yml\" sourcestartlinenumber=\"1\">Marks a type for the source generator to produce <xref href=\"ExcelReader.Core.Parser.IExcelRowMap%601\" data-throw-if-not-resolved=\"false\"></xref> and\n<xref href=\"ExcelReader.Core.Writer.IExcelRecordMap%601\" data-throw-if-not-resolved=\"false\"></xref> implementations for, from its\n<code>[ExcelColumn]</code>/<code>[ExcelRequired]</code>/<code>[ExcelIgnore]</code> attributes — the same source\n<code>TypeMapper&lt;T&gt;</code>'s reflection path reads, but resolved at compile time. The marked type\n(and every type it is nested inside, if any) must be declared <code>partial</code>, since the generator\nemits into an additional part of the same declaration.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.HeaderNormalization.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.HeaderNormalization.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.HeaderNormalization",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.HeaderNormalization.yml\" sourcestartlinenumber=\"1\">Flags controlling how header text is normalized before being matched against\n<xref href=\"ExcelReader.Core.Parser.ExcelColumnAttribute.Name\" data-throw-if-not-resolved=\"false\"></xref> or a property name.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.IExcelCellConverter-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.IExcelCellConverter-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.IExcelCellConverter<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.IExcelCellConverter-1.yml\" sourcestartlinenumber=\"1\">Converts a matched cell into a property value. Implement this and attach the implementation with\n<code>[ExcelConverter(typeof(MyConverter))]</code> for types the built-in parsers do not handle (money\nstrings, custom date formats, domain value objects, ...).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.IExcelRowMap-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.IExcelRowMap-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser.IExcelRowMap<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Parser.IExcelRowMap-1.yml\" sourcestartlinenumber=\"1\">Implemented by the source generator (feature A) — or by hand, before the generator runs — on the\nrow model type itself, which must be <code>partial</code>. The <code>static abstract</code> member\nturns &quot;no map was generated for this model&quot; into a compile error (<code class=\"typeparamref\">T</code> fails\nthe <code>where T : IExcelRowMap&lt;T&gt;</code> constraint on <xref href=\"ExcelReader.Core.Parser.ExcelParser.Generated%60%601(ExcelReader.Core.Parser.ExcelParserOptions)\" data-throw-if-not-resolved=\"false\"></xref>)\ninstead of a silent runtime fallback to reflection.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Parser.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Parser.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Parser",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Cell.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Cell.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Cell",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Cell.yml\" sourcestartlinenumber=\"1\">A single worksheet cell's value, exposed as a zero-allocation view over the reader's underlying\nbuffers. Only valid for the lifetime of the row it was read from — do not store it past that point.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.CellType.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.CellType.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.CellType",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.CellType.yml\" sourcestartlinenumber=\"1\">Identifies the kind of value a <xref href=\"ExcelReader.Core.Reader.Cell\" data-throw-if-not-resolved=\"false\"></xref> holds.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.CsvDialect.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.CsvDialect.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv.CsvDialect",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Csv.CsvDialect.yml\" sourcestartlinenumber=\"1\">The delimiter, quote, and encoding inferred by <xref href=\"ExcelReader.Core.Reader.Csv.CsvSniffer\" data-throw-if-not-resolved=\"false\"></xref> from a sample of a delimited-text source.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.CsvReader.Enumerator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.CsvReader.Enumerator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv.CsvReader.Enumerator",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Csv.CsvReader.Enumerator.yml\" sourcestartlinenumber=\"1\">A forward-only cursor over a <xref href=\"ExcelReader.Core.Reader.Csv.CsvReader\" data-throw-if-not-resolved=\"false\"></xref> source's records, reading either synchronously or asynchronously.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.CsvReader.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.CsvReader.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv.CsvReader",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Csv.CsvReader.yml\" sourcestartlinenumber=\"1\">An open delimited-text (CSV-style) source, exposed as a workbook with a single, unnamed sheet.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.CsvReaderOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.CsvReaderOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv.CsvReaderOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Csv.CsvReaderOptions.yml\" sourcestartlinenumber=\"1\">The delimited-text settings for a CSV source, carried by <xref href=\"ExcelReader.Core.Reader.ExcelReaderOptions.Csv\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.CsvSheet.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.CsvSheet.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv.CsvSheet",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Csv.CsvSheet.yml\" sourcestartlinenumber=\"1\">The single, unnamed sheet of a <xref href=\"ExcelReader.Core.Reader.Csv.CsvReader\" data-throw-if-not-resolved=\"false\"></xref>. A value that holds no resources.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.CsvSniffer.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.CsvSniffer.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv.CsvSniffer",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Csv.CsvSniffer.yml\" sourcestartlinenumber=\"1\">Infers a CSV dialect (delimiter, quote, encoding) from a sample of a delimited-text source.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.CsvSnifferOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.CsvSnifferOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv.CsvSnifferOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Csv.CsvSnifferOptions.yml\" sourcestartlinenumber=\"1\">Options controlling how <xref href=\"ExcelReader.Core.Reader.Csv.CsvSniffer.Detect(System.ReadOnlySpan%7bSystem.Byte%7d%2cExcelReader.Core.Reader.Csv.CsvSnifferOptions)\" data-throw-if-not-resolved=\"false\"></xref> infers a <xref href=\"ExcelReader.Core.Reader.Csv.CsvDialect\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Csv.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Csv.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Csv",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Excel.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Excel.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Excel",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Excel.yml\" sourcestartlinenumber=\"1\">Entry point for opening Excel and CSV workbooks. <xref href=\"ExcelReader.Core.Reader.Excel.Open(System.String%2cExcelReader.Core.Reader.ExcelReaderOptions)\" data-throw-if-not-resolved=\"false\"></xref>/\n<xref href=\"ExcelReader.Core.Reader.Excel.Open(System.IO.Stream%2cSystem.Boolean%2cExcelReader.Core.Reader.ExcelReaderOptions)\" data-throw-if-not-resolved=\"false\"></xref> and their async counterparts auto-detect XLSX/XLSB/XLS\nfrom the file's signature and return a format-agnostic <xref href=\"ExcelReader.Core.Reader.IExcelWorkbook\" data-throw-if-not-resolved=\"false\"></xref>; the\n<code>From*</code>/<code>FromXls*</code>/<code>FromXlsb*</code>/<code>FromCsv*</code> methods open a specific, known format directly.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelEncryptionException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelEncryptionException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelEncryptionException",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelEncryptionException.yml\" sourcestartlinenumber=\"1\">Thrown when an encrypted workbook cannot be opened. Inspect <xref href=\"ExcelReader.Core.Reader.ExcelEncryptionException.Reason\" data-throw-if-not-resolved=\"false\"></xref> to decide what\nto do: only <xref href=\"ExcelReader.Core.Reader.ExcelEncryptionReason.PasswordRequired\" data-throw-if-not-resolved=\"false\"></xref> and\n<xref href=\"ExcelReader.Core.Reader.ExcelEncryptionReason.PasswordIncorrect\" data-throw-if-not-resolved=\"false\"></xref> are worth prompting a user about — the\nother two are terminal, and retrying with another password will never help.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelEncryptionReason.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelEncryptionReason.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelEncryptionReason",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelEncryptionReason.yml\" sourcestartlinenumber=\"1\">Why an encrypted workbook could not be opened.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelFileFormat.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelFileFormat.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelFileFormat",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelFileFormat.yml\" sourcestartlinenumber=\"1\">Identifies the on-disk Excel file format a workbook was read from or is to be written as.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelLimitExceededException.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelLimitExceededException.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelLimitExceededException",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelLimitExceededException.yml\" sourcestartlinenumber=\"1\">Thrown when reading a workbook would exceed one of the resource limits configured on\n<xref href=\"ExcelReader.Core.Reader.ExcelReaderOptions\" data-throw-if-not-resolved=\"false\"></xref> (e.g. decompressed size, a single cell's byte length, shared-string\ntable size, or ZIP entry count), guarding against maliciously or accidentally oversized files.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelPassword.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelPassword.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelPassword",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelPassword.yml\" sourcestartlinenumber=\"1\">A workbook password. Deliberately a class rather than a record: a record's synthesized\n<code>ToString</code> would print the password, and this type is held by\n<xref href=\"ExcelReader.Core.Reader.ExcelReaderOptions\" data-throw-if-not-resolved=\"false\"></xref>, which <i>is</i> a record — so one\n<code>logger.LogDebug(&quot;{Options}&quot;, options)</code> would leak it. <xref href=\"ExcelReader.Core.Reader.ExcelPassword.ToString\" data-throw-if-not-resolved=\"false\"></xref> below is\nwhat makes that safe.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelReaderOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelReaderOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelReaderOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelReaderOptions.yml\" sourcestartlinenumber=\"1\">Resource limits and behavior toggles applied when opening and reading a workbook or a CSV source.\nExceeding a byte or entry-count limit throws <xref href=\"ExcelReader.Core.Reader.ExcelLimitExceededException\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelSheetList-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelSheetList-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelSheetList<TSheet>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelSheetList-1.yml\" sourcestartlinenumber=\"1\">The sheets of a workbook, in workbook order. Indexing or enumerating the list opens nothing.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.ExcelTable.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.ExcelTable.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.ExcelTable",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.ExcelTable.yml\" sourcestartlinenumber=\"1\">An Excel table (a range formatted with &quot;Format as Table&quot;, stored as a ListObject): its name, its\nposition on its sheet and its columns.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.IExcelRowEnumerator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.IExcelRowEnumerator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.IExcelRowEnumerator",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.IExcelRowEnumerator.yml\" sourcestartlinenumber=\"1\">A forward-only cursor over a sheet's rows, implemented by every concrete format's row\nenumerator and driven either synchronously (<xref href=\"ExcelReader.Core.Reader.IExcelRowEnumerator.MoveNext\" data-throw-if-not-resolved=\"false\"></xref>) or asynchronously\n(<xref href=\"ExcelReader.Core.Reader.IExcelRowEnumerator.MoveNextAsync\" data-throw-if-not-resolved=\"false\"></xref>).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.IExcelSheet-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.IExcelSheet-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.IExcelSheet<TEnumerator>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.IExcelSheet-1.yml\" sourcestartlinenumber=\"1\">One sheet's rows, typed to the concrete enumerator it hands out\n(<code class=\"typeparamref\">TEnumerator</code>) so callers read without boxing to\n<xref href=\"ExcelReader.Core.Reader.IExcelRowEnumerator\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.IExcelSheet.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.IExcelSheet.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.IExcelSheet",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.IExcelSheet.yml\" sourcestartlinenumber=\"1\">A sheet of an <xref href=\"ExcelReader.Core.Reader.IExcelWorkbook\" data-throw-if-not-resolved=\"false\"></xref>: its position, name and visibility, and its rows.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.IExcelWorkbook.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.IExcelWorkbook.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.IExcelWorkbook",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.IExcelWorkbook.yml\" sourcestartlinenumber=\"1\">An open workbook of any supported format (XLSX, XLSB, XLS, CSV): its sheets and the state they\nshare. Sheets are obtained from it and read independently.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.IRowAccumulator-2.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.IRowAccumulator-2.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.IRowAccumulator<TSelf, TModel>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.IRowAccumulator-2.yml\" sourcestartlinenumber=\"1\">Folds typed rows read by <code>SheetParallel.AggregateAsync</code> into a result. Each partition\nof the sheet gets its own instance.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.IRowRecord-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.IRowRecord-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.IRowRecord<TSelf>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.IRowRecord-1.yml\" sourcestartlinenumber=\"1\">A typed row that parses itself from a <xref href=\"ExcelReader.Core.Reader.Row\" data-throw-if-not-resolved=\"false\"></xref>, for\n<xref href=\"ExcelReader.Core.Reader.SheetParallel.AggregateAsync%60%602(ExcelReader.Core.Reader.IExcelSheet%2cExcelReader.Core.Reader.SheetParallelOptions%2cSystem.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Row.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Row.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Row",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Row.yml\" sourcestartlinenumber=\"1\">A single worksheet row, exposed as a zero-allocation view over the reader's underlying buffers.\nOnly valid for the lifetime of the enumeration that produced it — do not store it past that point.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.RowAction-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.RowAction-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.RowAction<TState>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.RowAction-1.yml\" sourcestartlinenumber=\"1\">Processes one row into the state owned by the partition that read it.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.RowAggregation-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.RowAggregation-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.RowAggregation<TState>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.RowAggregation-1.yml\" sourcestartlinenumber=\"1\">A fold over rows expressed as three functions, for\n<xref href=\"ExcelReader.Core.Reader.SheetParallel.AggregateAsync%60%601(ExcelReader.Core.Reader.IExcelSheet%2cExcelReader.Core.Reader.RowAggregation%7b%60%600%7d%2cExcelReader.Core.Reader.SheetParallelOptions%2cSystem.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>.\nCarries the same contract as <xref href=\"ExcelReader.Core.Reader.IRowAccumulator%602\" data-throw-if-not-resolved=\"false\"></xref>, without requiring a type.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.RowCell.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.RowCell.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.RowCell",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.RowCell.yml\" sourcestartlinenumber=\"1\">A cell paired with its column index, as produced by <xref href=\"ExcelReader.Core.Reader.RowCellEnumerator\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.RowCellEnumerator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.RowCellEnumerator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.RowCellEnumerator",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.RowCellEnumerator.yml\" sourcestartlinenumber=\"1\">Enumerates the populated cells of a <xref href=\"ExcelReader.Core.Reader.Row\" data-throw-if-not-resolved=\"false\"></xref>, in ascending column order, skipping gaps.\nSupports <code>foreach</code> via the duck-typed enumerator pattern (ref structs cannot implement\n<xref href=\"System.Collections.Generic.IEnumerator%601\" data-throw-if-not-resolved=\"false\"></xref>).</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Schema.ExcelColumnSchema.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Schema.ExcelColumnSchema.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Schema.ExcelColumnSchema",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Schema.ExcelColumnSchema.yml\" sourcestartlinenumber=\"1\">One column's guessed shape, as returned by\n<xref href=\"ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet%2cExcelReader.Core.Reader.Schema.SchemaInferenceOptions)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Schema.ExcelColumnType.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Schema.ExcelColumnType.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Schema.ExcelColumnType",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Schema.ExcelColumnType.yml\" sourcestartlinenumber=\"1\">A column's inferred or declared value type, as produced by\n<xref href=\"ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet%2cExcelReader.Core.Reader.Schema.SchemaInferenceOptions)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Schema.SchemaInferenceOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.yml\" sourcestartlinenumber=\"1\">Options for guessing a column schema with <xref href=\"ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelSheet%2cExcelReader.Core.Reader.Schema.SchemaInferenceOptions)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Schema.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Schema.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Schema",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.SheetDataReader.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.SheetDataReader.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.SheetDataReader",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.SheetDataReader.yml\" sourcestartlinenumber=\"1\">Adapts one <xref href=\"ExcelReader.Core.Reader.IExcelSheet\" data-throw-if-not-resolved=\"false\"></xref> to <xref href=\"System.Data.IDataReader\" data-throw-if-not-resolved=\"false\"></xref>, so it\ncan feed <code>SqlBulkCopy</code>, <code>DataTable.Load</code>, Dapper, or any other ADO.NET consumer directly.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.SheetDataReaderOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.SheetDataReaderOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.SheetDataReaderOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.SheetDataReaderOptions.yml\" sourcestartlinenumber=\"1\">Options for adapting a sheet to <xref href=\"System.Data.IDataReader\" data-throw-if-not-resolved=\"false\"></xref> with <xref href=\"ExcelReader.Core.Reader.SheetDataReader\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.SheetParallel.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.SheetParallel.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.SheetParallel",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.SheetParallel.yml\" sourcestartlinenumber=\"1\">Reads a sheet of any format across several threads: <code>ParseAsync</code> yields typed rows in source\norder, <code>ForEachAsync</code> hands each row to a callback on the worker threads, and\n<code>AggregateAsync</code> folds rows into one accumulator per partition.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.SheetParallelOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.SheetParallelOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.SheetParallelOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.SheetParallelOptions.yml\" sourcestartlinenumber=\"1\">Options for reading a sheet across several threads with <xref href=\"ExcelReader.Core.Reader.SheetParallel\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xls.XlsSheet.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xls.XlsSheet.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xls.XlsSheet",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xls.XlsSheet.yml\" sourcestartlinenumber=\"1\">One sheet of an <xref href=\"ExcelReader.Core.Reader.Xls.XlsWorkbook\" data-throw-if-not-resolved=\"false\"></xref>. A value that holds no resources; each enumerator it creates reads independently.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.yml\" sourcestartlinenumber=\"1\">Enumerates the rows of a single worksheet in an <xref href=\"ExcelReader.Core.Reader.Xls.XlsWorkbook\" data-throw-if-not-resolved=\"false\"></xref>, supporting both synchronous and asynchronous iteration.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xls.XlsWorkbook.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xls.XlsWorkbook.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xls.XlsWorkbook",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xls.XlsWorkbook.yml\" sourcestartlinenumber=\"1\">An open legacy BIFF8 (.xls) workbook. Its sheets are read independently, each through synchronous and asynchronous enumeration.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xls.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xls.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xls",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsb.XlsbSheet.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsb.XlsbSheet.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsb.XlsbSheet",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xlsb.XlsbSheet.yml\" sourcestartlinenumber=\"1\">One sheet of an <xref href=\"ExcelReader.Core.Reader.Xlsb.XlsbWorkbook\" data-throw-if-not-resolved=\"false\"></xref>. A value that holds no resources; each enumerator it creates reads independently.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.yml\" sourcestartlinenumber=\"1\">Forward-only enumerator over an <xref href=\"ExcelReader.Core.Reader.Xlsb.XlsbWorkbook\" data-throw-if-not-resolved=\"false\"></xref> sheet's rows.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsb.XlsbWorkbook",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.yml\" sourcestartlinenumber=\"1\">An open binary Excel (.xlsb / BIFF12) workbook. Its sheets are read independently, each streaming its cells without loading the whole file into memory.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsb.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsb.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsb",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsx.XlsxSheet.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsx.XlsxSheet.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsx.XlsxSheet",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xlsx.XlsxSheet.yml\" sourcestartlinenumber=\"1\">One sheet of an <xref href=\"ExcelReader.Core.Reader.Xlsx.XlsxWorkbook\" data-throw-if-not-resolved=\"false\"></xref>. A value that holds no resources; each enumerator it creates reads independently.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.yml\" sourcestartlinenumber=\"1\">Forward-only enumerator over an <xref href=\"ExcelReader.Core.Reader.Xlsx.XlsxWorkbook\" data-throw-if-not-resolved=\"false\"></xref> sheet's rows.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsx.XlsxWorkbook",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.yml\" sourcestartlinenumber=\"1\">An open Office Open XML (.xlsx) workbook. Its sheets are read independently, each streaming its cells without loading the whole file into memory.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.Xlsx.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.Xlsx.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader.Xlsx",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Reader.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Reader.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Reader",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.CellStyle.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.CellStyle.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.CellStyle",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.CellStyle.yml\" sourcestartlinenumber=\"1\">A column- or row-level cell style: number format, bold, and italic. Register one with <xref href=\"ExcelReader.Core.Writer.IWorkbookWriter%601.AddStyle(ExcelReader.Core.Writer.CellStyle)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Csv.CsvNewLine.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Csv.CsvNewLine.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Csv.CsvNewLine",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Csv.CsvNewLine.yml\" sourcestartlinenumber=\"1\">The byte sequence a <xref href=\"ExcelReader.Core.Writer.Csv.CsvWorkbookWriter\" data-throw-if-not-resolved=\"false\"></xref> writes after each record.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Csv.CsvRowWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Csv.CsvRowWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Csv.CsvRowWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Csv.CsvRowWriter.yml\" sourcestartlinenumber=\"1\">Writes the fields of a single CSV row, quoting a field only when it contains the delimiter,\nquote character, carriage return, or line feed.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Csv.CsvSheetWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.yml\" sourcestartlinenumber=\"1\">The single sheet of a CSV &quot;workbook&quot;. Adapts the flat <xref href=\"ExcelReader.Core.Writer.Csv.CsvWriter\" data-throw-if-not-resolved=\"false\"></xref> to the\n<xref href=\"ExcelReader.Core.Writer.ISheetWriter%601\" data-throw-if-not-resolved=\"false\"></xref> contract that record writing drives.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Csv.CsvWorkbookWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.yml\" sourcestartlinenumber=\"1\">Writes a CSV file through the <xref href=\"ExcelReader.Core.Writer.IWorkbookWriter%601\" data-throw-if-not-resolved=\"false\"></xref> contract. A CSV file holds\nexactly one sheet, so only a single <xref href=\"ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.AddSheet(System.String)\" data-throw-if-not-resolved=\"false\"></xref> call is supported.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Csv.CsvWriterOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Csv.CsvWriterOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Csv.CsvWriterOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Csv.CsvWriterOptions.yml\" sourcestartlinenumber=\"1\">Configures the dialect, encoding, and record terminator used when writing a CSV file.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Csv.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Csv.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Csv",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelRecordLayout-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelRecordLayout-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelRecordLayout<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelRecordLayout-1.yml\" sourcestartlinenumber=\"1\">How <xref href=\"ExcelReader.Core.Writer.SheetWriterExtensions\" data-throw-if-not-resolved=\"false\"></xref>' <code>WriteRecordsAsync</code> turns a <code class=\"typeparamref\">T</code> into a\nheader row and one row per record. Create one with <xref href=\"ExcelReader.Core.Writer.ExcelRecordLayout\" data-throw-if-not-resolved=\"false\"></xref>:\n<xref href=\"ExcelReader.Core.Writer.ExcelRecordLayout.FromAttributes%60%601\" data-throw-if-not-resolved=\"false\"></xref> reflects over the record type, and\n<xref href=\"ExcelReader.Core.Writer.ExcelRecordLayout.Generated%60%601\" data-throw-if-not-resolved=\"false\"></xref> uses the <code>[ExcelSerializable]</code> source-generated map.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelRecordLayout.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelRecordLayout.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelRecordLayout",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelRecordLayout.yml\" sourcestartlinenumber=\"1\">Creates <xref href=\"ExcelReader.Core.Writer.ExcelRecordLayout%601\" data-throw-if-not-resolved=\"false\"></xref> instances.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.yml\" sourcestartlinenumber=\"1\">Accumulates a property-to-column write plan for <code class=\"typeparamref\">T</code>, fed either by the\nsource generator (feature A) or by a hand-written <xref href=\"ExcelReader.Core.Writer.IExcelRecordMap%601\" data-throw-if-not-resolved=\"false\"></xref> implementation.\nThe write-side counterpart to <xref href=\"ExcelReader.Core.Parser.ExcelRowMapBuilder%601\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelTableOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelTableOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelTableOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelTableOptions.yml\" sourcestartlinenumber=\"1\">Configures an Excel table written with <xref href=\"ExcelReader.Core.Writer.ITableSheetWriter%601.BeginTable(System.String%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.String%7d%2cExcelReader.Core.Writer.ExcelTableOptions)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.IExcelCellWriter-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.IExcelCellWriter-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.IExcelCellWriter<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.IExcelCellWriter-1.yml\" sourcestartlinenumber=\"1\">Writes a value of type <code class=\"typeparamref\">T</code> as a cell of a row, for use with the\n<code>[ExcelConverter]</code> attribute on a property that <xref href=\"ExcelReader.Core.Writer.ExcelRecordLayout.FromAttributes%60%601\" data-throw-if-not-resolved=\"false\"></xref> writes.\nImplement this alongside <code>IExcelCellConverter&lt;T&gt;</code> on the same converter type to round-trip\na custom type through both writing (via <xref href=\"ExcelReader.Core.Writer.ExcelRecordLayout.FromAttributes%60%601\" data-throw-if-not-resolved=\"false\"></xref>) and reading\n(via <code>ExcelParser&lt;T&gt;</code>). A single instance is shared across every row and thread, so\nimplementations must be stateless and thread-safe.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.IExcelRecordMap-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.IExcelRecordMap-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.IExcelRecordMap<T>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.IExcelRecordMap-1.yml\" sourcestartlinenumber=\"1\">Implemented by the source generator (feature A) — or by hand, before the generator runs — on the\nrecord type itself, which must be <code>partial</code>. Generated in the same <code>partial</code> as\n<xref href=\"ExcelReader.Core.Parser.IExcelRowMap%601\" data-throw-if-not-resolved=\"false\"></xref>, since both maps derive from the same\nproperty list and attributes.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.IRowWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.IRowWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.IRowWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.IRowWriter.yml\" sourcestartlinenumber=\"1\">Writes one row's cells in column order, starting at the first column. Obtained from\n<xref href=\"ExcelReader.Core.Writer.ISheetWriter%601.StartRowAsync(System.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>; each <code>Write</code>/<xref href=\"ExcelReader.Core.Writer.IRowWriter.Skip(System.Int32)\" data-throw-if-not-resolved=\"false\"></xref> call advances\nto the next column, so cells must be written left-to-right with no way to revisit an earlier\ncolumn. Disposing the row writer (sync or async) finalizes the row and returns it to the sheet.\nCalling any member after disposal throws <xref href=\"System.ObjectDisposedException\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ISheetWriter-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ISheetWriter-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ISheetWriter<TRow>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ISheetWriter-1.yml\" sourcestartlinenumber=\"1\">Writes one sheet's rows to the workbook. Obtained from <xref href=\"ExcelReader.Core.Writer.IWorkbookWriter%601.AddSheet(System.String)\" data-throw-if-not-resolved=\"false\"></xref>;\na caller optionally sets column styles and widths, writes rows in order via <xref href=\"ExcelReader.Core.Writer.ISheetWriter%601.StartRowAsync(System.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref>,\nthen ends the sheet. The sheet's leading structure is written when the first row starts, or at\n<xref href=\"ExcelReader.Core.Writer.ISheetWriter%601.EndAsync(System.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref> for a sheet with no rows.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ITableSheetWriter-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ITableSheetWriter-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ITableSheetWriter<TRow>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ITableSheetWriter-1.yml\" sourcestartlinenumber=\"1\">A sheet writer that can write Excel tables (ranges formatted with &quot;Format as Table&quot;). Implemented by the\nXLSX and XLSB sheet writers.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.IWorkbookWriter-1.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.IWorkbookWriter-1.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.IWorkbookWriter<TSheet>",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.IWorkbookWriter-1.yml\" sourcestartlinenumber=\"1\">Writes a whole workbook (XLSX, XLSB, XLS or CSV) to a destination stream, one sheet at a time.\nImplementations open the underlying stream/archive on construction, so a caller only needs to\nadd sheets with <xref href=\"ExcelReader.Core.Writer.IWorkbookWriter%601.AddSheet(System.String)\" data-throw-if-not-resolved=\"false\"></xref> and dispose the workbook (or call\n<xref href=\"ExcelReader.Core.Writer.IWorkbookWriter%601.EndAsync(System.Threading.CancellationToken)\" data-throw-if-not-resolved=\"false\"></xref> then dispose) when finished.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.SheetWriterExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.SheetWriterExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.SheetWriterExtensions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.SheetWriterExtensions.yml\" sourcestartlinenumber=\"1\">Convenience methods layered on <xref href=\"ExcelReader.Core.Writer.ISheetWriter%601\" data-throw-if-not-resolved=\"false\"></xref>: write a whole collection of\nrecords to a sheet in one call, driving the start-row/write/dispose lifecycle per record.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xls.XlsRowWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xls.XlsRowWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xls.XlsRowWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xls.XlsRowWriter.yml\" sourcestartlinenumber=\"1\">Writes the cells of a single row of a BIFF8 (.xls) sheet.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xls.XlsSheetWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.yml\" sourcestartlinenumber=\"1\">Writes a single sheet of a BIFF8 (.xls) workbook, buffering cell records in memory until the\nworkbook is finalized. Rows beyond the BIFF8 65,536-row cap spill into an auto-generated\ncontinuation sheet.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xls.XlsWorkbookWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xls.XlsWorkbookWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xls.XlsWorkbookWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xls.XlsWorkbookWriter.yml\" sourcestartlinenumber=\"1\">Writes a workbook to the legacy BIFF8 (.xls) binary format.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xls.XlsWriterOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xls.XlsWriterOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xls.XlsWriterOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xls.XlsWriterOptions.yml\" sourcestartlinenumber=\"1\">Configures how a BIFF8 (.xls) workbook is written.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xls.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xls.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xls",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsb.XlsbCell.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsb.XlsbCell.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsb.XlsbCell",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsb.XlsbCell.yml\" sourcestartlinenumber=\"1\">An immutable, typed cell value for <xref href=\"ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.WriteRow(System.ReadOnlySpan%7bExcelReader.Core.Writer.Xlsb.XlsbCell%7d)\" data-throw-if-not-resolved=\"false\"></xref>,\ncreated via one of the <xref href=\"ExcelReader.Core.Writer.Xlsb.XlsbCell.Create(System.String)\" data-throw-if-not-resolved=\"false\"></xref> factory overloads.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsb.XlsbRowWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.yml\" sourcestartlinenumber=\"1\">Writes the cells of a single row into an .xlsb worksheet, one column at a time.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.yml\" sourcestartlinenumber=\"1\">Writes a single worksheet's rows into an .xlsb workbook produced by <xref href=\"ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.yml\" sourcestartlinenumber=\"1\">Writes an .xlsb workbook (BIFF12 binary format) to a stream, one sheet at a time.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.yml\" sourcestartlinenumber=\"1\">Configures how an XLSB package is written.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsb.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsb.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsb",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsx.XlsxRowWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.yml\" sourcestartlinenumber=\"1\">Writes the cells of a single worksheet row into an XLSX row buffer; reused across rows by <xref href=\"ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.yml\" sourcestartlinenumber=\"1\">Writes a single worksheet's XML into an XLSX ZIP archive, buffering rows and flushing them to the entry stream once they cross a size threshold.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsx.XlsxWorkbookWriter.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsx.XlsxWorkbookWriter.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsx.XlsxWorkbookWriter",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsx.XlsxWorkbookWriter.yml\" sourcestartlinenumber=\"1\">Writes a workbook to the XLSX (Office Open XML) format, streaming each sheet's rows into a ZIP archive as they're written.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.yml\" sourcestartlinenumber=\"1\">Configures how an XLSX package is written.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.Xlsx.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.Xlsx.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.Xlsx",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer",
+      "Summary": null
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core",
+      "Summary": null
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/api/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/toc.html"
+        },
+        ".json": {
+          "relative_path": "api/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/ArrowArrayGuard.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/ArrowArrayGuard.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/ArrowSchemaGuard.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/ArrowSchemaGuard.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/ArrowStream.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/ArrowStream.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/ArrowTable.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/ArrowTable.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/CellType.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/CellType.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/CellView.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/CellView.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/ColumnRef.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/ColumnRef.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/CsvAccumulator.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/CsvAccumulator.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/CsvParallelOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/CsvParallelOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/DecodedRows.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/DecodedRows.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/Error.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/Error.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/ExcelMapper.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/ExcelMapper.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/FieldBinding.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/FieldBinding.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/InferredColumn.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/InferredColumn.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/InputStream.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/InputStream.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/OpenOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/OpenOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/RowCursor.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/RowCursor.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/RowView.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/RowView.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/Sheet.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/Sheet.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/SheetVisibility.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/SheetVisibility.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/Source.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/Source.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/TableView.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/TableView.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/TypedReader.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/TypedReader.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/Workbook.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/Workbook.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/WriteOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/WriteOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/WriterHandle.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/WriterHandle.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/XlType.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/XlType.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/functions.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/functions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/cpp-api/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/toc.html"
+        },
+        ".json": {
+          "relative_path": "cpp-api/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/csv.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/csv.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/encryption.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/encryption.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/errors.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/errors.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/migrating-to-v6.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/migrating-to-v6.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/migrating-to-v7.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/migrating-to-v7.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/parsing.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/parsing.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/reading.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/reading.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/untrusted-input.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/untrusted-input.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/guide/writing.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/writing.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/index.md",
+      "output": {
+        ".html": {
+          "relative_path": "index.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/performance/benchmarks.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/performance/benchmarks.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/performance/reader-performance.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/performance/reader-performance.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/ArrowStream.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/ArrowStream.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Cell.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Cell.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/CellType.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/CellType.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/ColumnSpec.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/ColumnSpec.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/ColumnType.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/ColumnType.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/ColumnarSheet.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/ColumnarSheet.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/ExcelReaderError.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/ExcelReaderError.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/OpenOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/OpenOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/PasswordIncorrectError.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/PasswordIncorrectError.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/PasswordRequiredError.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/PasswordRequiredError.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Sheet.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Sheet.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/SheetVisibility.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/SheetVisibility.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/SheetWriter.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/SheetWriter.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Sheets.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Sheets.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Source.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Source.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/StringColumn.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/StringColumn.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/TypedTable.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/TypedTable.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Workbook.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Workbook.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/WriteOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/WriteOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/functions.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/functions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/python-api/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/toc.html"
+        },
+        ".json": {
+          "relative_path": "python-api/toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Toc",
+      "source_relative_path": "docs/toc.yml",
+      "output": {
+        ".html": {
+          "relative_path": "toc.html"
+        },
+        ".json": {
+          "relative_path": "toc.json"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "python/README.md",
+      "output": {
+        ".html": {
+          "relative_path": "python/README.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "rust/excelreader/README.md",
+      "output": {
+        ".html": {
+          "relative_path": "rust/excelreader/README.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Resource",
+      "source_relative_path": "src/ExcelReader.Native/include/excelreader.h",
+      "output": {
+        "resource": {
+          "relative_path": "src/ExcelReader.Native/include/excelreader.h"
+        }
+      },
+      "version": ""
+    }
+  ],
+  "groups": [
+    {
+      "xrefmap": "xrefmap.yml"
+    }
+  ]
+}

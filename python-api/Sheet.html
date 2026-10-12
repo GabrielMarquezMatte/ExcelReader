@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Sheet | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Sheet | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/python-api/Sheet.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="class-sheet">Class Sheet</h1>
+
+<p>One sheet of a <code>Workbook</code>: the workbook and an index. Holds no native resource.</p>
+<p>Every read opens its own cursor, so several reads may be in flight on one sheet or on several,
+on this thread or on others.</p>
+<pre><code class="lang-python">class Sheet
+</code></pre>
+<h2 id="properties">Properties</h2>
+<h3 id="index">index</h3>
+<pre><code class="lang-python">index: int
+</code></pre>
+<p>Zero-based position in the workbook.</p>
+<h3 id="name">name</h3>
+<pre><code class="lang-python">name: str
+</code></pre>
+<h3 id="visibility">visibility</h3>
+<pre><code class="lang-python">visibility: SheetVisibility
+</code></pre>
+<p><strong>Type</strong> <a href="SheetVisibility.html">SheetVisibility</a></p>
+<h2 id="methods">Methods</h2>
+<h3 id="rows">rows</h3>
+<pre><code class="lang-python">def rows() -&gt; Iterator[list[Cell]]
+</code></pre>
+<p>This sheet's rows, from the first. Each call is an independent pass over the sheet.</p>
+<p><strong>Returns</strong> Iterator[list[<a href="Cell.html">Cell</a>]]</p>
+<h3 id="read_all">read_all</h3>
+<pre><code class="lang-python">def read_all() -&gt; list[list[Cell]]
+</code></pre>
+<p>Materializes every row of this sheet in one native call.</p>
+<p>Builds one <code>Cell</code>/<code>str</code> object per cell — for a large sheet, <code>read_all_columnar()</code> is
+substantially faster because it never does that.</p>
+<p><strong>Returns</strong> list[list[<a href="Cell.html">Cell</a>]]</p>
+<h3 id="read_all_columnar">read_all_columnar</h3>
+<pre><code class="lang-python">def read_all_columnar() -&gt; ColumnarSheet
+</code></pre>
+<p>Materializes every row of this sheet as parallel flat arrays.</p>
+<p>The fast path for large sheets: unlike <code>read_all()</code>, this never constructs a <code>Cell</code>/<code>str</code>
+per cell. Use <code>decode_cell()</code> to materialize one cell on demand.</p>
+<p><strong>Returns</strong> <a href="ColumnarSheet.html">ColumnarSheet</a></p>
+<h3 id="parse_typed">parse_typed</h3>
+<pre><code class="lang-python">def parse_typed(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    parallelism: int = 1,
+) -&gt; TypedTable
+</code></pre>
+<p>Reads this whole sheet into typed columns, converting values on the native side.</p>
+<p>By far the fastest path in this library: unlike every other read method, no cell is ever
+formatted to text, so a large sheet costs a fraction of <code>read_all_columnar()</code>.</p>
+<p><code>header_row</code> is a 1-based row number whose values name the columns (that row is skipped and
+never yielded as data); 0 means the sheet has no header, in which case every spec must
+resolve by <code>index</code>.</p>
+<p><code>parallelism</code> is the thread count for a CSV: 1 (the default) reads on one thread, 0 uses every
+core, n up to n threads. Any other format, or a CSV too small to split, is read on one thread.
+The table is identical either way; a parallel read holds every partition's columns until they
+are merged, so its peak memory is higher.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>parallelism</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="TypedTable.html">TypedTable</a></p>
+<h3 id="iter_parse_typed">iter_parse_typed</h3>
+<pre><code class="lang-python">def iter_parse_typed(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    batch_size: int = 10000,
+) -&gt; Iterator[TypedTable]
+</code></pre>
+<p><code>parse_typed()</code> a batch at a time, yielding one <code>TypedTable</code> per batch.</p>
+<p><code>batch_size</code> is rows per batch; 0 means one unbounded batch, exactly what <code>parse_typed()</code>
+does. A generator that has already started owns its position in the sheet and keeps working after
+the workbook is closed.</p>
+<p>Being a generator, it opens nothing until the first iteration, so a bad <code>batch_size</code> is not
+reported until then; <code>to_record_batch_reader()</code> raises immediately instead.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int</td>
+<td><code>10000</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> Iterator[<a href="TypedTable.html">TypedTable</a>]</p>
+<h3 id="to_arrow">to_arrow</h3>
+<pre><code class="lang-python">def to_arrow(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    parallelism: int = 1,
+) -&gt; object
+</code></pre>
+<p>The same read as <code>parse_typed()</code>, handed to pyarrow as one <code>StructArray</code>, zero-copy.</p>
+<p>Requires pyarrow. The returned array owns the native buffers through the Arrow C Data
+Interface's release callback, so it stays valid after this workbook is closed. Wrap it with
+<code>pyarrow.RecordBatch.from_struct_array()</code> for a column-named batch. <code>parallelism</code> works as in
+<code>parse_typed()</code>.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>parallelism</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> object</p>
+<h3 id="to_record_batch">to_record_batch</h3>
+<pre><code class="lang-python">def to_record_batch(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    parallelism: int = 1,
+) -&gt; object
+</code></pre>
+<p>Same read as <code>to_arrow()</code>, wrapped as a column-named <code>pyarrow.RecordBatch</code>.</p>
+<p>Requires pyarrow — see <code>to_arrow()</code>.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>parallelism</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> object</p>
+<h3 id="to_record_batch_reader">to_record_batch_reader</h3>
+<pre><code class="lang-python">def to_record_batch_reader(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    batch_size: int = 10000,
+) -&gt; object
+</code></pre>
+<p>The same read as <code>to_arrow()</code>, as a streaming <code>pyarrow.RecordBatchReader</code>.</p>
+<p>Peak memory is one batch rather than one sheet. Requires pyarrow.</p>
+<p>pyarrow owns the stream once it is imported — exhausting or dropping the reader is what
+closes the underlying read.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int</td>
+<td><code>10000</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> object</p>
+<h3 id="to_arrow_stream">to_arrow_stream</h3>
+<pre><code class="lang-python">def to_arrow_stream(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    batch_size: int = 10000,
+) -&gt; ArrowStream
+</code></pre>
+<p>The same read as <code>to_record_batch_reader()</code>, as a single-use Arrow PyCapsule stream.</p>
+<p>Needs no third-party package to create; pass it to any consumer of <code>__arrow_c_stream__</code>
+(<code>polars.DataFrame(stream)</code>, <code>pyarrow.RecordBatchReader.from_stream(stream)</code>, ...).</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int</td>
+<td><code>10000</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="ArrowStream.html">ArrowStream</a></p>
+<h3 id="iter_pandas">iter_pandas</h3>
+<pre><code class="lang-python">def iter_pandas(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    batch_size: int = 10000,
+) -&gt; Iterator[object]
+</code></pre>
+<p>One <code>pandas.DataFrame</code> per batch, streamed. Requires pyarrow and pandas.</p>
+<p>A generator, so a missing dependency is reported at the first iteration, not at the call.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int</td>
+<td><code>10000</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> Iterator[object]</p>
+<h3 id="iter_polars">iter_polars</h3>
+<pre><code class="lang-python">def iter_polars(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    batch_size: int = 10000,
+) -&gt; Iterator[object]
+</code></pre>
+<p>One <code>polars.DataFrame</code> per batch, streamed. Requires pyarrow and polars.</p>
+<p>A generator, so a missing dependency is reported at the first iteration, not at the call.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int</td>
+<td><code>10000</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> Iterator[object]</p>
+<h3 id="to_pandas">to_pandas</h3>
+<pre><code class="lang-python">def to_pandas(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    batch_size: int = 10000,
+) -&gt; object
+</code></pre>
+<p>Same read as <code>to_arrow()</code>, materialized as a <code>pandas.DataFrame</code>.</p>
+<p><code>read_all()</code> concatenates every batch, so this does NOT bound peak memory the way
+<code>iter_pandas()</code> does. What it buys is the conversion: <code>self_destruct</code> frees each Arrow
+chunk as pandas takes it, so the sheet is never held twice. Requires pyarrow and pandas.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int</td>
+<td><code>10000</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> object</p>
+<h3 id="to_polars">to_polars</h3>
+<pre><code class="lang-python">def to_polars(
+    schema: Sequence[ColumnSpec],
+    header_row: int = 1,
+    batch_size: int = 10000,
+    parallelism: int = 1,
+) -&gt; object
+</code></pre>
+<p>Same read as <code>to_arrow()</code>, materialized as a <code>polars.DataFrame</code>, zero-copy.</p>
+<p>Streams internally through <code>to_arrow_stream()</code> — polars consumes the stream a batch at a
+time, so unlike <code>to_pandas()</code> the whole sheet is never resident as Arrow buffers. Requires
+polars only, not pyarrow. With <code>parallelism</code> other than 1 the sheet is parsed whole, as in
+<code>parse_typed()</code>, instead of streamed, and that path does require pyarrow.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>schema</code></td>
+<td>Sequence[<a href="ColumnSpec.html">ColumnSpec</a>]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>int</td>
+<td><code>10000</code></td>
+</tr>
+<tr>
+<td><code>parallelism</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> object</p>
+<h3 id="infer_schema">infer_schema</h3>
+<pre><code class="lang-python">def infer_schema(
+    header_row: int = 1,
+    sample_size: int = 100,
+    parse_text: bool = False,
+) -&gt; list[ColumnSpec]
+</code></pre>
+<p>Guesses a <code>parse_typed()</code>/<code>to_arrow()</code> schema by sampling this sheet's cells.</p>
+<p>Reads <code>header_row</code> for column names (0 means no header — every returned spec resolves by
+<code>index</code> instead) and up to <code>sample_size</code> rows after it, guessing each column's type from
+Excel's own per-cell type tag. A column with a real mix of kinds, only
+formula/error results, or nothing sampled falls back to <code>ColumnType.STRING</code>; <code>nullable</code> is set
+when any sampled row left the column empty.</p>
+<p><code>parse_text=True</code> also types cells that hold text — every CSV field, or numbers stored as text:
+integers, decimals, <code>true</code>/<code>false</code> and ISO dates or date-times, when the text has exactly that
+shape. Codes with a leading zero (<code>00123</code>), scientific notation (<code>12E4</code>), padded or comma-decimal
+numbers and non-ISO dates stay <code>ColumnType.STRING</code>.</p>
+<p>This is a guess over a sample, not a guarantee — a column that looks like <code>ColumnType.I64</code> in
+the sample can still hold a fractional value further down the sheet, which <code>parse_typed()</code>
+would then reject unless the spec is <code>nullable</code>.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>header_row</code></td>
+<td>int</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>sample_size</code></td>
+<td>int</td>
+<td><code>100</code></td>
+</tr>
+<tr>
+<td><code>parse_text</code></td>
+<td>bool</td>
+<td><code>False</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> list[<a href="ColumnSpec.html">ColumnSpec</a>]</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/python-api/Sheet.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

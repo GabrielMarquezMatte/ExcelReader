@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Contributing | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Contributing | ExcelReader ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/CONTRIBUTING.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="contributing">Contributing</h1>
+
+<p>Thanks for considering a contribution. This project takes small, focused pull requests over large
+rewrites — see <a href="ARCHITECTURE.html">ARCHITECTURE.md</a> for the shape of the codebase before diving in, and
+<a href="STYLEGUIDE.html">STYLEGUIDE.md</a> for the code style, which the analyzers only partly enforce.</p>
+<h2 id="build-expectations">Build expectations</h2>
+<ul>
+<li><p><strong>Warnings are errors.</strong> <code>Directory.Build.props</code> sets <code>TreatWarningsAsErrors</code>, with a curated
+<code>AnalysisMode=All</code> analyzer set (NetAnalyzers plus Meziantou). A PR that
+doesn't build clean locally won't build clean in CI either — run a full build before pushing:</p>
+<pre><code class="lang-bash">dotnet build ExcelReader.slnx --configuration Release
+</code></pre>
+</li>
+<li><p><strong>Public API changes require a <code>PublicAPI.Unshipped.txt</code> entry.</strong> <code>Microsoft.CodeAnalysis.PublicApiAnalyzers</code>
+is active and fails the build on any
+unrecorded public member. If you add, change, or remove anything public, update
+<code>src/ExcelReader.Core/PublicAPI/PublicAPI.Unshipped.txt</code>. A bot promotes <code>Unshipped</code> →
+<code>Shipped</code> automatically after each release — don't edit <code>Shipped.txt</code> by hand.</p>
+</li>
+<li><p><strong>Tests are required for behavior changes.</strong> Run the suite before opening a PR:</p>
+<pre><code class="lang-bash">dotnet test tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release
+</code></pre>
+<p>Untrusted-input paths (the CFB/OLE, BIFF8, BIFF12, and ZIP parsers) get extra scrutiny — new
+parsing code should have a corresponding limit/fuzz-safety test in
+<code>tests/ExcelReader.Tests/Reader/ReaderLimitTests.cs</code> or <code>tests/ExcelReader.Tests/FuzzTests.cs</code> where relevant. Read
+<a href="STYLEGUIDE.html#untrusted-input">STYLEGUIDE.md § Untrusted Input</a> before touching a parser: every
+length, offset, and size read from the file must be bounded before it drives an allocation.</p>
+</li>
+<li><p><strong>Guide examples compile.</strong> A C# block in <code>docs/guide</code> marked <code>&lt;!-- snippet: name --&gt;</code> is copied
+from <code>#region name</code> in <code>docs/snippets</code>, which builds with the solution. Edit the region, then
+rewrite the guides; CI fails if they differ:</p>
+<pre><code class="lang-bash">python docs/snippets/sync.py
+</code></pre>
+</li>
+</ul>
+<h2 id="commit-messages">Commit messages</h2>
+<p>Use <a href="https://www.conventionalcommits.org/">Conventional Commits</a>: <code>type(scope): summary</code>, imperative
+mood, lowercase summary, no trailing period. Common types in this repo: <code>feat</code>, <code>fix</code>, <code>refactor</code>,
+<code>perf</code>, <code>test</code>, <code>docs</code>, <code>chore</code>, <code>ci</code>, <code>build</code>. The scope is usually the area touched (<code>crypto</code>,
+<code>reader</code>, <code>writer</code>, <code>parser</code>, <code>native</code>). Example: <code>fix(crypto): bound VerifyPassword's encryptedVerifierHash length</code>.</p>
+<h2 id="pull-requests">Pull requests</h2>
+<ul>
+<li>One focused change per PR — don't batch unrelated fixes into one commit or one PR.</li>
+<li>If a change is user-visible (new API, behavior change, performance claim), mention it in the PR
+description; the README's benchmark tables and changelog are updated separately, not as part of
+every PR.</li>
+<li>CI runs on Linux, Windows, and macOS — a change that only builds on one OS isn't ready to merge.</li>
+</ul>
+<h2 id="reporting-bugs--requesting-features">Reporting bugs / requesting features</h2>
+<p>Use GitHub Issues for bugs and feature requests. For suspected security vulnerabilities, do <strong>not</strong>
+open a public issue — see <a href="SECURITY.html">SECURITY.md</a> for the private reporting channel.</p>
+<h2 id="code-of-conduct">Code of conduct</h2>
+<p>This project follows the <a href="CODE_OF_CONDUCT.html">Code of Conduct</a>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/CONTRIBUTING.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

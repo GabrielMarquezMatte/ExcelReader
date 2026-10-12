@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Workbook | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Workbook | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/Workbook.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="class-workbook">Class Workbook</h1>
+
+<p>An open workbook, closed on destruction.</p>
+<p>Safe to use from several threads at once: every read goes through a Sheet and opens its own cursor.</p>
+<pre><code class="lang-cpp">class xl::Workbook
+</code></pre>
+<h2 id="methods">Methods</h2>
+<h3 id="sheet_count">sheet_count</h3>
+<pre><code class="lang-cpp">std::expected&lt;int32_t, Error&gt; sheet_count() const
+</code></pre>
+<p>Number of sheets.</p>
+<p><strong>Returns</strong> std::expected&lt;int32_t, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="sheet_name_at">sheet_name_at</h3>
+<pre><code class="lang-cpp">std::expected&lt;std::string, Error&gt; sheet_name_at(int32_t index) const
+</code></pre>
+<p>Name of the sheet at <code>index</code>.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index</code></td>
+<td>int32_t</td>
+<td></td>
+<td>0-based sheet position.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;std::string, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="sheet_names">sheet_names</h3>
+<pre><code class="lang-cpp">std::expected&lt;std::vector&lt;std::string&gt;, Error&gt; sheet_names() const
+</code></pre>
+<p>Every sheet's name, in workbook order.</p>
+<p><strong>Returns</strong> std::expected&lt;std::vector&lt;std::string&gt;, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="sheet">sheet</h3>
+<pre><code class="lang-cpp">Sheet sheet(int32_t index) const noexcept
+</code></pre>
+<p>The sheet at <code>index</code>.</p>
+<p>Makes no native call: an index outside the workbook is reported by the first read on the returned sheet.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index</code></td>
+<td>int32_t</td>
+<td></td>
+<td>0-based sheet position.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="Sheet.html">Sheet</a></p>
+<h3 id="sheets">sheets</h3>
+<pre><code class="lang-cpp">std::expected&lt;std::vector&lt;Sheet&gt;, Error&gt; sheets() const
+</code></pre>
+<p>Every sheet, in workbook order. Opens nothing.</p>
+<p><strong>Returns</strong> std::expected&lt;std::vector&lt;<a href="Sheet.html">Sheet</a>&gt;, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="sheet_by_name">sheet_by_name</h3>
+<pre><code class="lang-cpp">std::expected&lt;std::optional&lt;Sheet&gt;, Error&gt; sheet_by_name(std::string_view name) const
+</code></pre>
+<p>The sheet called <code>name</code>, compared without regard to case.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>Sheet name.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;std::optional&lt;<a href="Sheet.html">Sheet</a>&gt;, <a href="Error.html">Error</a>&gt;: The sheet, or empty when no sheet matches.</p>
+<h3 id="is_date1904">is_date1904</h3>
+<pre><code class="lang-cpp">std::expected&lt;bool, Error&gt; is_date1904() const
+</code></pre>
+<p>Whether dates count from 1904 instead of 1900.</p>
+<p>A date cell's serial number depends on it.</p>
+<p><strong>Returns</strong> std::expected&lt;bool, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="handle">handle</h3>
+<pre><code class="lang-cpp">xl_workbook * handle() const noexcept
+</code></pre>
+<p>The native handle, for calling the C ABI directly.</p>
+<p><strong>Returns</strong> xl_workbook *: The handle, still owned by this object.</p>
+<h3 id="open">open</h3>
+<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open(
+    std::string_view path,
+    int32_t format = XL_FORMAT_AUTO,
+    const OpenOptions * options = nullptr)
+</code></pre>
+<p>Opens the workbook at a path.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>File to open.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td><code>XL_FORMAT_AUTO</code></td>
+<td>An <code>XL_FORMAT_*</code> constant. <code>XL_FORMAT_AUTO</code> detects XLSX, XLSB and XLS from the file's signature; CSV has none and needs <code>XL_FORMAT_CSV</code>.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>Reader limits and CSV dialect, or null for the defaults.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;: The workbook. Fails if the native library's ABI does not match this header.</p>
+<h3 id="open_memory">open_memory</h3>
+<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open_memory(
+    std::span&lt;const uint8_t&gt; data,
+    int32_t format = XL_FORMAT_AUTO,
+    const OpenOptions * options = nullptr)
+</code></pre>
+<p>Opens a workbook from bytes in memory.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data</code></td>
+<td>std::span&lt;const uint8_t&gt;</td>
+<td></td>
+<td>The file's bytes. The native library copies them, so they need not outlive the call.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td><code>XL_FORMAT_AUTO</code></td>
+<td>As for Workbook::open.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>As for Workbook::open.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="open_source">open_source</h3>
+<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open_source(
+    std::unique_ptr&lt;Source&gt; source,
+    int32_t format = XL_FORMAT_AUTO,
+    const OpenOptions * options = nullptr)
+</code></pre>
+<p>Opens a workbook over random-access bytes.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td>std::unique_ptr&lt;<a href="Source.html">Source</a>&gt;</td>
+<td></td>
+<td>Owned by the library from here on. Read from several threads, so every sheet can still be read in parallel.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td><code>XL_FORMAT_AUTO</code></td>
+<td>As for Workbook::open.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>As for Workbook::open; <code>source_block_size</code> and <code>source_cache_bytes</code> tune the block cache.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="open_stream">open_stream</h3>
+<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open_stream(
+    std::unique_ptr&lt;InputStream&gt; stream,
+    int32_t format = XL_FORMAT_AUTO,
+    const OpenOptions * options = nullptr)
+</code></pre>
+<p>Opens a workbook over a stream that cannot seek.</p>
+<p>A CSV is read as it arrives, and again from the start until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole first.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stream</code></td>
+<td>std::unique_ptr&lt;<a href="InputStream.html">InputStream</a>&gt;</td>
+<td></td>
+<td>Owned by the library from here on.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td><code>XL_FORMAT_AUTO</code></td>
+<td>As for Workbook::open.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
+<td><code>nullptr</code></td>
+<td>As for Workbook::open; <code>max_buffered_bytes</code> caps what an XLSX, XLSB or XLS may buffer.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/cpp-api/Workbook.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

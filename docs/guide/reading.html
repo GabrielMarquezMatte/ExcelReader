@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Reading rows | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Reading rows | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/reading.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="reading-rows">Reading rows</h1>
+
+<p>Opening a workbook, enumerating rows, and the async and prefetch paths.
+See also <a href="parsing.html">parsing.md</a> for binding rows to types, and <a href="csv.html">csv.md</a> for delimited text.</p>
+<h2 id="read-rows">Read rows</h2>
+<!-- snippet: reading-read-rows -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Reader;
+
+using var workbook = Excel.FromXlsxFile(&quot;report.xlsx&quot;);
+
+foreach (var row in workbook.FirstSheet)
+{
+    string name = row[0].GetString();
+
+    if (row[1].TryParse(null, out int quantity))
+    {
+        Console.WriteLine($&quot;{name}: {quantity}&quot;);
+    }
+
+    if (row[2].Type == CellType.Date &amp;&amp; row[2].TryGetDateTime(workbook.IsDate1904, out var date))
+    {
+        Console.WriteLine(date);
+    }
+}
+</code></pre>
+<p>An opened workbook (<a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html"><code>XlsxWorkbook</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html"><code>XlsbWorkbook</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Xls.XlsWorkbook.html"><code>XlsWorkbook</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvReader.html"><code>CsvReader</code></a>) hands out its sheets: <code>FirstSheet</code> is the first one, <code>Sheets[i]</code> any of them. A sheet holds no resources of its own; iterating it starts a new, independent read. Dispose the workbook, not the sheets.</p>
+<h3 id="parallel-reading-opt-in">Parallel reading (opt-in)</h3>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.SheetParallel.html"><code>SheetParallel</code></a> reads one sheet on several threads. It takes any sheet, so it works the same on XLSX, XLSB and CSV:</p>
+<!-- snippet: reading-parallel-parse -->
+<pre><code class="lang-csharp">using XlsxWorkbook workbook = Excel.FromXlsxFile(&quot;big.xlsx&quot;);
+
+await foreach (var row in SheetParallel.ParseAsync(workbook.FirstSheet, ExcelParser.FromAttributes&lt;SalesRow&gt;(), new SheetParallelOptions { DegreeOfParallelism = 8 }))
+{
+    Total += row.Revenue;
+}
+</code></pre>
+<p>You own the workbook: keep it open until the task completes or the enumeration ends. For CSV, give the dialect when you open it (<code>Excel.FromCsvFile(path, options)</code>), not in the options. <code>DegreeOfParallelism</code> of <code>0</code> (the default) uses every processor; <code>1</code> reads sequentially.</p>
+<p>There are three families, each over a sheet:</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Result</th>
+<th>Order</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ParseAsync&lt;T&gt;</code></td>
+<td>an <code>IAsyncEnumerable&lt;T&gt;</code></td>
+<td>the sheet's own order, identical to <code>parser.Parse(sheet)</code></td>
+</tr>
+<tr>
+<td><code>ForEachAsync</code></td>
+<td>calls your callback on the worker threads</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>AggregateAsync</code></td>
+<td>folds one accumulator per partition into a result</td>
+<td>the same result as a single-threaded run</td>
+</tr>
+</tbody>
+</table>
+<p>Parsing and type conversion run across threads; whatever your loop body does per row does not, so if that dominates, raising the degree will not help.</p>
+<p>Both of the next two examples read a <code>ref struct</code> model, so text columns stay as <code>ReadOnlySpan&lt;byte&gt;</code> and the per-row model allocation disappears; a class model still costs one instance per row.</p>
+<p>A fold over an XLSX sheet, with one accumulator per partition merged in sheet order:</p>
+<!-- snippet: reading-parallel-aggregate -->
+<pre><code class="lang-csharp">public ref struct SaleRow
+{
+    [ExcelColumn(&quot;Region&quot;)] public ReadOnlySpan&lt;byte&gt; Region { get; set; }
+    [ExcelColumn(&quot;Units&quot;)] public int Units { get; set; }
+}
+
+public sealed class UnitTotal : IRowAccumulator&lt;UnitTotal, SaleRow&gt;
+{
+    public long Units;
+
+    public void Add(SaleRow model) =&gt; Units += model.Units;
+
+    public void Merge(UnitTotal following) =&gt; Units += following.Units;
+}
+
+using XlsxWorkbook workbook = Excel.FromXlsxFile(&quot;big.xlsx&quot;);
+
+UnitTotal total = await SheetParallel.AggregateAsync&lt;UnitTotal, SaleRow&gt;(
+    workbook.FirstSheet,
+    ExcelParser.FromAttributes&lt;SaleRow&gt;(),
+    new SheetParallelOptions { HeaderRow = 1 });
+</code></pre>
+<p>The same call takes a <a class="xref" href="../../api/ExcelReader.Core.Reader.RowAggregation-1.html"><code>RowAggregation&lt;TState&gt;</code></a> when you would rather pass delegates than write a type, and an <code>IRowRecord&lt;TRecord&gt;</code> type in place of the parser.</p>
+<p>A per-row callback:</p>
+<!-- snippet: reading-parallel-foreach -->
+<pre><code class="lang-csharp">using XlsxWorkbook workbook = Excel.FromXlsxFile(&quot;big.xlsx&quot;);
+
+long total = 0;
+await SheetParallel.ForEachAsync(
+    workbook.FirstSheet,
+    ExcelParser.FromAttributes&lt;SaleRow&gt;(),
+    row =&gt; Interlocked.Add(ref total, row.Units),
+    new SheetParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
+</code></pre>
+<p>Unlike <code>ParseAsync</code>, the callback runs on the worker threads, so records arrive in no particular order and the callback must be safe to call from several threads at once. Spans are valid only for the duration of the call.</p>
+<p><code>HeaderRow</code> follows the same rule as before: <code>ParseAsync</code> takes the header from the parser's <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_HeaderRow"><code>ExcelParserOptions.HeaderRow</code></a> and rejects a non-zero <a class="xref" href="../../api/ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_HeaderRow"><code>SheetParallelOptions.HeaderRow</code></a>, while the parser-based <code>ForEachAsync</code> and <code>AggregateAsync</code> use <code>SheetParallelOptions.HeaderRow</code>.</p>
+<h4 id="when-it-reads-sequentially">When it reads sequentially</h4>
+<p>These cases read on one thread with the same results and no error:</p>
+<ul>
+<li><code>DegreeOfParallelism</code> of 1.</li>
+<li>A sheet under 256 KB uncompressed.</li>
+<li>XLS.</li>
+<li>A table view (<code>ExcelTable.AsSheet()</code>).</li>
+<li>A CSV that cannot be partitioned: a stream that is not a file, or a non-UTF-8 encoding. Only in-memory data (<code>ReadOnlyMemory&lt;byte&gt;</code>, <code>byte[]</code>) and a <code>FileStream</code>-backed source partition; a CSV over a <code>MemoryStream</code> does not, so pass its bytes as <code>ReadOnlyMemory&lt;byte&gt;</code>.</li>
+</ul>
+<p><code>PrefetchDecompression</code> does not apply on this path: XLSX and XLSB go through a pipeline that already overlaps inflate and parse.</p>
+<h4 id="delivery-guarantees">Delivery guarantees</h4>
+<ul>
+<li><strong><code>ParseAsync</code> and <code>AggregateAsync</code></strong> are exact on every format. <code>ParseAsync</code> yields the same items in the same order as the sequential parse; <code>AggregateAsync</code> equals its own single-threaded run.</li>
+<li><strong>XLSB</strong> delivers every row exactly once, in <code>ForEachAsync</code> too.</li>
+<li><strong>XLSX</strong> delivers exactly once for a well-formed sheet. The pipeline cuts the inflated sheet at what looks like a row start; on a sheet where those bytes sit inside cell content (a CDATA run, a comment) or the file is truncated, a worker detects it, and the read recovers by reading the rest sequentially. <code>ParseAsync</code> and <code>AggregateAsync</code> stay exact. In <code>ForEachAsync</code>, workers may already have called the callback for chunks that are then dropped, so on such a sheet rows can be delivered twice, or be rows the sequential reader would not produce.</li>
+<li><strong>CSV</strong> is at least once in <code>ForEachAsync</code>, unchanged from v6: the callback may be invoked more than once for the same record. A partition whose start offset was guessed wrongly is read again from the confirmed offset, and the discarded pass may already have delivered a whole partition's worth of records, 1 MiB to 64 MiB of them, not just a few near the seam. On a source with quoted fields those records may also be misparsed, carrying values that appear nowhere in the file, and an exception the callback threw during a discarded pass is discarded with it. A start is only guessed wrongly inside a quoted field, so a source in which the quote character never appears delivers every record exactly once. For that guarantee on any source, use <code>AggregateAsync</code>, where the discarded partition's accumulator is thrown away, and apply side effects once it returns.</li>
+</ul>
+<p>A callback that writes to a database or sends messages must be idempotent on CSV, and on XLSX if the sheet may be malformed, and must also tolerate records that do not exist: deduplicating on a key does not filter those out.</p>
+<p><a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row"><code>ExcelParseException.Row</code></a> on <code>ParseAsync</code> counts the rows emitted so far. On <code>ForEachAsync</code> and <code>AggregateAsync</code> it is the exact row when the read is sequential and <code>0</code> when it was partitioned.</p>
+<p>See the <a href="../performance/benchmarks.html#parallel-sheet-reading">parallel sheet benchmarks</a> and the <a href="../performance/benchmarks.html#parallel-csv">parallel CSV benchmarks</a> for what this buys. On a real-data XLSX the sheet stage drops from 29 ms (prefetched, sequential) to about 18 ms, and on XLSB from 16 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its <code>AggregateAsync</code> at dop 16 is ~2.8x faster than the typed path while allocating ~410x less, with zero garbage collections.</p>
+<p>Properties need setters. A get-only property is skipped during binding and silently receives nothing.</p>
+<h3 id="apache-arrow-conversion-opt-in">Apache Arrow conversion (opt-in)</h3>
+<pre><code class="lang-bash">dotnet add package ExcelReader.Arrow
+</code></pre>
+<!-- snippet: reading-arrow-read -->
+<pre><code class="lang-csharp">using ExcelReader.Arrow;
+using ExcelReader.Core.Reader;
+
+using var workbook = Excel.FromXlsxFile(&quot;report.xlsx&quot;);
+Apache.Arrow.RecordBatch batch = workbook.FirstSheet.ToArrowRecordBatch();
+</code></pre>
+<p>The schema defaults to <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_InferSchema_"><code>Excel.InferSchema</code></a>'s guess; pass one in <code>new ArrowReadOptions { Schema = ... }</code> to skip inference, and set <code>HeaderRow</code> there (default 1, 0 for none). The whole sheet is materialized into one <code>RecordBatch</code> — there is no chunked/streaming variant yet. Inference costs about the same time and ~1.8x the allocation of an explicit schema on the same file. See <a href="../performance/benchmarks.html#arrow-conversion">Arrow conversion</a> in the benchmarks.</p>
+<p><code>WriteRecordBatch</code>/<code>WriteRecordBatchAsync</code> are the write-side mirror — one call from a <code>RecordBatch</code> to a sheet, for XLSX, XLSB, XLS, and CSV:</p>
+<!-- snippet: reading-arrow-write -->
+<pre><code class="lang-csharp">using ExcelReader.Arrow;
+using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
+
+using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create(&quot;report.xlsx&quot;));
+workbook.WriteRecordBatch(batch); // adds the sheet, writes the header + every row, ends the workbook
+</code></pre>
+<p>Supports string, large string, string view, every integer width (signed and unsigned), half float, float, double, decimal128, decimal256, boolean, date32, date64, time32, time64, timestamp and null columns; any other type (binary, nested, dictionary) throws <code>NotSupportedException</code>. Pass <code>new ArrowWriteOptions { WriteHeader = false }</code> to skip the header row, or set <code>SheetName</code> (XLSX/XLSB/XLS only — CSV has no sheet name) to rename it from the <code>&quot;Sheet1&quot;</code> default.</p>
+<h2 id="open-by-auto-detecting-the-format">Open by auto-detecting the format</h2>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_Open_"><code>Excel.Open</code></a> picks the workbook type from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelWorkbook.html"><code>IExcelWorkbook</code></a>. <code>FirstSheet</code> gives the first sheet, and a sheet iterates its rows directly, so no pattern-match is needed for basic row iteration.</p>
+<!-- snippet: reading-open -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Reader;
+
+using IExcelWorkbook workbook = Excel.Open(&quot;report.xlsx&quot;); // or report.xlsb / report.xls
+
+foreach (var row in workbook.FirstSheet)
+{
+    Console.WriteLine(row[0].GetString());
+}
+</code></pre>
+<p><code>SheetCount</code>, <code>SheetAt(index)</code> and <code>TryGetSheet(name)</code> are on <code>IExcelWorkbook</code> itself, so you can walk every sheet without knowing the format. Each <a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet.html"><code>IExcelSheet</code></a> carries its own <code>Index</code>, <code>Name</code> and <code>Visibility</code>:</p>
+<!-- snippet: reading-open-every-sheet -->
+<pre><code class="lang-csharp">using IExcelWorkbook workbook = Excel.Open(&quot;report.xlsx&quot;);
+
+for (int i = 0; i &lt; workbook.SheetCount; i++)
+{
+    IExcelSheet sheet = workbook.SheetAt(i);
+    Console.WriteLine(sheet.Name);
+    foreach (var row in sheet)
+    {
+        Console.WriteLine(row[0].GetString());
+    }
+}
+</code></pre>
+<p><code>TryGetSheet</code> matches a name ignoring case and opens nothing:</p>
+<!-- snippet: reading-open-try-get-sheet -->
+<pre><code class="lang-csharp">if (workbook.TryGetSheet(&quot;Totals&quot;, out var totals))
+{
+    foreach (var row in totals)
+    {
+        Console.WriteLine(row[0].GetString());
+    }
+}
+</code></pre>
+<p>When you open a format directly (<a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_FromXlsxFile_"><code>Excel.FromXlsxFile</code></a> and the like) the workbook's <code>Sheets</code> is a typed, indexable list (<code>Sheets.Count</code>, <code>Sheets[i]</code>, <code>foreach</code>) of <a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsx.XlsxSheet.html"><code>XlsxSheet</code></a>, <a class="xref" href="../../api/ExcelReader.Core.Reader.Xlsb.XlsbSheet.html"><code>XlsbSheet</code></a> or <a class="xref" href="../../api/ExcelReader.Core.Reader.Xls.XlsSheet.html"><code>XlsSheet</code></a> values, so walking it boxes nothing. Reaching a sheet only looks up a name and an index; the file is not read until you iterate the sheet.</p>
+<p><code>Visibility</code> reports whether a sheet is shown in the workbook's tab bar, read from the format's own encoding of it (XLSX's <code>state</code> attribute, XLSB's <code>BrtBundleSh.hsState</code>, XLS's <code>BoundSheet8.hsState</code>). It is reported, never enforced — a hidden sheet enumerates its rows like any other, so converters and exporters filter on it themselves:</p>
+<!-- snippet: reading-open-visibility -->
+<pre><code class="lang-csharp">using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
+
+for (int i = 0; i &lt; workbook.SheetCount; i++)
+{
+    IExcelSheet sheet = workbook.SheetAt(i);
+    if (sheet.Visibility != ExcelSheetVisibility.Visible)
+    {
+        continue; // skip hidden and veryHidden sheets
+    }
+    Console.WriteLine(sheet.Name);
+}
+</code></pre>
+<p><a class="xref" href="../../api/ExcelReader.Core.ExcelSheetVisibility.html#ExcelReader_Core_ExcelSheetVisibility_VeryHidden"><code>ExcelSheetVisibility.VeryHidden</code></a> is the state Excel's own unhide dialog does not offer; both it and <code>Hidden</code> come back here. A sheet whose format says nothing about its state — or says something no producer agrees on — reads as <code>Visible</code>.</p>
+<p>CSV is exposed as a single, unnamed sheet (<code>SheetCount == 1</code>, <code>Name == &quot;&quot;</code>, always <code>Visible</code>). Pattern-match to the concrete type only for workbook-specific internals beyond this surface.</p>
+<p><code>OpenAsync</code> is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.</p>
+<p>Detection covers the signed formats only. To open a source whose format you already know — including CSV, which has no signature to detect — pass an <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelFileFormat.html"><code>ExcelFileFormat</code></a> and let <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_Csv"><code>ExcelReaderOptions.Csv</code></a> carry the dialect; see <a href="csv.html#read-csv">CSV</a>.</p>
+<!-- snippet: reading-open-csv -->
+<pre><code class="lang-csharp">using IExcelWorkbook workbook = Excel.Open(&quot;report.csv&quot;, ExcelFileFormat.Csv);
+</code></pre>
+<h2 id="read-an-excel-table">Read an Excel table</h2>
+<p>A workbook's tables (ranges formatted with <strong>Format as Table</strong>) are listed on <code>Tables</code>, ordered by sheet
+and creation, and found by name with <code>TryGetTable</code>, ignoring case. XLSX/XLSM and XLSB report them; XLS
+and CSV always report none. <code>AsSheet()</code> reads only the table: its header row first, then its data rows
+without the totals row, each cut to the table's columns, so it plugs into anything that takes a sheet.</p>
+<!-- snippet: reading-table -->
+<pre><code class="lang-csharp">using IExcelWorkbook workbook = Excel.Open(&quot;sales.xlsx&quot;);
+if (workbook.TryGetTable(&quot;Sales&quot;, out ExcelTable? sales))
+{
+    foreach (ProductRow row in ExcelParser.FromAttributes&lt;ProductRow&gt;().Parse(sales.AsSheet()))
+    {
+        Console.WriteLine($&quot;{row.Product}: {row.Qty}&quot;);
+    }
+}
+</code></pre>
+<ul>
+<li><code>FirstRow</code>, <code>FirstColumn</code>, <code>LastRow</code> and <code>LastColumn</code> are zero-based and include the header and totals
+rows; <code>Ref</code> is the same range in A1 notation.</li>
+<li>Column indexes inside <code>AsSheet()</code> rows stay those of the sheet: a table starting at column C reports
+its first cell at index 2. <code>Excel.InferSchema</code> keeps those indexes in <a class="xref" href="../../api/ExcelReader.Core.Reader.Schema.ExcelColumnSchema.html#ExcelReader_Core_Reader_Schema_ExcelColumnSchema_Index"><code>ExcelColumnSchema.Index</code></a> but
+lists only the table's columns. <a class="xref" href="../../api/ExcelReader.Core.Reader.SheetDataReader.html"><code>SheetDataReader</code></a> ordinals are relative to the table: ordinal 0 is
+its first column.</li>
+<li>A table whose header row is turned off (<code>HeaderRowCount == 0</code>) still enumerates, but <code>Parse</code> throws
+<code>InvalidOperationException</code> for every map, and <code>SheetDataReader</code> and <code>InferSchema</code> throw it when
+<code>HeaderRow</code> is greater than 0. Read it with <code>new SheetDataReader(table.AsSheet(), new SheetDataReaderOptions { HeaderRow = 0 })</code>,
+<code>Excel.InferSchema(table.AsSheet(), new SchemaInferenceOptions { HeaderRow = 0 })</code>, or by column index on the rows.</li>
+<li><code>StyleName</code> is the table style's name, such as <code>TableStyleMedium2</code>, or <code>null</code> when the table has none.</li>
+</ul>
+<h2 id="reading-sheets-in-parallel">Reading sheets in parallel</h2>
+<p>This is one thread per sheet. To read a single sheet on several threads, see <a href="#parallel-reading-opt-in">Parallel reading</a>. Each sheet of a workbook can be read on its own thread:</p>
+<!-- snippet: reading-sheets-in-parallel -->
+<pre><code class="lang-csharp">using XlsxWorkbook workbook = Excel.FromXlsxFile(path);
+
+Parallel.For(0, workbook.Sheets.Count, i =&gt;
+{
+    foreach (Row row in workbook.Sheets[i])
+    {
+        // consume
+    }
+});
+</code></pre>
+<p>The contract:</p>
+<ul>
+<li>A workbook is safe to share between threads once it is open: reading its metadata, getting sheets and creating enumerators all work concurrently.</li>
+<li>An enumerator belongs to one thread at a time. Using one enumerator from two threads at once is undefined behavior and is not checked.</li>
+<li>You may have several enumerators open at once, including several over the same sheet.</li>
+<li>Do not touch a stream you passed in while the workbook is open.</li>
+</ul>
+<p>Disposing the workbook closes it to new sheets and enumerators; its file or stream is released when the last enumerator already obtained from it is disposed.</p>
+<h2 id="read-asynchronously">Read asynchronously</h2>
+<p>Every sheet supports <code>await foreach</code>. For XLSX files, the async enumerator buffers one row at a time and uses the same row parser as the synchronous enumerator, so sync and async reads stay behaviorally aligned while awaits happen only when more bytes are needed.</p>
+<!-- snippet: reading-async -->
+<pre><code class="lang-csharp">using ExcelReader.Core.Reader;
+
+await using var workbook = await Excel.FromXlsxFileAsync(&quot;report.xlsx&quot;, ct: cancellationToken);
+
+await foreach (var row in workbook.FirstSheet)
+{
+    Console.WriteLine(row[0].GetString());
+}
+</code></pre>
+<p><code>await foreach</code> binds to the sheet's <code>GetAsyncEnumerator(CancellationToken ct = default)</code> by pattern. The call itself does no I/O: opening the sheet part (and, for XLSX, loading shared strings) happens asynchronously on the first <code>MoveNextAsync</code>. Because <a class="xref" href="../../api/ExcelReader.Core.Reader.Row.html"><code>Row</code></a> and <a class="xref" href="../../api/ExcelReader.Core.Reader.Cell.html"><code>Cell</code></a> are <code>ref struct</code> types, the current row cannot be held across an <code>await</code> inside the loop body: read its cells (or copy the values out) before awaiting anything else.</p>
+<p><code>await foreach</code> does not accept <code>.WithCancellation(ct)</code>: <code>Row</code> being a <code>ref struct</code> rules out <code>IAsyncEnumerable&lt;Row&gt;</code>, so the loop binds to the pattern rather than the interface. To pass a token, or to <code>await</code> while a row is in scope, drive the enumerator manually:</p>
+<!-- snippet: reading-async-enumerator -->
+<pre><code class="lang-csharp">await using var workbook = await Excel.FromXlsxFileAsync(&quot;report.xlsx&quot;, ct: cancellationToken);
+await using var rows = workbook.FirstSheet.GetAsyncEnumerator(cancellationToken);
+
+while (await rows.MoveNextAsync())
+{
+    var row = rows.Current;
+    Console.WriteLine(row[0].GetString());
+}
+</code></pre>
+<p>Errors from opening the sheet, such as cancellation or a corrupt part, surface from that first <code>MoveNextAsync</code>, not from <code>GetAsyncEnumerator</code>.</p>
+<h2 id="prefetch-decompression-xlsxxlsb">Prefetch decompression (XLSX/XLSB)</h2>
+<p>XLSX and XLSB are ZIP-backed, and inflating a sheet's compressed bytes competes for
+wall-clock time with parsing it. <a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_PrefetchDecompression"><code>ExcelReaderOptions.PrefetchDecompression</code></a> overlaps the
+two: a background thread inflates ahead while the calling thread parses. It is <strong>opt-in,
+defaults to <code>false</code></strong>, and only affects XLSX/XLSB — XLS and CSV have nothing to
+decompress, so the option is silently ignored for them.</p>
+<!-- snippet: reading-prefetch -->
+<pre><code class="lang-csharp">var options = new ExcelReaderOptions { PrefetchDecompression = true };
+using var workbook = Excel.FromXlsxFile(&quot;report.xlsx&quot;, options);
+
+foreach (var row in workbook.FirstSheet)
+{
+    Console.WriteLine(row[0].GetString());
+}
+</code></pre>
+<p>Measured across both read benchmarks (see <a href="../performance/benchmarks.html#real-data-reads">Real data reads</a> and
+<a href="../performance/benchmarks.html#string-heavy-reads">String-heavy reads</a>), on 65K-row workbooks:</p>
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th style="text-align: right;">Default</th>
+<th style="text-align: right;"><code>PrefetchDecompression = true</code></th>
+<th style="text-align: right;">Gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX, real data</td>
+<td style="text-align: right;">49.7 ms</td>
+<td style="text-align: right;">27.8 ms</td>
+<td style="text-align: right;">44%</td>
+</tr>
+<tr>
+<td>XLSM, real data</td>
+<td style="text-align: right;">50.3 ms</td>
+<td style="text-align: right;">28.1 ms</td>
+<td style="text-align: right;">44%</td>
+</tr>
+<tr>
+<td>XLSB, real data</td>
+<td style="text-align: right;">27.7 ms</td>
+<td style="text-align: right;">16.9 ms</td>
+<td style="text-align: right;">39%</td>
+</tr>
+<tr>
+<td>XLSX, string-heavy</td>
+<td style="text-align: right;">41.2 ms</td>
+<td style="text-align: right;">27.4 ms</td>
+<td style="text-align: right;">34%</td>
+</tr>
+<tr>
+<td>XLSB, string-heavy</td>
+<td style="text-align: right;">39.5 ms</td>
+<td style="text-align: right;">26.0 ms</td>
+<td style="text-align: right;">34%</td>
+</tr>
+</tbody>
+</table>
+<p>The gain tracks how much of a read is decompression rather than parsing, so it is largest
+on XLSX and XLSM with numeric data (where inflate dominates). Allocations rise from the producer task and the
+pooled decompression buffers — on the real-data corpus, roughly 8 KB to 25 KB for XLSX
+and 7 KB to 16 KB for XLSB — and neither path triggers a garbage collection.</p>
+<p>Do <strong>not</strong> enable it for concurrent server workloads: a caller already reading many files
+in parallel is CPU-saturated, and an extra background thread per read only doubles thread
+demand for no gain. It's meant for single-file batch processing.</p>
+<p>Writing has the same option, under a different name: see
+<a href="writing.html#prefetch-compression-xlsxxlsb-writing">Prefetch compression</a>.</p>
+<h2 id="bridge-to-adonet-idatareader">Bridge to ADO.NET (<code>IDataReader</code>)</h2>
+<p><code>SheetDataReader</code> adapts one <code>IExcelSheet</code> to <code>System.Data.IDataReader</code>, so it drops straight into <code>SqlBulkCopy</code>, <code>DataTable.Load</code>, Dapper, or any other ADO.NET consumer:</p>
+<!-- snippet: reading-data-reader -->
+<pre><code class="lang-csharp">using System.Data;
+using ExcelReader.Core.Reader;
+
+using IExcelWorkbook workbook = Excel.Open(&quot;report.xlsx&quot;);
+using IDataReader data = new SheetDataReader(workbook.FirstSheet); // header on row 1 by default
+
+var table = new DataTable();
+table.Load(data);
+</code></pre>
+<p>The header row (1-based, default 1) fixes the column shape; pass <code>new SheetDataReaderOptions { HeaderRow = 0 }</code> for a header-less sheet, whose columns come back named <code>Column0</code>, <code>Column1</code>, ... sized from the first data row. There is no schema-inference pass — <code>GetFieldType</code>/<code>GetValue</code>/the typed getters read the <em>current</em> row's own cell type, so a consumer building its schema from the first row (like <code>DataTable.Load</code>) locks in that row's types for the whole load. <code>NextResult()</code> always returns <code>false</code>; build one <code>SheetDataReader</code> per sheet instead of chaining result sets.</p>
+<p>The bridge costs ~1.3–1.4x over iterating rows directly, and <code>GetBytes</code> stays within ~10% of the direct read. See <a href="../performance/benchmarks.html#adonet-bridge-idatareader">ADO.NET bridge</a> in the benchmarks.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/reading.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

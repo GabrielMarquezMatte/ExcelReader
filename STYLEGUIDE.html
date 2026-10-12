@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>ExcelReader Style Guide | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="ExcelReader Style Guide | ExcelReader ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/STYLEGUIDE.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="excelreader-style-guide">ExcelReader Style Guide</h1>
+
+<p>Code style rules. For build/PR/test process, see <a href="CONTRIBUTING.html">CONTRIBUTING.md</a>; for the shape of
+the codebase, see <a href="ARCHITECTURE.html">ARCHITECTURE.md</a>.</p>
+<h2 id="priorities">Priorities</h2>
+<ol>
+<li><strong>Correctness</strong> — the code must be right. No shortcuts that sacrifice safety or accuracy.</li>
+<li><strong>Performance</strong> — optimize where it matters, but never at the cost of readability.</li>
+<li><strong>Readability</strong> — code is read far more than it is written.</li>
+</ol>
+<hr>
+<h2 id="ternaries">Ternaries</h2>
+<p>Use a ternary only when the entire expression fits on one line and both branches are single values — no function calls, no method chains, no nesting.</p>
+<pre><code class="lang-csharp">// OK: two literal values
+string label = isEmpty ? &quot;none&quot; : &quot;some&quot;;
+
+// OK: one field access each side
+int col = rRef.IsEmpty ? _nextCol : XlsxXml.ColumnIndex(rRef);
+
+// NOT OK: nested ternary
+string result = a ? b ? &quot;x&quot; : &quot;y&quot; : &quot;z&quot;;
+
+// NOT OK: branches contain logic
+int value = condition ? ComputeA() : ComputeB();
+
+// Use if instead:
+int value;
+if (condition)
+{
+    value = ComputeA();
+}
+else
+{
+    value = ComputeB();
+}
+</code></pre>
+<p>When in doubt, use <code>if</code>.</p>
+<hr>
+<h2 id="control-flow--prefer-early-return">Control Flow — Prefer Early Return</h2>
+<p>Avoid wrapping the happy path in a condition. Guard and exit early; keep the main logic at the lowest indentation level.</p>
+<pre><code class="lang-csharp">// NOT OK: body is nested under the guard
+private void AppendDecoded(ReadOnlySpan&lt;byte&gt; src)
+{
+    if (!src.IsEmpty)
+    {
+        EnsureValsCapacity(_valLen + src.Length);
+        _valLen += XlsxXml.Decode(src, _vals.AsSpan(_valLen));
+    }
+}
+
+// OK: guard exits early
+private void AppendDecoded(ReadOnlySpan&lt;byte&gt; src)
+{
+    if (src.IsEmpty)
+    {
+        return;
+    }
+    EnsureValsCapacity(_valLen + src.Length);
+    _valLen += XlsxXml.Decode(src, _vals.AsSpan(_valLen));
+}
+</code></pre>
+<p>Always use braces on <code>if</code>, even single-line bodies. The linter enforces this.</p>
+<hr>
+<h2 id="scope-nesting--maximum-3-levels">Scope Nesting — Maximum 3 Levels</h2>
+<p>Count every block that introduces indentation: <code>if</code>, <code>else</code>, <code>for</code>, <code>foreach</code>, <code>while</code>, <code>using</code>, <code>try</code>, <code>switch</code>. A function body is level 0. Nesting beyond 3 is a signal to extract a method.</p>
+<pre><code>level 0: function body
+level 1: while (true)
+level 2:   if (head.StartsWith(&quot;&lt;row&quot;u8))
+level 3:     foreach (...)         ← maximum allowed
+level 4:       if (...)            ← extract this into a private method
+</code></pre>
+<p>When you hit level 4, stop and ask: what is this inner block doing? Name it and move it.</p>
+<hr>
+<h2 id="method-bodies--always-block-body">Method Bodies — Always Block Body</h2>
+<p>Every method, property getter/setter, and constructor must use a block body with braces. Expression bodies (<code>=&gt;</code>) are forbidden on methods and properties, no matter how short.</p>
+<pre><code class="lang-csharp">// NOT OK
+public int SheetCount =&gt; _sheets.Length;
+private static string Foo() =&gt; Bar();
+
+// OK
+public int SheetCount
+{
+    get
+    {
+        return _sheets.Length;
+    }
+}
+private static string Foo()
+{
+    return Bar();
+}
+</code></pre>
+<p>This rule exists to keep diffs readable and the line count honest. A one-liner expression body hides complexity behind a single line and makes the 70-line rule easy to game.</p>
+<hr>
+<h2 id="function-length--maximum-70-lines">Function Length — Maximum 70 Lines</h2>
+<p>Count every non-blank, non-comment line inside the function body (opening and closing brace included). If a function exceeds 70 lines, split it. Nested <code>ref struct</code> types with their own methods count each method separately.</p>
+<p>70 is the review target. The build enforces a looser backstop through MA0051 (90 lines / 50 statements, see <code>.editorconfig</code>), so a method between 71 and 90 lines compiles but still fails review.</p>
+<p>Do not game the limit by collapsing logic onto single lines. The limit exists to keep methods focused, not to reward line-golf. A method that packs three operations on one line to stay under 70 is worse than one that splits them across 71 readable lines.</p>
+<p>Common splits:</p>
+<ul>
+<li>Parse one thing vs. emit the result of parsing</li>
+<li>Find a boundary vs. process the content within it</li>
+<li><code>EnsureCapacity</code> extracted from the caller</li>
+</ul>
+<hr>
+<h2 id="naming">Naming</h2>
+<ul>
+<li>Private fields: <code>_camelCase</code></li>
+<li>Private static methods: <code>PascalCase</code></li>
+<li>Local variables: <code>camelCase</code></li>
+<li>Prefer full words over abbreviations (<code>index</code> over <code>idx</code>, <code>source</code> over <code>src</code>) unless the abbreviation is idiomatic in the domain (<code>col</code>, <code>buf</code>, <code>len</code>, <code>pos</code>)</li>
+</ul>
+<h3 id="public-api-naming-must-be-symmetric-across-formats">Public API naming must be symmetric across formats</h3>
+<p>The four formats are peers. A factory, option, or capability that exists for one format must use the
+same name shape for all of them — <code>FromXls</code>/<code>FromXlsb</code>/<code>FromXlsx</code>/<code>FromCsv</code>, not three of those plus a
+bare <code>From</code>. A caller who learns one format's entry point should be able to guess the others. When you
+add a format-specific member, grep the sibling formats and match, or add the missing siblings in the
+same change.</p>
+<hr>
+<h2 id="comments">Comments</h2>
+<p><strong>The default is no comment.</strong> Code is expected to explain itself through naming and execution flow.
+Reaching for a comment is the signal to look at the code again first: if a reader cannot follow the
+logic, that is a defect in the code, not a gap in its documentation. Rename the variable, extract the
+method, flatten the branch. Fix it there, and the comment becomes unnecessary.</p>
+<p>A comment is justified only once that has been tried and the code still cannot carry the meaning —
+because the reason lives outside the code and no amount of naming can bring it in:</p>
+<ul>
+<li>A constraint imposed by a format spec, a platform, or an external producer.</li>
+<li>An invariant a reader could silently break, where breaking it stays compiling and passes review.</li>
+</ul>
+<pre><code class="lang-csharp">// OK: an invariant the type system cannot express
+// Decoded output is never longer than its XML source, so src.Length bounds the flat buffer.
+
+// NOT OK: describes what the code does
+// Loop through each cell and parse its value.
+
+// NOT OK: the code should have said this itself
+// p is the position of the '&lt;' that starts the row's closing tag
+int p = ...;          // -&gt; name it rowCloseTagStart and delete the comment
+</code></pre>
+<p>Never reference the task, the ticket, or the caller.</p>
+<h3 id="findings-do-not-belong-in-code">Findings do not belong in code</h3>
+<p>Measurements, benchmark results, memory-footprint numbers, and the reasoning that picked one
+approach over another are <strong>not comments</strong>. They go in <a href="docs/README.html"><code>docs/</code></a>.</p>
+<p>This includes the whole class of &quot;why it is this way&quot; content: a throughput figure that justified a
+buffer size, an allocation count that motivated pooling, a design that was prototyped and measured
+and then rejected. Put it in a document, with the numbers, the machine, and the corpus. Then the
+next person can re-run it and disagree with the evidence — which a comment asserting <code>// 2.4x faster</code>
+never lets them do.</p>
+<p>What may stay in the code is the constraint itself, stated without its evidence:</p>
+<pre><code class="lang-csharp">// OK: the ceiling, not the benchmark that found it
+// ponytail: 32 MB cap; sheets past that fall back to plain allocs.
+
+// NOT OK: a finding, and it rots the moment anything around it changes
+// Measured 11.3 ms vs 36.5 ms for Sylvan on the 65K-row corpus, so the span path stays.
+</code></pre>
+<h3 id="a-comment-must-stay-true-or-it-is-worse-than-no-comment">A comment must stay true, or it is worse than no comment</h3>
+<p>Comments carry maintenance cost. Two failure modes are specifically banned:</p>
+<ul>
+<li><strong>Do not describe a state the code is no longer in.</strong> A header that says &quot;these lookups are
+duplicated across the three readers&quot; is actively misleading once the class exists precisely so they
+are not duplicated. When you refactor, reread the comments on what you touched.</li>
+<li><strong>Do not cite a file that can disappear.</strong> Never point a comment at a plan, a spec, or a section
+marker (&quot;see step Z4&quot;) as the authoritative explanation. Those are working artifacts: they get
+renamed, merged and deleted, and the comment then sends a reader to nothing, which is worse than
+silence. A committed document under <a href="docs/README.html"><code>docs/</code></a> is different in kind — it is permanent, and
+pointing at one is how a finding stays out of the code. The test is whether the target is expected
+to still exist in a year, not whether a link is involved.</li>
+</ul>
+<hr>
+<h2 id="error-handling">Error Handling</h2>
+<p>Throw at trust boundaries: constructor arguments, public API parameters, malformed external data. Use <code>ArgumentOutOfRangeException.ThrowIfNegative</code> and similar .NET 6+ throw helpers. Do not add defensive checks for conditions that are impossible given the internal invariants.</p>
+<p>Match the exception to whose fault it is. A malformed file is <code>InvalidDataException</code> (or
+<code>ExcelLimitExceededException</code> when a configured cap is what rejected it) — never
+<code>ArgumentException</code>/<code>ArgumentOutOfRangeException</code>, which tell the caller they made a mistake when the
+input file is what is broken. If hostile input can reach a .NET throw helper, you are missing a
+validation step upstream.</p>
+<hr>
+<h2 id="untrusted-input">Untrusted Input</h2>
+<p>Everything the parsers read is attacker-controlled: <code>.xlsx</code>/<code>.xlsb</code>/<code>.xls</code>/<code>.csv</code> arrive from uploads,
+APIs, and mail attachments. These rules are not optional in reader code.</p>
+<ul>
+<li><p><strong>Bound every length, offset, count, and size read from the file before it drives an allocation, an
+index, or a loop bound.</strong> A field claiming a multi-GB stream inside a 4 KB file is the canonical
+attack: validate against what the container can actually hold (<code>source.Length</code>, the enclosing
+buffer's length, the spec's fixed value) and reject before allocating, not after.</p>
+</li>
+<li><p><strong>When you add a guard for one header field, apply it to every sibling field in that header.</strong> The
+expensive bugs here have all been <em>inconsistency</em>, not ignorance — a validated sector count sitting
+three lines above an unvalidated stream size, with a comment on the first one already explaining the
+exact attack. If a field needs the guard, assume its neighbours do too.</p>
+</li>
+<li><p><strong>Use <code>checked</code> for arithmetic on values derived from file bytes.</strong> Silent <code>int</code> overflow turns a
+bounds check into a wrapped negative that sails past it.</p>
+</li>
+<li><p><strong>Never let a malformed value silently change semantics.</strong> A truncating cast that turns a length into
+a negative sentinel meaning &quot;read everything&quot; is a worse outcome than a thrown exception, because
+nothing reports it.</p>
+</li>
+<li><p><strong>Validate before you allocate, not before you use.</strong> Renting or allocating first and discovering the
+inconsistency during the walk still hands the attacker the allocation.</p>
+</li>
+<li><p>New or changed parsing code needs a matching test in <code>ReaderLimitTests.cs</code> (forge the malformed
+header) or <code>FuzzTests.cs</code>. Assert the exception type and the limit metadata, not merely that
+something threw.</p>
+</li>
+</ul>
+<hr>
+<h2 id="pooled-buffers">Pooled Buffers</h2>
+<p><code>ArrayPool&lt;T&gt;.Shared</code> is used throughout the readers. Misuse here is a correctness bug, not a
+performance nit.</p>
+<ul>
+<li>Every <code>Rent</code> needs a matching <code>Return</code> on <strong>every</strong> exit path, including thrown exceptions. A method
+that rents, then throws mid-walk, must <code>try</code>/<code>catch</code>/<code>Return</code>/<code>rethrow</code> — a dropped buffer silently
+shrinks the pool for the whole process.</li>
+<li>Never <code>Return</code> a buffer that anything still references, and never touch a buffer after returning it.
+Ownership transfers must be explicit in a comment when a rented buffer outlives the renting method.</li>
+<li>Pooled arrays come back oversized and dirty. Bound reads by the logical length you tracked, never by
+<code>array.Length</code>.</li>
+<li>Buffers that live beyond one stack frame are returned in <code>Dispose</code>; guard against double-return with
+a flag, since <code>Dispose</code> may be called twice.</li>
+</ul>
+<hr>
+<h2 id="syncasync-twins">Sync/Async Twins</h2>
+<p>Several readers keep paired sync and async methods on purpose: an <code>async</code> method pays for a state
+machine on every row even when the buffer never needs refilling, so the hot path is duplicated rather
+than shared.</p>
+<p>The cost of that choice is that nothing in the compiler keeps the twins honest. So:</p>
+<ul>
+<li>A behavior fix to one twin <strong>must</strong> be applied to the other in the same change. Read both before you
+edit either.</li>
+<li>Behavior shared by both belongs in a sync helper that neither duplicates — the split should cover
+only the awaiting, not the logic around it.</li>
+<li>Do not add a third variant to work around a bug in one twin.</li>
+<li>Changes to a twinned path need a parity test asserting both produce identical output, including at
+buffer boundaries (a row straddling a refill, a cell forcing buffer growth) — that is exactly where
+the two implementations drift.</li>
+<li>A synchronous method does not take a <code>CancellationToken</code>.</li>
+</ul>
+<hr>
+<h2 id="tests-and-benchmarks">Tests and Benchmarks</h2>
+<p>Harness code is held to the same standard as library code, because a broken harness reports success.</p>
+<ul>
+<li><strong>Fail loudly, never silently.</strong> A fixture that was never built, a setup that never ran, an input
+that parsed to nothing — assert it. The dangerous case is not the harness that crashes; it is the one
+that measures zero work and publishes a number. Do not rely on the code under test to reject an empty
+input, because some formats accept it.</li>
+<li><strong>Register new benchmarks with their setup.</strong> When a class targets its <code>[GlobalSetup]</code> at specific
+methods, a new <code>[Benchmark]</code> absent from every target list runs against an unbuilt fixture.</li>
+<li><strong>Benchmarks against another library must compare matched work, or say plainly that they do not.</strong>
+If our side reads a zero-copy span while the competitor's API forces a string allocation, that gap is
+partly &quot;we are faster&quot; and partly &quot;we skipped work they cannot skip&quot;. Publish a matched-work sibling
+next to it. An unlabelled comparison that flatters us is a defect.</li>
+<li><strong>State the machine for every published number</strong>, and never derive a ratio across results measured on
+different hardware. Allocation figures are deterministic and comparable across machines; timings are
+not.</li>
+<li>Name tests for what they actually cover. A fixture hand-authored in code is not a &quot;real world&quot; file,
+and calling it one hides the gap it was supposed to close.</li>
+<li>Assert real behavior — exact values, exception types, limit metadata. A test that calls a method and
+asserts no throw documents nothing.</li>
+</ul>
+<hr>
+<h2 id="performance-notes">Performance Notes</h2>
+<p>These rules apply only when a function is on a measured hot path (cell parsing, buffer management):</p>
+<ul>
+<li>Prefer <code>ReadOnlySpan&lt;byte&gt;</code> over <code>string</code> for text that does not need to be allocated.</li>
+<li>Use <code>ArrayPool&lt;T&gt;.Shared</code> for buffers that live beyond one stack frame. Return them in <code>Dispose</code>.</li>
+<li><code>ref struct</code> types stay on the stack; use them for row/cell value types.</li>
+<li>Avoid LINQ in hot paths; use <code>IndexOf</code> on spans which benefits from SIMD.</li>
+<li>Split cold paths (growth, throw helpers) into <code>[MethodImpl(MethodImplOptions.NoInlining)]</code> methods so
+they do not bloat the hot caller's IL and cost it inlining.</li>
+<li>Optimize against a measurement, and record what it showed in <a href="docs/README.html"><code>docs/</code></a> — never in a comment.
+An optimization with no number behind it is a guess that costs readability. Caches in particular are
+a trade, not a win: document the workload where the cache pays and the one where it does not, with
+the numbers that showed it.</li>
+</ul>
+<p>Outside the hot path (workbook loading, shared-strings init), ordinary allocations are fine.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/STYLEGUIDE.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ExcelParser&lt;T&gt; | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ExcelParser&lt;T&gt; | ExcelReader ">
+      
+      <meta name="description" content="Parses rows from an Excel or CSV sheet into instances of T. Create one with :  reflects over [ExcelColumn]/[ExcelRequired]/[ExcelConverter] attributes,  uses the [ExcelSerializable] source-generated map, and  takes a map configured at runtime.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Parser_ExcelParser_1.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Parser.ExcelParser%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Parser.ExcelParser`1">
+
+
+
+  <h1 id="ExcelReader_Core_Parser_ExcelParser_1" data-uid="ExcelReader.Core.Parser.ExcelParser`1" class="text-break">
+Class ExcelParser&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Parser.html">Parser</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Parses rows from an Excel or CSV sheet into instances of <code class="typeparamref">T</code>. Create one with
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html">ExcelParser</a>: <a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_FromAttributes__1_ExcelReader_Core_Parser_ExcelParserOptions_">FromAttributes&lt;T&gt;(ExcelParserOptions?)</a> reflects over
+<code>[ExcelColumn]</code>/<code>[ExcelRequired]</code>/<code>[ExcelConverter]</code> attributes,
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Generated__1_ExcelReader_Core_Parser_ExcelParserOptions_">Generated&lt;T&gt;(ExcelParserOptions?)</a> uses the <code>[ExcelSerializable]</code> source-generated map, and
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Build__1_System_Action_ExcelReader_Core_Parser_ExcelRowMapBuilder___0___ExcelReader_Core_Parser_ExcelParserOptions_">Build&lt;T&gt;(Action&lt;ExcelRowMapBuilder&lt;T&gt;&gt;, ExcelParserOptions?)</a> takes a map configured at runtime.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class ExcelParser&lt;T&gt; where T : allows ref struct</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The model type to bind each row to. May be a <code>ref struct</code>, including one with a
+<code>ReadOnlySpan&lt;byte&gt;</code> property. A <code>struct T</code> consumed via a direct <code>foreach</code>
+skips the per-row model allocation a class <code class="typeparamref">T</code> requires.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ExcelParser&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Parser_ExcelParser_1_Parse_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse*"></a>
+
+  <h3 id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_Csv_CsvSheet_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse(ExcelReader.Core.Reader.Csv.CsvSheet)">
+  Parse(CsvSheet)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses the records of a CSV sheet into <code class="typeparamref">T</code> instances, lazily as the result is enumerated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CsvEnumerable&lt;T&gt; Parse(CsvSheet sheet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.Csv.CsvSheet.html">CsvSheet</a></dt>
+    <dd><p>The CSV sheet to pull records from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Parser.CsvEnumerable-1.html">CsvEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>An enumerable that yields one <code class="typeparamref">T</code> per data row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_Csv_CsvSheet__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses a specialized enumerable (dense field binding, single-pass projection), since CSV rows have
+no gaps or styles. Prefer this overload over <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html#ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_IExcelSheet_">Parse(IExcelSheet)</a> for CSV: a sheet
+held as <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a> goes through the generic path.</p>
+</div>
+
+
+
+
+  <a id="ExcelReader_Core_Parser_ExcelParser_1_Parse_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse*"></a>
+
+  <h3 id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_IExcelSheet_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse(ExcelReader.Core.Reader.IExcelSheet)">
+  Parse(IExcelSheet)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses the rows of a format-agnostic sheet (one obtained from <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html">IExcelWorkbook</a>) into <code class="typeparamref">T</code> instances, lazily as the result is enumerated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelEnumerable&lt;T, IExcelSheet, IExcelRowEnumerator&gt; Parse(IExcelSheet sheet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a></dt>
+    <dd><p>The sheet to pull rows from. Each enumeration of the result starts a new read of it.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">ExcelEnumerable</span>&lt;T, <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a>, <a class="xref" href="ExcelReader.Core.Reader.IExcelRowEnumerator.html">IExcelRowEnumerator</a>&gt;</dt>
+    <dd><p>An enumerable that yields one <code class="typeparamref">T</code> per data row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p><code class="paramref">sheet</code> is a table view (<a class="xref" href="ExcelReader.Core.Reader.ExcelTable.html#ExcelReader_Core_Reader_ExcelTable_AsSheet">AsSheet()</a>) of a table without a header row.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Parser_ExcelParser_1_Parse_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse*"></a>
+
+  <h3 id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_Xls_XlsSheet_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse(ExcelReader.Core.Reader.Xls.XlsSheet)">
+  Parse(XlsSheet)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses the rows of an XLS sheet into <code class="typeparamref">T</code> instances, lazily as the result is enumerated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelEnumerable&lt;T, XlsSheet, XlsWorkbook.Enumerator&gt; Parse(XlsSheet sheet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.Xls.XlsSheet.html">XlsSheet</a></dt>
+    <dd><p>The sheet to pull rows from. Each enumeration of the result starts a new read of it.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">ExcelEnumerable</span>&lt;T, <a class="xref" href="ExcelReader.Core.Reader.Xls.XlsSheet.html">XlsSheet</a>, <a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.html">XlsWorkbook</a>.<a class="xref" href="ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.html">Enumerator</a>&gt;</dt>
+    <dd><p>An enumerable that yields one <code class="typeparamref">T</code> per data row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Parser_ExcelParser_1_Parse_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse*"></a>
+
+  <h3 id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_Xlsb_XlsbSheet_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse(ExcelReader.Core.Reader.Xlsb.XlsbSheet)">
+  Parse(XlsbSheet)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses the rows of an XLSB sheet into <code class="typeparamref">T</code> instances, lazily as the result is enumerated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelEnumerable&lt;T, XlsbSheet, XlsbWorkbook.Enumerator&gt; Parse(XlsbSheet sheet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbSheet.html">XlsbSheet</a></dt>
+    <dd><p>The sheet to pull rows from. Each enumeration of the result starts a new read of it.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">ExcelEnumerable</span>&lt;T, <a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbSheet.html">XlsbSheet</a>, <a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html">XlsbWorkbook</a>.<a class="xref" href="ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.html">Enumerator</a>&gt;</dt>
+    <dd><p>An enumerable that yields one <code class="typeparamref">T</code> per data row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Parser_ExcelParser_1_Parse_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse*"></a>
+
+  <h3 id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_Xlsx_XlsxSheet_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse(ExcelReader.Core.Reader.Xlsx.XlsxSheet)">
+  Parse(XlsxSheet)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses the rows of an XLSX sheet into <code class="typeparamref">T</code> instances, lazily as the result is enumerated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelEnumerable&lt;T&gt; Parse(XlsxSheet sheet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Reader.Xlsx.XlsxSheet.html">XlsxSheet</a></dt>
+    <dd><p>The sheet to pull rows from. Each enumeration of the result starts a new read of it.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelEnumerable-1.html">ExcelEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>An enumerable that yields one <code class="typeparamref">T</code> per data row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

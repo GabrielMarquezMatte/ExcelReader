@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace ExcelReader.Core.Parser | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace ExcelReader.Core.Parser | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Parser">
+
+  <h1 id="ExcelReader_Core_Parser" data-uid="ExcelReader.Core.Parser" class="text-break">Namespace ExcelReader.Core.Parser</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.CsvEnumerable-1.html">CsvEnumerable&lt;T&gt;</a></dt>
+      <dd><p>Lazily projects CSV rows into <code class="typeparamref">T</code> instances by binding each property to a fixed field index, for both synchronous and asynchronous enumeration.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelCellReaders.html">ExcelCellReaders</a></dt>
+      <dd><p>The built-in cell readers <code>ExcelParser&lt;T&gt;</code>'s reflection path already uses, exposed as
+<a class="xref" href="ExcelReader.Core.Parser.ExcelCellReader-1.html">ExcelCellReader&lt;TValue&gt;</a> instances for a source-generated or hand-written
+<a class="xref" href="ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html">ExcelRowMapBuilder&lt;T&gt;</a> map to plug into <a class="xref" href="ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html#ExcelReader_Core_Parser_ExcelRowMapBuilder_1_Property__1_System_String___ExcelReader_Core_Parser_ExcelCellReader___0__ExcelReader_Core_Parser_ExcelPropertySetter__0___0__System_Boolean_System_Boolean_">Property&lt;TValue&gt;(string[], ExcelCellReader&lt;TValue&gt;, ExcelPropertySetter&lt;T, TValue&gt;, bool, bool)</a>
+without duplicating the conversion logic.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelColumnAttribute.html">ExcelColumnAttribute</a></dt>
+      <dd><p>Maps a property to a worksheet column by header name. Apply more than once to accept alternate
+header spellings for the same property.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelConverterAttribute.html">ExcelConverterAttribute</a></dt>
+      <dd><p>Binds a custom <a class="xref" href="ExcelReader.Core.Parser.IExcelCellConverter-1.html">IExcelCellConverter&lt;T&gt;</a> to a property. The converter type must
+implement <a class="xref" href="ExcelReader.Core.Parser.IExcelCellConverter-1.html">IExcelCellConverter&lt;T&gt;</a> for the property's exact type and expose a public
+parameterless constructor.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelEnumerable-1.html">ExcelEnumerable&lt;T&gt;</a></dt>
+      <dd><p>Lazily projects XLSX rows into <code class="typeparamref">T</code> instances, for both synchronous and asynchronous enumeration.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelIgnoreAttribute.html">ExcelIgnoreAttribute</a></dt>
+      <dd><p>Excludes a property from both parsing and record writing: no column is read into it and none is
+written from it. Use for computed or transient properties.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html">ExcelParseException</a></dt>
+      <dd><p>Thrown when a bound column's cell is non-empty but fails to parse into the target property type
+and the parser is configured to throw on parse failures (rather than silently keep the property
+at its default). See <a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_ThrowOnParseFailure">ThrowOnParseFailure</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html">ExcelParser</a></dt>
+      <dd><p>Creates <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser&lt;T&gt;</a> instances.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html">ExcelParserOptions</a></dt>
+      <dd><p>Options controlling how <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser&lt;T&gt;</a> locates the header row, matches header
+text to bound properties, and handles cells that fail to parse.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser&lt;T&gt;</a></dt>
+      <dd><p>Parses rows from an Excel or CSV sheet into instances of <code class="typeparamref">T</code>. Create one with
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html">ExcelParser</a>: <a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_FromAttributes__1_ExcelReader_Core_Parser_ExcelParserOptions_">FromAttributes&lt;T&gt;(ExcelParserOptions?)</a> reflects over
+<code>[ExcelColumn]</code>/<code>[ExcelRequired]</code>/<code>[ExcelConverter]</code> attributes,
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Generated__1_ExcelReader_Core_Parser_ExcelParserOptions_">Generated&lt;T&gt;(ExcelParserOptions?)</a> uses the <code>[ExcelSerializable]</code> source-generated map, and
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Build__1_System_Action_ExcelReader_Core_Parser_ExcelRowMapBuilder___0___ExcelReader_Core_Parser_ExcelParserOptions_">Build&lt;T&gt;(Action&lt;ExcelRowMapBuilder&lt;T&gt;&gt;, ExcelParserOptions?)</a> takes a map configured at runtime.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelRequiredAttribute.html">ExcelRequiredAttribute</a></dt>
+      <dd><p>Marks a property whose column must be present in the header row; parsing throws when the header
+is read if no matching name is found. By default every data row's cell must also be non-empty
+(and must parse successfully — a non-empty but unparsable cell fails the same way as a blank one),
+throwing on the first row that fails either check. Set <a class="xref" href="ExcelReader.Core.Parser.ExcelRequiredAttribute.html#ExcelReader_Core_Parser_ExcelRequiredAttribute_AllowEmpty">AllowEmpty</a> to true to require
+only the column's presence. Contrast with <a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_ThrowOnParseFailure">ThrowOnParseFailure</a>,
+which governs parse-failure behavior only for non-required columns.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html">ExcelRowMapBuilder&lt;T&gt;</a></dt>
+      <dd><p>Accumulates a row-to-property binding for <code class="typeparamref">T</code>, fed either by the source
+generator (feature A) or by a hand-written <a class="xref" href="ExcelReader.Core.Parser.IExcelRowMap-1.html">IExcelRowMap&lt;T&gt;</a> implementation. Mirrors,
+without reflection, exactly what <code>TypeMapper&lt;T&gt;.Build()</code> produces from attributes.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelSerializableAttribute.html">ExcelSerializableAttribute</a></dt>
+      <dd><p>Marks a type for the source generator to produce <a class="xref" href="ExcelReader.Core.Parser.IExcelRowMap-1.html">IExcelRowMap&lt;T&gt;</a> and
+<a class="xref" href="ExcelReader.Core.Writer.IExcelRecordMap-1.html">IExcelRecordMap&lt;T&gt;</a> implementations for, from its
+<code>[ExcelColumn]</code>/<code>[ExcelRequired]</code>/<code>[ExcelIgnore]</code> attributes — the same source
+<code>TypeMapper&lt;T&gt;</code>'s reflection path reads, but resolved at compile time. The marked type
+(and every type it is nested inside, if any) must be declared <code>partial</code>, since the generator
+emits into an additional part of the same declaration.</p>
+</dd>
+    </dl>
+    <h3 id="structs">
+Structs
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelRowContext.html">ExcelRowContext</a></dt>
+      <dd><p>Settings a cell reader, converter or row parser needs to convert a cell, handed to every
+<a class="xref" href="ExcelReader.Core.Parser.ExcelCellReader-1.html">ExcelCellReader&lt;TValue&gt;</a>, <a class="xref" href="ExcelReader.Core.Parser.ExcelRowParser-1.html">ExcelRowParser&lt;TModel&gt;</a> and
+<a class="xref" href="ExcelReader.Core.Parser.IExcelCellConverter-1.html#ExcelReader_Core_Parser_IExcelCellConverter_1_TryConvert_ExcelReader_Core_Reader_Cell__ExcelReader_Core_Parser_ExcelRowContext___0__">TryConvert(in Cell, in ExcelRowContext, out T)</a> call.</p>
+</dd>
+    </dl>
+    <h3 id="interfaces">
+Interfaces
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.IExcelCellConverter-1.html">IExcelCellConverter&lt;T&gt;</a></dt>
+      <dd><p>Converts a matched cell into a property value. Implement this and attach the implementation with
+<code>[ExcelConverter(typeof(MyConverter))]</code> for types the built-in parsers do not handle (money
+strings, custom date formats, domain value objects, ...).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.IExcelRowMap-1.html">IExcelRowMap&lt;T&gt;</a></dt>
+      <dd><p>Implemented by the source generator (feature A) — or by hand, before the generator runs — on the
+row model type itself, which must be <code>partial</code>. The <code>static abstract</code> member
+turns &quot;no map was generated for this model&quot; into a compile error (<code class="typeparamref">T</code> fails
+the <code>where T : IExcelRowMap&lt;T&gt;</code> constraint on <a class="xref" href="ExcelReader.Core.Parser.ExcelParser.html#ExcelReader_Core_Parser_ExcelParser_Generated__1_ExcelReader_Core_Parser_ExcelParserOptions_">Generated&lt;T&gt;(ExcelParserOptions?)</a>)
+instead of a silent runtime fallback to reflection.</p>
+</dd>
+    </dl>
+    <h3 id="enums">
+Enums
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.HeaderNormalization.html">HeaderNormalization</a></dt>
+      <dd><p>Flags controlling how header text is normalized before being matched against
+<a class="xref" href="ExcelReader.Core.Parser.ExcelColumnAttribute.html#ExcelReader_Core_Parser_ExcelColumnAttribute_Name">Name</a> or a property name.</p>
+</dd>
+    </dl>
+    <h3 id="delegates">
+Delegates
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelCellReader-1.html">ExcelCellReader&lt;TValue&gt;</a></dt>
+      <dd><p>Reads a non-empty cell into a value of type <code class="typeparamref">TValue</code>. Every built-in reader
+exposed by <a class="xref" href="ExcelReader.Core.Parser.ExcelCellReaders.html">ExcelCellReaders</a> matches this shape, so a source-generated or
+hand-written <a class="xref" href="ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html">ExcelRowMapBuilder&lt;T&gt;</a> map can plug either a built-in reader or a
+custom one into <a class="xref" href="ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html#ExcelReader_Core_Parser_ExcelRowMapBuilder_1_Property__1_System_String___ExcelReader_Core_Parser_ExcelCellReader___0__ExcelReader_Core_Parser_ExcelPropertySetter__0___0__System_Boolean_System_Boolean_">Property&lt;TValue&gt;(string[], ExcelCellReader&lt;TValue&gt;, ExcelPropertySetter&lt;T, TValue&gt;, bool, bool)</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelPropertySetter-2.html">ExcelPropertySetter&lt;TModel, TValue&gt;</a></dt>
+      <dd><p>Assigns <code class="paramref">value</code> to a property of <code class="paramref">model</code>. The source generator
+emits this as a direct property assignment (e.g. <code>static (ref T m, V v) =&gt; m.Prop = v</code>) —
+no delegate compilation at runtime.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Parser.ExcelRowParser-1.html">ExcelRowParser&lt;TModel&gt;</a></dt>
+      <dd><p>Reads a matched, non-empty cell and assigns the result directly onto <code class="paramref">model</code> in
+one call, instead of going through a separate <a class="xref" href="ExcelReader.Core.Parser.ExcelCellReader-1.html">ExcelCellReader&lt;TValue&gt;</a> +
+<a class="xref" href="ExcelReader.Core.Parser.ExcelPropertySetter-2.html">ExcelPropertySetter&lt;TModel, TValue&gt;</a> pair. Plug this into
+<a class="xref" href="ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html#ExcelReader_Core_Parser_ExcelRowMapBuilder_1_PropertyRaw_System_String___ExcelReader_Core_Parser_ExcelRowParser__0__System_Boolean_System_Boolean_">PropertyRaw(string[], ExcelRowParser&lt;T&gt;, bool, bool)</a> when a single fused delegate (e.g. one emitted by
+the <code>[ExcelSerializable]</code> source generator) should replace what would otherwise be two
+indirect calls per bound cell per row.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

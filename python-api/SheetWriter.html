@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SheetWriter | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SheetWriter | ExcelReader ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/python-api/SheetWriter.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="class-sheetwriter">Class SheetWriter</h1>
+
+<p>A streaming workbook writer. Use as a context manager; closing finalizes the file.</p>
+<p>The required call order is <code>start_sheet</code> -&gt; <code>start_row</code> -&gt; one write per cell -&gt; <code>end_row</code> -&gt;
+<code>end_sheet</code>. Calling out of order raises <code>ExcelReaderError</code>, and the writer stays usable: fix
+the order and continue, or close to discard.</p>
+<pre><code class="lang-python">class SheetWriter
+</code></pre>
+<p>Supports <code>with</code>.</p>
+<h2 id="methods">Methods</h2>
+<h3 id="start_sheet">start_sheet</h3>
+<pre><code class="lang-python">def start_sheet(name: str) -&gt; None
+</code></pre>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>str</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="start_row">start_row</h3>
+<pre><code class="lang-python">def start_row() -&gt; None
+</code></pre>
+<h3 id="end_row">end_row</h3>
+<pre><code class="lang-python">def end_row() -&gt; None
+</code></pre>
+<h3 id="end_sheet">end_sheet</h3>
+<pre><code class="lang-python">def end_sheet() -&gt; None
+</code></pre>
+<h3 id="write_str">write_str</h3>
+<pre><code class="lang-python">def write_str(value: str | None) -&gt; None
+</code></pre>
+<p>Writes the next cell as text, or a blank cell for None.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>str | None</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_i64">write_i64</h3>
+<pre><code class="lang-python">def write_i64(value: int | None) -&gt; None
+</code></pre>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>int | None</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_f64">write_f64</h3>
+<pre><code class="lang-python">def write_f64(value: float | None) -&gt; None
+</code></pre>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>float | None</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_bool">write_bool</h3>
+<pre><code class="lang-python">def write_bool(value: bool | None) -&gt; None
+</code></pre>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>bool | None</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_date">write_date</h3>
+<pre><code class="lang-python">def write_date(value: datetime.date | None) -&gt; None
+</code></pre>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>datetime.date | None</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_time">write_time</h3>
+<pre><code class="lang-python">def write_time(value: datetime.time | None) -&gt; None
+</code></pre>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>datetime.time | None</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_timestamp">write_timestamp</h3>
+<pre><code class="lang-python">def write_timestamp(value: datetime.datetime | None) -&gt; None
+</code></pre>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>value</code></td>
+<td>datetime.datetime | None</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_null">write_null</h3>
+<pre><code class="lang-python">def write_null(column_type: ColumnType) -&gt; None
+</code></pre>
+<p>Writes a blank cell typed as <code>column_type</code>.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>column_type</code></td>
+<td><a href="ColumnType.html">ColumnType</a></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="write_row">write_row</h3>
+<pre><code class="lang-python">def write_row(values: Sequence[Any]) -&gt; None
+</code></pre>
+<p><code>start_row()</code>, one inferred write per value, <code>end_row()</code>.</p>
+<p>The type of each value picks the write method. <code>None</code> becomes a blank <em>string</em> cell — it is
+the one case inference cannot resolve; use <code>write_null(ColumnType.X)</code> for a typed blank.</p>
+<p>Raises <code>TypeError</code>, before writing anything, for a value whose type has no mapping.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>values</code></td>
+<td>Sequence[Any]</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="bytes">bytes</h3>
+<pre><code class="lang-python">def bytes() -&gt; bytes
+</code></pre>
+<p>The workbook written so far, for an in-memory writer.</p>
+<p>Implicitly finishes the workbook's trailing structure, so it is safe whether or not every
+sheet and row was explicitly ended. Unlike <code>close()</code>, it does not release the writer — call
+<code>close()</code> afterward either way. Raises <code>ExcelReaderError</code> for a file-backed writer.</p>
+<p><strong>Returns</strong> bytes</p>
+<h3 id="close">close</h3>
+<pre><code class="lang-python">def close() -&gt; None
+</code></pre>
+<p>Finalizes and releases the writer. Safe to call more than once.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/python-api/SheetWriter.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
