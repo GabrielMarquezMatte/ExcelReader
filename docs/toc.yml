@@ -10,6 +10,8 @@
       href: guide/csv.md
     - name: Encrypted workbooks
       href: guide/encryption.md
+    - name: Errors across languages
+      href: guide/errors.md
     - name: Migrating to v7
       href: guide/migrating-to-v7.md
     - name: Migrating to v6
