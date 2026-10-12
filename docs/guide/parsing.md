@@ -236,6 +236,6 @@ A few differences from a class or struct model:
 
 - **Span fields alias the reader's row buffer** — valid only until the next row. Copy them out (e.g. `Encoding.UTF8.GetString(span)`) if you need to keep the value past the loop body. Under `await foreach`, the same rule means the model can't be held across an `await` in the loop body.
 - **The non-generic `IEnumerator.Current` throws.** `IEnumerable<T>` and `IAsyncEnumerable<T>` both accept a `ref struct` element type on net9.0+, so the sequence flows through them normally; only the legacy non-generic `IEnumerator.Current` cannot, because it would have to box. LINQ over a `ref struct` model is still out, since its operators do not carry the `allows ref struct` anti-constraint.
-- **Not AOT/trim-safe** on this path, since it reflects over `T`'s properties and compiles setters at runtime. For an AOT-clean zero-copy model, mark the `ref partial struct` `[ExcelSerializable]` and read it with `ExcelParser.Generated<T>` — see [Generate the map at compile time](#generate-the-map-at-compile-time-aot-clean).
+- **Not AOT/trim-safe** on this path, since it reflects over `T`'s properties and compiles setters at runtime. For an AOT-clean zero-copy model, mark the `ref partial struct` `[ExcelSerializable]` and read it with `ExcelParser.Generated<T>` — see [Generate typed maps at compile time](#generate-typed-maps-at-compile-time-native-aot--trimming).
 - A regular `struct`/`class` model uses the same entry point — only a genuine `ref struct` model gets the extra zero-copy span-property binding.
 
