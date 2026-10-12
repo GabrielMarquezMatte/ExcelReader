@@ -36,9 +36,4 @@
     <NoWarn>$(NoWarn);RS0016;RS0026;RS0037</NoWarn>
   </PropertyGroup>
 
-  <ItemGroup>
-    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
-    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
-  </ItemGroup>
-
 </Project>
