@@ -9,6 +9,8 @@ using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Reader.Zip;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 using ExcelReader.Tests.Crypto;
 using ExcelReader.Tests.Reader.Tables;
 using ExcelReader.Tests.Reader.Xls;
@@ -389,6 +391,94 @@ namespace ExcelReader.Tests.Reader
             using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(value.Length, e.Current[0].GetString().Length);
+        }
+
+        private const int BudgetRows = 5_000;
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void RereadingASheetStartsAFreshTotalDecompressedBudget(bool xlsb, bool fromStream)
+        {
+            byte[] package = WriteTextRows(xlsb, sharedStrings: false);
+            (long total, long sheet) = EntrySizes(package, xlsb);
+            var options = new ExcelReaderOptions { MaxTotalDecompressedBytes = total + (sheet / 2) };
+
+            using MemoryStream stream = new(package);
+            using IExcelWorkbook workbook = fromStream
+                ? Excel.Open(stream, options: options)
+                : Excel.Open(package, options);
+            for (int pass = 0; pass < 3; pass++)
+            {
+                Assert.Equal(BudgetRows, CountRows(workbook.FirstSheet));
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void OneSheetReadStillCountsTheSharedStringsTowardTheTotalBudget(bool xlsb)
+        {
+            byte[] package = WriteTextRows(xlsb, sharedStrings: true);
+            (long total, long sheet) = EntrySizes(package, xlsb);
+            var options = new ExcelReaderOptions { MaxTotalDecompressedBytes = total - (sheet / 2) };
+
+            using IExcelWorkbook workbook = Excel.Open(package, options);
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => CountRows(workbook.FirstSheet));
+            Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
+        }
+
+        private static byte[] WriteTextRows(bool xlsb, bool sharedStrings)
+        {
+            using MemoryStream ms = new();
+            if (xlsb)
+            {
+                using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(ms, leaveOpen: true, new XlsbWriterOptions { UseSharedStrings = sharedStrings });
+                using (XlsbSheetWriter sheet = workbook.AddSheet("S"))
+                {
+                    for (int i = 0; i < BudgetRows; i++)
+                    {
+                        using XlsbRowWriter row = sheet.StartRow();
+                        row.Write(string.Create(CultureInfo.InvariantCulture, $"value {i:D6} padding padding padding"));
+                    }
+                }
+                workbook.End();
+            }
+            else
+            {
+                using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(ms, leaveOpen: true, new XlsxWriterOptions { UseSharedStrings = sharedStrings });
+                using (XlsxSheetWriter sheet = workbook.AddSheet("S"))
+                {
+                    for (int i = 0; i < BudgetRows; i++)
+                    {
+                        using XlsxRowWriter row = sheet.StartRow();
+                        row.Write(string.Create(CultureInfo.InvariantCulture, $"value {i:D6} padding padding padding"));
+                    }
+                }
+                workbook.End();
+            }
+            return ms.ToArray();
+        }
+
+        private static (long Total, long Sheet) EntrySizes(byte[] package, bool xlsb)
+        {
+            using MemoryStream ms = new(package);
+            using ZipArchive zip = new(ms, ZipArchiveMode.Read);
+            long total = zip.Entries.Sum(entry => entry.Length);
+            long sheet = zip.GetEntry(xlsb ? "xl/worksheets/sheet1.bin" : "xl/worksheets/sheet1.xml")!.Length;
+            return (total, sheet);
+        }
+
+        private static int CountRows(IExcelSheet sheet)
+        {
+            int rows = 0;
+            foreach (Row row in sheet)
+            {
+                rows++;
+            }
+            return rows;
         }
 
         [Fact]

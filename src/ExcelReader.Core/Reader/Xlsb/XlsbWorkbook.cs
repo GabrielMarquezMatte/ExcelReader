@@ -278,7 +278,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             try
             {
                 ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![index].Path);
-                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes, _options), entry.UncompressedSize);
+                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes.ForRead(), _options), entry.UncompressedSize);
             }
             catch
             {
@@ -303,7 +303,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             try
             {
                 ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![index].Path);
-                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes, WithoutPrefetch), entry.UncompressedSize);
+                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes.ForRead(), WithoutPrefetch), entry.UncompressedSize);
             }
             catch
             {
@@ -315,7 +315,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         internal Stream OpenSheetStream(int index)
         {
             ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![index].Path);
-            return _zip!.OpenEntryStream(entry, _decompressedBytes, WithoutPrefetch);
+            return _zip!.OpenEntryStream(entry, _decompressedBytes.ForRead(), WithoutPrefetch);
         }
 
         internal Enumerator OpenSheetAsync(int index, CancellationToken ct)
