@@ -30,10 +30,15 @@ def run_doxygen(output: Path) -> Path:
             "EXTRACT_ALL = YES",
             "EXCLUDE_SYMBOLS = xl::detail*",
             "QUIET = YES",
-            "WARNINGS = NO",
+            "WARN_IF_UNDOCUMENTED = NO",
+            "WARN_IF_DOC_ERROR = YES",
+            "WARN_IF_INCOMPLETE_DOC = YES",
+            "WARN_NO_PARAMDOC = YES",
+            "WARN_AS_ERROR = FAIL_ON_WARNINGS",
         ]
     )
-    subprocess.run(["doxygen", "-"], input=config, text=True, cwd=REPO_ROOT, check=True)
+    if subprocess.run(["doxygen", "-"], input=config, text=True, cwd=REPO_ROOT).returncode != 0:
+        raise SystemExit("Doxygen reported documentation problems in the headers; see its warnings above.")
     return output / "xml"
 
 
