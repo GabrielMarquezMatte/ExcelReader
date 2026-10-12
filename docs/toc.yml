@@ -12,10 +12,8 @@
       href: guide/encryption.md
     - name: Errors across languages
       href: guide/errors.md
-    - name: Migrating to v7
-      href: guide/migrating-to-v7.md
-    - name: Migrating to v6
-      href: guide/migrating-to-v6.md
+    - name: Reading untrusted files
+      href: guide/untrusted-input.md
 - name: API
   href: api/
 - name: Bindings
@@ -40,3 +38,11 @@
       href: performance/reader-performance.md
     - name: Live results
       href: https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/
+- name: Releases
+  items:
+    - name: Release notes
+      href: https://github.com/GabrielMarquezMatte/ExcelReader/releases
+    - name: Migrating to v7
+      href: guide/migrating-to-v7.md
+    - name: Migrating to v6
+      href: guide/migrating-to-v6.md

@@ -34,8 +34,13 @@
       }
     ],
     "resource": [
-      { "files": [ "assets/icon.png", "LICENSE", "src/ExcelReader.Native/include/excelreader.h" ] }
+      { "files": [ "assets/icon.png", "LICENSE", "src/ExcelReader.Native/include/excelreader.h" ] },
+      { "files": [ "404.html" ], "src": "docs" }
     ],
+    "sitemap": {
+      "baseUrl": "https://gabrielmarquezmatte.github.io/ExcelReader/",
+      "changefreq": "weekly"
+    },
     "output": "docs/_site",
     "template": [ "default", "modern", "docs/template" ],
     "globalMetadata": {
