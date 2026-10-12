@@ -28,10 +28,13 @@ namespace xl
 {
 
 
+    /// @brief A failure reported by any entry point.
+    ///
+    /// This header throws nothing: every function that can fail returns `std::expected<T, Error>`.
     struct Error
     {
-        int32_t code;
-        std::string message;
+        int32_t code;        ///< One of the `XL_*` status codes.
+        std::string message; ///< The native library's description of what went wrong.
     };
 
     namespace detail
@@ -71,6 +74,10 @@ namespace xl
     } 
 
 
+    /// @brief ABI revision of the loaded native library.
+    ///
+    /// Every open checks it against the `XL_ABI_VERSION` this header was compiled with and fails on a
+    /// mismatch.
     inline int32_t abi_version() noexcept { return xl_abi_version(); }
 
     namespace detail
@@ -119,42 +126,57 @@ namespace xl
     } 
 
 
+    /// @brief One column guessed by Sheet::infer_schema.
     struct InferredColumn
     {
-        std::optional<std::string> name;
-        int32_t index = 0;
-        int32_t type = XL_T_STRING; 
-        bool nullable = false;
+        std::optional<std::string> name; ///< Header text; empty when the column must be matched by `index`.
+        int32_t index = 0;                ///< 0-based column position.
+        int32_t type = XL_T_STRING;       ///< One of the `XL_T_*` constants.
+        bool nullable = false;            ///< Whether the column may hold empty cells.
     };
 
 
+    /// @brief Reader limits and CSV dialect for the Workbook::open family.
+    ///
+    /// A field left at 0 or `XL_OPT_DEFAULT` keeps the library default; on/off fields take
+    /// `XL_OPT_TRUE` or `XL_OPT_FALSE`. The `max_*` fields bound what a malformed or hostile file can
+    /// make the reader allocate: lower them for untrusted input. An out-of-range value fails the open
+    /// with `XL_INVALID_ARGUMENT`.
     struct OpenOptions
     {
-        int32_t csv_sniff_dialect = XL_OPT_DEFAULT;
-        int32_t csv_delimiter = 0;
-        int32_t csv_quote = 0;
-        int32_t csv_detect_bom = XL_OPT_DEFAULT;
-        int32_t csv_max_cell_bytes = 0;
-        int32_t csv_intern_strings = XL_OPT_DEFAULT;
+        int32_t csv_sniff_dialect = XL_OPT_DEFAULT;      ///< Infer delimiter and quote from the start of a CSV. Off by default.
+        int32_t csv_delimiter = 0;                       ///< CSV field separator byte. Default `,`.
+        int32_t csv_quote = 0;                           ///< CSV quote byte. Default `"`.
+        int32_t csv_detect_bom = XL_OPT_DEFAULT;         ///< Skip a leading UTF-8 byte-order mark. On by default.
+        int32_t csv_max_cell_bytes = 0;                  ///< For CSV, replaces `max_cell_bytes`.
+        int32_t csv_intern_strings = XL_OPT_DEFAULT;     ///< For CSV, replaces `intern_strings`.
 
-        int64_t max_total_decompressed_bytes = 0;
-        int32_t max_cell_bytes = 0;
-        int64_t max_shared_string_bytes = 0;
-        int32_t max_zip_entries = 0;
-        int32_t prefetch_decompression = XL_OPT_DEFAULT;
-        int32_t intern_strings = XL_OPT_DEFAULT;
-        int64_t source_cache_bytes = 0;
-        int64_t max_buffered_bytes = 0;
-        int32_t source_block_size = 0;
+        int64_t max_total_decompressed_bytes = 0;        ///< Bytes an XLSX/XLSB may inflate to, or an XLS workbook stream may declare. Default 512 MiB.
+        int32_t max_cell_bytes = 0;                      ///< Largest cell value or buffered CSV record. Default 32 MiB.
+        int64_t max_shared_string_bytes = 0;             ///< Largest shared-string table. Default 128 MiB.
+        int32_t max_zip_entries = 0;                     ///< Most entries an XLSX/XLSB archive may hold. Default 65,536.
+        int32_t prefetch_decompression = XL_OPT_DEFAULT; ///< Inflate XLSX/XLSB sheet data on a background thread ahead of parsing. Off by default.
+        int32_t intern_strings = XL_OPT_DEFAULT;         ///< Deduplicate repeated text outside the shared-string table. Off by default; pays off only for low-cardinality text.
+        int64_t source_cache_bytes = 0;                  ///< Block cache of Workbook::open_source. Default 64 MiB.
+        int64_t max_buffered_bytes = 0;                  ///< Most bytes Workbook::open_stream reads before an XLSX, XLSB or XLS opens.
+        int32_t source_block_size = 0;                   ///< Block size of Workbook::open_source's cache. Default 4 MiB; negative turns the cache off.
 
-        std::string password_{};
+        std::string password_{}; ///< Set through password().
 
+        /// @brief Sets the password that unlocks an encrypted OOXML workbook (.xlsx/.xlsb/.xlsm).
+        ///
+        /// Open the workbook with `XL_FORMAT_AUTO`: `XL_FORMAT_XLSX` reads the encrypted container as a
+        /// plain ZIP and fails before the password is checked.
+        /// @param value The password, as UTF-8.
+        /// @return `*this`, for chaining.
         OpenOptions &password(std::string_view value)
         {
             password_ = std::string(value);
             return *this;
         }
 
+        /// @brief These options as the C ABI's `xl_open_options`.
+        /// @return A struct pointing into this object, valid while it lives unchanged.
         xl_open_options to_c() const noexcept
         {
             xl_open_options opts{};
@@ -181,16 +203,21 @@ namespace xl
     };
 
 
+    /// @brief Settings for every writer.
+    ///
+    /// A field left at 0 or `XL_OPT_DEFAULT` keeps the library default.
     struct WriteOptions
     {
-        std::string_view sheet_name{}; 
+        std::string_view sheet_name{}; ///< Default `Sheet1`; ignored for CSV. Borrowed: must outlive the write.
 
-        int32_t csv_delimiter = 0;
-        int32_t csv_quote = 0;
+        int32_t csv_delimiter = 0; ///< CSV field separator byte. Default `,`.
+        int32_t csv_quote = 0;     ///< CSV quote byte. Default `"`.
 
-        int32_t date1904 = XL_OPT_DEFAULT;           
-        int32_t use_shared_strings = XL_OPT_DEFAULT; 
+        int32_t date1904 = XL_OPT_DEFAULT;           ///< XLS/XLSB only: use the 1904 date system. Off by default.
+        int32_t use_shared_strings = XL_OPT_DEFAULT; ///< XLSX/XLSB only: store repeated text once in a shared-string table. Off by default.
 
+        /// @brief These options as the C ABI's `xl_write_options`.
+        /// @return A struct pointing into this object, valid while it lives unchanged.
         xl_write_options to_c() const noexcept
         {
             xl_write_options opts{};
@@ -207,15 +234,19 @@ namespace xl
         }
     };
 
+    /// @brief Settings for aggregate_csv_file and aggregate_csv_memory.
+    ///
+    /// A zero field keeps the library default.
     struct CsvParallelOptions
     {
-        int32_t degree_of_parallelism = 0;
-        int32_t header_row = 0;
-        int32_t delimiter = 0;
-        int32_t quote = 0;
-        int32_t detect_bom = XL_OPT_DEFAULT;
-        int32_t max_cell_bytes = 0;
+        int32_t degree_of_parallelism = 0;   ///< Worker threads; 0 uses every processor, 1 runs sequentially.
+        int32_t header_row = 0;              ///< 1-based header row, not aggregated; 0 means none.
+        int32_t delimiter = 0;               ///< Field separator byte. Default `,`.
+        int32_t quote = 0;                   ///< Quote byte. Default `"`.
+        int32_t detect_bom = XL_OPT_DEFAULT; ///< Skip a leading UTF-8 byte-order mark. On by default.
+        int32_t max_cell_bytes = 0;          ///< Largest field or buffered record. Default 32 MiB.
 
+        /// @brief These options as the C ABI's `xl_csv_parallel_options`.
         xl_csv_parallel_options to_c() const noexcept
         {
             xl_csv_parallel_options opts{};
@@ -265,6 +296,10 @@ namespace xl
 
     } 
 
+    /// @brief The format a file name's extension names.
+    /// @param path File name or path. Only its extension is read: .xlsx, .xlsb, .xls or .csv, in any case.
+    /// @return The matching `XL_FORMAT_*` constant, or `XL_FORMAT_AUTO` when none matches, which every
+    /// writer rejects.
     constexpr int32_t format_from_path(std::string_view path) noexcept
     {
         const size_t separator = path.find_last_of("/\\");
@@ -291,6 +326,10 @@ namespace xl
     }
 
 
+    /// @brief One column handed to write_columns.
+    ///
+    /// Its buffers are borrowed, not copied, and must outlive the write. Build it with i64_column,
+    /// string_column and the other column functions rather than by hand.
     struct ColumnRef
     {
         std::string_view name{}; 
@@ -322,42 +361,79 @@ namespace xl
 
     } 
 
+    /// @brief An `XL_T_I64` column.
+    /// @param name Header text. Either every column of a table has one or none does.
+    /// @param values One value per row.
+    /// @param validity Optional LSB-first bitmap, one bit per row, set where the row has a value. Empty
+    /// means every row has one.
+    /// @return A column borrowing `values` and `validity`.
     inline constexpr ColumnRef i64_column(std::string_view name, std::span<const int64_t> values,
                                           std::span<const uint8_t> validity = {}) noexcept
     {
         return detail::scalar_column<XL_T_I64>(name, values, validity);
     }
 
+    /// @brief An `XL_T_F64` column.
+    /// @param name Header text, as for i64_column.
+    /// @param values One value per row.
+    /// @param validity Optional null bitmap, as for i64_column.
+    /// @return A column borrowing `values` and `validity`.
     inline constexpr ColumnRef f64_column(std::string_view name, std::span<const double> values,
                                           std::span<const uint8_t> validity = {}) noexcept
     {
         return detail::scalar_column<XL_T_F64>(name, values, validity);
     }
 
+    /// @brief An `XL_T_BOOL` column.
+    /// @param name Header text, as for i64_column.
+    /// @param values One byte per row, 0 or 1.
+    /// @param validity Optional null bitmap, as for i64_column.
+    /// @return A column borrowing `values` and `validity`.
     inline constexpr ColumnRef bool_column(std::string_view name, std::span<const uint8_t> values,
                                            std::span<const uint8_t> validity = {}) noexcept
     {
         return detail::scalar_column<XL_T_BOOL>(name, values, validity);
     }
 
+    /// @brief An `XL_T_DATE` column.
+    /// @param name Header text, as for i64_column.
+    /// @param days_since_epoch Days since 1970-01-01, one per row.
+    /// @param validity Optional null bitmap, as for i64_column.
+    /// @return A column borrowing `days_since_epoch` and `validity`.
     inline constexpr ColumnRef date_column(std::string_view name, std::span<const int32_t> days_since_epoch,
                                            std::span<const uint8_t> validity = {}) noexcept
     {
         return detail::scalar_column<XL_T_DATE>(name, days_since_epoch, validity);
     }
 
+    /// @brief An `XL_T_TIME` column.
+    /// @param name Header text, as for i64_column.
+    /// @param micros_since_midnight Microseconds since midnight, one per row.
+    /// @param validity Optional null bitmap, as for i64_column.
+    /// @return A column borrowing `micros_since_midnight` and `validity`.
     inline constexpr ColumnRef time_column(std::string_view name, std::span<const int64_t> micros_since_midnight,
                                            std::span<const uint8_t> validity = {}) noexcept
     {
         return detail::scalar_column<XL_T_TIME>(name, micros_since_midnight, validity);
     }
 
+    /// @brief An `XL_T_TIMESTAMP` column.
+    /// @param name Header text, as for i64_column.
+    /// @param micros_since_epoch Microseconds since 1970-01-01T00:00:00Z, one per row.
+    /// @param validity Optional null bitmap, as for i64_column.
+    /// @return A column borrowing `micros_since_epoch` and `validity`.
     inline constexpr ColumnRef timestamp_column(std::string_view name, std::span<const int64_t> micros_since_epoch,
                                                 std::span<const uint8_t> validity = {}) noexcept
     {
         return detail::scalar_column<XL_T_TIMESTAMP>(name, micros_since_epoch, validity);
     }
 
+    /// @brief An `XL_T_STRING` column.
+    /// @param name Header text, as for i64_column.
+    /// @param offsets One entry per row plus one: row `i` is `data[offsets[i], offsets[i + 1])`.
+    /// @param data The UTF-8 text of every row, back to back.
+    /// @param validity Optional null bitmap, as for i64_column.
+    /// @return A column borrowing `offsets`, `data` and `validity`.
     inline constexpr ColumnRef string_column(std::string_view name, std::span<const int32_t> offsets,
                                              std::span<const uint8_t> data,
                                              std::span<const uint8_t> validity = {}) noexcept
@@ -436,24 +512,30 @@ namespace xl
     } 
 
 
+    /// @brief What a cell holds.
     enum class CellType : int32_t
     {
         Empty = XL_CELL_EMPTY,
         String = XL_CELL_STRING,
         Number = XL_CELL_NUMBER,
-        Date = XL_CELL_DATE,
+        Date = XL_CELL_DATE,       ///< A number in a date format; the value is its serial number.
         Bool = XL_CELL_BOOL,
-        Formula = XL_CELL_FORMULA,
-        Error = XL_CELL_ERROR,
+        Formula = XL_CELL_FORMULA, ///< No longer produced: a formula cell reports its cached result's type.
+        Error = XL_CELL_ERROR,     ///< An error value such as `#N/A`.
     };
 
+    /// @brief One cell of a row, borrowing the row's memory.
     struct CellView
     {
-        int32_t column{};
-        CellType type{};
-        std::string_view value{};
+        int32_t column{};         ///< 0-based column.
+        CellType type{};          ///< What the cell holds.
+        std::string_view value{}; ///< The text as stored, so a date is its serial number.
     };
 
+    /// @brief The cells of one row: a range of CellView.
+    ///
+    /// Borrowed from whatever produced it, so it is valid only as long as that RowCursor row,
+    /// DecodedRows or aggregation callback says.
     class RowView
     {
     public:
@@ -466,6 +548,8 @@ namespace xl
         size_t size() const { return count_; }
         bool empty() const { return count_ == 0; }
 
+        /// @brief The `index`-th cell, counting cells rather than columns. Unchecked.
+        /// @param index Position among the row's cells, below size().
         CellView operator[](size_t index) const
         {
             if (cells_ != nullptr)
@@ -560,6 +644,9 @@ namespace xl
         size_t count_{};
     };
 
+    /// @brief Every row of a sheet, or every row a cursor had left, decoded in one native call.
+    ///
+    /// Owns that memory until destruction; the RowView it hands out borrow from it.
     class DecodedRows
     {
     public:
@@ -584,6 +671,8 @@ namespace xl
         size_t size() const { return raw_.row_count > 0 ? static_cast<size_t>(raw_.row_count) : 0; }
         bool empty() const { return size() == 0; }
 
+        /// @brief The row at `index`. Unchecked.
+        /// @param index 0-based row, below size().
         RowView operator[](size_t index) const
         {
             const xl_row &row = raw_.rows[index];
@@ -636,11 +725,15 @@ namespace xl
     };
 
 
-    /// Reads one sheet row by row. Owns a native cursor and closes it on destruction. Use one
-    /// cursor from one thread at a time; any number may be open on one workbook.
+    /// @brief Reads one sheet row by row.
+    ///
+    /// Owns a native cursor and closes it on destruction. Use one cursor from one thread at a time;
+    /// any number may be open on one workbook.
     class RowCursor
     {
     public:
+        /// @brief Takes ownership of a cursor opened through the C ABI.
+        /// @param rows Cursor from `xl_rows_open`, closed by this object.
         explicit RowCursor(xl_rows *rows) noexcept : rows_(rows) {}
 
         RowCursor(const RowCursor &) = delete;
@@ -659,8 +752,9 @@ namespace xl
 
         ~RowCursor() { close(); }
 
-        /// The returned view points into memory the cursor owns and is valid until the next
-        /// next_row() on this cursor or until the cursor is destroyed.
+        /// @brief Reads the next row.
+        /// @return A view into memory the cursor owns, valid until the next next_row() or the cursor's
+        /// destruction. The end of the sheet arrives as an error whose code is `XL_EOF`.
         std::expected<RowView, Error> next_row()
         {
             xl_row row{};
@@ -676,7 +770,7 @@ namespace xl
             return RowView(row.cells, static_cast<size_t>(row.cell_count));
         }
 
-        /// Every row this cursor has not yet returned, decoded in one native call.
+        /// @brief Every row this cursor has not yet returned, decoded in one native call.
         std::expected<DecodedRows, Error> read_all_decoded()
         {
             xl_rows_decoded raw{};
@@ -688,6 +782,8 @@ namespace xl
             return DecodedRows(raw);
         }
 
+        /// @brief The native cursor, for calling the C ABI directly.
+        /// @return The cursor, still owned by this object.
         xl_rows *handle() const noexcept { return rows_; }
 
     private:
@@ -703,29 +799,38 @@ namespace xl
         xl_rows *rows_ = nullptr;
     };
 
+    /// @brief Whether a sheet's tab is shown.
     enum class SheetVisibility : int32_t
     {
         Visible = XL_SHEET_VISIBLE,
-        Hidden = XL_SHEET_HIDDEN,
-        VeryHidden = XL_SHEET_VERY_HIDDEN,
+        Hidden = XL_SHEET_HIDDEN,          ///< Hidden, but listed in Excel's Unhide dialog.
+        VeryHidden = XL_SHEET_VERY_HIDDEN, ///< Hidden and absent from the Unhide dialog; only code can show it.
     };
 
-    /// One sheet of a Workbook: the native workbook handle and an index. Holds no resource of its
-    /// own, so it is cheap to copy and may be handed to another thread; each read opens what it
-    /// needs. After its workbook is destroyed, every read on it returns XL_INVALID_HANDLE.
+    /// @brief One sheet of a Workbook: the native workbook handle and an index.
+    ///
+    /// Holds no resource of its own, so it is cheap to copy and may be handed to another thread; each
+    /// read opens what it needs. After its workbook is destroyed, every read on it returns
+    /// `XL_INVALID_HANDLE`.
     class Sheet
     {
     public:
+        /// @brief A sheet of a workbook opened through the C ABI. Workbook hands these out.
+        /// @param handle Workbook handle, not owned.
+        /// @param index 0-based sheet position.
         Sheet(xl_workbook *handle, int32_t index) noexcept : handle_(handle), index_(index) {}
 
+        /// @brief 0-based position in the workbook.
         int32_t index() const noexcept { return index_; }
 
+        /// @brief The sheet's name.
         std::expected<std::string, Error> name() const
         {
             return detail::fill_string([this](uint8_t *buffer, int32_t capacity, int32_t *out_len)
                                        { return xl_sheet_name_at(handle_, index_, buffer, capacity, out_len); });
         }
 
+        /// @brief Whether the sheet's tab is shown.
         std::expected<SheetVisibility, Error> visibility() const
         {
             int32_t raw = 0;
@@ -737,7 +842,8 @@ namespace xl
             return static_cast<SheetVisibility>(raw);
         }
 
-        /// A cursor over this sheet, from its first row. Each call opens an independent cursor.
+        /// @brief A cursor over this sheet, from its first row.
+        /// @return A new, independent cursor on every call.
         std::expected<RowCursor, Error> rows() const
         {
             xl_rows *rows = nullptr;
@@ -749,7 +855,7 @@ namespace xl
             return RowCursor(rows);
         }
 
-        /// The whole sheet from its first row, decoded in one native call.
+        /// @brief The whole sheet from its first row, decoded in one native call.
         std::expected<DecodedRows, Error> read_all_decoded() const
         {
             auto cursor = rows();
@@ -760,7 +866,12 @@ namespace xl
             return cursor->read_all_decoded();
         }
 
-        /// flags: 0, or XL_INFER_PARSE_TEXT to also type cells that hold text.
+        /// @brief Guesses each column's name and type from a sample of the sheet.
+        /// @param header_row 1-based row holding the headers; 0 when the sheet has none.
+        /// @param sample_size Rows after the header to sample.
+        /// @param flags 0, or `XL_INFER_PARSE_TEXT` to also type cells that hold text, such as every CSV
+        /// field or numbers stored as text.
+        /// @return One InferredColumn per column, in order.
         std::expected<std::vector<InferredColumn>, Error> infer_schema(int32_t header_row = 1,
                                                                        int32_t sample_size = 100,
                                                                        int32_t flags = 0) const
@@ -797,6 +908,8 @@ namespace xl
             return columns;
         }
 
+        /// @brief The native workbook handle.
+        /// @return The handle, not owned: it dies with its Workbook.
         xl_workbook *handle() const noexcept { return handle_; }
 
     private:
@@ -804,20 +917,34 @@ namespace xl
         int32_t index_ = 0;
     };
 
-    /// Random-access bytes for Workbook::open_source. read_at is called from several threads at once.
+    /// @brief Random-access bytes for Workbook::open_source.
+    ///
+    /// `read_at` is called from several threads at once.
     class Source
     {
     public:
         virtual ~Source() = default;
+        /// @brief Total length in bytes.
         virtual std::uint64_t size() const = 0;
+        /// @brief Reads the bytes at an offset.
+        /// @param offset Position of the first byte.
+        /// @param buffer Where to put them.
+        /// @return How many bytes were written, or an error message. An error, or an exception, fails
+        /// the read that needed the bytes.
         virtual std::expected<std::size_t, std::string> read_at(std::uint64_t offset, std::span<std::byte> buffer) const = 0;
     };
 
-    /// Sequential bytes for Workbook::open_stream. read is never called concurrently.
+    /// @brief Sequential bytes for Workbook::open_stream.
+    ///
+    /// `read` is never called concurrently.
     class InputStream
     {
     public:
         virtual ~InputStream() = default;
+        /// @brief Reads the next bytes.
+        /// @param buffer Where to put up to `buffer.size()` bytes.
+        /// @return How many bytes were written, 0 at the end of the stream, or an error message. An error,
+        /// or an exception, fails the open or read that needed the bytes.
         virtual std::expected<std::size_t, std::string> read(std::span<std::byte> buffer) = 0;
     };
 
@@ -873,7 +1000,10 @@ namespace xl
         }
     }
 
-    /// An open workbook. Safe to use from several threads at once: every read goes through a Sheet and opens its own cursor.
+    /// @brief An open workbook, closed on destruction.
+    ///
+    /// Safe to use from several threads at once: every read goes through a Sheet and opens its own
+    /// cursor.
     class Workbook
     {
     public:
@@ -893,6 +1023,12 @@ namespace xl
 
         ~Workbook() { close(); }
 
+        /// @brief Opens the workbook at a path.
+        /// @param path File to open.
+        /// @param format An `XL_FORMAT_*` constant. `XL_FORMAT_AUTO` detects XLSX, XLSB and XLS from the
+        /// file's signature; CSV has none and needs `XL_FORMAT_CSV`.
+        /// @param options Reader limits and CSV dialect, or null for the defaults.
+        /// @return The workbook. Fails if the native library's ABI does not match this header.
         static std::expected<Workbook, Error> open(std::string_view path, int32_t format = XL_FORMAT_AUTO,
                                                    const OpenOptions *options = nullptr)
         {
@@ -913,6 +1049,10 @@ namespace xl
             return Workbook(handle);
         }
 
+        /// @brief Opens a workbook from bytes in memory.
+        /// @param data The file's bytes. The native library copies them, so they need not outlive the call.
+        /// @param format As for Workbook::open.
+        /// @param options As for Workbook::open.
         static std::expected<Workbook, Error> open_memory(std::span<const uint8_t> data, int32_t format = XL_FORMAT_AUTO,
                                                           const OpenOptions *options = nullptr)
         {
@@ -932,7 +1072,12 @@ namespace xl
             return Workbook(handle);
         }
 
-        /// Opens a workbook over a source the library owns from here on; every sheet can be read in parallel.
+        /// @brief Opens a workbook over random-access bytes.
+        /// @param source Owned by the library from here on. Read from several threads, so every sheet can
+        /// still be read in parallel.
+        /// @param format As for Workbook::open.
+        /// @param options As for Workbook::open; `source_block_size` and `source_cache_bytes` tune the
+        /// block cache.
         static std::expected<Workbook, Error> open_source(std::unique_ptr<Source> source, int32_t format = XL_FORMAT_AUTO,
                                                           const OpenOptions *options = nullptr)
         {
@@ -965,8 +1110,14 @@ namespace xl
             return Workbook(handle);
         }
 
-        /// Opens a workbook over a stream that cannot seek: a CSV is read as it arrives, and again from the start
-        /// until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole first.
+        /// @brief Opens a workbook over a stream that cannot seek.
+        ///
+        /// A CSV is read as it arrives, and again from the start until 16 MiB of it were read; an XLSX,
+        /// XLSB or XLS is read whole first.
+        /// @param stream Owned by the library from here on.
+        /// @param format As for Workbook::open.
+        /// @param options As for Workbook::open; `max_buffered_bytes` caps what an XLSX, XLSB or XLS may
+        /// buffer.
         static std::expected<Workbook, Error> open_stream(std::unique_ptr<InputStream> stream, int32_t format = XL_FORMAT_AUTO,
                                                           const OpenOptions *options = nullptr)
         {
@@ -994,6 +1145,7 @@ namespace xl
         }
 
 
+        /// @brief Number of sheets.
         std::expected<int32_t, Error> sheet_count() const
         {
             int32_t count = 0;
@@ -1005,12 +1157,15 @@ namespace xl
             return count;
         }
 
+        /// @brief Name of the sheet at `index`.
+        /// @param index 0-based sheet position.
         std::expected<std::string, Error> sheet_name_at(int32_t index) const
         {
             return detail::fill_string([this, index](uint8_t *buffer, int32_t capacity, int32_t *out_len)
                                        { return xl_sheet_name_at(handle_, index, buffer, capacity, out_len); });
         }
 
+        /// @brief Every sheet's name, in workbook order.
         std::expected<std::vector<std::string>, Error> sheet_names() const
         {
             auto count = sheet_count();
@@ -1032,11 +1187,14 @@ namespace xl
             return names;
         }
 
-        /// The sheet at `index`. Makes no native call: an index outside the workbook is reported
-        /// by the first read on the returned sheet.
+        /// @brief The sheet at `index`.
+        ///
+        /// Makes no native call: an index outside the workbook is reported by the first read on the
+        /// returned sheet.
+        /// @param index 0-based sheet position.
         Sheet sheet(int32_t index) const noexcept { return Sheet(handle_, index); }
 
-        /// Every sheet, in workbook order. Opens nothing.
+        /// @brief Every sheet, in workbook order. Opens nothing.
         std::expected<std::vector<Sheet>, Error> sheets() const
         {
             auto count = sheet_count();
@@ -1053,7 +1211,9 @@ namespace xl
             return result;
         }
 
-        /// The sheet called `name`, compared without regard to case; empty when no sheet matches.
+        /// @brief The sheet called `name`, compared without regard to case.
+        /// @param name Sheet name.
+        /// @return The sheet, or empty when no sheet matches.
         std::expected<std::optional<Sheet>, Error> sheet_by_name(std::string_view name) const
         {
             int32_t index = -1;
@@ -1070,6 +1230,9 @@ namespace xl
             return std::optional<Sheet>{Sheet(handle_, index)};
         }
 
+        /// @brief Whether dates count from 1904 instead of 1900.
+        ///
+        /// A date cell's serial number depends on it.
         std::expected<bool, Error> is_date1904() const
         {
             int32_t flag = 0;
@@ -1081,6 +1244,8 @@ namespace xl
             return flag != 0;
         }
 
+        /// @brief The native handle, for calling the C ABI directly.
+        /// @return The handle, still owned by this object.
         xl_workbook *handle() const noexcept { return handle_; }
 
     private:
@@ -1099,6 +1264,11 @@ namespace xl
     };
 
 
+    /// @brief The `XL_T_*` column type `T` reads and writes as, in `value`.
+    ///
+    /// Defined for std::string and std::string_view, integers, floating point, bool, the std::chrono
+    /// date and time types, and std::optional of any of them.
+    /// @tparam T A field type.
     template <typename T>
     struct XlType; 
 
@@ -1194,6 +1364,10 @@ namespace xl
     } 
 
 
+    /// @brief A member bound to a column by header name. Built by make_field.
+    /// @tparam Class The row type.
+    /// @tparam T The member's type.
+    /// @tparam N How many header names the binding accepts.
     template <typename Class, typename T, std::size_t N = 1>
     struct FieldBinding
     {
@@ -1202,12 +1376,20 @@ namespace xl
         using FieldType = T;
     };
 
+    /// @brief Binds a member to the column with one header.
+    /// @param name Header text.
+    /// @param member The member to fill or write.
+    /// @return The binding, for ExcelMapper::get_bindings.
     template <typename Class, typename T>
     constexpr FieldBinding<Class, T> make_field(const char *name, T Class::*member)
     {
         return {{name}, member};
     }
 
+    /// @brief Binds a member to the column headed by any of several names.
+    /// @param names Accepted header texts.
+    /// @param member The member to fill or write.
+    /// @return The binding, for ExcelMapper::get_bindings.
     template <typename Class, typename T, std::size_t N>
     constexpr FieldBinding<Class, T, N> make_field(const char *(&&names)[N], T Class::*member)
     {
@@ -1220,6 +1402,12 @@ namespace xl
         return result;
     }
 
+    /// @brief Maps a row type to columns.
+    ///
+    /// Specialize it with a `static constexpr auto get_bindings()` that returns a std::tuple of
+    /// make_field results; parse_sheet, typed_reader, parse_arrow and write_sheet all read the same
+    /// mapping.
+    /// @tparam T The row type.
     template <typename T>
     struct ExcelMapper;
 
@@ -1348,6 +1536,10 @@ namespace xl
     } 
 
 
+    /// @brief The rows of a typed parse, held in native columnar memory.
+    ///
+    /// Each row converts to `T` on access. Owns that memory; a random-access range of `T`.
+    /// @tparam T Row type, mapped by `ExcelMapper<T>`.
     template <typename T>
     class TableView
     {
@@ -1461,8 +1653,13 @@ namespace xl
         int64_t size() const noexcept { return table_.row_count; }
         bool empty() const noexcept { return table_.row_count == 0; }
 
+        /// @brief Row `row` as `T`. Unchecked; at() is the checked read.
+        /// @param row 0-based row, below size().
         T operator[](int64_t row) const { return detail::row_at<T>(table_, row); }
 
+        /// @brief Row `row` as `T`, bounds-checked.
+        /// @param row 0-based row.
+        /// @return The row, or empty outside `[0, size())`.
         std::optional<T> at(int64_t row) const
         {
             if (row < 0 || row >= table_.row_count)
@@ -1472,6 +1669,7 @@ namespace xl
             return (*this)[row];
         }
 
+        /// @brief Every row converted to `T`.
         std::vector<T> to_vector() const
         {
             std::vector<T> result;
@@ -1483,6 +1681,8 @@ namespace xl
             return result;
         }
 
+        /// @brief Takes ownership of a table produced by the C ABI.
+        /// @param table Table from `xl_parse_typed` or `xl_typed_reader_next`, freed by this object.
         static TableView from_raw(xl_table table) { return TableView(table); }
 
     private:
@@ -1492,6 +1692,13 @@ namespace xl
     };
 
 
+    /// @brief Reads a whole sheet as `T`.
+    /// @tparam T Row type, mapped by `ExcelMapper<T>`.
+    /// @param sheet The sheet to read.
+    /// @param header_row 1-based row holding the headers; 0 when the sheet has none.
+    /// @param degree_of_parallelism Threads to split an XLSX, XLSB or CSV across: 0 uses every
+    /// processor, 1 runs sequentially. The result is the same either way.
+    /// @return Every row after the header.
     template <typename T>
     std::expected<TableView<T>, Error> parse_sheet(Sheet sheet, int32_t header_row = 1,
                                                    int32_t degree_of_parallelism = 1)
@@ -1515,6 +1722,11 @@ namespace xl
     }
 
 
+    /// @brief parse_sheet delivered a batch at a time.
+    ///
+    /// An input range of `std::expected<TableView<T>, Error>` that stops after the first error. Each
+    /// batch owns its memory and outlives the reader. Use from one thread at a time.
+    /// @tparam T Row type, mapped by `ExcelMapper<T>`.
     template <typename T>
     class TypedReader
     {
@@ -1536,6 +1748,8 @@ namespace xl
 
         ~TypedReader() { xl_typed_reader_close(reader_); } 
 
+        /// @brief Reads the next batch.
+        /// @return The batch, or empty at the end of the sheet.
         std::expected<std::optional<TableView<T>>, Error> next()
         {
             xl_table table{};
@@ -1612,6 +1826,8 @@ namespace xl
         iterator begin() { return iterator(this); }
         std::default_sentinel_t end() const noexcept { return {}; }
 
+        /// @brief Takes ownership of a reader opened through the C ABI.
+        /// @param reader Reader from `xl_typed_reader_open`, closed by this object.
         static TypedReader from_raw(xl_typed_reader *reader) { return TypedReader(reader); }
 
     private:
@@ -1620,6 +1836,11 @@ namespace xl
         xl_typed_reader *reader_ = nullptr;
     };
 
+    /// @brief Opens a TypedReader over a sheet.
+    /// @tparam T Row type, mapped by `ExcelMapper<T>`.
+    /// @param sheet The sheet to read.
+    /// @param header_row As for parse_sheet.
+    /// @param batch_size Rows per batch: 0 makes one batch of the whole sheet; negative is an error.
     template <typename T>
     std::expected<TypedReader<T>, Error> typed_reader(Sheet sheet, int32_t header_row = 1,
                                                       int64_t batch_size = 10000)
@@ -1641,6 +1862,13 @@ namespace xl
         return TypedReader<T>::from_raw(reader);
     }
 
+    /// @brief Writes columns as one sheet, copying nothing.
+    /// @param path File to create.
+    /// @param format An `XL_FORMAT_*` constant. `XL_FORMAT_AUTO` is rejected: a file being created has
+    /// no signature to detect.
+    /// @param columns Columns of equal length, borrowed for the call. Either every column has a name,
+    /// written as a header row, or none does.
+    /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
     inline std::expected<void, Error> write_columns(std::string_view path, int32_t format,
                                                     std::span<const ColumnRef> columns,
                                                     const WriteOptions *options = nullptr)
@@ -1680,12 +1908,21 @@ namespace xl
         return {};
     }
 
+    /// @brief write_columns with the format taken from the file's extension.
+    /// @param path File to create; its extension picks the format.
+    /// @param columns As for the overload that takes a format.
+    /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
     inline std::expected<void, Error> write_columns(std::string_view path, std::span<const ColumnRef> columns,
                                                     const WriteOptions *options = nullptr)
     {
         return write_columns(path, format_from_path(path), columns, options);
     }
 
+    /// @brief write_columns into memory.
+    /// @param format As for write_columns. There is no default: no file name to infer it from.
+    /// @param columns As for write_columns.
+    /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
+    /// @return The file's bytes.
     inline std::expected<std::vector<uint8_t>, Error> write_columns_to_memory(int32_t format,
                                                                               std::span<const ColumnRef> columns,
                                                                               const WriteOptions *options = nullptr)
@@ -1730,6 +1967,13 @@ namespace xl
     }
 
 
+    /// @brief Encrypts a finished XLSX or XLSB.
+    ///
+    /// The encryption parameters are fixed at Excel's own defaults; the result opens in Excel, and in
+    /// Workbook::open given the same password.
+    /// @param package_path The plaintext package. Read twice, so it must already be a finished file.
+    /// @param destination_path Where to write the encrypted file.
+    /// @param password The password, as UTF-8.
     inline std::expected<void, Error> encrypt_package(std::string_view package_path,
                                                        std::string_view destination_path,
                                                        std::string_view password)
@@ -1997,7 +2241,12 @@ namespace xl
 
     } 
 
-    // NOTE for write_sheet_to_memory below: this body is intentionally NOT factored into a shared
+    /// @brief Writes rows as one sheet.
+    /// @param path File to create.
+    /// @param format As for write_columns.
+    /// @param rows Input range of a row type with an ExcelMapper, the mapping parse_sheet reads with.
+    /// An empty std::optional field writes a blank cell.
+    /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
     template <std::ranges::input_range R>
     std::expected<void, Error> write_sheet(std::string_view path, int32_t format, R &&rows,
                                            const WriteOptions *options = nullptr)
@@ -2022,10 +2271,15 @@ namespace xl
                                          "a string column exceeds 2 GiB, which int32 offsets cannot address."});
         }
 
+        // refs borrows pointers into builders, so both must stay in the scope of the write call.
         const std::array<ColumnRef, field_count> refs = detail::to_refs(builders, bindings, indices);
         return write_columns(path, format, refs, options);
     }
 
+    /// @brief write_sheet with the format taken from the file's extension.
+    /// @param path File to create; its extension picks the format.
+    /// @param rows As for the overload that takes a format.
+    /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
     template <std::ranges::input_range R>
     std::expected<void, Error> write_sheet(std::string_view path, R &&rows,
                                            const WriteOptions *options = nullptr)
@@ -2033,7 +2287,11 @@ namespace xl
         return write_sheet(path, format_from_path(path), std::forward<R>(rows), options);
     }
 
-    // In-memory equivalent of write_sheet: same transpose (see the NOTE on write_sheet above for why
+    /// @brief write_sheet into memory.
+    /// @param format As for write_columns. There is no default: no file name to infer it from.
+    /// @param rows As for write_sheet.
+    /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
+    /// @return The file's bytes.
     template <std::ranges::input_range R>
     std::expected<std::vector<uint8_t>, Error> write_sheet_to_memory(int32_t format, R &&rows,
                                                                      const WriteOptions *options = nullptr)
@@ -2058,11 +2316,17 @@ namespace xl
                                          "a string column exceeds 2 GiB, which int32 offsets cannot address."});
         }
 
+        // refs borrows pointers into builders, so both must stay in the scope of the write call.
         const std::array<ColumnRef, field_count> refs = detail::to_refs(builders, bindings, indices);
         return write_columns_to_memory(format, refs, options);
     }
 
 
+    /// @brief Writes a workbook as calls arrive instead of building it in memory first.
+    ///
+    /// Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and
+    /// end_row; then end_sheet. A call out of order returns an error rather than corrupting the
+    /// output. Closed on destruction.
     class WriterHandle
     {
     public:
@@ -2082,6 +2346,10 @@ namespace xl
 
         ~WriterHandle() { close(); }
 
+        /// @brief Creates a file to write into.
+        /// @param path File to create.
+        /// @param format An `XL_FORMAT_*` constant other than `XL_FORMAT_AUTO`.
+        /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
         static std::expected<WriterHandle, Error> open(std::string_view path, int32_t format,
                                                        const WriteOptions *options = nullptr)
         {
@@ -2102,6 +2370,9 @@ namespace xl
             return WriterHandle(handle);
         }
 
+        /// @brief Writes into memory instead of a file; read the result with bytes().
+        /// @param format An `XL_FORMAT_*` constant other than `XL_FORMAT_AUTO`.
+        /// @param options Sheet name, CSV dialect and format toggles, or null for the defaults.
         static std::expected<WriterHandle, Error> open_memory(int32_t format,
                                                               const WriteOptions *options = nullptr)
         {
@@ -2120,18 +2391,25 @@ namespace xl
             return WriterHandle(handle);
         }
 
+        /// @brief Starts a sheet.
+        /// @param name The sheet's name.
         std::expected<void, Error> start_sheet(std::string_view name)
         {
             return status_result(xl_start_sheet(handle_, reinterpret_cast<const uint8_t *>(name.data()),
                                                 static_cast<int32_t>(name.size())));
         }
 
+        /// @brief Starts a row.
         std::expected<void, Error> start_row() { return status_result(xl_start_row(handle_)); }
 
+        /// @brief Ends the current row.
         std::expected<void, Error> end_row() { return status_result(xl_end_row(handle_)); }
 
+        /// @brief Ends the current sheet.
         std::expected<void, Error> end_sheet() { return status_result(xl_end_sheet(handle_)); }
 
+        /// @brief Writes the next cell.
+        /// @param value Any type XlType covers; an empty std::optional writes a blank cell.
         template <typename T>
         std::expected<void, Error> write(const T &value)
         {
@@ -2192,8 +2470,14 @@ namespace xl
             }
         }
 
+        /// @brief Writes a blank cell.
+        /// @param type The column's `XL_T_*` constant.
         std::expected<void, Error> write_null(int32_t type) { return status_result(xl_write_null(handle_, type)); }
 
+        /// @brief Everything written so far, for a handle from open_memory.
+        ///
+        /// Finishes the workbook's trailing structure but leaves the handle open.
+        /// @return The file's bytes.
         std::expected<std::vector<uint8_t>, Error> bytes()
         {
             xl_buffer buffer{};
@@ -2210,6 +2494,8 @@ namespace xl
             return std::vector<uint8_t>(buffer.data, buffer.data + buffer.len);
         }
 
+        /// @brief The native handle, for calling the C ABI directly.
+        /// @return The handle, still owned by this object.
         xl_writer_handle *handle() const noexcept { return handle_; }
 
     private:
@@ -2237,7 +2523,9 @@ namespace xl
     };
 
 
-    /// A fold over CSV records. `Acc` must be move-constructible; the wrapper returns the surviving
+    /// @brief A fold over CSV records.
+    ///
+    /// `Acc` must be move-constructible; the wrapper returns the surviving
     /// accumulator by moving out of it. `combine` must fold `next` into `*this` without destroying
     /// it - the library owns `next`'s lifetime and frees it afterwards.
     ///
@@ -2254,6 +2542,7 @@ namespace xl
     /// All callbacks must be noexcept in effect: an exception escaping into the library is undefined
     /// behavior, so this wrapper catches everything and reports it as an error. See
     /// `excelreader.h`'s `xl_csv_aggregate_file` contract.
+    /// @tparam Acc The accumulator type.
     template <typename Acc>
     concept CsvAccumulator =
         std::move_constructible<Acc> && requires(Acc acc, Acc &next, RowView row) {
@@ -2391,7 +2680,7 @@ namespace xl
         }
     }
 
-    /// Folds the CSV file at `path` into one `Acc` across several threads.
+    /// @brief Folds the CSV file at `path` into one `Acc` across several threads.
     ///
     /// `seed` is called at least once per partition, on worker threads, and may be called again for
     /// a partition that has to be re-read - a seeded accumulator can therefore be destroyed without
@@ -2402,6 +2691,11 @@ namespace xl
     /// instead of hard-erroring inside a shim. The `remove_cvref_t` is load-bearing - `Seed` deduces
     /// to an lvalue reference for a named callable, and `const Seed &` would collapse the `const`
     /// away.
+    /// @tparam Acc The accumulator; see CsvAccumulator.
+    /// @param path CSV file to read.
+    /// @param seed Makes a fresh `Acc` for a partition.
+    /// @param options Threads, header row and CSV dialect, or null for the defaults.
+    /// @return The combined accumulator.
     template <CsvAccumulator Acc, typename Seed>
         requires std::invocable<const std::remove_cvref_t<Seed> &>
     std::expected<Acc, Error> aggregate_csv_file(std::string_view path, Seed &&seed,
@@ -2424,7 +2718,11 @@ namespace xl
         return detail::csv_finish<Acc, SeedType>(context, status, state);
     }
 
-    /// Folds the CSV file at `path` into one `Acc`, seeding each partition with `Acc()`.
+    /// @brief Folds the CSV file at `path` into one `Acc`, seeding each partition with `Acc()`.
+    /// @tparam Acc The accumulator; see CsvAccumulator.
+    /// @param path CSV file to read.
+    /// @param options Threads, header row and CSV dialect, or null for the defaults.
+    /// @return The combined accumulator.
     template <CsvAccumulator Acc>
         requires std::default_initializable<Acc>
     std::expected<Acc, Error> aggregate_csv_file(std::string_view path,
@@ -2434,8 +2732,14 @@ namespace xl
         return aggregate_csv_file<Acc>(path, seed, options);
     }
 
-    /// Folds an in-memory CSV buffer into one `Acc`. The buffer is not copied and must stay valid
-    /// for the duration of the call. Otherwise identical to `aggregate_csv_file`.
+    /// @brief Folds an in-memory CSV buffer into one `Acc`.
+    ///
+    /// Otherwise identical to aggregate_csv_file.
+    /// @tparam Acc The accumulator; see CsvAccumulator.
+    /// @param data The CSV bytes. Not copied, so they must stay valid for the call.
+    /// @param seed As for aggregate_csv_file.
+    /// @param options Threads, header row and CSV dialect, or null for the defaults.
+    /// @return The combined accumulator.
     template <CsvAccumulator Acc, typename Seed>
         requires std::invocable<const std::remove_cvref_t<Seed> &>
     std::expected<Acc, Error> aggregate_csv_memory(std::span<const uint8_t> data, Seed &&seed,
@@ -2457,7 +2761,11 @@ namespace xl
         return detail::csv_finish<Acc, SeedType>(context, status, state);
     }
 
-    /// Folds an in-memory CSV buffer into one `Acc`, seeding each partition with `Acc()`.
+    /// @brief Folds an in-memory CSV buffer into one `Acc`, seeding each partition with `Acc()`.
+    /// @tparam Acc The accumulator; see CsvAccumulator.
+    /// @param data The CSV bytes. Not copied, so they must stay valid for the call.
+    /// @param options Threads, header row and CSV dialect, or null for the defaults.
+    /// @return The combined accumulator.
     template <CsvAccumulator Acc>
         requires std::default_initializable<Acc>
     std::expected<Acc, Error> aggregate_csv_memory(std::span<const uint8_t> data,
