@@ -507,6 +507,9 @@ namespace ExcelReader.Core.Reader.Xls
             internal const int Blank = 0x0201;
             internal const int MulBlank = 0x00BE;
             internal const int StringRec = 0x0207;
+            internal const int ShrFmla = 0x04BC;
+            internal const int Array = 0x0221;
+            internal const int Table = 0x0236;
         }
     }
 }

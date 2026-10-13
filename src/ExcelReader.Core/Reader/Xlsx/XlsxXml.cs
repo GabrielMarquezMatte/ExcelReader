@@ -8,6 +8,8 @@ namespace ExcelReader.Core.Reader.Xlsx
 {
     internal static class XlsxXml
     {
+        private static readonly SearchValues<byte> MarkupOrEscape = SearchValues.Create("<&_\r"u8);
+
         internal static int ParseIntOr(ReadOnlySpan<byte> source, int fallback)
         {
             return Utf8Parser.TryParse(source, out int value, out _) ? value : fallback;
@@ -77,7 +79,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             int w = 0;
             while (!src.IsEmpty)
             {
-                int special = src.IndexOfAny((byte)'&', (byte)'<');
+                int special = src.IndexOfAny((byte)'&', (byte)'<', (byte)'\r');
                 if (special < 0)
                 {
                     src.CopyTo(dest[w..]);
@@ -86,6 +88,15 @@ namespace ExcelReader.Core.Reader.Xlsx
                 src[..special].CopyTo(dest[w..]);
                 w += special;
                 src = src[special..];
+
+                // XML end-of-line handling: a literal CR LF pair, or a CR alone, reads as one LF. A carriage
+                // return meant as data arrives as &#13; or _x000D_, which this does not touch.
+                if (src[0] == (byte)'\r')
+                {
+                    dest[w++] = (byte)'\n';
+                    src = src[(src.Length > 1 && src[1] == (byte)'\n' ? 2 : 1)..];
+                    continue;
+                }
 
                 if (src[0] == (byte)'<')
                 {
@@ -167,17 +178,19 @@ namespace ExcelReader.Core.Reader.Xlsx
             return raw.Length;
         }
 
-        // Finds the first '<' or '&'. Only text with a '_' ahead of it can hold an _xHHHH_ escape, so the
-        // usual underscore-free text costs one scan instead of a second pass for "_x".
+        // Finds the first '<', '&' or carriage return. Only text with a '_' ahead of it can hold an _xHHHH_
+        // escape, so the usual underscore-free text costs one scan instead of a second pass for "_x".
+        // A carriage return stops the scan because text holding one needs Decode's end-of-line handling;
+        // callers that expect a closing tag at the returned index then fall back to it.
         internal static int IndexOfMarkup(ReadOnlySpan<byte> text, out bool mayEscape)
         {
-            int i = text.IndexOfAny((byte)'<', (byte)'&', (byte)'_');
+            int i = text.IndexOfAny(MarkupOrEscape);
             mayEscape = i >= 0 && text[i] == (byte)'_';
             if (!mayEscape)
             {
                 return i;
             }
-            int rest = text[i..].IndexOfAny((byte)'<', (byte)'&');
+            int rest = text[i..].IndexOfAny((byte)'<', (byte)'&', (byte)'\r');
             return rest < 0 ? -1 : i + rest;
         }
 

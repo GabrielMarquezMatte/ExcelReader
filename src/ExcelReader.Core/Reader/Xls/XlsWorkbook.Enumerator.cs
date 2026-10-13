@@ -294,6 +294,12 @@ namespace ExcelReader.Core.Reader.Xls
                             _acc.AddError(col, style, result[2]);
                             break;
                         case 0:
+                            // The first cell of a shared or array formula, or of a data table, has that
+                            // definition's record between its FORMULA and its STRING.
+                            if (_cursor.PeekId() is Rec.ShrFmla or Rec.Array or Rec.Table)
+                            {
+                                _cursor.TryReadRecord(out _, out _);
+                            }
                             if (_cursor.PeekId() == Rec.StringRec && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> str) && str.Length >= 3)
                             {
                                 int start = _acc.ValueLength;
