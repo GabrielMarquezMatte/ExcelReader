@@ -252,8 +252,13 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         private ValueTask AbandonZipAsync()
         {
-            AbandonZip();
-            return ValueTask.CompletedTask;
+            _faulted = true;
+            if (_zipClosed)
+            {
+                return ValueTask.CompletedTask;
+            }
+            _zipClosed = true;
+            return _zip.AbandonAsync();
         }
 
         private void ReleaseStream()

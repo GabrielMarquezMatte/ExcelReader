@@ -379,12 +379,96 @@ namespace ExcelReader.Tests.Writer.Zip
             Assert.Equal(0, output.Written.Length);
         }
 
+        [Fact]
+        public async Task AbandonAsyncWritesTheDirectoryOverAnOutputThatRejectsSyncWrites()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var output = new AsyncOnlyStream();
+            var zip = new ZipPackageWriter(output);
+            await CompleteEntryAsync(zip, "done.xml", Done, ct);
+            Stream entry = zip.OpenEntry("open.xml", CompressionLevel.NoCompression);
+            await entry.WriteAsync(Done, ct);
+
+            await zip.AbandonAsync();
+
+            byte[] package = output.ToArray();
+            Assert.Equal(1, EndRecordCount(package));
+            AssertEntries(package, ("done.xml", Done));
+            Assert.Throws<ObjectDisposedException>(() => entry.Write(new byte[1]));
+            Assert.Throws<ObjectDisposedException>(() => zip.OpenEntry("next.xml", CompressionLevel.Fastest));
+        }
+
+        [Fact]
+        public async Task AbandonAsyncIsIdempotentAndBlocksALaterAbandon()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var output = new MemoryStream();
+            var zip = new ZipPackageWriter(output);
+            await CompleteEntryAsync(zip, "done.xml", Done, ct);
+
+            await zip.AbandonAsync();
+            long length = output.Length;
+            await zip.AbandonAsync();
+            zip.Abandon();
+
+            Assert.Equal(length, output.Length);
+            Assert.Equal(1, EndRecordCount(output.ToArray()));
+        }
+
+        [Fact]
+        public async Task AbandonAsyncOnAnOutputThatAlwaysFailsDoesNotThrow()
+        {
+            var output = new FailingWriteStream(limit: 0);
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
+            await Assert.ThrowsAsync<IOException>(async () => await entry.WriteAsync(new byte[64 * 1024], TestContext.Current.CancellationToken));
+            await zip.AbandonAsync();
+            await zip.AbandonAsync();
+            Assert.Equal(0, output.Written.Length);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task AbandonSeeksBackToTheEndAfterAFailedHeaderPatch(bool useAsync)
+        {
+            var output = new FailOnBackwardWriteStream();
+            var zip = new ZipPackageWriter(output);
+            CompleteEntry(zip, "done.xml", Done);
+            Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
+            entry.Write(new byte[70_000]);
+            output.Armed = true;
+            Assert.Throws<IOException>(entry.Dispose);
+
+            if (useAsync)
+            {
+                await zip.AbandonAsync();
+            }
+            else
+            {
+                zip.Abandon();
+            }
+
+            byte[] package = output.ToArray();
+            Assert.Equal(1, EndRecordCount(package));
+            AssertEntries(package, ("done.xml", Done));
+        }
+
         private static readonly byte[] Done = "<done>content</done>"u8.ToArray();
 
         private static void CompleteEntry(ZipPackageWriter zip, string name, byte[] content)
         {
             using Stream entry = zip.OpenEntry(name, CompressionLevel.NoCompression);
             entry.Write(content);
+        }
+
+        private static async Task CompleteEntryAsync(ZipPackageWriter zip, string name, byte[] content, CancellationToken ct)
+        {
+            Stream entry = zip.OpenEntry(name, CompressionLevel.NoCompression);
+            await using (entry.ConfigureAwait(false))
+            {
+                await entry.WriteAsync(content, ct);
+            }
         }
 
         private static long AssertFailedArchiveRejectsEverything(ZipPackageWriter zip, Stream entry, MemoryStream written)
@@ -426,6 +510,66 @@ namespace ExcelReader.Tests.Writer.Zip
                 data.CopyTo(copy);
                 Assert.True(copy.ToArray().AsSpan().SequenceEqual(expected[i].Content));
                 Assert.Equal(Crc32Tests.BitwiseCrc(expected[i].Content), archive.Entries[i].Crc32);
+            }
+        }
+
+        private sealed class AsyncOnlyStream : MemoryStream
+        {
+            private bool _inAsync;
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                RejectSync();
+                base.Write(buffer, offset, count);
+            }
+
+            public override void Write(ReadOnlySpan<byte> buffer)
+            {
+                RejectSync();
+                base.Write(buffer);
+            }
+
+            public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                _inAsync = true;
+                try
+                {
+                    Write(buffer.Span);
+                }
+                finally
+                {
+                    _inAsync = false;
+                }
+                await Task.Yield();
+            }
+
+            private void RejectSync()
+            {
+                if (!_inAsync)
+                {
+                    throw new NotSupportedException("sync write");
+                }
+            }
+        }
+
+        private sealed class FailOnBackwardWriteStream : MemoryStream
+        {
+            internal bool Armed { get; set; }
+
+            public override void Write(ReadOnlySpan<byte> buffer)
+            {
+                if (Armed && Position < Length)
+                {
+                    Armed = false;
+                    throw new IOException("patch failed");
+                }
+                base.Write(buffer);
+            }
+
+            public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                Write(buffer.Span);
+                return ValueTask.CompletedTask;
             }
         }
 
