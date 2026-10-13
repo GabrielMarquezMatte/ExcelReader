@@ -101,6 +101,8 @@ namespace ExcelReader.Core.Writer.Zip
                 Bits = _bits | ((final ? 3UL : 2UL) << _bitCount),
                 Count = _bitCount + 3,
             };
+            // Up to 31 pending bits plus the 3 header bits can exceed 32; flush so a 31-bit symbol still fits.
+            FlushWord(destination, ref state);
             int next = EncodeMatches(blockEnd, destination, ref state);
             EncodeLiterals(next, blockEnd, destination, ref state);
             state.Count += 7;
