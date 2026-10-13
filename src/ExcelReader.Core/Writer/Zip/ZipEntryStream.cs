@@ -126,10 +126,19 @@ namespace ExcelReader.Core.Writer.Zip
 
         public override void Write(ReadOnlySpan<byte> buffer)
         {
-            Accept(buffer);
-            if (_pending.Length >= FlushThreshold)
+            ObjectDisposedException.ThrowIf(_closed, this);
+            try
             {
-                FlushPending();
+                Accept(buffer);
+                if (_pending.Length >= FlushThreshold)
+                {
+                    FlushPending();
+                }
+            }
+            catch
+            {
+                Fail();
+                throw;
             }
         }
 
@@ -140,10 +149,19 @@ namespace ExcelReader.Core.Writer.Zip
 
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            Accept(buffer.Span);
-            if (_pending.Length >= FlushThreshold)
+            ObjectDisposedException.ThrowIf(_closed, this);
+            try
             {
-                await FlushPendingAsync(cancellationToken).ConfigureAwait(false);
+                Accept(buffer.Span);
+                if (_pending.Length >= FlushThreshold)
+                {
+                    await FlushPendingAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                Fail();
+                throw;
             }
         }
 
@@ -154,6 +172,14 @@ namespace ExcelReader.Core.Writer.Zip
                 return;
             }
             _closed = true;
+            Release();
+        }
+
+        // A failed write leaves the output position unknown, so the entry and the archive are dead.
+        private void Fail()
+        {
+            _closed = true;
+            _owner.EntryFailed();
             Release();
         }
 
@@ -209,7 +235,6 @@ namespace ExcelReader.Core.Writer.Zip
 
         private void Accept(ReadOnlySpan<byte> buffer)
         {
-            ObjectDisposedException.ThrowIf(_closed, this);
             _crc = Crc32.Append(_crc, buffer);
             _uncompressed += buffer.Length;
             if (_encoder is not null)
