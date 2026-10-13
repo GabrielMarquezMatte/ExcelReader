@@ -467,6 +467,11 @@ namespace ExcelReader.Native.Typed
             {
                 bool ok = ColumnParserFactory.ReadDateTime(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out DateTime value)
                     || ColumnParserFactory.ReadTextDateTime(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out value);
+                // Text with a "Z" or an offset parses to the machine's local time; the wire value is UTC.
+                if (value.Kind == DateTimeKind.Local)
+                {
+                    value = value.ToUniversalTime();
+                }
                 return Append(_longs, ok, (value - DateTime.UnixEpoch).Ticks / 10);
             }
 
