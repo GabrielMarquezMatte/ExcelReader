@@ -91,5 +91,49 @@ namespace ExcelReader.Tests.Writer.Zip
                 }
             }
         }
+
+        [Fact]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "A seeded generator picks reproducible test inputs; nothing here is secret.")]
+        public void CombineMatchesTheCrcOfTheConcatenation()
+        {
+            var random = new Random(11);
+            byte[] buffer = new byte[200_000];
+            random.NextBytes(buffer);
+            for (int trial = 0; trial < 400; trial++)
+            {
+                int total = trial < 40 ? trial : random.Next(40, buffer.Length);
+                int cut = random.Next(0, total + 1);
+                ReadOnlySpan<byte> whole = buffer.AsSpan(0, total);
+                uint first = Crc32.Append(0, whole[..cut]);
+                uint second = Crc32.Append(0, whole[cut..]);
+                uint combined = Crc32.Combine(first, second, total - cut);
+                Assert.True(combined == BitwiseCrc(whole), $"total {total}, cut {cut}: {combined:X8}");
+            }
+        }
+
+        [Fact]
+        public void CombineWithNothingKeepsTheCrc()
+        {
+            Assert.Equal(0x1234_5678u, Crc32.Combine(0x1234_5678, 0, 0));
+            Assert.Equal(0u, Crc32.Combine(0, 0, 0));
+        }
+
+        [Fact]
+        public void CombineChainsOverThreeParts()
+        {
+            byte[] a = "first part "u8.ToArray();
+            byte[] b = "second, longer part of the input "u8.ToArray();
+            byte[] c = "third"u8.ToArray();
+            uint ab = Crc32.Combine(Crc32.Append(0, a), Crc32.Append(0, b), b.Length);
+            uint abc = Crc32.Combine(ab, Crc32.Append(0, c), c.Length);
+            Assert.Equal(BitwiseCrc([.. a, .. b, .. c]), abc);
+        }
+
+        [Fact]
+        public void CombineRejectsANegativeLength()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => Crc32.Combine(1, 2, -1));
+        }
     }
 }

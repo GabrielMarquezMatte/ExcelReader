@@ -21,6 +21,7 @@ namespace ExcelReader.Core.Writer.Zip
         private const uint Polynomial = 0x04C1_1DB7;
 
         private static readonly uint[] Table = BuildTable();
+        private static readonly uint[] SquaredPowersOfX = BuildSquaredPowersOfX();
         private static readonly Vector128<ulong> Fold128By128 = FoldConstants(128);
         private static readonly Vector128<ulong> Fold128By512 = FoldConstants(512);
         private static readonly Vector256<ulong> Fold256By256 = Vector256.Create(FoldConstants(256), FoldConstants(256));
@@ -214,6 +215,61 @@ namespace ExcelReader.Core.Writer.Zip
                     entry = (entry >> 1) ^ (ReflectedPolynomial & (0u - (entry & 1)));
                 }
                 table[index] = entry;
+            }
+            return table;
+        }
+
+        /// <summary>
+        /// The CRC of two byte runs laid end to end, from the CRC of each and the length of the second.
+        /// </summary>
+        internal static uint Combine(uint first, uint second, long secondLength)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(secondLength);
+            return MultiplyModP(PowerOfX(secondLength), first) ^ second;
+        }
+
+        // x^(8 * byteCount) mod P, by square and multiply over the bits of byteCount. Entry k of the table
+        // is x^(2^k); the sequence repeats every 32 entries, and bytes start three squarings in.
+        private static uint PowerOfX(long byteCount)
+        {
+            uint power = 1u << 31;
+            int exponent = 3;
+            while (byteCount != 0)
+            {
+                if ((byteCount & 1) != 0)
+                {
+                    power = MultiplyModP(SquaredPowersOfX[exponent & 31], power);
+                }
+                byteCount >>= 1;
+                exponent++;
+            }
+            return power;
+        }
+
+        // Polynomial product mod P in the reflected domain, where bit 31 is x^0.
+        private static uint MultiplyModP(uint a, uint b)
+        {
+            uint product = 0;
+            for (uint mask = 1u << 31; mask != 0; mask >>= 1)
+            {
+                if ((a & mask) != 0)
+                {
+                    product ^= b;
+                }
+                b = (b >> 1) ^ (ReflectedPolynomial & (0u - (b & 1)));
+            }
+            return product;
+        }
+
+        private static uint[] BuildSquaredPowersOfX()
+        {
+            var table = new uint[32];
+            uint power = 1u << 30;
+            table[0] = power;
+            for (int index = 1; index < table.Length; index++)
+            {
+                power = MultiplyModP(power, power);
+                table[index] = power;
             }
             return table;
         }
