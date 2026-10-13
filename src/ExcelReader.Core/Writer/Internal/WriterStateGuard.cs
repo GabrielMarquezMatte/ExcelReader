@@ -72,6 +72,26 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 throw new ArgumentException("Sheet names cannot contain : \\ / ? * [ or ].", nameof(name));
             }
+            if (name[0] == '\'' || name[^1] == '\'')
+            {
+                throw new ArgumentException("Sheet names cannot begin or end with an apostrophe.", nameof(name));
+            }
+            if (HasUnwritableCharacter(name))
+            {
+                throw new ArgumentException("Sheet names cannot contain control characters, U+FFFE or U+FFFF.", nameof(name));
+            }
+        }
+
+        private static bool HasUnwritableCharacter(string name)
+        {
+            foreach (char c in name)
+            {
+                if (c < ' ' || c >= '\uFFFE')
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

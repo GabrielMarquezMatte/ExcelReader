@@ -10,14 +10,17 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal static class CellFormatter
     {
+        // A raw carriage return is escaped too: an XML parser reads it as a line feed.
         private const string Special =
             "&<>\"'_" +
-            "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000B\u000C" +
+            "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000B\u000C\u000D" +
             "\u000E\u000F\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F";
 
-        private static readonly SearchValues<char> SpecialChars = SearchValues.Create(Special);
+        // U+FFFE and U+FFFF are not XML characters, so they are written as _xHHHH_ as well.
+        private static readonly SearchValues<char> SpecialChars = SearchValues.Create(Special + "\uFFFE\uFFFF");
 
-        private static readonly SearchValues<byte> SpecialBytes = SearchValues.Create(Encoding.ASCII.GetBytes(Special));
+        // 0xEF leads the UTF-8 form of U+FFFE and U+FFFF, and of every other U+F000..U+FFFF character.
+        private static readonly SearchValues<byte> SpecialBytes = SearchValues.Create([.. Encoding.ASCII.GetBytes(Special), 0xEF]);
 
         // <c r="XFD1048576" s="2147483647" t="inlineStr">
         private const int MaxCellOpenLength = 48;
@@ -91,8 +94,9 @@ namespace ExcelReader.Core.Writer.Internal
         /// <summary>
         /// True when <see cref="WriteString"/> would emit <paramref name="utf8"/>'s own bytes unchanged:
         /// non-empty, within the cell limit, valid UTF-8, nothing to escape, and no whitespace at either
-        /// end. Every escaped character is ASCII, and UTF-8 multi-byte sequences never contain an ASCII
-        /// byte, so a byte search over the same set is exact.
+        /// end. Every escaped ASCII character is searched as its own byte, which no UTF-8 multi-byte
+        /// sequence contains; text with a character from U+F000 up is never plain, so that U+FFFE and
+        /// U+FFFF are escaped.
         /// </summary>
         internal static bool IsPlainUtf8Text(ReadOnlySpan<byte> utf8)
         {
