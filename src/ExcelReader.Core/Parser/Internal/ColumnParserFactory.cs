@@ -119,7 +119,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (propType == typeof(TimeOnly))
             {
-                return BuildValue<T, TimeOnly>(prop, ReadTimeOnly);
+                return BuildValue<T, TimeOnly>(prop, ReadTimeOnlyAuto);
             }
             if (propType.IsEnum)
             {
@@ -161,7 +161,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (innerType == typeof(TimeOnly))
             {
-                return BuildNullableValue<T, TimeOnly>(prop, ReadTimeOnly);
+                return BuildNullableValue<T, TimeOnly>(prop, ReadTimeOnlyAuto);
             }
             if (innerType.IsEnum)
             {
@@ -272,6 +272,11 @@ namespace ExcelReader.Core.Parser.Internal
             return true;
         }
 
+        internal static bool ReadTimeOnlyAuto(in Cell cell, in ExcelRowContext context, out TimeOnly value)
+        {
+            return ReadTimeOnly(in cell, in context, out value) || ReadTextTimeOnly(in cell, in context, out value);
+        }
+
         internal static bool ReadTextDateTime(in Cell cell, in ExcelRowContext context, out DateTime value)
         {
             return TryParseDateTimeText(in cell, context.FormatProvider, out value);
@@ -292,6 +297,11 @@ namespace ExcelReader.Core.Parser.Internal
         internal static bool TryParseSpanParsable<TValue>(in Cell cell, IFormatProvider provider, [MaybeNullWhen(false)] out TValue value)
             where TValue : ISpanParsable<TValue>
         {
+            // XLSB and XLS keep a number in binary, with no text in Value to parse.
+            if (cell.Value.IsEmpty && cell.Type is CellType.Number or CellType.Date)
+            {
+                return TValue.TryParse(cell.GetString(), provider, out value);
+            }
             Span<char> stack = stackalloc char[Utf8Text.StackChars];
             ReadOnlySpan<char> chars = Utf8Text.Decode(cell.Value, stack, out char[]? rented);
             try
@@ -480,7 +490,7 @@ namespace ExcelReader.Core.Parser.Internal
             [SkipLocalsInit]
             public static bool TryParse(in Cell cell, out TEnum value)
             {
-                if (cell.Type == CellType.Number && cell.TryGetDouble(out double d))
+                if (cell.Type is CellType.Number or CellType.Date && cell.TryGetDouble(out double d))
                 {
                     if (d != Math.Truncate(d) || d < long.MinValue || d > long.MaxValue)
                     {
@@ -585,6 +595,12 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (Ascii.EqualsIgnoreCase(v, "true"u8)) { value = true; return true; }
             if (Ascii.EqualsIgnoreCase(v, "false"u8)) { value = false; return true; }
+            // XLSB and XLS keep a number in binary, with no text in Value to compare.
+            if (cell.Type is CellType.Number or CellType.Date && cell.TryGetDouble(out double number) && number is 0 or 1)
+            {
+                value = number == 1;
+                return true;
+            }
             value = false;
             return false;
         }
