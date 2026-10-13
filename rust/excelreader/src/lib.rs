@@ -128,6 +128,7 @@ pub struct XlOpenOptions {
     pub source_cache_bytes: i64,
     pub max_buffered_bytes: i64,
     pub source_block_size: i32,
+    pub verify_zip_checksums: i32,
 }
 
 #[repr(C)]

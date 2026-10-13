@@ -37,7 +37,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Gets a value indicating whether each ZIP entry read from an XLSX or XLSB package is
         /// checked against the CRC-32 its central directory records. Defaults to <see langword="true"/>.</summary>
-        /// <remarks>A mismatch throws <see cref="InvalidDataException"/> when the entry's last byte is read, so
+        /// <remarks>A mismatch throws <see cref="InvalidDataException"/> when the entry's last bytes are read, so
         /// rows before the damage may already have been returned. Turn it off to read a package whose
         /// producer wrote wrong checksums; damaged data then surfaces only if it also breaks parsing.</remarks>
         public bool VerifyZipChecksums { get; init; } = true;
