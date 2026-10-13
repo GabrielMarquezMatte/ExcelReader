@@ -9,7 +9,7 @@ namespace ExcelReader.Core.Writer.Zip
     /// <c>ZipArchive</c> uses in create mode. Offsets are absolute positions in that stream.
     /// </summary>
     [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
-        Justification = "The open entry belongs to the caller that opened it and is completed by its Dispose; Abandon releases it without writing.")]
+        Justification = "The open entry belongs to the caller that opened it and is completed by its Dispose; Abandon releases it without completing it.")]
     internal sealed class ZipPackageWriter
     {
         private readonly Stream _output;
@@ -71,11 +71,35 @@ namespace ExcelReader.Core.Writer.Zip
             await WriteRawAsync(directory.Memory, ct).ConfigureAwait(false);
         }
 
+        [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+            Justification = "Called while an earlier failure propagates; the directory is best effort and must not hide that failure.")]
         internal void Abandon()
         {
+            if (_closed)
+            {
+                return;
+            }
             _closed = true;
             _open?.Abandon();
             _open = null;
+            try
+            {
+                using BiffBuffer directory = BuildDirectory();
+                WriteRaw(directory.Span);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        internal void FlushOutput()
+        {
+            _output.Flush();
+        }
+
+        internal Task FlushOutputAsync(CancellationToken ct)
+        {
+            return _output.FlushAsync(ct);
         }
 
         internal void WriteRaw(ReadOnlySpan<byte> bytes)
@@ -124,6 +148,11 @@ namespace ExcelReader.Core.Writer.Zip
                 throw new InvalidOperationException("Every ZIP entry must be closed successfully before the archive is finished.");
             }
             _closed = true;
+            return BuildDirectory();
+        }
+
+        private BiffBuffer BuildDirectory()
+        {
             long directoryOffset = Position;
             var directory = new BiffBuffer(256 + (_entries.Count * 128));
             foreach (ZipEntryRecord entry in _entries)

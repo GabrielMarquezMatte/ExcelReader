@@ -102,6 +102,36 @@ namespace ExcelReader.Core.Writer.Zip
 
         public override void Flush()
         {
+            if (_closed)
+            {
+                return;
+            }
+            try
+            {
+                _owner.FlushOutput();
+            }
+            catch
+            {
+                Fail();
+                throw;
+            }
+        }
+
+        public override async Task FlushAsync(CancellationToken cancellationToken)
+        {
+            if (_closed)
+            {
+                return;
+            }
+            try
+            {
+                await _owner.FlushOutputAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                Fail();
+                throw;
+            }
         }
 
         public override int Read(byte[] buffer, int offset, int count)
