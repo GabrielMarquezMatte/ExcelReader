@@ -110,6 +110,17 @@ bytes. Anything else escaping a read of a file — an `IndexOutOfRangeException`
 [SECURITY.md](../../SECURITY.md). See [Errors across languages](errors.md) for how these map onto the
 bindings.
 
+## Damaged packages
+
+An XLSX or XLSB package is a ZIP archive, and each of its entries carries a CRC-32 of its data.
+The reader checks it as the entry is read and throws `InvalidDataException` on a mismatch, so a file
+cut short or altered in transit does not come back as plausible but wrong cells. A sheet is checked
+when its last byte is read, which means the rows before the damage may already have been returned:
+treat the exception as invalidating everything read from that file. The checksum guards against
+accidents, not tampering, since whoever alters the data can recompute it.
+[`ExcelReaderOptions.VerifyZipChecksums`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums)
+turns the check off.
+
 ## What the reader does not do
 
 - **It evaluates nothing.** A formula cell reports the result Excel cached when it saved the file,

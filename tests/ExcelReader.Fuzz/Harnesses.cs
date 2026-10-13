@@ -21,10 +21,12 @@ namespace ExcelReader.Fuzz
     /// </summary>
     internal static class Harnesses
     {
+        // Checksums stay off: a mutated entry would otherwise fail its CRC-32 before reaching a parser.
         private static readonly ExcelReaderOptions Limits = new()
         {
             MaxCellBytes = 1 << 20,
             MaxSharedStringBytes = 1 << 22,
+            VerifyZipChecksums = false,
         };
 
         private static readonly CsvReaderOptions CsvLimits = new()
@@ -37,6 +39,7 @@ namespace ExcelReader.Fuzz
             MaxCellBytes = 1 << 20,
             MaxSharedStringBytes = 1 << 22,
             Password = "hunter2",
+            VerifyZipChecksums = false,
         };
 
         internal static void Xlsx(ReadOnlySpan<byte> data)

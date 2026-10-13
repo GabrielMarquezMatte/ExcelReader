@@ -1,3 +1,5 @@
+using ExcelReader.Core.Writer.Zip;
+
 namespace ExcelReader.Core.Reader.Zip
 {
     internal sealed class DecompressedByteCounter
@@ -37,24 +39,31 @@ namespace ExcelReader.Core.Reader.Zip
 
     internal sealed class LimitedReadStream : Stream
     {
+        internal const string ChecksumMismatch = "The ZIP entry's data does not match its CRC-32.";
+
         private readonly Stream _inner;
         private readonly DecompressedByteCounter? _totalCounter;
         private readonly DecompressedByteCounter? _entryCounter;
         private readonly long _declaredLength;
+        private readonly uint? _expectedCrc;
         private long _produced;
+        private uint _crc;
 
         // declaredLength is the entry's size from the central directory. Neither raw deflate nor a stored
         // entry can tell a cut-short stream from a complete one, so the length is the only end-of-data check.
+        // expectedCrc, when given, is compared once the declared length has been produced.
         internal LimitedReadStream(
             Stream inner,
             long declaredLength,
             DecompressedByteCounter? totalCounter,
             string entryLimitName = "",
-            long entryLimit = 0)
+            long entryLimit = 0,
+            uint? expectedCrc = null)
         {
             _inner = inner;
             _declaredLength = declaredLength;
             _totalCounter = totalCounter;
+            _expectedCrc = expectedCrc;
             _entryCounter = entryLimit > 0 ? new DecompressedByteCounter(entryLimit, entryLimitName) : null;
         }
 
@@ -76,17 +85,17 @@ namespace ExcelReader.Core.Reader.Zip
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            return Count(_inner.Read(buffer, offset, count), count);
+            return Count(_inner.Read(buffer, offset, count), buffer.AsSpan(offset, count));
         }
 
         public override int Read(Span<byte> buffer)
         {
-            return Count(_inner.Read(buffer), buffer.Length);
+            return Count(_inner.Read(buffer), buffer);
         }
 
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            return Count(await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false), buffer.Length);
+            return Count(await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false), buffer.Span);
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -124,11 +133,11 @@ namespace ExcelReader.Core.Reader.Zip
             await base.DisposeAsync().ConfigureAwait(false);
         }
 
-        private int Count(int read, int requested)
+        private int Count(int read, ReadOnlySpan<byte> buffer)
         {
             if (read <= 0)
             {
-                if (requested > 0 && _produced != _declaredLength)
+                if (buffer.Length > 0 && _produced != _declaredLength)
                 {
                     throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.");
                 }
@@ -141,6 +150,15 @@ namespace ExcelReader.Core.Reader.Zip
             }
             _totalCounter?.Add(read);
             _entryCounter?.Add(read);
+            if (_expectedCrc is not uint expected)
+            {
+                return read;
+            }
+            _crc = Crc32.Append(_crc, buffer[..read]);
+            if (_produced == _declaredLength && _crc != expected)
+            {
+                throw new InvalidDataException(ChecksumMismatch);
+            }
             return read;
         }
     }

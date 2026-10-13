@@ -50,7 +50,7 @@ namespace ExcelReader.Core.Writer.Internal
 
         [DoesNotReturn]
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void ThrowUnrepresentable(Type sourceType, string paramName)
+        internal static void ThrowUnrepresentable(Type sourceType, string paramName)
         {
             throw new ArgumentException(
                 $"Cannot write a value of type '{sourceType}' to a spreadsheet cell: it does not convert to a finite number.",
