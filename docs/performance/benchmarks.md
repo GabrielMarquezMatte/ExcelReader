@@ -218,7 +218,7 @@ The encoder's limits are deliberate:
 
 It scales because a write is bound by building rows, not by deflate: `PrefetchWrite` already takes deflate off the calling thread and stops at 1.6x to 1.8x, so compressing chunks in parallel would add nothing on top of it, while formatting the rows in parallel does.
 
-Each batch is compressed with no reference to the one before it, which costs 0.18% of file size for XLSX (15,481,372 B to 15,508,760 B) and 0.04% for XLSB (16,863,131 B to 16,869,306 B). The process's peak working set rose by 16 MB over the serial write with 4 batches in flight and by 28 MB with 8, about 3 MB per batch, and does not depend on the number of rows.
+Each batch is compressed with no reference to the one before it, which costs 0.18% of file size for XLSX (15,481,372 B to 15,508,760 B) and 0.04% for XLSB (16,863,131 B to 16,869,306 B). The process's peak working set rose by 12 MB over the serial write with 4 batches in flight and by 23 MB with 8, about 3 MB per batch, and does not depend on the number of rows.
 
 ### Matched-work reads (`*_Materialized`)
 
