@@ -66,7 +66,10 @@ namespace ExcelReader.Tests.Native
             return ReadApi.OpenStream(stream!, format, options, out handle);
         }
 
-        private static NativeOpenOptionsRaw Options() => new() { StructSize = sizeof(NativeOpenOptionsRaw) };
+        private static NativeOpenOptionsRaw Options()
+        {
+            return new() { StructSize = sizeof(NativeOpenOptionsRaw) };
+        }
 
         private static int CountRows(NativeHandle handle, int sheet)
         {
