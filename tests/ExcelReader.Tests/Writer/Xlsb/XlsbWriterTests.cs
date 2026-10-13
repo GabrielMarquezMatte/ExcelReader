@@ -376,6 +376,20 @@ namespace ExcelReader.Tests.Writer.Xlsb
         }
 
         [Fact]
+        public void ARowBeyondTheRowLimitThrows()
+        {
+            using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(Stream.Null, leaveOpen: true);
+            XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+            for (int i = 0; i < 1_048_576; i++)
+            {
+                sheet.StartRow().Dispose();
+            }
+
+            ExcelLimitExceededException error = Assert.Throws<ExcelLimitExceededException>(() => sheet.StartRow());
+            Assert.Equal(1_048_577, error.Actual);
+        }
+
+        [Fact]
         public async Task WriteNonNumericFormattableThrowsArgumentException()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
