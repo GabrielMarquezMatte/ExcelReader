@@ -108,6 +108,47 @@ namespace ExcelReader.Tests.Writer
             });
         }
 
+        [Fact]
+        public void AValueWithNoNumericFormIsRefusedTheSameWayEverywhere()
+        {
+            using MemoryStream ms = new();
+            using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                XlsxSheetWriter sheet = wb.AddSheet("S1");
+                using (XlsxRowWriter row = sheet.StartRow())
+                {
+                    Assert.Throws<ArgumentException>(() => row.Write('c'));
+                }
+                sheet.End();
+            }
+            using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("S1");
+                using (XlsbRowWriter row = sheet.StartRow())
+                {
+                    Assert.Throws<ArgumentException>(() => row.Write('c'));
+                }
+                sheet.End();
+            }
+            using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                XlsSheetWriter sheet = wb.AddSheet("S1");
+                using (XlsRowWriter row = sheet.StartRow())
+                {
+                    Assert.Throws<ArgumentException>(() => row.Write('c'));
+                }
+                sheet.End();
+            }
+        }
+
+        [Fact]
+        public void ALimitMessageNamesNoUnit()
+        {
+            var error = new ExcelLimitExceededException("Rows", 1_048_576, 1_048_577);
+
+            Assert.Equal("Rows limit exceeded: 1048577 exceeds 1048576.", error.Message);
+        }
+
         private static void WithWorkbook(string format, Action<Probe> body)
         {
             using MemoryStream ms = new();

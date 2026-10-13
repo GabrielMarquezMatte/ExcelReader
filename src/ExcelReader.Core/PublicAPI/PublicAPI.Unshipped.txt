@@ -160,3 +160,5 @@ ExcelReader.Core.Reader.SheetDataReaderOptions.HeaderRow.get -> int
 ExcelReader.Core.Reader.SheetDataReaderOptions.HeaderRow.init -> void
 ExcelReader.Core.Reader.SheetDataReaderOptions.SheetDataReaderOptions() -> void
 static ExcelReader.Core.Reader.SheetDataReaderOptions.Default.get -> ExcelReader.Core.Reader.SheetDataReaderOptions!
+ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums.get -> bool
+ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums.init -> void

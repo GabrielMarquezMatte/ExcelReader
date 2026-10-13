@@ -133,6 +133,19 @@ Two behavior changes come with them:
 - The CLI `convert` command no longer shifts dates by four years when the source workbook uses the 1904 date system.
 - [`XlsxWriterOptions`](xref:ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions) gains `Date1904`, which v6 lacked. It defaults to `false`, so existing output is unchanged.
 
+## Stricter reading and writing
+
+v7 refuses several inputs that v6 accepted and then got wrong.
+
+- **Damaged packages.** Each ZIP entry of an XLSX or XLSB package is checked against its CRC-32. A mismatch throws `InvalidDataException` when the entry's last byte is read, so rows before the damage may already have been returned. v6 checked only the entry's size. Set [`ExcelReaderOptions.VerifyZipChecksums`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums) to `false` to read a package whose producer wrote wrong checksums. The check costs 2% to 5% of a read.
+- **Sheet names.** `AddSheet` throws `ArgumentException` for a name that begins or ends with an apostrophe, or contains a control character (tab and line feed included), U+FFFE or U+FFFF. Excel refuses a workbook with such a name.
+- **Column settings.** `SetColumnWidth` and `SetColumnStyle` throw `ArgumentOutOfRangeException` for a column past the format's last one (16,384 columns; 256 for XLS) and for a width above 255, Excel's maximum. v6 wrote a file Excel refused for the first, and an XLS width of 256 came out as a hidden column.
+- **Number formats.** `AddStyle` throws `ExcelLimitExceededException` for the 201st distinct number format of a workbook, and `ArgumentException` for a format longer than 255 characters. Excel does not open a workbook past either.
+- **Rows in XLSB.** A sheet stops at 1,048,576 rows. v6 accepted one more, which Excel does not read.
+- **Values with no numeric form.** `Write<T>` with a type that does not convert to a number, such as `char`, throws `ArgumentException` in every writer. XLSB and XLS threw `InvalidCastException`.
+- **Text in XLSX.** A carriage return, U+FFFE and U+FFFF in cell text are now written escaped. v6 wrote them raw: Excel read the carriage return as a line feed and refused a file with either of the other two.
+- **`ExcelLimitExceededException.Message`** no longer says "bytes" for limits counted in rows, columns or entries. `LimitName`, `Limit` and `Actual` are unchanged.
+
 ## Native bindings
 
 The C ABI is unchanged: no signature moved, and `XL_ABI_VERSION` stays 6. Behavior changed. `degree_of_parallelism` of `0` on `xl_parse_typed` and the Arrow exports now parallelises XLSX and XLSB as well as CSV, using every processor. Pass `1` for the old sequential behavior. The Rust, Python and C++ bindings take the same value (`degree_of_parallelism`, `parallelism`) and need no code change; a `parallelism=0` call on an XLSX or XLSB sheet is now faster, and holds every partition's columns until they merge, so its peak memory is higher.

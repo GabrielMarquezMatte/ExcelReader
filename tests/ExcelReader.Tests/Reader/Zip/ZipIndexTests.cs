@@ -392,7 +392,7 @@ namespace ExcelReader.Tests.Reader.Zip
             long exact = probe.Bytes.Length - probe.DataOffset;
 
             Zip64Layout fits = BuildStoredZip64(Zip64Payload, compressedSize: exact, uncompressedSize: exact);
-            using (ZipIndex index = ZipIndex.Create(fits.Bytes, ExcelReaderOptions.Default))
+            using (ZipIndex index = ZipIndex.Create(fits.Bytes, Unchecked))
             {
                 Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
                 using ZipPart part = index.OpenPart(entry, new DecompressedByteCounter(0));
@@ -508,12 +508,16 @@ namespace ExcelReader.Tests.Reader.Zip
 
         private static readonly bool[] Modes = [false, true];
 
-        private static async Task<ZipIndex> CreatePositionalAsync(byte[] bytes, bool useAsync, CancellationToken ct)
+        // The size-boundary tests stretch a stored entry over bytes its recorded CRC-32 never covered.
+        private static readonly ExcelReaderOptions Unchecked = new() { VerifyZipChecksums = false };
+
+        private static async Task<ZipIndex> CreatePositionalAsync(
+            byte[] bytes, bool useAsync, CancellationToken ct, ExcelReaderOptions? options = null)
         {
             ByteSource source = ByteSource.FromStream(new MemoryStream(bytes, writable: false), leaveOpen: false);
             return useAsync
-                ? await ZipIndex.CreateAsync(source, ExcelReaderOptions.Default, ct)
-                : ZipIndex.Create(source, ExcelReaderOptions.Default);
+                ? await ZipIndex.CreateAsync(source, options ?? ExcelReaderOptions.Default, ct)
+                : ZipIndex.Create(source, options ?? ExcelReaderOptions.Default);
         }
 
         private static async Task<InvalidDataException> CreateFailsAsync(byte[] bytes, bool useAsync, CancellationToken ct)
@@ -675,7 +679,7 @@ namespace ExcelReader.Tests.Reader.Zip
                 long exact = probe.Bytes.Length - probe.DataOffset;
 
                 Zip64Layout fits = BuildStoredZip64(Zip64Payload, compressedSize: exact, uncompressedSize: exact);
-                using (ZipIndex index = await CreatePositionalAsync(fits.Bytes, useAsync, ct))
+                using (ZipIndex index = await CreatePositionalAsync(fits.Bytes, useAsync, ct, Unchecked))
                 {
                     Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
                     using ZipPart part = await OpenPartPositionalAsync(index, entry, useAsync, ct);
