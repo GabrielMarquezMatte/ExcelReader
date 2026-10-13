@@ -31,6 +31,8 @@ namespace ExcelReader.Core.Writer.Xls
         internal const int Number = 0x0203;
         internal const int Label = 0x0204;
         internal const int LabelSst = 0x00FD;
+        internal const int Rk = 0x027E;
+        internal const int MulRk = 0x00BD;
         internal const int BoolErr = 0x0205;
         internal const int Index = 0x020B;
         internal const int Row = 0x0208;

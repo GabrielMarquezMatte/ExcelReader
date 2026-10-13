@@ -303,6 +303,45 @@ namespace ExcelReader.Core.Writer.Xls
             buffer.Advance(record.Length);
         }
 
+        /// <summary>
+        /// Opens a run of RK cells: header, row and first column now, then 6 bytes (ixfe, RK) per cell.
+        /// A run of one is an RK record, whose layout is exactly that; a longer run is a MULRK record,
+        /// which only adds the last column. <see cref="EndRkRun"/> fixes the id and length either way.
+        /// </summary>
+        internal static int BeginRkRun(BiffBuffer buffer, int row, int firstCol)
+        {
+            int start = buffer.Length;
+            Span<byte> header = buffer.GetSpan(8);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[4..], (ushort)row);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[6..], (ushort)firstCol);
+            buffer.Advance(8);
+            return start;
+        }
+
+        internal static void AppendRk(BiffBuffer buffer, int xf, int rk)
+        {
+            Span<byte> cell = buffer.GetSpan(6);
+            BinaryPrimitives.WriteUInt16LittleEndian(cell, (ushort)xf);
+            BinaryPrimitives.WriteInt32LittleEndian(cell[2..], rk);
+            buffer.Advance(6);
+        }
+
+        internal static void EndRkRun(BiffBuffer buffer, int start, int firstCol, int count)
+        {
+            Span<byte> header = buffer.Slice(start, 4);
+            if (count == 1)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(header, BiffRecord.Rk);
+                BinaryPrimitives.WriteUInt16LittleEndian(header[2..], 10);
+                return;
+            }
+            BinaryPrimitives.WriteUInt16LittleEndian(header, BiffRecord.MulRk);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[2..], (ushort)(4 + (6 * count) + 2));
+            Span<byte> last = buffer.GetSpan(2);
+            BinaryPrimitives.WriteUInt16LittleEndian(last, (ushort)(firstCol + count - 1));
+            buffer.Advance(2);
+        }
+
         internal static void WriteLabel(BiffBuffer buffer, int row, int col, int xf, ReadOnlySpan<char> value)
         {
             Span<byte> dest = buffer.GetSpan(13 + (value.Length * 2));

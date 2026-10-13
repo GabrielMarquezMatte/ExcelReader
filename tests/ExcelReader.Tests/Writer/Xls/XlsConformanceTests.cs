@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Xls;
@@ -25,6 +26,9 @@ namespace ExcelReader.Tests.Writer.Xls
         private const int LabelSst = 0x00FD;
         private const int Sst = 0x00FC;
         private const int ExtSst = 0x00FF;
+        private const int Rk = 0x027E;
+        private const int MulRk = 0x00BD;
+        private const int Number = 0x0203;
 
         private readonly record struct Record(int Position, int Id, byte[] Payload);
 
@@ -126,6 +130,93 @@ namespace ExcelReader.Tests.Writer.Xls
 
             Assert.Equal(18, records.Single(r => r.Id == Window1).Payload.Length);
             Assert.Equal([0, 0], records.Single(r => r.Id == Date1904).Payload);
+        }
+
+        [Theory]
+        [InlineData(0.0, true)]
+        [InlineData(42.0, true)]
+        [InlineData(-536870912.0, true)]
+        [InlineData(536870912.0, true)]
+        [InlineData(1.5, true)]
+        [InlineData(0.1, true)]
+        [InlineData(45292.25, true)]
+        [InlineData(1234.56, true)]
+        [InlineData(0.5, true)]
+        [InlineData(Math.PI, false)]
+        [InlineData(1e-300, false)]
+        [InlineData(123456789.123, false)]
+        public void RkEncodesOnlyNumbersItGivesBackUnchanged(double value, bool encodable)
+        {
+            Assert.Equal(encodable, XlsRk.TryEncode(value, out int rk));
+            if (encodable)
+            {
+                Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(XlsRk.Decode(rk)));
+            }
+        }
+
+        [Fact]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "A seeded generator picks reproducible test inputs; nothing here is secret.")]
+        public void RkNeverChangesAValue()
+        {
+            Assert.True(XlsRk.TryEncode(-0.0, out int negativeZero));
+            Assert.Equal(BitConverter.DoubleToInt64Bits(-0.0), BitConverter.DoubleToInt64Bits(XlsRk.Decode(negativeZero)));
+
+            var random = new Random(1234);
+            for (int i = 0; i < 100_000; i++)
+            {
+                double value = (i % 4) switch
+                {
+                    0 => random.Next(-1_000_000_000, 1_000_000_000),
+                    1 => Math.Round(random.NextDouble() * 1e7, 2),
+                    2 => random.NextDouble() * Math.Pow(10, random.Next(-20, 20)),
+                    _ => BitConverter.Int64BitsToDouble(random.NextInt64() & ~0x3_FFFF_FFFFL),
+                };
+                if (double.IsFinite(value) && XlsRk.TryEncode(value, out int rk))
+                {
+                    Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(XlsRk.Decode(rk)));
+                }
+            }
+        }
+
+        [Fact]
+        public void ConsecutiveNumbersShareOneMulRkRecord()
+        {
+            byte[] xls = Write(wb =>
+            {
+                using var sheet = wb.AddSheet("S");
+                using var row = sheet.StartRow();
+                row.Write(1);
+                row.Write(2.5);
+                row.Write(new DateTime(2026, 1, 2));
+                row.Write("x");
+                row.Write(3);
+                row.Skip(1);
+                row.Write(4);
+                row.Write(Math.PI);
+            });
+
+            List<int> cells = Worksheet(Records(xls))
+                .Where(r => r.Id is MulRk or Rk or Number or Label)
+                .Select(r => r.Id)
+                .ToList();
+            Assert.Equal([MulRk, Label, Rk, Rk, Number], cells);
+
+            using var reader = Excel.FromXls(new MemoryStream(xls));
+            using var rows = reader.FirstSheet.GetEnumerator();
+            Assert.True(rows.MoveNext());
+            Row read = rows.Current;
+            Assert.Equal("1", read[0].GetString());
+            Assert.Equal("2.5", read[1].GetString());
+            Assert.Equal(CellType.Date, read[2].Type);
+            Assert.True(read[2].TryGetDateTime(isDate1904: false, out DateTime date));
+            Assert.Equal(new DateTime(2026, 1, 2), date);
+            Assert.Equal("x", read[3].GetString());
+            Assert.Equal("3", read[4].GetString());
+            Assert.Equal(CellType.Empty, read[5].Type);
+            Assert.Equal("4", read[6].GetString());
+            Assert.True(read[7].TryParse(System.Globalization.CultureInfo.InvariantCulture, out double pi));
+            Assert.Equal(Math.PI, pi);
         }
 
         [Fact]

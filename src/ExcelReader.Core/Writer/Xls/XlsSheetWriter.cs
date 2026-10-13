@@ -36,6 +36,12 @@ namespace ExcelReader.Core.Writer.Xls
         private int _rowCellStart;
         private int _rowColMic;
         private int _rowColMax;
+
+        // Numbers in consecutive columns of the current row are appended to one open MULRK record, ended
+        // by a gap or another kind of cell; see BiffRecordWriter.BeginRkRun.
+        private int _rkRecord;
+        private int _rkCount;
+        private int _rkFirstCol;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
         private bool _rowHasCells;
@@ -175,6 +181,7 @@ namespace ExcelReader.Core.Writer.Xls
         /// <summary>A row left without cells gets one blank cell, since BIFF8 has no other trace of it for a reader to find.</summary>
         internal void NotifyRowEnded()
         {
+            FlushRkRun();
             if (_rowActive && !_rowHasCells)
             {
                 BiffRecordWriter.WriteBlank(_cells, _rowNumber, 0, XlsGlobals.GeneralXf);
@@ -193,7 +200,7 @@ namespace ExcelReader.Core.Writer.Xls
         {
             ValidateColumn(col);
             int abstractStyle = EffectiveStyle(col);
-            BiffRecordWriter.WriteNumber(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
+            WriteNumberCell(row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
             Track(row, col);
         }
 
@@ -202,7 +209,7 @@ namespace ExcelReader.Core.Writer.Xls
             ValidateColumn(col);
             int abstractStyle = EffectiveStyle(col);
             double serial = ExcelEpoch.OADateToSerial(value.ToOADate(), _date1904);
-            BiffRecordWriter.WriteNumber(_cells, row, col, abstractStyle == 0 ? XlsGlobals.DateXf : XlsGlobals.CustomXf(abstractStyle), serial);
+            WriteNumberCell(row, col, abstractStyle == 0 ? XlsGlobals.DateXf : XlsGlobals.CustomXf(abstractStyle), serial);
             Track(row, col);
         }
 
@@ -212,6 +219,7 @@ namespace ExcelReader.Core.Writer.Xls
             ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
             int abstractStyle = EffectiveStyle(col);
             int xf = abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle);
+            FlushRkRun();
             if (value.Length > XlsSharedStrings.MaxLabelLength)
             {
                 BiffRecordWriter.WriteLabelSst(_cells, row, col, xf, _owner.AddSharedString(value));
@@ -227,8 +235,40 @@ namespace ExcelReader.Core.Writer.Xls
         {
             ValidateColumn(col);
             int abstractStyle = EffectiveStyle(col);
+            FlushRkRun();
             BiffRecordWriter.WriteBool(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
             Track(row, col);
+        }
+
+        private void WriteNumberCell(int row, int col, int xf, double value)
+        {
+            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
+            if (!XlsRk.TryEncode(value, out int rk))
+            {
+                FlushRkRun();
+                BiffRecordWriter.WriteNumber(_cells, row, col, xf, value);
+                return;
+            }
+            if (_rkCount > 0 && col != _rkFirstCol + _rkCount)
+            {
+                FlushRkRun();
+            }
+            if (_rkCount == 0)
+            {
+                _rkFirstCol = col;
+                _rkRecord = BiffRecordWriter.BeginRkRun(_cells, row, col);
+            }
+            BiffRecordWriter.AppendRk(_cells, xf, rk);
+            _rkCount++;
+        }
+
+        private void FlushRkRun()
+        {
+            if (_rkCount > 0)
+            {
+                BiffRecordWriter.EndRkRun(_cells, _rkRecord, _rkFirstCol, _rkCount);
+                _rkCount = 0;
+            }
         }
 
         internal void ReleaseBuffer()
