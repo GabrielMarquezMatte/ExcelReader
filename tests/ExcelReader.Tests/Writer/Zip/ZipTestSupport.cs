@@ -57,14 +57,21 @@ namespace ExcelReader.Tests.Writer.Zip
                 U32(zip, offset + 14), U32(zip, offset + 18), U32(zip, offset + 22));
         }
 
-        /// <summary>Zeroes the DOS time and date of every local and central header.</summary>
-        internal static byte[] WithoutTimestamps(byte[] zip)
+        /// <summary>
+        /// Zeroes what legitimately differs between two writers of the same content: the DOS time and date
+        /// of every local and central header, and the two central fields <see cref="System.IO.Compression.ZipArchive"/>
+        /// fills from the operating system (the host byte of "version made by", and the external attributes,
+        /// which hold Unix permissions there).
+        /// </summary>
+        internal static byte[] WithoutTimestampsAndHost(byte[] zip)
         {
             byte[] copy = (byte[])zip.Clone();
             foreach (ZipCentral entry in ReadCentral(zip))
             {
                 copy.AsSpan((int)entry.LocalOffset + 10, 4).Clear();
                 copy.AsSpan(entry.Position + 12, 4).Clear();
+                copy[entry.Position + 5] = 0;
+                copy.AsSpan(entry.Position + 38, 4).Clear();
             }
             return copy;
         }

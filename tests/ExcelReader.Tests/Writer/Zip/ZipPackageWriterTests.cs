@@ -126,7 +126,10 @@ namespace ExcelReader.Tests.Writer.Zip
         private static void AssertSameShape(ZipCentral expected, ZipCentral actual, byte[] expectedZip, byte[] actualZip)
         {
             Assert.Equal(expected.Name, actual.Name);
-            Assert.Equal(expected.MadeBy, actual.MadeBy);
+            // ZipArchive puts the operating system in the high byte; the package writer always writes 0,
+            // so a file does not depend on the machine that wrote it.
+            Assert.Equal((byte)expected.MadeBy, (byte)actual.MadeBy);
+            Assert.Equal(0, actual.MadeBy >> 8);
             Assert.Equal(expected.Version, actual.Version);
             Assert.Equal(expected.Flags, actual.Flags);
             Assert.Equal(expected.Method, actual.Method);
@@ -162,7 +165,7 @@ namespace ExcelReader.Tests.Writer.Zip
             }
             if (level == CompressionLevel.NoCompression)
             {
-                Assert.Equal(ZipLayout.WithoutTimestamps(expected), ZipLayout.WithoutTimestamps(actual));
+                Assert.Equal(ZipLayout.WithoutTimestampsAndHost(expected), ZipLayout.WithoutTimestampsAndHost(actual));
             }
             AssertContentAndCrc(actual);
         }
