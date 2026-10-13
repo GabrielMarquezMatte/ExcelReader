@@ -42,6 +42,7 @@ namespace ExcelReader.Core.Writer.Zip
 
         internal void Write(ReadOnlySpan<byte> input, BiffBuffer output)
         {
+            ObjectDisposedException.ThrowIf(_window.Length == 0, this);
             while (!input.IsEmpty)
             {
                 if (_end == WindowCapacity)
@@ -142,8 +143,11 @@ namespace ExcelReader.Core.Writer.Zip
 
         private int EncodeMatches(int blockEnd, Span<byte> destination, ref BitState state)
         {
-            ref byte window = ref MemoryMarshal.GetArrayDataReference(_window);
-            ref uint table = ref MemoryMarshal.GetArrayDataReference(_table);
+            byte[] windowArray = _window;
+            uint[] tableArray = _table;
+            ObjectDisposedException.ThrowIf(windowArray.Length < WindowCapacity || tableArray.Length < 1 << HashBits, this);
+            ref byte window = ref MemoryMarshal.GetArrayDataReference(windowArray);
+            ref uint table = ref MemoryMarshal.GetArrayDataReference(tableArray);
             ref byte output = ref MemoryMarshal.GetReference(destination);
             ref uint literals = ref MemoryMarshal.GetArrayDataReference(FixedHuffmanCodes.Literals);
             ref uint lengths = ref MemoryMarshal.GetArrayDataReference(FixedHuffmanCodes.Lengths);

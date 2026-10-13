@@ -687,5 +687,49 @@ namespace ExcelReader.Tests.Writer.Zip
             using Stream last = read.GetEntry("e69999.bin")!.Open();
             Assert.Equal(69_999 & 0xFF, last.ReadByte());
         }
+
+        public static TheoryData<CompressionLevel, bool> HugeWriteCases()
+        {
+            var data = new TheoryData<CompressionLevel, bool>();
+            foreach (CompressionLevel level in Enum.GetValues<CompressionLevel>())
+            {
+                data.Add(level, false);
+                data.Add(level, true);
+            }
+            return data;
+        }
+
+        [Theory]
+        [MemberData(nameof(HugeWriteCases))]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "A seeded generator picks reproducible test inputs; nothing here is secret.")]
+        public async Task OneHugeWriteReachesTheOutputInBoundedPieces(CompressionLevel level, bool useAsync)
+        {
+            byte[] content = new byte[5 << 20];
+            new Random(7).NextBytes(content);
+            var output = new LargestWriteStream();
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("huge.bin", level);
+            if (useAsync)
+            {
+                await entry.WriteAsync(content, TestContext.Current.CancellationToken);
+                await entry.DisposeAsync();
+            }
+            else
+            {
+                entry.Write(content);
+                entry.Dispose();
+            }
+            zip.Finish();
+
+            Assert.InRange(output.Largest, 1, (1 << 20) + (64 * 1024));
+            using var read = new ZipArchive(new MemoryStream(output.ToArray()), ZipArchiveMode.Read);
+            ZipArchiveEntry stored = read.GetEntry("huge.bin")!;
+            using Stream data = stored.Open();
+            using var copy = new MemoryStream();
+            await data.CopyToAsync(copy, TestContext.Current.CancellationToken);
+            Assert.True(copy.ToArray().AsSpan().SequenceEqual(content));
+            Assert.Equal(Crc32Tests.BitwiseCrc(content), stored.Crc32);
+        }
     }
 }
