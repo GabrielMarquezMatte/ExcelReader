@@ -263,10 +263,10 @@ Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):
 
 | Workload | Default | `PrefetchWrite = true` | Gain |
 |---|---:|---:|---:|
-| XLSX | 10.910 ms | 6.865 ms | 37% |
-| XLSB | 7.555 ms | 5.614 ms | 26% |
+| XLSX | 8.337 ms | 5.175 ms | 38% |
+| XLSB | 5.572 ms | 3.419 ms | 39% |
 
-Allocations are unchanged (4.02 MB vs. 4.03–4.04 MB) — the background writer hands over buffers the row
+Allocations are unchanged (4.02 MB either way) — the background writer hands over buffers the row
 writer already owns rather than copying them.
 
 The same caveat as the read side applies: **do not enable it for concurrent server workloads**. A

@@ -48,9 +48,9 @@ XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x
 |---|---:|---:|---:|
 | Cell-by-cell read | 3.916 ms, 2.84 KB | 5.173 ms, 1,717.73 KB | 6.856 ms, 10,499.25 KB |
 | Cell-by-cell read async | 3.236 ms, 2.91 KB | - | - |
-| Workbook writing | 5.296 ms, 16.03 MB | - | - |
+| Workbook writing | 4.859 ms, 16.31 MB | - | - |
 
-ExcelReader is ~1.3x faster than Sylvan for generated XLS reads while allocating ~605x less memory, and ~1.8x faster than OfficeIMO. The XLS writer is ~1.7x faster than the XLSX writer in this benchmark (`XlsWriteBenchmark`, 4.859 ms vs 8.375 ms in the same run). Most of its 16.31 MB is the benchmark's pre-sized 16 MB destination `MemoryStream`; the typed-record table below measures it at 4.03 MB like the other formats.
+ExcelReader is ~1.3x faster than Sylvan for generated XLS reads while allocating ~605x less memory, and ~1.8x faster than OfficeIMO. The XLS writer is ~1.7x faster than the XLSX writer in this benchmark (`XlsWriteBenchmark`, 4.859 ms vs 8.375 ms in the same run). Most of its 16.31 MB is the benchmark's pre-sized 16 MB destination `MemoryStream`; the typed-record table below measures it at 4.31 MB, close to the other formats.
 
 ### CSV
 
@@ -176,7 +176,7 @@ Without prefetch a read is inflate plus parse, so the faster inflate converts di
 
 ### Write path: managed deflate and CRC-32
 
-XLSX and XLSB packages are written by the library's own ZIP writer. `CompressionLevel.Fastest`, the default, compresses with a managed fixed-Huffman deflate encoder and checksums with a managed CRC-32 that folds with PCLMULQDQ. Each piece alone, against what `ZipArchive` used before, on the same Ryzen 7 5700X:
+XLSX and XLSB packages are written by the library's own ZIP writer. `CompressionLevel.Fastest`, the default, compresses with a managed fixed-Huffman deflate encoder and checksums with a managed CRC-32 that folds with PCLMULQDQ. Each piece alone on the same Ryzen 7 5700X: the deflate rows against zlib-ng at `Fastest`, which `ZipArchive` used, and the CRC row against `System.IO.Hashing.Crc32`, the fastest managed alternative (`ZipArchive` itself calls zlib's native CRC, which was not measured):
 
 | | zlib-ng `Fastest` / System.IO.Hashing | Managed | Ratio |
 |---|---:|---:|---:|
@@ -248,10 +248,10 @@ The takeaway is not that one column beats the other: it is that ExcelReader's he
 |---|---:|---:|
 | XLSX | 8.922 ms | 4.02 MB |
 | XLSB | 6.113 ms | 4.02 MB |
-| XLS | 5.021 ms | 4.03 MB |
-| CSV | 4.762 ms | 4.00 MB |
+| XLS | 6.292 ms | 4.31 MB |
+| CSV | 4.824 ms | 4.00 MB |
 
-Relative ordering: CSV and XLS close at the front, then XLSB, then XLSX — the record-mapping layer adds little overhead over hand-written cell-by-cell writes (XLSB 6.113 ms vs. 5.572 ms, XLSX 8.922 ms vs. 8.337 ms).
+Relative ordering: CSV at the front, XLSB and XLS close behind it, then XLSX — the record-mapping layer adds little overhead over hand-written cell-by-cell writes (XLSB 6.113 ms vs. 5.572 ms, XLSX 8.922 ms vs. 8.337 ms).
 
 ### Native and Arrow string writes
 
