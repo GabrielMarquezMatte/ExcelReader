@@ -26,7 +26,7 @@ namespace ExcelReader.Core.Writer.Parallel
             Func<BatchSegment, CancellationToken, ValueTask> emit, CancellationToken ct)
         {
             _degree = options.DegreeOfParallelism == 0 ? Environment.ProcessorCount : options.DegreeOfParallelism;
-            _batchRows = options.BatchRows;
+            _batchRows = Math.Min(options.BatchRows, ExcelLimits.MaxRows);
             _rowsBefore = rowsBefore;
             _format = format;
             _emit = emit;
@@ -64,7 +64,11 @@ namespace ExcelReader.Core.Writer.Parallel
         private ValueTask AddAsync(T record)
         {
             _batch[_count++] = record;
-            return _count == _batchRows ? DispatchAsync() : ValueTask.CompletedTask;
+            if (_count == _batchRows)
+            {
+                return DispatchAsync();
+            }
+            return ValueTask.CompletedTask;
         }
 
         private async ValueTask CompleteAsync()
@@ -98,9 +102,14 @@ namespace ExcelReader.Core.Writer.Parallel
             _batch = ArrayPool<T>.Shared.Rent(_batchRows);
             _count = 0;
             _rowsBefore += count;
-            _inFlight.Enqueue(_degree == 1
-                ? Task.FromResult(Format(batch, count, rowsBefore))
-                : Task.Run(() => Format(batch, count, rowsBefore), CancellationToken.None));
+            if (_degree == 1)
+            {
+                _inFlight.Enqueue(Task.FromResult(Format(batch, count, rowsBefore)));
+            }
+            else
+            {
+                _inFlight.Enqueue(Task.Run(() => Format(batch, count, rowsBefore), CancellationToken.None));
+            }
         }
 
         private BatchSegment Format(T[] batch, int count, int rowsBefore)

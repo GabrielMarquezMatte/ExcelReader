@@ -10,7 +10,8 @@ namespace ExcelReader.Core.Writer
 
         /// <summary>
         /// Gets the most batches formatted and compressed at once. <c>0</c>, the default, means
-        /// <see cref="Environment.ProcessorCount"/>. With <c>1</c> the batches run on the calling thread.
+        /// <see cref="Environment.ProcessorCount"/>. With <c>1</c> the batches run on the calling flow,
+        /// without the thread pool.
         /// </summary>
         public int DegreeOfParallelism { get; init; }
 

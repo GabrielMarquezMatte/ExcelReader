@@ -167,7 +167,7 @@ namespace ExcelReader.Tests.Writer.Parallel
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
                 async () => await Runner(probe, 2, 10, cts.Token).RunAsync(new RecordSource<int>(Source())));
             Assert.Equal(0, probe.Running);
-            Assert.True(probe.Emitted.Count < 100);
+            Assert.True(probe.Emitted.Count <= 3);
         }
 
         [Fact]
