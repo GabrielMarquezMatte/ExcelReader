@@ -310,7 +310,8 @@ The rules:
   enumerated by one flow at a time, never concurrently.
 - **Rows may be written before and after the call, not during it.** Row numbering carries on, and
   the call can be made more than once on a sheet.
-- **A failure faults the sheet**, as a failing row does in a serial write. The original exception is
+- **A failure or a cancellation ends the sheet and the workbook.** A serial `WriteRecordsAsync`
+  cancelled between rows leaves the sheet usable; a parallel call does not. The original exception is
   rethrown once every batch in flight has stopped.
 - **With `UseSharedStrings`, string indexes depend on thread timing**, so two runs give files that
   differ byte for byte. Their content is the same.
