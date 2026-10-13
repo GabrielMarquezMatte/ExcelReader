@@ -1,4 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer.Xls
@@ -14,8 +17,6 @@ namespace ExcelReader.Core.Writer.Xls
         internal const int MaxColumn = 255;
         private const int MaxSheetNameLength = 31;
 
-        private const int FramingBytes = 20 + 18 + 22 + 4;
-
         private readonly XlsWorkbookWriter _owner;
         private readonly bool _date1904;
         private readonly bool _isContinuation;
@@ -29,6 +30,12 @@ namespace ExcelReader.Core.Writer.Xls
         private int _maxRow = -1;
         private int _maxCol = -1;
         private int _rowNumber = -1;
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
+            Justification = "Read while the workbook is written; released with _cells via ReleaseBuffer.")]
+        private readonly BiffBuffer _rows = new(4096);
+        private int _rowCellStart;
+        private int _rowColMic;
+        private int _rowColMax;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
         private bool _rowHasCells;
@@ -52,13 +59,12 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal ExcelSheetVisibility Visibility { get; }
 
-        internal int SubstreamLength => FramingBytes + _colInfos.Length + _cells.Length;
-
         internal int RowCount => _maxRow + 1;
         internal int ColCount => _maxCol + 1;
         internal ReadOnlyMemory<byte> CellsMemory => _cells.Memory;
         internal ReadOnlyMemory<byte> ColInfoMemory => _colInfos.Memory;
-        internal bool ResourcesReleased => _cells.IsReleased && _colInfos.IsReleased;
+        internal ReadOnlySpan<XlsRowExtent> Rows => MemoryMarshal.Cast<byte, XlsRowExtent>(_rows.Span);
+        internal bool ResourcesReleased => _cells.IsReleased && _colInfos.IsReleased && _rows.IsReleased;
         private bool HasActiveRow => _rowActive || (_continuation?.HasActiveRow ?? false);
 
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
@@ -160,6 +166,7 @@ namespace ExcelReader.Core.Writer.Xls
             _activeRowStyle = styleId;
             _rowActive = true;
             _rowHasCells = false;
+            _rowCellStart = _cells.Length;
             _rowWriter ??= new XlsRowWriter(this, _rowNumber);
             _rowWriter.Reset(_rowNumber);
             return _rowWriter;
@@ -172,6 +179,12 @@ namespace ExcelReader.Core.Writer.Xls
             {
                 BiffRecordWriter.WriteBlank(_cells, _rowNumber, 0, XlsGlobals.GeneralXf);
                 Track(_rowNumber, 0);
+            }
+            if (_rowActive)
+            {
+                var extent = new XlsRowExtent(_rowCellStart, _rowColMic, _rowColMax + 1);
+                MemoryMarshal.Write(_rows.GetSpan(Unsafe.SizeOf<XlsRowExtent>()), in extent);
+                _rows.Advance(Unsafe.SizeOf<XlsRowExtent>());
             }
             _rowActive = false;
         }
@@ -196,8 +209,17 @@ namespace ExcelReader.Core.Writer.Xls
         internal void EmitLabel(int row, int col, ReadOnlySpan<char> value)
         {
             ValidateColumn(col);
+            ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
             int abstractStyle = EffectiveStyle(col);
-            BiffRecordWriter.WriteLabel(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
+            int xf = abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle);
+            if (value.Length > XlsSharedStrings.MaxLabelLength)
+            {
+                BiffRecordWriter.WriteLabelSst(_cells, row, col, xf, _owner.AddSharedString(value));
+            }
+            else
+            {
+                BiffRecordWriter.WriteLabel(_cells, row, col, xf, value);
+            }
             Track(row, col);
         }
 
@@ -213,10 +235,16 @@ namespace ExcelReader.Core.Writer.Xls
         {
             _cells.Dispose();
             _colInfos.Dispose();
+            _rows.Dispose();
         }
 
         private void Track(int row, int col)
         {
+            if (!_rowHasCells)
+            {
+                _rowColMic = col;
+            }
+            _rowColMax = col;
             _rowHasCells = true;
             if (row > _maxRow) { _maxRow = row; }
             if (col > _maxCol) { _maxCol = col; }
@@ -299,4 +327,7 @@ namespace ExcelReader.Core.Writer.Xls
             return ValueTask.CompletedTask;
         }
     }
+
+    [StructLayout(LayoutKind.Auto)]
+    internal readonly record struct XlsRowExtent(int CellStart, int ColMic, int ColMac);
 }
