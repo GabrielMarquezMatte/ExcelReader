@@ -21,7 +21,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private readonly ZipPackageWriter _zip;
         private readonly CompressionLevel _compression;
         private readonly bool _offloadWrite;
-        private readonly BiffBuffer _rowBuffer = new(512);
+        private readonly BiffBuffer _rowBuffer;
         // ponytail: flush to the deflate stream once buffered rows pass 64 KB — bounds memory on huge
         private const int FlushThreshold = 64 * 1024;
         private readonly int _flushThreshold = FlushThreshold;
@@ -46,12 +46,14 @@ namespace ExcelReader.Core.Writer.Xlsx
             Visibility = visibility;
             _compression = compression;
             _offloadWrite = offloadWrite;
+            _rowBuffer = new BiffBuffer(512);
         }
 
         // A detached copy formats batches for the parallel record path: it has its own row buffer,
         // never flushes it and never touches the ZIP.
-        private XlsxSheetWriter(XlsxSheetWriter source)
+        private XlsxSheetWriter(XlsxSheetWriter source, int batchRows)
         {
+            _rowBuffer = new BiffBuffer(DetachedCapacity(batchRows));
             _owner = source._owner;
             _zip = source._zip;
             Name = source.Name;
@@ -67,6 +69,11 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
         }
 
+        private static int DetachedCapacity(int batchRows)
+        {
+            return (int)Math.Min(1 << 20, (long)batchRows * 128);
+        }
+
         internal string Name { get; }
         internal int SheetId { get; }
         internal ExcelSheetVisibility Visibility { get; }
@@ -77,12 +84,20 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         internal int GetSharedStringIndex(string value)
         {
-            return _workerStrings is null ? _owner.GetSharedStringIndex(value) : _workerStrings.GetOrAdd(value);
+            if (_workerStrings is null)
+            {
+                return _owner.GetSharedStringIndex(value);
+            }
+            return _workerStrings.GetOrAdd(value);
         }
 
         internal int GetSharedStringIndex(ReadOnlySpan<char> value)
         {
-            return _workerStrings is null ? _owner.GetSharedStringIndex(value) : _workerStrings.GetOrAdd(value);
+            if (_workerStrings is null)
+            {
+                return _owner.GetSharedStringIndex(value);
+            }
+            return _workerStrings.GetOrAdd(value);
         }
 
         internal int GetColumnStyle(int columnIndex)
@@ -563,6 +578,7 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         async ValueTask IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.AppendSegmentAsync(BatchSegment segment, CancellationToken ct)
         {
+            WriterStateGuard.ThrowIfEnded(_state, this);
             await _entry!.AppendSegmentAsync(segment.Data.Memory, segment.Crc, segment.RawLength, ct).ConfigureAwait(false);
             _rowNumber += segment.Rows;
         }
@@ -578,9 +594,9 @@ namespace ExcelReader.Core.Writer.Xlsx
             await FaultAsync().ConfigureAwait(false);
         }
 
-        XlsxSheetWriter IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.CreateDetached()
+        XlsxSheetWriter IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.CreateDetached(int batchRows)
         {
-            return new XlsxSheetWriter(this);
+            return new XlsxSheetWriter(this, batchRows);
         }
 
         void IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.BeginBatch(int rowsBefore)

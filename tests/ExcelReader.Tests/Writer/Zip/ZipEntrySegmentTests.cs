@@ -125,5 +125,21 @@ namespace ExcelReader.Tests.Writer.Zip
             Assert.Throws<InvalidOperationException>(zip.Finish);
             zip.Abandon();
         }
+
+        [Fact]
+        public async Task AFailedAsyncAppendKillsTheEntryAndTheArchive()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            byte[] raw = DeflateEncoderTests.SheetXml(20_000);
+            var zip = new ZipPackageWriter(new FailingWriteStream(limit: 0));
+            ZipEntryStream entry = zip.OpenEntry("sheet.xml", CompressionLevel.Fastest);
+            (byte[] segment, uint crc) = Segment(raw, CompressionLevel.Fastest);
+
+            await Assert.ThrowsAsync<IOException>(async () => await entry.AppendSegmentAsync(segment, crc, raw.Length, ct));
+            await entry.DisposeAsync();
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => await entry.AppendSegmentAsync(segment, crc, raw.Length, ct));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await zip.FinishAsync(ct));
+            zip.Abandon();
+        }
     }
 }

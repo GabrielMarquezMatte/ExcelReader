@@ -10,11 +10,12 @@ namespace ExcelReader.Core.Writer
     /// <see cref="ParallelWriteOptions.BatchRows"/> rows.
     /// </summary>
     /// <remarks>
-    /// The source is enumerated on the calling thread only. A <c>writeRow</c> delegate runs on pool
+    /// The source is enumerated by one flow at a time, never concurrently. A <c>writeRow</c> delegate runs on pool
     /// threads, several at once, so whatever it captures must be safe to use concurrently; the layouts
     /// from <see cref="ExcelRecordLayout"/> are. Rows may be written through the normal API before
-    /// and after a call, but not while one is running. With shared strings on, string indexes depend
-    /// on thread timing, so two runs give the same content in files that differ byte for byte.
+    /// and after a call, but not while one is running. A call that throws, a cancelled one included,
+    /// ends the sheet and its workbook. With shared strings on, string indexes depend on thread
+    /// timing, so two runs give the same content in files that differ byte for byte.
     /// </remarks>
     public static class ParallelSheetWriterExtensions
     {
@@ -30,6 +31,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         /// <exception cref="InvalidOperationException">A row is still active on the sheet.</exception>
         /// <exception cref="ExcelReader.Core.Reader.ExcelLimitExceededException">The records do not fit in the sheet's 1,048,576 rows.</exception>
+        /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</exception>
         public static ValueTask WriteRecordsParallelAsync<T>(this XlsxSheetWriter sheet, IEnumerable<T> records,
             ExcelRecordLayout<T> layout, ParallelWriteOptions? options = null, CancellationToken ct = default)
         {
@@ -61,6 +63,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         /// <exception cref="InvalidOperationException">A row is still active on the sheet.</exception>
         /// <exception cref="ExcelReader.Core.Reader.ExcelLimitExceededException">The records do not fit in the sheet's 1,048,576 rows.</exception>
+        /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</exception>
         public static ValueTask WriteRecordsParallelAsync<T>(this XlsxSheetWriter sheet, IEnumerable<T> records,
             Action<XlsxRowWriter, T> writeRow, ParallelWriteOptions? options = null, CancellationToken ct = default)
         {
@@ -94,6 +97,7 @@ namespace ExcelReader.Core.Writer
         /// <param name="ct">A token to cancel the operation between batches.</param>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/>, <paramref name="records"/>, <paramref name="name"/> or <paramref name="layout"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="options"/> holds a negative degree or a batch size below 1.</exception>
+        /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</exception>
         public static ValueTask WriteTableParallelAsync<T>(this XlsxSheetWriter sheet, IEnumerable<T> records, string name,
             ExcelRecordLayout<T> layout, ExcelTableOptions? tableOptions = null, ParallelWriteOptions? options = null, CancellationToken ct = default)
         {

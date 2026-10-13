@@ -24,7 +24,8 @@ namespace ExcelReader.Core.Writer.Parallel
         /// <summary>Faults the sheet after a failed parallel stretch. Never throws.</summary>
         ValueTask FailSegmentsAsync();
 
-        TSelf CreateDetached();
+        /// <summary>Makes a detached copy whose buffer is sized for batches of <paramref name="batchRows"/> rows.</summary>
+        TSelf CreateDetached(int batchRows);
 
         void BeginBatch(int rowsBefore);
 

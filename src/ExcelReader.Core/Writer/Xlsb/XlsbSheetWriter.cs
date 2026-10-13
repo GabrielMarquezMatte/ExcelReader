@@ -21,7 +21,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
         private readonly bool _offloadWrite;
-        private readonly BiffBuffer _records = new(4096);
+        private readonly BiffBuffer _records;
         private readonly TableTracker _tables = new();
         private readonly int _spillThreshold = SpillThreshold;
         private readonly WorkerStringCache? _workerStrings;
@@ -66,12 +66,14 @@ namespace ExcelReader.Core.Writer.Xlsb
             _date1904 = date1904;
             _compression = compression;
             _offloadWrite = offloadWrite;
+            _records = new BiffBuffer(4096);
         }
 
         // A detached copy formats batches for the parallel record path: it has its own record buffer,
         // never spills it and never touches the ZIP.
-        private XlsbSheetWriter(XlsbSheetWriter source)
+        private XlsbSheetWriter(XlsbSheetWriter source, int batchRows)
         {
+            _records = new BiffBuffer(DetachedCapacity(batchRows));
             _owner = source._owner;
             _zip = source._zip;
             Name = source.Name;
@@ -86,6 +88,11 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 _workerStrings = new WorkerStringCache(_owner.SharedStrings!, _owner.SharedStringsGate);
             }
+        }
+
+        private static int DetachedCapacity(int batchRows)
+        {
+            return (int)Math.Min(1 << 20, (long)batchRows * 128);
         }
 
         internal string Name { get; }
@@ -694,11 +701,19 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         private int SharedStringIndex(ReadOnlySpan<char> value, string? owned)
         {
-            if (_workerStrings is not null)
+            if (_workerStrings is null)
             {
-                return owned is null ? _workerStrings.GetOrAdd(value) : _workerStrings.GetOrAdd(owned);
+                if (owned is null)
+                {
+                    return _owner.GetSharedStringIndex(value);
+                }
+                return _owner.GetSharedStringIndex(owned);
             }
-            return owned is null ? _owner.GetSharedStringIndex(value) : _owner.GetSharedStringIndex(owned);
+            if (owned is null)
+            {
+                return _workerStrings.GetOrAdd(value);
+            }
+            return _workerStrings.GetOrAdd(owned);
         }
 
         internal void WriteBoolCell(int columnIndex, bool value)
@@ -771,6 +786,7 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         async ValueTask IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.AppendSegmentAsync(BatchSegment segment, CancellationToken ct)
         {
+            WriterStateGuard.ThrowIfEnded(_state, this);
             MergeUsedRange(segment);
             if (!_segmentsOpen)
             {
@@ -828,9 +844,9 @@ namespace ExcelReader.Core.Writer.Xlsb
             await FaultAsync().ConfigureAwait(false);
         }
 
-        XlsbSheetWriter IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.CreateDetached()
+        XlsbSheetWriter IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.CreateDetached(int batchRows)
         {
-            return new XlsbSheetWriter(this);
+            return new XlsbSheetWriter(this, batchRows);
         }
 
         void IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.BeginBatch(int rowsBefore)

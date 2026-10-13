@@ -50,11 +50,11 @@ namespace ExcelReader.Core.Writer.Parallel
         {
             int rowsBefore = await sheet.BeginSegmentsAsync(ct).ConfigureAwait(false);
             var workers = new ConcurrentBag<TSheet>();
-            var runner = new BatchRunner<T>(options, rowsBefore,
-                (batch, count, before) => FormatBatch(sheet, workers, writeRow, batch, count, before),
-                sheet.AppendSegmentAsync, ct);
             try
             {
+                var runner = new BatchRunner<T>(options, rowsBefore,
+                    (batch, count, before) => FormatBatch(sheet, workers, writeRow, batch, count, before),
+                    sheet.AppendSegmentAsync, ct);
                 await runner.RunAsync(records).ConfigureAwait(false);
             }
             catch
@@ -79,7 +79,7 @@ namespace ExcelReader.Core.Writer.Parallel
         {
             if (!workers.TryTake(out TSheet? worker))
             {
-                worker = sheet.CreateDetached();
+                worker = sheet.CreateDetached(count);
             }
             try
             {

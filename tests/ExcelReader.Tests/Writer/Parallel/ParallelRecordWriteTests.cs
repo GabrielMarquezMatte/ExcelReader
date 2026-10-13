@@ -165,15 +165,19 @@ namespace ExcelReader.Tests.Writer.Parallel
         }
 
         [Theory]
-        [InlineData(CompressionLevel.Fastest)]
-        [InlineData(CompressionLevel.Optimal)]
-        [InlineData(CompressionLevel.SmallestSize)]
-        [InlineData(CompressionLevel.NoCompression)]
-        public async Task SerialRowsBeforeAndAfterSurvive(CompressionLevel level)
+        [InlineData(CompressionLevel.Fastest, false)]
+        [InlineData(CompressionLevel.Optimal, false)]
+        [InlineData(CompressionLevel.SmallestSize, false)]
+        [InlineData(CompressionLevel.NoCompression, false)]
+        [InlineData(CompressionLevel.Fastest, true)]
+        [InlineData(CompressionLevel.Optimal, true)]
+        [InlineData(CompressionLevel.SmallestSize, true)]
+        [InlineData(CompressionLevel.NoCompression, true)]
+        public async Task SerialRowsBeforeAndAfterSurvive(CompressionLevel level, bool prefetch)
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             List<Item> items = Items(1_300);
-            byte[] package = await WriteAsync(new XlsxWriterOptions { Compression = level }, async sheet =>
+            byte[] package = await WriteAsync(new XlsxWriterOptions { Compression = level, PrefetchWrite = prefetch }, async sheet =>
             {
                 await sheet.WriteRecordsAsync(items, (Action<XlsxRowWriter, Item>)Fill, ct);
                 await sheet.WriteRecordsParallelAsync(items, Fill, Parallel(4), ct);
@@ -344,6 +348,36 @@ namespace ExcelReader.Tests.Writer.Parallel
             await wb.EndAsync(ct);
 
             Assert.Equal(3, Read(ms.ToArray()).Count);
+        }
+
+        [Fact]
+        public async Task ABatchSizeBeyondTheRowLimitStillWrites()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            List<Item> items = Items(7);
+            byte[] package = await WriteAsync(XlsxWriterOptions.Default, async sheet =>
+                await sheet.WriteRecordsParallelAsync(items, Fill, Parallel(2, int.MaxValue), ct));
+
+            Assert.Equal(7, Read(package).Count);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task AFailingOutputSurfacesItsOwnException(bool prefetch)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            List<Item> items = Items(20_000);
+            using var target = new FailingWriteStream(limit: 4096);
+            XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(target, leaveOpen: true, new XlsxWriterOptions { PrefetchWrite = prefetch });
+            XlsxSheetWriter sheet = wb.AddSheet("Data");
+
+            IOException failure = await Assert.ThrowsAsync<IOException>(
+                async () => await sheet.WriteRecordsParallelAsync(items, Fill, Parallel(4), ct));
+
+            Assert.Equal("disk full", failure.Message);
+            Assert.True(sheet.ResourcesReleased);
+            await wb.DisposeAsync();
         }
     }
 }

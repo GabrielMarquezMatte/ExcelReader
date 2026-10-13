@@ -98,14 +98,17 @@ namespace ExcelReader.Tests.Writer.Parallel
         }
 
         [Theory]
-        [InlineData(CompressionLevel.Fastest)]
-        [InlineData(CompressionLevel.Optimal)]
-        [InlineData(CompressionLevel.NoCompression)]
-        public async Task SerialRowsBeforeAndAfterSurvive(CompressionLevel level)
+        [InlineData(CompressionLevel.Fastest, false)]
+        [InlineData(CompressionLevel.Optimal, false)]
+        [InlineData(CompressionLevel.NoCompression, false)]
+        [InlineData(CompressionLevel.Fastest, true)]
+        [InlineData(CompressionLevel.Optimal, true)]
+        [InlineData(CompressionLevel.NoCompression, true)]
+        public async Task SerialRowsBeforeAndAfterSurvive(CompressionLevel level, bool prefetch)
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             List<Item> items = ParallelRecordWriteTests.Items(1_300);
-            byte[] package = await WriteAsync(new XlsbWriterOptions { Compression = level }, async sheet =>
+            byte[] package = await WriteAsync(new XlsbWriterOptions { Compression = level, PrefetchWrite = prefetch }, async sheet =>
             {
                 await sheet.WriteRecordsAsync(items, Fill, ct);
                 await sheet.WriteRecordsParallelAsync(items, Fill, Parallel(4), ct);
@@ -202,6 +205,25 @@ namespace ExcelReader.Tests.Writer.Parallel
 
             Assert.True(sheet.ResourcesReleased);
             Assert.Throws<ObjectDisposedException>(() => sheet.StartRow());
+            await wb.DisposeAsync();
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task AFailingOutputSurfacesItsOwnException(bool prefetch)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            List<Item> items = ParallelRecordWriteTests.Items(20_000);
+            using var target = new FailingWriteStream(limit: 4096);
+            XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(target, leaveOpen: true, new XlsbWriterOptions { PrefetchWrite = prefetch });
+            XlsbSheetWriter sheet = wb.AddSheet("Data");
+
+            IOException failure = await Assert.ThrowsAsync<IOException>(
+                async () => await sheet.WriteRecordsParallelAsync(items, Fill, Parallel(4), ct));
+
+            Assert.Equal("disk full", failure.Message);
+            Assert.True(sheet.ResourcesReleased);
             await wb.DisposeAsync();
         }
     }
