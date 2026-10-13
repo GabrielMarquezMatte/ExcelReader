@@ -276,7 +276,9 @@ namespace ExcelReader.Tests.Writer.Xls
             });
 
             List<Record> records = Records(xls);
-            Assert.Equal(2, Worksheet(records).Count(r => r.Id == expectedRecord));
+            // "short" is a LABEL too.
+            int expectedCount = expectedRecord == Label ? 3 : 2;
+            Assert.Equal(expectedCount, Worksheet(records).Count(r => r.Id == expectedRecord));
             if (expectedRecord == LabelSst)
             {
                 Assert.Single(records, r => r.Id == Sst);
