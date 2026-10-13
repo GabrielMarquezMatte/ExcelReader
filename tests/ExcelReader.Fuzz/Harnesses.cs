@@ -10,6 +10,8 @@ using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Reader.Zip.Inflate;
+using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Fuzz
 {
@@ -247,6 +249,42 @@ namespace ExcelReader.Fuzz
                 return;
             }
             throw new InvalidOperationException("The fuzz oracle swallows an inflate divergence.");
+        }
+
+        internal static void Deflate(ReadOnlySpan<byte> data)
+        {
+            if (data.IsEmpty)
+            {
+                return;
+            }
+            int chunk = 1 + (data[0] * 4099 % 70_000);
+            ReadOnlySpan<byte> payload = data[1..];
+            if (payload.Length > MaxInflateOutput)
+            {
+                payload = payload[..MaxInflateOutput];
+            }
+            byte[] compressed = DeflateWithEncoder(payload, chunk);
+            byte[] viaZlib = InflateWith(static source => new DeflateStream(source, CompressionMode.Decompress), compressed);
+            byte[] viaLibrary = InflateWith(static source => new InflateStream(source), compressed);
+            if (!viaZlib.AsSpan().SequenceEqual(payload) || !viaLibrary.AsSpan().SequenceEqual(payload))
+            {
+                throw new OracleDivergenceException(
+                    $"Deflate round trip changed {payload.Length} bytes written in {chunk}-byte pieces: DeflateStream gave {viaZlib.Length}, InflateStream {viaLibrary.Length}.");
+            }
+        }
+
+        private static byte[] DeflateWithEncoder(ReadOnlySpan<byte> payload, int chunk)
+        {
+            using var encoder = new DeflateEncoder();
+            using var output = new BiffBuffer(4096);
+            while (!payload.IsEmpty)
+            {
+                int take = Math.Min(chunk, payload.Length);
+                encoder.Write(payload[..take], output);
+                payload = payload[take..];
+            }
+            encoder.Finish(output);
+            return output.Span.ToArray();
         }
 
         private static void RequireSameInflate(byte[] actual, byte[] reference, bool prefixOnly)
