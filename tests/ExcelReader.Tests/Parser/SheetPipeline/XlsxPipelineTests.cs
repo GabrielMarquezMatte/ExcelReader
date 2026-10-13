@@ -99,7 +99,10 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
         {
             private long _remaining = long.MaxValue;
 
-            public void Arm(long budget) => _remaining = budget;
+            public void Arm(long budget)
+            {
+                _remaining = budget;
+            }
 
             public override bool CanRead => inner.CanRead;
             public override bool CanSeek => inner.CanSeek;
@@ -136,9 +139,20 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
                 return n;
             }
 
-            public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
-            public override void SetLength(long value) => throw new NotSupportedException();
-            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                return inner.Seek(offset, origin);
+            }
+
+            public override void SetLength(long value)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                throw new NotSupportedException();
+            }
 
             private void Spend(int n)
             {

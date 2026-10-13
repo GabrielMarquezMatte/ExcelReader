@@ -180,15 +180,30 @@ namespace ExcelReader.Tests.Writer
                 };
             }
 
-            internal void AddSheet(string name) => _addSheet(name);
+            internal void AddSheet(string name)
+            {
+                _addSheet(name);
+            }
 
-            internal void Width(int column, double width) => _width(column, width);
+            internal void Width(int column, double width)
+            {
+                _width(column, width);
+            }
 
-            internal void Style(int column) => _style(column);
+            internal void Style(int column)
+            {
+                _style(column);
+            }
 
-            internal int AddStyle(CellStyle style) => _addStyle(style);
+            internal int AddStyle(CellStyle style)
+            {
+                return _addStyle(style);
+            }
 
-            internal void Abandon() => _abandon();
+            internal void Abandon()
+            {
+                _abandon();
+            }
         }
     }
 }

@@ -68,19 +68,34 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark(Baseline = true)]
-        public long EndToEnd() => ReadAll(_xlsx, null);
+        public long EndToEnd()
+        {
+            return ReadAll(_xlsx, null);
+        }
 
         [Benchmark]
-        public long EndToEnd_Prefetch() => ReadAll(_xlsx, _prefetchOptions);
+        public long EndToEnd_Prefetch()
+        {
+            return ReadAll(_xlsx, _prefetchOptions);
+        }
 
         [Benchmark]
-        public bool SharedStringPrologue() => Prologue(_xlsx);
+        public bool SharedStringPrologue()
+        {
+            return Prologue(_xlsx);
+        }
 
         [Benchmark]
-        public long Stored_EndToEnd() => ReadAll(_stored, null);
+        public long Stored_EndToEnd()
+        {
+            return ReadAll(_stored, null);
+        }
 
         [Benchmark]
-        public bool Stored_SharedStringPrologue() => Prologue(_stored);
+        public bool Stored_SharedStringPrologue()
+        {
+            return Prologue(_stored);
+        }
 
         [Benchmark]
         public long IndexParse_Utf8Parser()

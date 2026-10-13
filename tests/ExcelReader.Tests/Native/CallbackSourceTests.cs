@@ -24,14 +24,17 @@ namespace ExcelReader.Tests.Native
         {
             private GCHandle _handle = GCHandle.Alloc(source);
 
-            internal NativeSourceRaw Raw(long? length = null) => new()
+            internal NativeSourceRaw Raw(long? length = null)
             {
-                StructSize = sizeof(NativeSourceRaw),
-                UserData = (void*)GCHandle.ToIntPtr(_handle),
-                Length = length ?? source.Bytes.Length,
-                ReadAt = &ReadAt,
-                Release = &Release,
-            };
+                return new()
+                {
+                    StructSize = sizeof(NativeSourceRaw),
+                    UserData = (void*)GCHandle.ToIntPtr(_handle),
+                    Length = length ?? source.Bytes.Length,
+                    ReadAt = &ReadAt,
+                    Release = &Release,
+                };
+            }
 
             public void Dispose()
             {
@@ -72,7 +75,10 @@ namespace ExcelReader.Tests.Native
             return ReadApi.OpenSource(source!, format, options, out handle);
         }
 
-        private static NativeOpenOptionsRaw Options() => new() { StructSize = sizeof(NativeOpenOptionsRaw) };
+        private static NativeOpenOptionsRaw Options()
+        {
+            return new() { StructSize = sizeof(NativeOpenOptionsRaw) };
+        }
 
         private static byte[] BuildPrefetchedXlsx()
         {
