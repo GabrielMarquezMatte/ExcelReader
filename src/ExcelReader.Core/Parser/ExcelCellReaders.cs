@@ -76,8 +76,7 @@ namespace ExcelReader.Core.Parser
 
         private static bool ReadTimeOnlyAuto(in Cell cell, in ExcelRowContext context, out TimeOnly value)
         {
-            return ColumnParserFactory.ReadTimeOnly(in cell, in context, out value)
-                || ColumnParserFactory.ReadTextTimeOnly(in cell, in context, out value);
+            return ColumnParserFactory.ReadTimeOnlyAuto(in cell, in context, out value);
         }
 
         /// <summary>
