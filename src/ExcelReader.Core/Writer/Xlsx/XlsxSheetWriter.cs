@@ -1,10 +1,12 @@
 using System.Buffers.Text;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Writer.Parallel;
 using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Writer.Xlsx
@@ -12,7 +14,7 @@ namespace ExcelReader.Core.Writer.Xlsx
     /// <summary>
     /// Writes a single worksheet's XML into an XLSX ZIP archive, buffering rows and flushing them to the entry stream once they cross a size threshold.
     /// </summary>
-    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>, ITableSheetWriter<XlsxRowWriter>
+    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>, ITableSheetWriter<XlsxRowWriter>, IBatchSheet<XlsxSheetWriter, XlsxRowWriter>
     {
         private readonly TableTracker _tables = new();
         private readonly XlsxWorkbookWriter _owner;
@@ -22,6 +24,10 @@ namespace ExcelReader.Core.Writer.Xlsx
         private readonly BiffBuffer _rowBuffer = new(512);
         // ponytail: flush to the deflate stream once buffered rows pass 64 KB — bounds memory on huge
         private const int FlushThreshold = 64 * 1024;
+        private readonly int _flushThreshold = FlushThreshold;
+        private readonly WorkerStringCache? _workerStrings;
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "An alias of the entry that _stream is or wraps; disposing _stream disposes it.")]
+        private ZipEntryStream? _entry;
         private XlsxRowWriter? _rowWriter;
         private Stream? _stream;
         private int _rowNumber;
@@ -42,6 +48,25 @@ namespace ExcelReader.Core.Writer.Xlsx
             _offloadWrite = offloadWrite;
         }
 
+        // A detached copy formats batches for the parallel record path: it has its own row buffer,
+        // never flushes it and never touches the ZIP.
+        private XlsxSheetWriter(XlsxSheetWriter source)
+        {
+            _owner = source._owner;
+            _zip = source._zip;
+            Name = source.Name;
+            SheetId = source.SheetId;
+            Visibility = source.Visibility;
+            _compression = source._compression;
+            _columnStyles = source._columnStyles;
+            _flushThreshold = int.MaxValue;
+            _state = WriterState.Started;
+            if (_owner.UseSharedStrings)
+            {
+                _workerStrings = new WorkerStringCache(_owner.SharedStrings!, _owner.SharedStringsGate);
+            }
+        }
+
         internal string Name { get; }
         internal int SheetId { get; }
         internal ExcelSheetVisibility Visibility { get; }
@@ -52,12 +77,12 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         internal int GetSharedStringIndex(string value)
         {
-            return _owner.GetSharedStringIndex(value);
+            return _workerStrings is null ? _owner.GetSharedStringIndex(value) : _workerStrings.GetOrAdd(value);
         }
 
         internal int GetSharedStringIndex(ReadOnlySpan<char> value)
         {
-            return _owner.GetSharedStringIndex(value);
+            return _workerStrings is null ? _owner.GetSharedStringIndex(value) : _workerStrings.GetOrAdd(value);
         }
 
         internal int GetColumnStyle(int columnIndex)
@@ -89,8 +114,9 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
             try
             {
-                Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-                _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
+                ZipEntryStream entry = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+                _entry = entry;
+                _stream = _offloadWrite ? new WriteOffloadStream(entry) : entry;
                 _rowBuffer.Reset();
                 _rowBuffer.WriteUtf8(
                     "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
@@ -117,8 +143,9 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             try
             {
-                Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-                _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
+                ZipEntryStream entry = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+                _entry = entry;
+                _stream = _offloadWrite ? new WriteOffloadStream(entry) : entry;
                 _rowBuffer.Reset();
                 _rowBuffer.WriteUtf8(
                     "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
@@ -358,6 +385,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             _state = WriterState.Ended;
             _stream = null;
+            _entry = null;
             _rowBuffer.Dispose();
             _owner.NotifySheetEnded(faulted);
         }
@@ -445,7 +473,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         internal void EndBufferedRow()
         {
             CloseBufferedRow();
-            if (_rowBuffer.Length >= FlushThreshold)
+            if (_rowBuffer.Length >= _flushThreshold)
             {
                 FlushRowBuffer();
             }
@@ -474,7 +502,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         internal ValueTask EndBufferedRowAsync(CancellationToken ct = default)
         {
             CloseBufferedRow();
-            return _rowBuffer.Length >= FlushThreshold ? FlushRowBufferAsync(ct) : ValueTask.CompletedTask;
+            return _rowBuffer.Length >= _flushThreshold ? FlushRowBufferAsync(ct) : ValueTask.CompletedTask;
         }
 
         private async ValueTask FlushRowBufferAsync(CancellationToken ct)
@@ -497,6 +525,85 @@ namespace ExcelReader.Core.Writer.Xlsx
                 await FaultAsync().ConfigureAwait(false);
                 throw;
             }
+        }
+
+        CompressionLevel IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.BatchCompression
+        {
+            get
+            {
+                return _compression;
+            }
+        }
+
+        async ValueTask<int> IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.BeginSegmentsAsync(CancellationToken ct)
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsxRowWriter));
+            await EnsureStartedAsync(ct).ConfigureAwait(false);
+            if (_rowBuffer.Length > 0)
+            {
+                await FlushRowBufferAsync(ct).ConfigureAwait(false);
+            }
+            if (_stream is WriteOffloadStream offload)
+            {
+                try
+                {
+                    await offload.DrainAsync(ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    await FaultAsync().ConfigureAwait(false);
+                    throw;
+                }
+            }
+            // Held for the whole stretch, so StartRow and End are refused until it is over.
+            _rowActive = true;
+            return _rowNumber;
+        }
+
+        async ValueTask IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.AppendSegmentAsync(BatchSegment segment, CancellationToken ct)
+        {
+            await _entry!.AppendSegmentAsync(segment.Data.Memory, segment.Crc, segment.RawLength, ct).ConfigureAwait(false);
+            _rowNumber += segment.Rows;
+        }
+
+        void IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.EndSegments()
+        {
+            _rowActive = false;
+        }
+
+        async ValueTask IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.FailSegmentsAsync()
+        {
+            _rowActive = false;
+            await FaultAsync().ConfigureAwait(false);
+        }
+
+        XlsxSheetWriter IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.CreateDetached()
+        {
+            return new XlsxSheetWriter(this);
+        }
+
+        void IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.BeginBatch(int rowsBefore)
+        {
+            _rowBuffer.Reset();
+            _rowNumber = rowsBefore;
+            _rowActive = false;
+        }
+
+        XlsxRowWriter IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.StartBatchRow()
+        {
+            return StartRow();
+        }
+
+        ReadOnlySpan<byte> IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.EndBatch(BatchSegment segment)
+        {
+            _workerStrings?.FlushReferences();
+            return _rowBuffer.Span;
+        }
+
+        void IBatchSheet<XlsxSheetWriter, XlsxRowWriter>.ReleaseDetached()
+        {
+            _rowBuffer.Dispose();
         }
     }
 }

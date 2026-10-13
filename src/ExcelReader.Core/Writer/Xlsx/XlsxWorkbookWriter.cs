@@ -146,6 +146,16 @@ namespace ExcelReader.Core.Writer.Xlsx
             return _sharedStrings!.GetOrAdd(value);
         }
 
+        internal SharedStringTable? SharedStrings
+        {
+            get
+            {
+                return _sharedStrings;
+            }
+        }
+
+        internal Lock SharedStringsGate { get; } = new();
+
         /// <inheritdoc/>
         public int AddStyle(CellStyle style)
         {

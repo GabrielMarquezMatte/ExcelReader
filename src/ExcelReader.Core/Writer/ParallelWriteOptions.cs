@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Writer
 {
-    /// <summary>Configures parallel record writes.</summary>
+    /// <summary>Configures the parallel record writes of <see cref="ParallelSheetWriterExtensions"/>.</summary>
     public sealed class ParallelWriteOptions
     {
         /// <summary>Gets the default options: one batch in flight per processor, 8,192 rows per batch.</summary>

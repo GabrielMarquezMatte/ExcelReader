@@ -48,6 +48,12 @@ namespace ExcelReader.Core.Writer.Internal
             return index;
         }
 
+        /// <summary>Counts references that were resolved without calling <see cref="GetOrAdd(string)"/>.</summary>
+        internal void AddReferences(int count)
+        {
+            Count += count;
+        }
+
         internal BiffBuffer ToXlsxBytes()
         {
             BiffBuffer xml = new(Math.Max(256, _values.Count * 32));
