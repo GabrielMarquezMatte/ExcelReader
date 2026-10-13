@@ -115,7 +115,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         public void SetColumnStyle(int columnIndex, int styleId)
         {
-            SheetColumnValidation.SetColumnStyle(ref _columnStyles, columnIndex, styleId, _owner.StyleCount, _state, this);
+            SheetColumnValidation.SetColumnStyle(ref _columnStyles, columnIndex, styleId, _owner.StyleCount, ExcelLimits.MaxColumns, _state, this);
         }
 
         /// <inheritdoc/>
@@ -123,7 +123,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         public void SetColumnWidth(int columnIndex, double width)
         {
-            SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this);
+            SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, ExcelLimits.MaxColumns, _state, this);
         }
 
         private int EffectiveStyle(int columnIndex)
