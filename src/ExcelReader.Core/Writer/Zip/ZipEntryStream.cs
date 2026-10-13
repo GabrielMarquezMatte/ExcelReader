@@ -21,10 +21,14 @@ namespace ExcelReader.Core.Writer.Zip
         private readonly BiffBuffer _pending = new(FlushThreshold * 2);
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
             Justification = "Released by Release(), which every close path and Abandon call.")]
-        private readonly DeflateEncoder? _encoder;
+        private DeflateEncoder? _encoder;
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
             Justification = "Finished by FinishCompression and released by Release().")]
-        private readonly DeflateStream? _zlib;
+        private DeflateStream? _zlib;
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
+            Justification = "Owns no resources; the DeflateStream over it disposes it.")]
+        private BufferSink? _zlibSink;
+        private bool _segmented;
         private uint _crc;
         private long _uncompressed;
         private long _compressed;
@@ -47,7 +51,8 @@ namespace ExcelReader.Core.Writer.Zip
             }
             else if (record.Method == ZipRecords.MethodDeflate)
             {
-                _zlib = new DeflateStream(new BufferSink(_pending), record.Level);
+                _zlibSink = new BufferSink(_pending);
+                _zlib = new DeflateStream(_zlibSink, record.Level);
             }
         }
 
@@ -209,6 +214,82 @@ namespace ExcelReader.Core.Writer.Zip
             }
         }
 
+        /// <summary>
+        /// Appends data that <see cref="SegmentCompressor"/> already compressed at this entry's level,
+        /// with the CRC and length of the bytes it was made from.
+        /// </summary>
+        internal void AppendSegment(ReadOnlySpan<byte> segment, uint crc, long uncompressedLength)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            try
+            {
+                BeginSegments();
+                MergeSegment(crc, uncompressedLength);
+                _pending.Write(segment);
+                if (_pending.Length >= FlushThreshold)
+                {
+                    FlushPending();
+                }
+            }
+            catch
+            {
+                Fail();
+                throw;
+            }
+        }
+
+        /// <inheritdoc cref="AppendSegment"/>
+        internal async ValueTask AppendSegmentAsync(ReadOnlyMemory<byte> segment, uint crc, long uncompressedLength, CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            try
+            {
+                BeginSegments();
+                MergeSegment(crc, uncompressedLength);
+                _pending.Write(segment.Span);
+                if (_pending.Length >= FlushThreshold)
+                {
+                    await FlushPendingAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                Fail();
+                throw;
+            }
+        }
+
+        // From here on every piece of the entry is self-contained: a compressor kept across a segment
+        // could refer back to bytes the reader sees before that segment.
+        private void BeginSegments()
+        {
+            if (_segmented)
+            {
+                return;
+            }
+            _segmented = true;
+            if (_encoder is not null)
+            {
+                _encoder.FlushSync(_pending);
+                _encoder.Dispose();
+                _encoder = null;
+                return;
+            }
+            if (_zlib is not null)
+            {
+                _zlib.Flush();
+                _zlibSink!.Discard = true;
+                _zlib.Dispose();
+                _zlib = null;
+            }
+        }
+
+        private void MergeSegment(uint crc, long uncompressedLength)
+        {
+            _crc = Crc32.Combine(_crc, crc, uncompressedLength);
+            _uncompressed += uncompressedLength;
+        }
+
         internal void Abandon()
         {
             if (_closed)
@@ -281,6 +362,11 @@ namespace ExcelReader.Core.Writer.Zip
         {
             _crc = Crc32.Append(_crc, buffer);
             _uncompressed += buffer.Length;
+            if (_segmented)
+            {
+                SegmentCompressor.Compress(buffer, _record.Level, _pending);
+                return;
+            }
             if (_encoder is not null)
             {
                 _encoder.Write(buffer, _pending);
@@ -364,6 +450,14 @@ namespace ExcelReader.Core.Writer.Zip
 
         private void FinishCompression()
         {
+            if (_segmented)
+            {
+                if (_record.Method == ZipRecords.MethodDeflate)
+                {
+                    _pending.Write(SegmentCompressor.FinalBlock);
+                }
+                return;
+            }
             _encoder?.Finish(_pending);
             _zlib?.Dispose();
         }
