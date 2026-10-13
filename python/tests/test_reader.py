@@ -823,3 +823,45 @@ def test_infer_schema_without_parse_text_keeps_csv_columns_as_strings():
         schema = workbook.sheets[0].infer_schema()
 
     assert {spec.type for spec in schema} == {ColumnType.STRING}
+
+
+@pytest.mark.parametrize(
+    ("serial", "date1904", "expected"),
+    [
+        ("1", False, (1900, 1, 1)),
+        ("59", False, (1900, 2, 28)),
+        ("61", False, (1900, 3, 1)),
+        ("45000.75", False, (2023, 3, 15)),
+        ("2958465", False, (9999, 12, 31)),
+        ("0", True, (1904, 1, 1)),
+        ("43538", True, (2023, 3, 15)),
+    ],
+)
+def test_as_date_follows_excels_calendar(serial, date1904, expected):
+    from datetime import date
+
+    assert Cell(0, CellType.DATE, serial).as_date(date1904) == date(*expected)
+
+
+@pytest.mark.parametrize("serial", ["-1", "2958466", "1e400", "nan"])
+def test_as_date_rejects_a_serial_excel_cannot_show(serial):
+    with pytest.raises(ValueError, match="not an Excel date serial"):
+        Cell(0, CellType.DATE, serial).as_date()
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_micros"),
+    [
+        ("2024-01-15T13:30:05.0000000Z", 1_705_325_405_000_000),
+        ("2024-01-15T13:30:05+03:00", 1_705_314_605_000_000),
+        ("2024-01-15T13:30:05", 1_705_325_405_000_000),
+    ],
+)
+def test_parse_typed_timestamp_text_does_not_depend_on_the_local_time_zone(tmp_path, text, expected_micros):
+    path = tmp_path / "stamps.csv"
+    path.write_text(f"at\n{text}\n", encoding="utf-8")
+
+    with open_workbook(path) as workbook:
+        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.TIMESTAMP, name="at")])
+
+    assert list(table.columns[0]) == [expected_micros]

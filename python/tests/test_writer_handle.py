@@ -219,3 +219,18 @@ def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
         from_memory = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert from_file == from_memory
+
+
+@pytest.mark.parametrize("value", [2**63, -(2**63) - 1, 2**64 + 5])
+def test_an_integer_beyond_64_bits_is_refused_not_wrapped(tmp_path, value):
+    with open_writer(tmp_path / "big.xlsx") as writer:
+        writer.start_sheet("Data")
+        with pytest.raises(OverflowError):
+            writer.write_row(["fine", value])
+        writer.start_row()
+        with pytest.raises(OverflowError):
+            writer.write_i64(value)
+        writer.write_i64(2**63 - 1)
+        writer.write_i64(-(2**63))
+        writer.end_row()
+        writer.end_sheet()
