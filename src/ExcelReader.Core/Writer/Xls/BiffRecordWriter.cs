@@ -1,4 +1,3 @@
-using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer.Xls
@@ -10,10 +9,11 @@ namespace ExcelReader.Core.Writer.Xls
             int len = buffer.BeginRecord(BiffRecord.Bof);
             buffer.WriteU16(BiffRecord.Biff8Version);
             buffer.WriteU16(substreamType);
-            for (int i = 0; i < 12; i++)
-            {
-                buffer.WriteByte(0);
-            }
+            // [MS-XLS] requires rupYear to be 1996 or 1997, and verLowestBiff to be 6.
+            buffer.WriteU16(0x0DBB);
+            buffer.WriteU16(0x07CC);
+            buffer.WriteI32(0);
+            buffer.WriteI32(6);
             buffer.EndRecord(len);
         }
 
@@ -54,8 +54,10 @@ namespace ExcelReader.Core.Writer.Xls
         {
             int len = buffer.BeginRecord(BiffRecord.WriteAccess);
             ReadOnlySpan<byte> name = "ExcelReader"u8;
+            buffer.WriteU16(name.Length);
+            buffer.WriteByte(0);
             buffer.Write(name);
-            for (int i = name.Length; i < 112; i++)
+            for (int i = 3 + name.Length; i < 112; i++)
             {
                 buffer.WriteByte((byte)' ');
             }
@@ -81,16 +83,27 @@ namespace ExcelReader.Core.Writer.Xls
         {
             WriteU16Record(buffer, BiffRecord.FnGroupCount, 17);
         }
-        private static ReadOnlySpan<byte> WriteWindow1Payload => [
-            0xFF, 0x7F, 0xFF, 0x7F, 0x80, 0x70, 0x30, 0x39,
-            0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0xC0, 0x20,
-        ];
-        internal static void WriteWindow1(BiffBuffer buffer)
+        internal static void WriteWindow1(BiffBuffer buffer, int activeSheet)
         {
             int len = buffer.BeginRecord(BiffRecord.Window1);
-            buffer.Write(WriteWindow1Payload);
+            buffer.WriteU16(0x7FFF);
+            buffer.WriteU16(0x7FFF);
+            buffer.WriteU16(0x7080);
+            buffer.WriteU16(0x3930);
+            buffer.WriteU16(0x0038);
+            buffer.WriteU16(activeSheet);
+            buffer.WriteU16(0);
+            buffer.WriteU16(1);
+            buffer.WriteU16(600);
             buffer.EndRecord(len);
+        }
+
+        internal static void WriteU16Records(BiffBuffer buffer, ReadOnlySpan<int> ids, int value)
+        {
+            foreach (int id in ids)
+            {
+                WriteU16Record(buffer, id, value);
+            }
         }
 
         internal static void WriteBackup(BiffBuffer buffer)
@@ -210,13 +223,65 @@ namespace ExcelReader.Core.Writer.Xls
             buffer.WriteU16(0);
             buffer.EndRecord(len);
         }
-        private static ReadOnlySpan<byte> ThirdPayload => [0xB6, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        internal static void WriteWindow2(BiffBuffer buffer)
+        internal static void WriteWindow2(BiffBuffer buffer, bool selected)
         {
             int len = buffer.BeginRecord(BiffRecord.Window2);
-            buffer.Write(ThirdPayload);
+            buffer.WriteU16(selected ? 0x06B6 : 0x00B6);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0x0040);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0);
+            buffer.WriteI32(0);
             buffer.EndRecord(len);
         }
+
+        internal static void WriteSheetSettings(BiffBuffer buffer)
+        {
+            WriteU16Record(buffer, BiffRecord.CalcMode, 1);
+            WriteU16Record(buffer, BiffRecord.CalcCount, 100);
+            WriteU16Record(buffer, BiffRecord.CalcRefMode, 1);
+            WriteU16Record(buffer, BiffRecord.CalcIter, 0);
+            int delta = buffer.BeginRecord(BiffRecord.CalcDelta);
+            buffer.WriteDouble(0.001);
+            buffer.EndRecord(delta);
+            WriteU16Record(buffer, BiffRecord.CalcSaveRecalc, 1);
+            WriteU16Record(buffer, BiffRecord.PrintRowCol, 0);
+            WriteU16Record(buffer, BiffRecord.PrintGrid, 0);
+            WriteU16Record(buffer, BiffRecord.GridSet, 1);
+            int guts = buffer.BeginRecord(BiffRecord.Guts);
+            buffer.WriteI32(0);
+            buffer.WriteI32(0);
+            buffer.EndRecord(guts);
+            int rowHeight = buffer.BeginRecord(BiffRecord.DefaultRowHeight);
+            buffer.WriteU16(0);
+            buffer.WriteU16(DefaultRowHeightTwips);
+            buffer.EndRecord(rowHeight);
+            WriteU16Record(buffer, BiffRecord.WsBool, 0x04C1);
+        }
+
+        internal const int DefaultRowHeightTwips = 255;
+
+        internal static void WriteDefColWidth(BiffBuffer buffer)
+        {
+            WriteU16Record(buffer, BiffRecord.DefColWidth, 8);
+        }
+
+        internal static void WriteRow(BiffBuffer buffer, int row, int colMic, int colMac)
+        {
+            int len = buffer.BeginRecord(BiffRecord.Row);
+            buffer.WriteU16(row);
+            buffer.WriteU16(colMic);
+            buffer.WriteU16(colMac);
+            buffer.WriteU16(DefaultRowHeightTwips);
+            buffer.WriteI32(0);
+            buffer.WriteU16(0x0100);
+            buffer.WriteU16(GeneralStyleXf);
+            buffer.EndRecord(len);
+        }
+
+        private const int GeneralStyleXf = 15;
 
         internal static void WriteBlank(BiffBuffer buffer, int row, int col, int xf)
         {
@@ -236,37 +301,21 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal static void WriteLabel(BiffBuffer buffer, int row, int col, int xf, ReadOnlySpan<char> value)
         {
-            ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
             bool compressed = BiffStringEncoder.CanCompress(value);
-            int charBytes = compressed ? value.Length : value.Length * 2;
-            if (9 + charBytes <= BiffRecord.MaxPayload)
-            {
-                int len = buffer.BeginRecord(BiffRecord.Label);
-                WriteCellHeader(buffer, row, col, xf);
-                buffer.WriteU16(value.Length);
-                buffer.WriteByte((byte)(compressed ? 0 : 1));
-                BiffStringEncoder.WriteChars(buffer, value, compressed);
-                buffer.EndRecord(len);
-                return;
-            }
-            int firstChars = compressed ? 8215 : 4107;
-            int lenSplit = buffer.BeginRecord(BiffRecord.Label);
+            int len = buffer.BeginRecord(BiffRecord.Label);
             WriteCellHeader(buffer, row, col, xf);
             buffer.WriteU16(value.Length);
             buffer.WriteByte((byte)(compressed ? 0 : 1));
-            BiffStringEncoder.WriteChars(buffer, value[..firstChars], compressed);
-            buffer.EndRecord(lenSplit);
-            int offset = firstChars;
-            int maxContChars = compressed ? 8223 : 4111;
-            while (offset < value.Length)
-            {
-                int take = Math.Min(maxContChars, value.Length - offset);
-                int contLen = buffer.BeginRecord(0x003C);
-                buffer.WriteByte((byte)(compressed ? 0 : 1));
-                BiffStringEncoder.WriteChars(buffer, value.Slice(offset, take), compressed);
-                buffer.EndRecord(contLen);
-                offset += take;
-            }
+            BiffStringEncoder.WriteChars(buffer, value, compressed);
+            buffer.EndRecord(len);
+        }
+
+        internal static void WriteLabelSst(BiffBuffer buffer, int row, int col, int xf, int sharedStringIndex)
+        {
+            int len = buffer.BeginRecord(BiffRecord.LabelSst);
+            WriteCellHeader(buffer, row, col, xf);
+            buffer.WriteI32(sharedStringIndex);
+            buffer.EndRecord(len);
         }
 
         internal static void WriteBool(BiffBuffer buffer, int row, int col, int xf, bool value)
