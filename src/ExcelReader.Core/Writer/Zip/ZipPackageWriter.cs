@@ -40,7 +40,7 @@ namespace ExcelReader.Core.Writer.Zip
             }
         }
 
-        internal Stream OpenEntry(string name, CompressionLevel level)
+        internal ZipEntryStream OpenEntry(string name, CompressionLevel level)
         {
             ObjectDisposedException.ThrowIf(_closed, this);
             if (!Enum.IsDefined(level))
