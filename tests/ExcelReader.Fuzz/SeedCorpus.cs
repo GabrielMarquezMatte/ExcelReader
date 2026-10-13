@@ -51,6 +51,7 @@ namespace ExcelReader.Fuzz
                               "csv-parallel-3", "csv-parallel-4", "csv-parallel-5", "csv-parallel-6"]),
             ("inflate", ["inflate-stored", "inflate-fixed", "inflate-dynamic"]),
             ("deflate", ["deflate-text", "deflate-zeros", "deflate-noise"]),
+            ("deflate-segments", ["deflate-segments-text", "deflate-segments-zeros", "deflate-segments-noise"]),
         ];
 
         internal static async Task GenerateAsync(string rootDirectory)
@@ -130,6 +131,9 @@ namespace ExcelReader.Fuzz
             yield return ("deflate-text", [16, .. sheet]);
             yield return ("deflate-zeros", [255, .. new byte[70_000]]);
             yield return ("deflate-noise", [1, .. noise]);
+            yield return ("deflate-segments-text", [1, .. sheet]);
+            yield return ("deflate-segments-zeros", [2, .. new byte[70_000]]);
+            yield return ("deflate-segments-noise", [0, .. noise]);
         }
 
         private static byte[] Deflate(byte[] raw, CompressionLevel level)
