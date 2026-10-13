@@ -255,6 +255,14 @@ zlib through `DeflateStream`. When a write faults, `Abandon` still writes a cent
 the entries that completed, as disposing `ZipArchive` did; a failed entry write marks the whole
 archive failed, so nothing more can be added to it.
 
+`WriteRecordsParallelAsync` and `WriteTableParallelAsync` (`Writer/Parallel/`) cut a record source into
+batches. Each batch is formatted on a pool thread by a detached copy of the sheet writer, which has
+its own buffer and never touches the ZIP, then compressed into a byte-aligned deflate segment that
+refers to nothing outside itself. The calling flow appends segments in order through
+`ZipEntryStream.AppendSegmentAsync`, which merges CRCs with `Crc32.Combine`. Once an entry has
+received a segment, everything written to it is a segment, including later serial rows, so no
+compressor ever carries history across one.
+
 ## The `excelreader` CLI
 
 `src/ExcelReader.Cli/` is a thin `dotnet tool` shell (`excelreader`) over Core's public API — it

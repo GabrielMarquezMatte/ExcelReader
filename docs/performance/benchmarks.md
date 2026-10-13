@@ -203,6 +203,23 @@ The encoder's limits are deliberate:
 - It emits fixed-Huffman blocks only, so `Optimal` and `SmallestSize` still go through zlib, inside the same container.
 - A block covers at most 65,535 input bytes, so any block that would grow is written stored instead. Incompressible input grows by at most 5 bytes per block.
 
+### Parallel record writes
+
+`WriteRecordsParallelAsync` formats and compresses batches of 8,192 records on pool threads and appends them to the sheet in order. Writing 1,000,000 rows by four columns (text, integer, date, number) into a pre-sized `MemoryStream` at `Fastest`, on the same Ryzen 7 5700X. Each figure is the median of 9 writes after 3 warm-up writes, from a console harness rather than BenchmarkDotNet:
+
+| Write | XLSX | vs serial | XLSB | vs serial |
+|---|---:|---:|---:|---:|
+| Serial | 187.3 ms | 1.0x | 123.6 ms | 1.0x |
+| Serial, `PrefetchWrite` | 117.8 ms | 1.6x | 67.6 ms | 1.8x |
+| Parallel, 1 batch in flight | 172.7 ms | 1.1x | 120.6 ms | 1.0x |
+| Parallel, 2 | 92.1 ms | 2.0x | 63.2 ms | 2.0x |
+| Parallel, 4 | 49.9 ms | 3.8x | 40.9 ms | 3.0x |
+| Parallel, 8 | 35.7 ms | 5.2x | 27.7 ms | 4.5x |
+
+It scales because a write is bound by building rows, not by deflate: `PrefetchWrite` already takes deflate off the calling thread and stops at 1.6x to 1.8x, so compressing chunks in parallel would add nothing on top of it, while formatting the rows in parallel does.
+
+Each batch is compressed with no reference to the one before it, which costs 0.18% of file size for XLSX (15,481,372 B to 15,508,760 B) and 0.04% for XLSB (16,863,131 B to 16,869,306 B). The process's peak working set rose by 16 MB over the serial write with 4 batches in flight and by 28 MB with 8, about 3 MB per batch, and does not depend on the number of rows.
+
 ### Matched-work reads (`*_Materialized`)
 
 Every read benchmark class has a `*_Materialized` sibling that calls `cell.GetString()` per text cell — the same UTF-16 materialization Sylvan's ADO.NET-style API is forced to pay — while keeping `TryParse`/`TryGetDateTime` for numeric and date cells, exactly mirroring the competitor accumulator. These are the matched-work counterparts to the zero-copy rows above.

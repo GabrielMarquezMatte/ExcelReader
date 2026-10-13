@@ -278,3 +278,31 @@ namespace Snippets.Writing.Prefetch
         }
     }
 }
+
+namespace Snippets.Writing.Parallel
+{
+    public sealed record Metric(string Name, double Value);
+
+    internal static class Snippet
+    {
+        internal static async Task Run(Stream stream, IEnumerable<Metric> records)
+        {
+            #region writing-parallel
+            await using var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true);
+            XlsxSheetWriter sheet = wb.AddSheet("S1");
+
+            // Header row from the layout, then one row per record.
+            await sheet.WriteRecordsParallelAsync(records, ExcelRecordLayout.FromAttributes<Metric>());
+
+            // Or format each row yourself; this delegate runs on several threads at once.
+            await sheet.WriteRecordsParallelAsync(records, static (XlsxRowWriter row, Metric record) =>
+            {
+                row.Write(record.Name);
+                row.Write(record.Value);
+            }, new ParallelWriteOptions { DegreeOfParallelism = 4 });
+
+            await sheet.EndAsync();
+            #endregion
+        }
+    }
+}
