@@ -196,7 +196,7 @@ namespace ExcelReader.Core.Writer.Internal
                 ThrowIfFaulted();
                 throw;
             }
-            await barrier.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await barrier.Task.ConfigureAwait(false);
             ThrowIfFaulted();
         }
 
