@@ -138,6 +138,11 @@ Two behavior changes come with them:
 v7 refuses several inputs that v6 accepted and then got wrong.
 
 - **Damaged packages.** Each ZIP entry of an XLSX or XLSB package is checked against its CRC-32. A mismatch throws `InvalidDataException` when the entry's last byte is read, so rows before the damage may already have been returned. v6 checked only the entry's size. Set [`ExcelReaderOptions.VerifyZipChecksums`](xref:ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums) to `false` to read a package whose producer wrote wrong checksums; the bindings have the same switch as `verify_zip_checksums`. The check costs 2% to 4% of a read, and under 1% with `PrefetchDecompression`, where it runs on the background thread.
+- **Line breaks in XLSX text.** A cell with a line break now reads with `
+`, as XLSB and XLS already did. Excel stores the break as a CR LF pair in the XML, which v6 returned as `
+`. A carriage return stored as data (`_x000D_` or `&#13;`) is still returned. Code that split XLSX text on `
+` should split on `
+`.
 - **Sheet names.** `AddSheet` throws `ArgumentException` for a name that begins or ends with an apostrophe, or contains a control character (tab and line feed included), U+FFFE or U+FFFF. Excel refuses a workbook with such a name.
 - **Column settings.** `SetColumnWidth` and `SetColumnStyle` throw `ArgumentOutOfRangeException` for a column past the format's last one (16,384 columns; 256 for XLS) and for a width above 255, Excel's maximum. v6 wrote a file Excel refused for the first, and an XLS width of 256 came out as a hidden column.
 - **Number formats.** `AddStyle` throws `ExcelLimitExceededException` for the 201st distinct number format of a workbook, and `ArgumentException` for a format longer than 255 characters. Excel does not open a workbook past either.
