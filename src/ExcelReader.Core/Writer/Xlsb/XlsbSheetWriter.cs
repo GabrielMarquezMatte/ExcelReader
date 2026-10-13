@@ -514,9 +514,9 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsbRowWriter));
             EnsureStarted();
-            if (_rowNumber >= ExcelLimits.MaxRows)
+            if (_rowNumber >= ExcelLimits.MaxRows - 1)
             {
-                ExcelLimits.ThrowRowLimit(_rowNumber + 1L);
+                ExcelLimits.ThrowRowLimit(_rowNumber + 2L);
             }
             _rowNumber++;
             _activeRowStyle = styleId;
