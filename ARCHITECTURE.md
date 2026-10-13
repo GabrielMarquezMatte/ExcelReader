@@ -246,6 +246,15 @@ against a shared bug, so the fixtures in `tests/ExcelReader.Tests/data/encrypted
 plaintext produced by an independent implementation) remain the only correctness oracle for
 decryption specifically.
 
+XLSX and XLSB packages are written by `Writer/Zip/ZipPackageWriter`, not `ZipArchive`. It writes the
+layout `ZipArchive` uses in create mode (patched local headers on seekable streams, data descriptors
+otherwise, Zip64 only when a field overflows). `CompressionLevel.Fastest` entries go through
+`DeflateEncoder`, a fixed-Huffman deflate with a stored-block fallback, and are checksummed by
+`Crc32`, which folds 128 or 256 bits at a time with PCLMULQDQ. `Optimal` and `SmallestSize` keep
+zlib through `DeflateStream`. When a write faults, `Abandon` still writes a central directory for
+the entries that completed, as disposing `ZipArchive` did; a failed entry write marks the whole
+archive failed, so nothing more can be added to it.
+
 ## The `excelreader` CLI
 
 `src/ExcelReader.Cli/` is a thin `dotnet tool` shell (`excelreader`) over Core's public API — it

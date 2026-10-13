@@ -20,10 +20,10 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 | Typed row parsing | 10.668 ms, 3.87 MB | 56.150 ms, 10.48 MB | 107.805 ms, 5.70 MB | - |
 | Typed row parsing async | 10.833 ms, 3.87 MB | 59.036 ms, 10.48 MB | - | - |
 | Typed row parsing, shared strings | 9.216 ms, 2.29 MB | - | - | - |
-| Workbook writing | 10.913 ms, 4.02 MB | - | 18.166 ms, 4.02 MB | 15.128 ms, 15.84 MB |
-| Workbook writing, shared strings | 10.848 ms, 4.06 MB | - | - | - |
+| Workbook writing | 8.337 ms, 4.02 MB | - | 18.437 ms, 4.02 MB | 15.332 ms, 15.84 MB |
+| Workbook writing, shared strings | 8.358 ms, 4.06 MB | - | - | - |
 
-ExcelReader is ~5.3x faster than Sylvan for raw XLSX reads, allocating ~543x less, and ~15.6x faster than OfficeIMO. For typed parsing it is ~5.3x faster than Sylvan (~5.4x async against async). For XLSX writing, ExcelReader is ~1.4x faster than SpreadCheetah while allocating ~3.9x less memory, and ~1.7x faster than OfficeIMO.
+ExcelReader is ~5.3x faster than Sylvan for raw XLSX reads, allocating ~543x less, and ~15.6x faster than OfficeIMO. For typed parsing it is ~5.3x faster than Sylvan (~5.4x async against async). For XLSX writing, ExcelReader is ~1.8x faster than SpreadCheetah while allocating ~3.9x less memory, and ~2.2x faster than OfficeIMO.
 
 OfficeIMO.Excel's typed parsing is hand-mapped from its `OpenDataReader`, because `RowsAs<T>` needs an `r` attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.
 
@@ -37,10 +37,10 @@ Reading a shared-strings XLSX workbook with typed parsing is ~14% faster than th
 | Cell-by-cell read async | 4.845 ms, 3.89 KB | - |
 | Typed row parsing | 7.819 ms, 3.87 MB | - |
 | Typed row parsing async | 8.061 ms, 3.87 MB | - |
-| Workbook writing | 7.478 ms, 4.02 MB | - |
-| Workbook writing, shared strings | 7.370 ms, 4.06 MB | - |
+| Workbook writing | 5.572 ms, 4.02 MB | - |
+| Workbook writing, shared strings | 5.595 ms, 4.05 MB | - |
 
-XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x faster than XLSX reads, typed parsing is ~1.4x faster than XLSX parsing, and writing is ~1.5x faster than XLSX writing. Against OfficeIMO's XLSB reader, ExcelReader is ~2.3x faster while allocating ~1,800x less. The XLSB writer is also ~2.0x faster than SpreadCheetah's XLSX writer on this benchmark while allocating ~75% less memory.
+XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x faster than XLSX reads, typed parsing is ~1.4x faster than XLSX parsing, and writing is ~1.5x faster than XLSX writing. Against OfficeIMO's XLSB reader, ExcelReader is ~2.3x faster while allocating ~1,800x less. The XLSB writer is also ~2.8x faster than SpreadCheetah's XLSX writer on this benchmark while allocating ~75% less memory.
 
 ### XLS (BIFF8)
 
@@ -50,7 +50,7 @@ XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x
 | Cell-by-cell read async | 3.236 ms, 2.91 KB | - | - |
 | Workbook writing | 5.296 ms, 16.03 MB | - | - |
 
-ExcelReader is ~1.3x faster than Sylvan for generated XLS reads while allocating ~605x less memory, and ~1.8x faster than OfficeIMO. The XLS writer is ~2.1x faster than the XLSX writer in this benchmark (`XlsWriteBenchmark`, 5.296 ms vs 10.964 ms in the same run). Most of its 16.03 MB is the benchmark's pre-sized 16 MB destination `MemoryStream`; the typed-record table below measures it at 4.03 MB like the other formats.
+ExcelReader is ~1.3x faster than Sylvan for generated XLS reads while allocating ~605x less memory, and ~1.8x faster than OfficeIMO. The XLS writer is ~1.7x faster than the XLSX writer in this benchmark (`XlsWriteBenchmark`, 4.859 ms vs 8.375 ms in the same run). Most of its 16.31 MB is the benchmark's pre-sized 16 MB destination `MemoryStream`; the typed-record table below measures it at 4.03 MB like the other formats.
 
 ### CSV
 
@@ -174,6 +174,35 @@ About 40% of the default read is inflate: without it the whole read drops from 3
 
 Without prefetch a read is inflate plus parse, so the faster inflate converts directly; with prefetch the two overlap and the read is bounded by the slower stage, which is why the prefetch columns above moved little.
 
+### Write path: managed deflate and CRC-32
+
+XLSX and XLSB packages are written by the library's own ZIP writer. `CompressionLevel.Fastest`, the default, compresses with a managed fixed-Huffman deflate encoder and checksums with a managed CRC-32 that folds with PCLMULQDQ. Each piece alone, against what `ZipArchive` used before, on the same Ryzen 7 5700X:
+
+| | zlib-ng `Fastest` / System.IO.Hashing | Managed | Ratio |
+|---|---:|---:|---:|
+| Deflate, writer XLSX sheet (6.0 MB) | 4.75 ms | 2.98 ms | 1.59x, same size |
+| Deflate, writer XLSB sheet (4.6 MB) | 4.60 ms | 2.52 ms | 1.82x, same size |
+| Deflate, 65K real XLSX sheet (34.4 MB) | 60.3 ms | 38.4 ms | 1.57x, same size |
+| CRC-32, 64 KB chunks in cache | 16.4 GB/s | 35.8 GB/s | 2.19x |
+
+Whole writes of 50,000 rows by four columns (text, integer, date, number) into a `MemoryStream`, before and after the switch. Each figure is the median of three interleaved runs of 41 writes:
+
+| Write | `ZipArchive` | Managed ZIP writer | Change | File size |
+|---|---:|---:|---:|---:|
+| XLSX, `Fastest` | 10.43 ms | 9.11 ms | -12.7% | 773,487 B → 774,344 B |
+| XLSX, `Fastest` + `PrefetchWrite` | 6.15 ms | 5.84 ms | -5.0% | same as above |
+| XLSX, `Optimal` | 30.90 ms | 31.38 ms | within noise | 483,613 B → 483,607 B |
+| XLSB, `Fastest` | 7.66 ms | 5.42 ms | -29.2% | 861,060 B → 861,568 B |
+| XLSB, `Fastest` + `PrefetchWrite` | 5.37 ms | 3.08 ms | -42.6% | same as above |
+| XLSB, `Optimal` | 38.17 ms | 37.98 ms | within noise | 466,917 B → 466,917 B |
+
+XLSB gains more because deflate was a larger share of its write; with `PrefetchWrite` an XLSX write is bounded by building the XML, so the faster deflate moves it little.
+
+The encoder's limits are deliberate:
+
+- It emits fixed-Huffman blocks only, so `Optimal` and `SmallestSize` still go through zlib, inside the same container.
+- A block covers at most 65,535 input bytes, so any block that would grow is written stored instead. Incompressible input grows by at most 5 bytes per block.
+
 ### Matched-work reads (`*_Materialized`)
 
 Every read benchmark class has a `*_Materialized` sibling that calls `cell.GetString()` per text cell — the same UTF-16 materialization Sylvan's ADO.NET-style API is forced to pay — while keeping `TryParse`/`TryGetDateTime` for numeric and date cells, exactly mirroring the competitor accumulator. These are the matched-work counterparts to the zero-copy rows above.
@@ -217,12 +246,12 @@ The takeaway is not that one column beats the other: it is that ExcelReader's he
 
 | Format | Mean | Allocated |
 |---|---:|---:|
-| XLSX | 12.099 ms | 4.02 MB |
-| XLSB | 7.597 ms | 4.02 MB |
+| XLSX | 8.922 ms | 4.02 MB |
+| XLSB | 6.113 ms | 4.02 MB |
 | XLS | 5.021 ms | 4.03 MB |
 | CSV | 4.762 ms | 4.00 MB |
 
-Relative ordering: CSV and XLS close at the front, then XLSB, then XLSX — the record-mapping layer adds little overhead over hand-written cell-by-cell writes (XLSB 7.597 ms vs. 7.478 ms, XLSX 12.099 ms vs. 10.913 ms).
+Relative ordering: CSV and XLS close at the front, then XLSB, then XLSX — the record-mapping layer adds little overhead over hand-written cell-by-cell writes (XLSB 6.113 ms vs. 5.572 ms, XLSX 8.922 ms vs. 8.337 ms).
 
 ### Native and Arrow string writes
 
@@ -230,12 +259,12 @@ Relative ordering: CSV and XLS close at the front, then XLSB, then XLSX — the 
 
 | Scenario | Mean | Allocated |
 |---|---:|---:|
-| Native string columns → XLSX | 20.487 ms | 18.02 KB |
+| Native string columns → XLSX | 14.559 ms | 15.74 KB |
 | Native string columns → CSV | 5.098 ms | 416 B |
-| Arrow `StringArray` → XLSX | 26.644 ms | 18.06 KB |
-| Styled rows → XLSX | 7.068 ms | 18.20 KB |
+| Arrow `StringArray` → XLSX | 20.343 ms | 15.79 KB |
+| Styled rows → XLSX | 5.411 ms | 15.92 KB |
 
-Text arrives through `IRowWriter.WriteUtf8`, which the XLSX and CSV writers copy through as bytes whenever the text needs no escaping, so none of these allocate per cell: the ~18 KB is per-workbook ZIP and part setup, which CSV does not have.
+Text arrives through `IRowWriter.WriteUtf8`, which the XLSX and CSV writers copy through as bytes whenever the text needs no escaping, so none of these allocate per cell: the ~16 KB is per-workbook ZIP and part setup, which CSV does not have.
 
 ### Ref struct typed parsing (zero-copy)
 
