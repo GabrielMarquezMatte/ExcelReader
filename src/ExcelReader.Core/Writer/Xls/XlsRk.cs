@@ -1,9 +1,9 @@
 namespace ExcelReader.Core.Writer.Xls
 {
     /// <summary>
-    /// Encodes a number as an [MS-XLS] RkNumber: a 30-bit integer, or the top 30 bits of a double, either
-    /// one optionally divided by 100. A value is encoded only when decoding gives back the same bits, so
-    /// RK never changes a number; anything else stays a NUMBER record.
+    /// Encodes a number as an RkNumber, the same in [MS-XLS] and [MS-XLSB]: a 30-bit integer, or the top
+    /// 30 bits of a double, either one optionally divided by 100. A value is encoded only when decoding
+    /// gives back the same bits, so RK never changes a number; anything else keeps an 8-byte double.
     /// </summary>
     internal static class XlsRk
     {
@@ -12,20 +12,21 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal static bool TryEncode(double value, out int rk)
         {
+            // Excel picks the truncated double whenever it is exact, so that form goes first.
             long bits = BitConverter.DoubleToInt64Bits(value);
+            if ((bits & LowBits) == 0)
+            {
+                rk = (int)(bits >> 32);
+                return true;
+            }
             if (Math.Abs(value) < IntLimit)
             {
                 int whole = (int)value;
-                if (whole == value && bits != long.MinValue)
+                if (whole == value)
                 {
                     rk = (whole << 2) | 2;
                     return true;
                 }
-            }
-            if ((bits & LowBits) == 0)
-            {
-                rk = (int)(bits >> 32) & ~3;
-                return true;
             }
 
             // Only these two forms divide by 100 on decoding, so only they need decoding to prove exact.
