@@ -238,65 +238,52 @@ namespace ExcelReader.Tests.Writer.Zip
         }
 
         [Fact]
-        public void AFailedWriteLeavesNoCentralDirectory()
+        public void AFailedWriteKillsTheArchiveAndAbandonListsTheCompletedEntries()
         {
-            var output = new FailingWriteStream(limit: 100_000);
+            var output = new FailOnceWriteStream(failOnCall: 2);
             var zip = new ZipPackageWriter(output);
-            Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
-            byte[] chunk = new byte[64 * 1024];
-            Assert.Throws<IOException>(() =>
-            {
-                for (int i = 0; i < 10; i++)
-                {
-                    entry.Write(chunk);
-                }
-            });
-            AssertFailedEntryIsDead(zip, entry, output.Written);
-            zip.Abandon();
-            zip.Abandon();
-            Assert.Throws<ObjectDisposedException>(() => zip.OpenEntry("next.xml", CompressionLevel.Fastest));
-        }
-
-        private static void AssertFailedEntryIsDead(ZipPackageWriter zip, Stream entry, MemoryStream written)
-        {
-            long length = written.Length;
-            entry.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => entry.Write(new byte[1]));
-            Assert.Throws<InvalidOperationException>(zip.Finish);
-            Assert.Throws<InvalidOperationException>(() => zip.OpenEntry("next.xml", CompressionLevel.Fastest));
-            Assert.Equal(length, written.Length);
-            Assert.Equal(-1, written.ToArray().AsSpan().IndexOf("PK"u8));
-        }
-
-        [Fact]
-        public void ATransientWriteFailureKillsTheEntry()
-        {
-            var output = new FailOnceWriteStream(failOnCall: 1);
-            var zip = new ZipPackageWriter(output);
+            CompleteEntry(zip, "done.xml", Done);
             Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
             Assert.Throws<IOException>(() => entry.Write(new byte[64 * 1024]));
-            AssertFailedEntryIsDead(zip, entry, output.Written);
+            long length = AssertFailedArchiveRejectsEverything(zip, entry, output.Written);
+
+            zip.Abandon();
+            byte[] package = output.Written.ToArray();
+            Assert.True(package.Length > length);
+            Assert.Equal(1, EndRecordCount(package));
+            AssertEntries(package, ("done.xml", Done));
+            zip.Abandon();
+            Assert.Equal(package.Length, output.Written.Length);
+            Assert.Throws<ObjectDisposedException>(() => zip.OpenEntry("next.xml", CompressionLevel.Fastest));
+            Assert.Throws<ObjectDisposedException>(zip.Finish);
         }
 
         [Fact]
-        public async Task ATransientAsyncWriteFailureKillsTheEntry()
+        public async Task AFailedAsyncWriteKillsTheArchiveAndAbandonListsTheCompletedEntries()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            var output = new FailOnceWriteStream(failOnCall: 1);
+            var output = new FailOnceWriteStream(failOnCall: 2);
             var zip = new ZipPackageWriter(output);
+            CompleteEntry(zip, "done.xml", Done);
             Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
             await Assert.ThrowsAsync<IOException>(async () => await entry.WriteAsync(new byte[64 * 1024], ct));
             await entry.DisposeAsync();
             await Assert.ThrowsAsync<InvalidOperationException>(async () => await zip.FinishAsync(ct));
-            AssertFailedEntryIsDead(zip, entry, output.Written);
+            AssertFailedArchiveRejectsEverything(zip, entry, output.Written);
+
+            zip.Abandon();
+            byte[] package = output.Written.ToArray();
+            Assert.Equal(1, EndRecordCount(package));
+            AssertEntries(package, ("done.xml", Done));
         }
 
         [Fact]
-        public async Task ACancelledWriteKillsTheEntryEvenWhenDisposedWithNoToken()
+        public async Task ACancelledWriteKillsTheArchiveEvenWhenDisposedWithNoToken()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var output = new MemoryStream();
             var zip = new ZipPackageWriter(output);
+            CompleteEntry(zip, "done.xml", Done);
             Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
             using var cancelled = new CancellationTokenSource();
             await cancelled.CancelAsync();
@@ -304,27 +291,163 @@ namespace ExcelReader.Tests.Writer.Zip
                 async () => await entry.WriteAsync(new byte[64 * 1024], cancelled.Token));
             await entry.DisposeAsync();
             await Assert.ThrowsAsync<InvalidOperationException>(async () => await zip.FinishAsync(ct));
-            AssertFailedEntryIsDead(zip, entry, output);
+            AssertFailedArchiveRejectsEverything(zip, entry, output);
+
+            zip.Abandon();
+            byte[] package = output.ToArray();
+            Assert.Equal(1, EndRecordCount(package));
+            AssertEntries(package, ("done.xml", Done));
+        }
+
+        [Fact]
+        public void AFailedFlushKillsTheArchiveAndAbandonListsTheCompletedEntries()
+        {
+            var output = new FlushFailingStream();
+            var zip = new ZipPackageWriter(output);
+            CompleteEntry(zip, "done.xml", Done);
+            Stream entry = zip.OpenEntry("next.xml", CompressionLevel.NoCompression);
+            entry.Write(Done);
+            output.FailFlush = true;
+            Assert.Throws<IOException>(entry.Flush);
+            output.FailFlush = false;
+            AssertFailedArchiveRejectsEverything(zip, entry, output);
+
+            zip.Abandon();
+            byte[] package = output.ToArray();
+            Assert.Equal(1, EndRecordCount(package));
+            AssertEntries(package, ("done.xml", Done));
+        }
+
+        [Fact]
+        public async Task AFailedAsyncFlushKillsTheArchive()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var output = new FlushFailingStream { FailFlush = true };
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("a.xml", CompressionLevel.NoCompression);
+            await Assert.ThrowsAsync<IOException>(() => entry.FlushAsync(ct));
+            output.FailFlush = false;
+            AssertFailedArchiveRejectsEverything(zip, entry, output);
+        }
+
+        [Fact]
+        public void FlushingAnEntryFlushesTheOutputAndFlushingAClosedEntryDoesNot()
+        {
+            var output = new FlushFailingStream();
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("a.xml", CompressionLevel.NoCompression);
+            entry.Flush();
+            Assert.Equal(1, output.Flushes);
+            entry.Dispose();
+            entry.Flush();
+            Assert.Equal(1, output.Flushes);
         }
 
         [Theory]
         [InlineData(CompressionLevel.Fastest)]
         [InlineData(CompressionLevel.Optimal)]
         [InlineData(CompressionLevel.NoCompression)]
-        public void AbandonReleasesTheOpenEntryWithoutWriting(CompressionLevel level)
+        public void AbandonWithAnOpenEntryListsTheCompletedEntriesAndReleasesTheOpenOne(CompressionLevel level)
         {
             var output = new MemoryStream();
             var zip = new ZipPackageWriter(output);
+            CompleteEntry(zip, "done.xml", Done);
             Stream entry = zip.OpenEntry("a.xml", level);
             entry.Write(DeflateEncoderTests.SheetXml(2000));
-            long length = output.Length;
             zip.Abandon();
-            Assert.Equal(length, output.Length);
+
+            byte[] package = output.ToArray();
+            Assert.Equal(1, EndRecordCount(package));
+            AssertEntries(package, ("done.xml", Done));
             Assert.Throws<ObjectDisposedException>(() => entry.Write(new byte[1]));
             entry.Dispose();
             zip.Abandon();
-            Assert.Equal(length, output.Length);
+            Assert.Equal(package.Length, output.Length);
             Assert.Throws<ObjectDisposedException>(zip.Finish);
+            Assert.Throws<ObjectDisposedException>(() => zip.OpenEntry("next.xml", level));
+        }
+
+        [Fact]
+        public void AbandonOnAnOutputThatAlwaysFailsDoesNotThrow()
+        {
+            var output = new FailingWriteStream(limit: 0);
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
+            Assert.Throws<IOException>(() => entry.Write(new byte[64 * 1024]));
+            zip.Abandon();
+            zip.Abandon();
+            Assert.Equal(0, output.Written.Length);
+        }
+
+        private static readonly byte[] Done = "<done>content</done>"u8.ToArray();
+
+        private static void CompleteEntry(ZipPackageWriter zip, string name, byte[] content)
+        {
+            using Stream entry = zip.OpenEntry(name, CompressionLevel.NoCompression);
+            entry.Write(content);
+        }
+
+        private static long AssertFailedArchiveRejectsEverything(ZipPackageWriter zip, Stream entry, MemoryStream written)
+        {
+            long length = written.Length;
+            entry.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => entry.Write(new byte[1]));
+            Assert.Throws<InvalidOperationException>(zip.Finish);
+            Assert.Throws<InvalidOperationException>(() => zip.OpenEntry("next.xml", CompressionLevel.Fastest));
+            Assert.Equal(length, written.Length);
+            return length;
+        }
+
+        private static int EndRecordCount(byte[] package)
+        {
+            int count = 0;
+            int from = 0;
+            ReadOnlySpan<byte> signature = [0x50, 0x4B, 0x05, 0x06];
+            while (true)
+            {
+                int found = package.AsSpan(from).IndexOf(signature);
+                if (found < 0)
+                {
+                    return count;
+                }
+                count++;
+                from += found + signature.Length;
+            }
+        }
+
+        private static void AssertEntries(byte[] package, params (string Name, byte[] Content)[] expected)
+        {
+            using var archive = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
+            Assert.Equal(expected.Select(static e => e.Name), archive.Entries.Select(static e => e.FullName), StringComparer.Ordinal);
+            for (int i = 0; i < expected.Length; i++)
+            {
+                using Stream data = archive.Entries[i].Open();
+                using var copy = new MemoryStream();
+                data.CopyTo(copy);
+                Assert.True(copy.ToArray().AsSpan().SequenceEqual(expected[i].Content));
+                Assert.Equal(Crc32Tests.BitwiseCrc(expected[i].Content), archive.Entries[i].Crc32);
+            }
+        }
+
+        private sealed class FlushFailingStream : MemoryStream
+        {
+            internal bool FailFlush { get; set; }
+            internal int Flushes { get; private set; }
+
+            public override void Flush()
+            {
+                Flushes++;
+                if (FailFlush)
+                {
+                    throw new IOException("flush failed");
+                }
+            }
+
+            public override Task FlushAsync(CancellationToken cancellationToken)
+            {
+                Flush();
+                return Task.CompletedTask;
+            }
         }
 
         [Theory]
