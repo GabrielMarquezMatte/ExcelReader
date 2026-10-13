@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -8,7 +9,7 @@ namespace ExcelReader.Core.Writer.Internal
     {
         private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
-        internal static async ValueTask WriteTextAsync(ZipArchive zip, string entryName, string content, CompressionLevel compression, CancellationToken ct)
+        internal static async ValueTask WriteTextAsync(ZipPackageWriter zip, string entryName, string content, CompressionLevel compression, CancellationToken ct)
         {
             byte[] rented = ArrayPool<byte>.Shared.Rent(Utf8NoBom.GetMaxByteCount(content.Length));
             try
@@ -22,10 +23,9 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        internal static async ValueTask WriteBytesAsync(ZipArchive zip, string entryName, ReadOnlyMemory<byte> content, CompressionLevel compression, CancellationToken ct)
+        internal static async ValueTask WriteBytesAsync(ZipPackageWriter zip, string entryName, ReadOnlyMemory<byte> content, CompressionLevel compression, CancellationToken ct)
         {
-            ZipArchiveEntry entry = zip.CreateEntry(entryName, compression);
-            Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+            Stream stream = zip.OpenEntry(entryName, compression);
             await using (stream.ConfigureAwait(false))
             {
                 await stream.WriteAsync(content, ct).ConfigureAwait(false);
@@ -38,8 +38,7 @@ namespace ExcelReader.Core.Writer.Internal
             return new ValueTask(stream.FlushAsync(ct));
         }
 
-
-        internal static void WriteText(ZipArchive zip, string entryName, string content, CompressionLevel compression)
+        internal static void WriteText(ZipPackageWriter zip, string entryName, string content, CompressionLevel compression)
         {
             byte[] rented = ArrayPool<byte>.Shared.Rent(Utf8NoBom.GetMaxByteCount(content.Length));
             try
@@ -53,10 +52,9 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        internal static void WriteBytes(ZipArchive zip, string entryName, ReadOnlySpan<byte> content, CompressionLevel compression)
+        internal static void WriteBytes(ZipPackageWriter zip, string entryName, ReadOnlySpan<byte> content, CompressionLevel compression)
         {
-            ZipArchiveEntry entry = zip.CreateEntry(entryName, compression);
-            using Stream stream = entry.Open();
+            using Stream stream = zip.OpenEntry(entryName, compression);
             stream.Write(content);
         }
 

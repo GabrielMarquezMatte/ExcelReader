@@ -5,6 +5,7 @@ using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Writer.Xlsx
 {
@@ -15,7 +16,7 @@ namespace ExcelReader.Core.Writer.Xlsx
     {
         private readonly TableTracker _tables = new();
         private readonly XlsxWorkbookWriter _owner;
-        private readonly ZipArchive _zip;
+        private readonly ZipPackageWriter _zip;
         private readonly CompressionLevel _compression;
         private readonly bool _offloadWrite;
         private readonly BiffBuffer _rowBuffer = new(512);
@@ -29,7 +30,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private Dictionary<int, int>? _columnStyles;
         private Dictionary<int, double>? _columnWidths;
 
-        internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipArchive zip, string name, int sheetId,
+        internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipPackageWriter zip, string name, int sheetId,
             ExcelSheetVisibility visibility, CompressionLevel compression, bool offloadWrite)
         {
             _owner = owner;
@@ -88,8 +89,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
             try
             {
-                ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-                Stream stream = entry.Open();
+                Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
                 _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
                 _rowBuffer.Reset();
                 _rowBuffer.WriteUtf8(
@@ -117,8 +117,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             try
             {
-                ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-                Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+                Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
                 _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
                 _rowBuffer.Reset();
                 _rowBuffer.WriteUtf8(

@@ -4,13 +4,14 @@ using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes an .xlsb workbook (BIFF12 binary format) to a stream, one sheet at a time.</summary>
     public sealed class XlsbWorkbookWriter : IWorkbookWriter<XlsbSheetWriter>
     {
-        private readonly ZipArchive _zip;
+        private readonly ZipPackageWriter _zip;
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
@@ -26,7 +27,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private bool _zipClosed;
         private bool _disposed;
 
-        private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, XlsbWriterOptions options)
+        private XlsbWorkbookWriter(ZipPackageWriter zip, Stream stream, bool leaveOpen, XlsbWriterOptions options)
         {
             _zip = zip;
             _stream = stream;
@@ -46,7 +47,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         public static XlsbWorkbookWriter Create(Stream stream, bool leaveOpen = false, XlsbWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
+            ZipPackageWriter zip = new(stream);
             return new XlsbWorkbookWriter(zip, stream, leaveOpen, options ?? XlsbWriterOptions.Default);
         }
 
@@ -162,7 +163,7 @@ namespace ExcelReader.Core.Writer.Xlsb
                 await WriteAppPropertiesAsync(ct).ConfigureAwait(false);
                 await WriteTablesAsync(ct).ConfigureAwait(false);
                 await WriteContentTypesAsync(ct).ConfigureAwait(false);
-                await CloseZipAsync().ConfigureAwait(false);
+                await CloseZipAsync(ct).ConfigureAwait(false);
             }
             catch
             {
@@ -174,13 +175,13 @@ namespace ExcelReader.Core.Writer.Xlsb
         private void CloseZip()
         {
             _zipClosed = true;
-            _zip.Dispose();
+            _zip.Finish();
         }
 
-        private ValueTask CloseZipAsync()
+        private ValueTask CloseZipAsync(CancellationToken ct = default)
         {
             _zipClosed = true;
-            return _zip.DisposeAsync();
+            return _zip.FinishAsync(ct);
         }
 
         private void AbandonZip()
@@ -189,19 +190,14 @@ namespace ExcelReader.Core.Writer.Xlsb
             if (!_zipClosed)
             {
                 _zipClosed = true;
-                FailureCleanup.Dispose(_zip);
+                _zip.Abandon();
             }
         }
 
         private ValueTask AbandonZipAsync()
         {
-            _faulted = true;
-            if (_zipClosed)
-            {
-                return ValueTask.CompletedTask;
-            }
-            _zipClosed = true;
-            return FailureCleanup.DisposeAsync(_zip);
+            AbandonZip();
+            return ValueTask.CompletedTask;
         }
 
         private void ReleaseStream()
