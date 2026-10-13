@@ -287,6 +287,41 @@ namespace ExcelReader.Fuzz
             return output.Span.ToArray();
         }
 
+        internal static void DeflateSegments(ReadOnlySpan<byte> data)
+        {
+            if (data.IsEmpty)
+            {
+                return;
+            }
+            int chunk = 1 + (data[0] * 4099 % 70_000);
+            ReadOnlySpan<byte> payload = data[1..];
+            if (payload.Length > MaxInflateOutput)
+            {
+                payload = payload[..MaxInflateOutput];
+            }
+            byte[] compressed = DeflateInSegments(payload, chunk);
+            byte[] viaZlib = InflateWith(static source => new DeflateStream(source, CompressionMode.Decompress), compressed);
+            byte[] viaLibrary = InflateWith(static source => new InflateStream(source), compressed);
+            if (!viaZlib.AsSpan().SequenceEqual(payload) || !viaLibrary.AsSpan().SequenceEqual(payload))
+            {
+                throw new OracleDivergenceException(
+                    $"Deflate segments changed {payload.Length} bytes cut into {chunk}-byte segments: DeflateStream gave {viaZlib.Length}, InflateStream {viaLibrary.Length}.");
+            }
+        }
+
+        private static byte[] DeflateInSegments(ReadOnlySpan<byte> payload, int chunk)
+        {
+            using var output = new BiffBuffer(4096);
+            while (!payload.IsEmpty)
+            {
+                int take = Math.Min(chunk, payload.Length);
+                SegmentCompressor.Compress(payload[..take], CompressionLevel.Fastest, output);
+                payload = payload[take..];
+            }
+            output.Write(SegmentCompressor.FinalBlock);
+            return output.Span.ToArray();
+        }
+
         private static void RequireSameInflate(byte[] actual, byte[] reference, bool prefixOnly)
         {
             bool same = prefixOnly ? reference.AsSpan().StartsWith(actual) : actual.AsSpan().SequenceEqual(reference);

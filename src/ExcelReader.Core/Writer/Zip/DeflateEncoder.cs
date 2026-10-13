@@ -71,6 +71,22 @@ namespace ExcelReader.Core.Writer.Zip
             _bitCount = 0;
         }
 
+        /// <summary>
+        /// Ends the pending input as a non-final block and appends an empty stored block, so the output
+        /// ends on a byte boundary and another deflate stream may be laid after it.
+        /// </summary>
+        internal void FlushSync(BiffBuffer output)
+        {
+            EncodeBlock(_end, final: false, output);
+            Span<byte> tail = output.GetSpan(sizeof(ulong) + 4);
+            int headerBytes = (_bitCount + 3 + 7) / 8;
+            BinaryPrimitives.WriteUInt64LittleEndian(tail, _bits);
+            BinaryPrimitives.WriteUInt32LittleEndian(tail[headerBytes..], 0xFFFF_0000);
+            output.Advance(headerBytes + 4);
+            _bits = 0;
+            _bitCount = 0;
+        }
+
         public void Dispose()
         {
             if (_window.Length == 0)
