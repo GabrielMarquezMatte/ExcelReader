@@ -187,6 +187,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private void AbandonZip()
         {
             _faulted = true;
+            _activeSheet?.Abandon();
             if (!_zipClosed)
             {
                 _zipClosed = true;
@@ -194,15 +195,18 @@ namespace ExcelReader.Core.Writer.Xlsb
             }
         }
 
-        private ValueTask AbandonZipAsync()
+        private async ValueTask AbandonZipAsync()
         {
             _faulted = true;
-            if (_zipClosed)
+            if (_activeSheet is not null)
             {
-                return ValueTask.CompletedTask;
+                await _activeSheet.AbandonAsync().ConfigureAwait(false);
             }
-            _zipClosed = true;
-            return _zip.AbandonAsync();
+            if (!_zipClosed)
+            {
+                _zipClosed = true;
+                await _zip.AbandonAsync().ConfigureAwait(false);
+            }
         }
 
         private void ReleaseStream()
