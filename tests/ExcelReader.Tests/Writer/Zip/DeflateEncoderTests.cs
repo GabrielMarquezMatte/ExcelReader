@@ -163,6 +163,26 @@ namespace ExcelReader.Tests.Writer.Zip
         }
 
         [Fact]
+        public void FarMatchAtBlockStartSurvivesPendingBits()
+        {
+            byte[] run = RandomBytes(300, seed: 1);
+            run[0] = 0xAB;
+            for (int prefix = 0; prefix < 256; prefix++)
+            {
+                foreach (int distance in new[] { 30_000, 22_000, 18_000 })
+                {
+                    byte[] input = new byte[DeflateEncoder.MaxBlockLength + 2_000];
+                    RandomBytes(prefix, seed: prefix).CopyTo(input, 0);
+                    run.CopyTo(input, DeflateEncoder.MaxBlockLength - distance);
+                    run.AsSpan(0, 200).CopyTo(input.AsSpan(DeflateEncoder.MaxBlockLength));
+                    RandomBytes(1_800, seed: 1_000 + prefix).CopyTo(input, DeflateEncoder.MaxBlockLength + 200);
+                    input[DeflateEncoder.MaxBlockLength + 200] = (byte)(run[200] ^ 0xFF);
+                    AssertRoundTrips(input, Encode(input, static remaining => remaining));
+                }
+            }
+        }
+
+        [Fact]
         public void FixedCodesFollowRfc1951()
         {
             Assert.Equal(0x188u, FixedHuffmanCodes.Literals[0]);
