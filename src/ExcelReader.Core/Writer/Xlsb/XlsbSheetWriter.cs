@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Writer.Xls;
 
 namespace ExcelReader.Core.Writer.Xlsb
 {
@@ -614,8 +615,6 @@ namespace ExcelReader.Core.Writer.Xlsb
         }
 
         private const int CellHeaderLength = 8;
-        private const int RkIntMin = -(1 << 29);
-        private const int RkIntMax = (1 << 29) - 1;
 
         internal void WriteStringCell(int columnIndex, string? value)
         {
@@ -682,12 +681,12 @@ namespace ExcelReader.Core.Writer.Xlsb
             ValidateColumn(columnIndex);
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             TrackColumn(columnIndex);
-            if (TryEncodeRk(value, out uint rk))
+            if (XlsRk.TryEncode(value, out int rk))
             {
                 const int RkLength = CellHeaderLength + 4;
                 Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellRk, RkLength, out Span<byte> rkPayload);
                 Biff12RecordWriter.WriteCellHeader(rkPayload, columnIndex, style);
-                BinaryPrimitives.WriteUInt32LittleEndian(rkPayload.Slice(8, 4), rk);
+                BinaryPrimitives.WriteInt32LittleEndian(rkPayload.Slice(8, 4), rk);
                 MaybeFlush();
                 return;
             }
@@ -696,19 +695,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
             BinaryPrimitives.WriteDoubleLittleEndian(p.Slice(8, 8), value);
             MaybeFlush();
-        }
-
-        private static bool TryEncodeRk(double value, out uint rk)
-        {
-            rk = 0;
-            if (value != Math.Truncate(value) || value < RkIntMin || value > RkIntMax
-                || (value == 0 && double.IsNegative(value)))
-            {
-                return false;
-            }
-            ulong bits = BitConverter.DoubleToUInt64Bits(value);
-            rk = (bits & 0x3_FFFF_FFFFUL) == 0 ? (uint)(bits >> 32) : ((uint)(int)value << 2) | 0x02;
-            return true;
         }
 
         private static void ValidateColumn(int columnIndex)
