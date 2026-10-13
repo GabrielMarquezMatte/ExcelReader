@@ -114,7 +114,11 @@ namespace ExcelReader.Core.Writer.Zip
             bool zip64Sizes = entry.NeedsZip64Sizes;
             bool zip64Offset = entry.NeedsZip64Offset;
             int extraFields = (zip64Sizes ? 2 : 0) + (zip64Offset ? 1 : 0);
-            int extraLength = extraFields == 0 ? 0 : 4 + (8 * extraFields);
+            int extraLength = 0;
+            if (extraFields != 0)
+            {
+                extraLength = 4 + (8 * extraFields);
+            }
             buffer.WriteU32(CentralHeaderSignature);
             buffer.WriteU16(VersionMadeBy);
             buffer.WriteU16(extraFields == 0 ? VersionDefault : VersionZip64);

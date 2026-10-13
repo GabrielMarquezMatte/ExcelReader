@@ -57,10 +57,5 @@ namespace ExcelReader.Core.Writer.Internal
             using Stream stream = zip.OpenEntry(entryName, compression);
             stream.Write(content);
         }
-
-        internal static void Flush(Stream stream)
-        {
-            stream.Flush();
-        }
     }
 }

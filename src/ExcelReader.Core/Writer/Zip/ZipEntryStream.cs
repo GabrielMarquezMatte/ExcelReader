@@ -12,6 +12,7 @@ namespace ExcelReader.Core.Writer.Zip
     internal sealed class ZipEntryStream : Stream
     {
         private const int FlushThreshold = 64 * 1024;
+        private const int MaxWriteSlice = 1 << 20;
 
         private readonly ZipPackageWriter _owner;
         private readonly ZipEntryRecord _record;
@@ -39,7 +40,8 @@ namespace ExcelReader.Core.Writer.Zip
                 record.Flags |= ZipRecords.FlagDataDescriptor;
             }
             ZipRecords.WriteLocalHeader(_pending, record);
-            if (record.Level == CompressionLevel.Fastest)
+            // DeflateEncoder writes and compares native-order words, which is only deflate's bit order on little-endian.
+            if (record.Level == CompressionLevel.Fastest && BitConverter.IsLittleEndian)
             {
                 _encoder = new DeflateEncoder();
             }
@@ -159,11 +161,17 @@ namespace ExcelReader.Core.Writer.Zip
             ObjectDisposedException.ThrowIf(_closed, this);
             try
             {
-                Accept(buffer);
-                if (_pending.Length >= FlushThreshold)
+                do
                 {
-                    FlushPending();
+                    int take = Math.Min(buffer.Length, MaxWriteSlice);
+                    Accept(buffer[..take]);
+                    buffer = buffer[take..];
+                    if (_pending.Length >= FlushThreshold)
+                    {
+                        FlushPending();
+                    }
                 }
+                while (!buffer.IsEmpty);
             }
             catch
             {
@@ -182,11 +190,17 @@ namespace ExcelReader.Core.Writer.Zip
             ObjectDisposedException.ThrowIf(_closed, this);
             try
             {
-                Accept(buffer.Span);
-                if (_pending.Length >= FlushThreshold)
+                do
                 {
-                    await FlushPendingAsync(cancellationToken).ConfigureAwait(false);
+                    int take = Math.Min(buffer.Length, MaxWriteSlice);
+                    Accept(buffer.Span[..take]);
+                    buffer = buffer[take..];
+                    if (_pending.Length >= FlushThreshold)
+                    {
+                        await FlushPendingAsync(cancellationToken).ConfigureAwait(false);
+                    }
                 }
+                while (!buffer.IsEmpty);
             }
             catch
             {

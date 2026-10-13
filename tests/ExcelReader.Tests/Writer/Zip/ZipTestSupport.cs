@@ -261,4 +261,22 @@ namespace ExcelReader.Tests.Writer.Zip
             _length = Math.Max(_length, end);
         }
     }
+
+    /// <summary>A seekable in-memory output that remembers the size of its largest single write.</summary>
+    internal sealed class LargestWriteStream : MemoryStream
+    {
+        internal int Largest { get; private set; }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            Largest = Math.Max(Largest, count);
+            base.Write(buffer, offset, count);
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            Largest = Math.Max(Largest, buffer.Length);
+            base.Write(buffer);
+        }
+    }
 }

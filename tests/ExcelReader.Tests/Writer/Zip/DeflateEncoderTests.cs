@@ -192,5 +192,17 @@ namespace ExcelReader.Tests.Writer.Zip
             Assert.Equal(0x5u, FixedHuffmanCodes.Distances[1]);
             Assert.Equal(0x7FFEF2u, FixedHuffmanCodes.Distances[32_768]);
         }
+
+        [Fact]
+        public void UsingADisposedEncoderThrows()
+        {
+            using var output = new BiffBuffer(4096);
+            var encoder = new DeflateEncoder();
+            encoder.Write(new byte[100], output);
+            encoder.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => encoder.Write(new byte[1], output));
+            Assert.Throws<ObjectDisposedException>(() => encoder.Write(new byte[DeflateEncoder.MaxBlockLength], output));
+            Assert.Throws<ObjectDisposedException>(() => encoder.Finish(output));
+        }
     }
 }
