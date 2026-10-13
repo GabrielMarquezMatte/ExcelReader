@@ -344,6 +344,16 @@ namespace ExcelReader.Core.Writer.Xlsx
             Release(faulted: true);
         }
 
+        internal void Abandon()
+        {
+            Fault();
+        }
+
+        internal ValueTask AbandonAsync()
+        {
+            return FaultAsync();
+        }
+
         private void Release(bool faulted)
         {
             _state = WriterState.Ended;
