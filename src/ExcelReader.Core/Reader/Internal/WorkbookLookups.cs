@@ -87,7 +87,8 @@ namespace ExcelReader.Core.Reader.Internal
             {
                 return new LimitedReadStream(opened, uncompressedSize, counter, entryLimitName, entryLimit, expectedCrc);
             }
-            return new LimitedReadStream(new PrefetchStream(opened), uncompressedSize, counter, entryLimitName, entryLimit, expectedCrc);
+            return new LimitedReadStream(
+                new PrefetchStream(opened, uncompressedSize, expectedCrc), uncompressedSize, counter, entryLimitName, entryLimit);
         }
 
         internal static int InitialBufferCapacity(long entryLength)

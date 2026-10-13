@@ -37,6 +37,8 @@ pub struct OpenOptions {
     pub max_zip_entries: Option<i32>,
     pub prefetch_decompression: Option<bool>,
     pub intern_strings: Option<bool>,
+    /// XLSX/XLSB only: check each ZIP entry against its CRC-32. `None` is `true`.
+    pub verify_zip_checksums: Option<bool>,
 
     /// `open_source` only: bytes fetched per `read_at` call. `None` is 4 MiB; a negative value turns
     /// the cache off.
@@ -98,6 +100,9 @@ impl OpenOptions {
         prefetch_decompression: bool,
         /// XLS/XLSX/XLSB only. Library default is `false`.
         intern_strings: bool,
+        /// XLSX/XLSB only: check each ZIP entry against its CRC-32, so a damaged file fails the read
+        /// instead of returning wrong cells. Library default is `true`.
+        verify_zip_checksums: bool,
         /// `open_source` only: bytes fetched per `read_at` call. Library default is 4 MiB; a negative
         /// value turns the cache off.
         source_block_size: i32,
@@ -148,6 +153,7 @@ impl OpenOptions {
             source_cache_bytes: opt_number(self.source_cache_bytes),
             max_buffered_bytes: opt_number(self.max_buffered_bytes),
             source_block_size: opt_number(self.source_block_size),
+            verify_zip_checksums: opt_state(self.verify_zip_checksums),
         };
         if let Some(bytes) = password {
             raw.password = bytes.as_ptr();
@@ -304,11 +310,13 @@ mod tests {
     fn booleans_lower_to_distinct_true_and_false_states() {
         let options = OpenOptions::new()
             .prefetch_decompression(true)
-            .intern_strings(false);
+            .intern_strings(false)
+            .verify_zip_checksums(false);
         let guard = options.to_raw();
         let raw = guard.raw;
         assert_eq!(raw.prefetch_decompression, XL_OPT_TRUE);
         assert_eq!(raw.intern_strings, XL_OPT_FALSE);
+        assert_eq!(raw.verify_zip_checksums, XL_OPT_FALSE);
         assert_eq!(raw.csv_detect_bom, XL_OPT_DEFAULT);
     }
 
@@ -393,6 +401,7 @@ mod tests {
         assert_eq!(std::mem::offset_of!(XlOpenOptions, source_cache_bytes), 88);
         assert_eq!(std::mem::offset_of!(XlOpenOptions, max_buffered_bytes), 96);
         assert_eq!(std::mem::offset_of!(XlOpenOptions, source_block_size), 104);
+        assert_eq!(std::mem::offset_of!(XlOpenOptions, verify_zip_checksums), 108);
         assert_eq!(std::mem::size_of::<XlSource>(), 40);
         assert_eq!(std::mem::size_of::<XlStream>(), 32);
     }

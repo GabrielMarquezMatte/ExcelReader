@@ -121,6 +121,10 @@ class OpenOptions(NamedTuple):
     in 64 MiB by default; a negative block size turns the cache off). `max_buffered_bytes` caps how
     much `open_stream()` reads before an XLSX, XLSB or XLS opens.
 
+    `verify_zip_checksums` (on by default) checks each ZIP entry of an XLSX or XLSB against its
+    CRC-32, so a damaged file raises instead of returning wrong cells. Set it to `False` to read a
+    file whose producer wrote wrong checksums.
+
     Validation happens on the native side, which owns the real limits; an out-of-range value raises
     `ExcelReaderError` with the reason. Fields mirror xl_open_options in
     src/ExcelReader.Native/include/excelreader.h.
@@ -141,6 +145,7 @@ class OpenOptions(NamedTuple):
     source_block_size: int | None = None
     source_cache_bytes: int | None = None
     max_buffered_bytes: int | None = None
+    verify_zip_checksums: bool | None = None
 
 
 class WriteOptions(NamedTuple):

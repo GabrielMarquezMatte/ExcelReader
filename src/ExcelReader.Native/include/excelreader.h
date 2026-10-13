@@ -83,6 +83,8 @@ typedef struct xl_open_options {
     int64_t source_cache_bytes;
     int64_t max_buffered_bytes;
     int32_t source_block_size;
+    /* XL_OPT_*: check each XLSX/XLSB ZIP entry against its CRC-32. On by default. */
+    int32_t verify_zip_checksums;
 } xl_open_options;
 
 int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format,

@@ -13,6 +13,33 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void The_Checksum_Switch_Sits_In_The_Former_Tail_Padding()
+        {
+            Assert.Equal(108, (int)System.Runtime.InteropServices.Marshal.OffsetOf<NativeOpenOptionsRaw>(nameof(NativeOpenOptionsRaw.VerifyZipChecksums)));
+        }
+
+        [Theory]
+        [InlineData(0, true)]
+        [InlineData(1, false)]
+        [InlineData(2, true)]
+        public void The_Checksum_Switch_Reaches_The_Reader_Options(int state, bool expected)
+        {
+            NativeOpenOptionsRaw raw = new() { StructSize = sizeof(NativeOpenOptionsRaw), VerifyZipChecksums = state };
+
+            Assert.True(NativeOpenOptions.TryDecode(raw, out NativeOpenOptions options, out string? error), error);
+            Assert.Equal(expected, options.ToExcelReaderOptions().VerifyZipChecksums);
+        }
+
+        [Fact]
+        public void An_Unknown_Checksum_State_Is_Rejected()
+        {
+            NativeOpenOptionsRaw raw = new() { StructSize = sizeof(NativeOpenOptionsRaw), VerifyZipChecksums = 3 };
+
+            Assert.False(NativeOpenOptions.TryDecode(raw, out _, out string? error));
+            Assert.Contains("verify_zip_checksums", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void A_6_0_Sized_Struct_Is_Read_As_A_Prefix()
         {
             NativeOpenOptionsRaw caller = new()

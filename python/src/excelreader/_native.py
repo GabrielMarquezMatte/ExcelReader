@@ -266,6 +266,7 @@ class NativeOpenOptions(ctypes.Structure):
         ("source_cache_bytes", ctypes.c_int64),
         ("max_buffered_bytes", ctypes.c_int64),
         ("source_block_size", ctypes.c_int32),
+        ("verify_zip_checksums", ctypes.c_int32),
     ]
 
 
@@ -334,6 +335,7 @@ def to_native_open_options(options: OpenOptions) -> NativeOpenOptions:
     raw.csv_intern_strings = _opt_state(options.csv_intern_strings)
     raw.prefetch_decompression = _opt_state(options.prefetch_decompression)
     raw.intern_strings = _opt_state(options.intern_strings)
+    raw.verify_zip_checksums = _opt_state(options.verify_zip_checksums)
     raw.csv_delimiter = _opt_number(options.csv_delimiter)
     raw.csv_quote = _opt_number(options.csv_quote)
     raw.csv_max_cell_bytes = _opt_number(options.csv_max_cell_bytes)
