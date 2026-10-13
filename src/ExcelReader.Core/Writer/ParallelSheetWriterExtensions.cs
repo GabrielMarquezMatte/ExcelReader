@@ -1,4 +1,5 @@
 using ExcelReader.Core.Writer.Parallel;
+using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Core.Writer
@@ -110,6 +111,66 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(records);
             ArgumentNullException.ThrowIfNull(layout);
             return ParallelRecordWriter.WriteTableAsync<XlsxSheetWriter, XlsxRowWriter, T>(sheet, new RecordSource<T>(records), name, layout, tableOptions, options, ct);
+        }
+
+        /// <inheritdoc cref="WriteRecordsParallelAsync{T}(XlsxSheetWriter, IEnumerable{T}, ExcelRecordLayout{T}, ParallelWriteOptions?, CancellationToken)"/>
+        public static ValueTask WriteRecordsParallelAsync<T>(this XlsbSheetWriter sheet, IEnumerable<T> records,
+            ExcelRecordLayout<T> layout, ParallelWriteOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            return ParallelRecordWriter.WriteRecordsAsync<XlsbSheetWriter, XlsbRowWriter, T>(sheet, new RecordSource<T>(records), layout, options, ct);
+        }
+
+        /// <inheritdoc cref="WriteRecordsParallelAsync{T}(XlsxSheetWriter, IEnumerable{T}, ExcelRecordLayout{T}, ParallelWriteOptions?, CancellationToken)"/>
+        public static ValueTask WriteRecordsParallelAsync<T>(this XlsbSheetWriter sheet, IAsyncEnumerable<T> records,
+            ExcelRecordLayout<T> layout, ParallelWriteOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            return ParallelRecordWriter.WriteRecordsAsync<XlsbSheetWriter, XlsbRowWriter, T>(sheet, new RecordSource<T>(records), layout, options, ct);
+        }
+
+        /// <inheritdoc cref="WriteRecordsParallelAsync{T}(XlsxSheetWriter, IEnumerable{T}, Action{XlsxRowWriter, T}, ParallelWriteOptions?, CancellationToken)"/>
+        public static ValueTask WriteRecordsParallelAsync<T>(this XlsbSheetWriter sheet, IEnumerable<T> records,
+            Action<XlsbRowWriter, T> writeRow, ParallelWriteOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(writeRow);
+            return ParallelRecordWriter.WriteRowsAsync(sheet, new RecordSource<T>(records), writeRow, options, ct);
+        }
+
+        /// <inheritdoc cref="WriteRecordsParallelAsync{T}(XlsxSheetWriter, IEnumerable{T}, Action{XlsxRowWriter, T}, ParallelWriteOptions?, CancellationToken)"/>
+        public static ValueTask WriteRecordsParallelAsync<T>(this XlsbSheetWriter sheet, IAsyncEnumerable<T> records,
+            Action<XlsbRowWriter, T> writeRow, ParallelWriteOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(writeRow);
+            return ParallelRecordWriter.WriteRowsAsync(sheet, new RecordSource<T>(records), writeRow, options, ct);
+        }
+
+        /// <inheritdoc cref="WriteTableParallelAsync{T}(XlsxSheetWriter, IEnumerable{T}, string, ExcelRecordLayout{T}, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)"/>
+        public static ValueTask WriteTableParallelAsync<T>(this XlsbSheetWriter sheet, IEnumerable<T> records, string name,
+            ExcelRecordLayout<T> layout, ExcelTableOptions? tableOptions = null, ParallelWriteOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            return ParallelRecordWriter.WriteTableAsync<XlsbSheetWriter, XlsbRowWriter, T>(sheet, new RecordSource<T>(records), name, layout, tableOptions, options, ct);
+        }
+
+        /// <inheritdoc cref="WriteTableParallelAsync{T}(XlsxSheetWriter, IEnumerable{T}, string, ExcelRecordLayout{T}, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)"/>
+        public static ValueTask WriteTableParallelAsync<T>(this XlsbSheetWriter sheet, IAsyncEnumerable<T> records, string name,
+            ExcelRecordLayout<T> layout, ExcelTableOptions? tableOptions = null, ParallelWriteOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            return ParallelRecordWriter.WriteTableAsync<XlsbSheetWriter, XlsbRowWriter, T>(sheet, new RecordSource<T>(records), name, layout, tableOptions, options, ct);
         }
     }
 }

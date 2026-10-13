@@ -1,16 +1,18 @@
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Writer.Parallel;
 using ExcelReader.Core.Writer.Xls;
 using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
-    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>
+    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>, IBatchSheet<XlsbSheetWriter, XlsbRowWriter>
     {
         private const int SpillThreshold = 64 * 1024;
 
@@ -21,6 +23,12 @@ namespace ExcelReader.Core.Writer.Xlsb
         private readonly bool _offloadWrite;
         private readonly BiffBuffer _records = new(4096);
         private readonly TableTracker _tables = new();
+        private readonly int _spillThreshold = SpillThreshold;
+        private readonly WorkerStringCache? _workerStrings;
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "An alias of the entry that _stream is or wraps; disposing _stream disposes it.")]
+        private ZipEntryStream? _entry;
+        private bool _segmentsOpen;
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "End disposes it and Fault cleans it up; the analyzer loses it once _entry aliases the same entry.")]
         private Stream? _stream;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
@@ -58,6 +66,26 @@ namespace ExcelReader.Core.Writer.Xlsb
             _date1904 = date1904;
             _compression = compression;
             _offloadWrite = offloadWrite;
+        }
+
+        // A detached copy formats batches for the parallel record path: it has its own record buffer,
+        // never spills it and never touches the ZIP.
+        private XlsbSheetWriter(XlsbSheetWriter source)
+        {
+            _owner = source._owner;
+            _zip = source._zip;
+            Name = source.Name;
+            SheetId = source.SheetId;
+            Visibility = source.Visibility;
+            _date1904 = source._date1904;
+            _compression = source._compression;
+            _columnStyles = source._columnStyles;
+            _spillThreshold = int.MaxValue;
+            _state = WriterState.Started;
+            if (_owner.UseSharedStrings)
+            {
+                _workerStrings = new WorkerStringCache(_owner.SharedStrings!, _owner.SharedStringsGate);
+            }
         }
 
         internal string Name { get; }
@@ -366,6 +394,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             _state = WriterState.Ended;
             _stream = null;
+            _entry = null;
             ReleaseBuffers();
             if (!faulted && !_registered)
             {
@@ -404,7 +433,7 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         private void MaybeFlush()
         {
-            if (!_rowActive && _records.Length >= SpillThreshold)
+            if (!_rowActive && _records.Length >= _spillThreshold)
             {
                 FlushRecords();
             }
@@ -416,8 +445,9 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return;
             }
-            Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-            _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
+            ZipEntryStream entry = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
+            _entry = entry;
+            _stream = _offloadWrite ? new WriteOffloadStream(entry) : entry;
         }
 
         private void FlushRecords()
@@ -646,7 +676,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             int style = EffectiveStyle(columnIndex);
             if (_owner.UseSharedStrings)
             {
-                int index = owned is null ? _owner.GetSharedStringIndex(value) : _owner.GetSharedStringIndex(owned);
+                int index = SharedStringIndex(value, owned);
                 const int Length = CellHeaderLength + 4;
                 Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellIsst, Length, out Span<byte> shared);
                 Biff12RecordWriter.WriteCellHeader(shared, columnIndex, style);
@@ -660,6 +690,15 @@ namespace ExcelReader.Core.Writer.Xlsb
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(8, 4), (uint)value.Length);
             MemoryMarshal.AsBytes(value).CopyTo(p[12..]);
             MaybeFlush();
+        }
+
+        private int SharedStringIndex(ReadOnlySpan<char> value, string? owned)
+        {
+            if (_workerStrings is not null)
+            {
+                return owned is null ? _workerStrings.GetOrAdd(value) : _workerStrings.GetOrAdd(owned);
+            }
+            return owned is null ? _owner.GetSharedStringIndex(value) : _owner.GetSharedStringIndex(owned);
         }
 
         internal void WriteBoolCell(int columnIndex, bool value)
@@ -708,6 +747,121 @@ namespace ExcelReader.Core.Writer.Xlsb
         private static void ValidateColumn(int columnIndex)
         {
             ExcelLimits.ThrowIfColumnOutOfRange(columnIndex);
+        }
+
+        CompressionLevel IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.BatchCompression
+        {
+            get
+            {
+                return _compression;
+            }
+        }
+
+        ValueTask<int> IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.BeginSegmentsAsync(CancellationToken ct)
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsbRowWriter));
+            ct.ThrowIfCancellationRequested();
+            EnsureStarted();
+            // Held for the whole stretch, so StartRow and End are refused until it is over.
+            _rowActive = true;
+            _segmentsOpen = false;
+            return ValueTask.FromResult(_rowNumber + 1);
+        }
+
+        async ValueTask IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.AppendSegmentAsync(BatchSegment segment, CancellationToken ct)
+        {
+            MergeUsedRange(segment);
+            if (!_segmentsOpen)
+            {
+                await OpenSegmentsAsync(ct).ConfigureAwait(false);
+            }
+            await _entry!.AppendSegmentAsync(segment.Data.Memory, segment.Crc, segment.RawLength, ct).ConfigureAwait(false);
+            _rowNumber += segment.Rows;
+        }
+
+        // The sheet header leaves the buffer here, not when the stretch begins, so the dimension record
+        // it carries sees the first batch's rows and columns.
+        private async ValueTask OpenSegmentsAsync(CancellationToken ct)
+        {
+            FlushRecords();
+            try
+            {
+                EnsureStream();
+                if (_stream is WriteOffloadStream offload)
+                {
+                    await offload.DrainAsync(ct).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                await FaultAsync().ConfigureAwait(false);
+                throw;
+            }
+            _segmentsOpen = true;
+        }
+
+        private void MergeUsedRange(BatchSegment segment)
+        {
+            if (segment.RowLast < 0)
+            {
+                return;
+            }
+            if (_usedRowFirst < 0)
+            {
+                _usedRowFirst = segment.RowFirst;
+            }
+            _usedRowLast = segment.RowLast;
+            _usedColFirst = Math.Min(_usedColFirst, segment.ColumnFirst);
+            _usedColLast = Math.Max(_usedColLast, segment.ColumnLast);
+        }
+
+        void IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.EndSegments()
+        {
+            _rowActive = false;
+            _segmentsOpen = false;
+        }
+
+        async ValueTask IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.FailSegmentsAsync()
+        {
+            _rowActive = false;
+            await FaultAsync().ConfigureAwait(false);
+        }
+
+        XlsbSheetWriter IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.CreateDetached()
+        {
+            return new XlsbSheetWriter(this);
+        }
+
+        void IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.BeginBatch(int rowsBefore)
+        {
+            _records.Reset();
+            _rowNumber = rowsBefore - 1;
+            _rowActive = false;
+            _usedRowFirst = -1;
+            _usedRowLast = -1;
+            _usedColFirst = int.MaxValue;
+            _usedColLast = -1;
+        }
+
+        XlsbRowWriter IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.StartBatchRow()
+        {
+            return StartRow();
+        }
+
+        ReadOnlySpan<byte> IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.EndBatch(BatchSegment segment)
+        {
+            _workerStrings?.FlushReferences();
+            segment.RowFirst = _usedRowFirst;
+            segment.RowLast = _usedRowLast;
+            segment.ColumnFirst = _usedColFirst;
+            segment.ColumnLast = _usedColLast;
+            return _records.Span;
+        }
+
+        void IBatchSheet<XlsbSheetWriter, XlsbRowWriter>.ReleaseDetached()
+        {
+            ReleaseBuffers();
         }
     }
 }
