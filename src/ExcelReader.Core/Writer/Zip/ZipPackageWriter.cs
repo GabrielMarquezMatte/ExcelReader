@@ -75,17 +75,32 @@ namespace ExcelReader.Core.Writer.Zip
             Justification = "Called while an earlier failure propagates; the directory is best effort and must not hide that failure.")]
         internal void Abandon()
         {
-            if (_closed)
+            if (!TryClose())
             {
                 return;
             }
-            _closed = true;
-            _open?.Abandon();
-            _open = null;
             try
             {
-                using BiffBuffer directory = BuildDirectory();
+                using BiffBuffer directory = PrepareAbandonedDirectory();
                 WriteRaw(directory.Span);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+            Justification = "Called while an earlier failure propagates; the directory is best effort and must not hide that failure.")]
+        internal async ValueTask AbandonAsync()
+        {
+            if (!TryClose())
+            {
+                return;
+            }
+            try
+            {
+                using BiffBuffer directory = PrepareAbandonedDirectory();
+                await WriteRawAsync(directory.Memory, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -148,6 +163,28 @@ namespace ExcelReader.Core.Writer.Zip
                 throw new InvalidOperationException("Every ZIP entry must be closed successfully before the archive is finished.");
             }
             _closed = true;
+            return BuildDirectory();
+        }
+
+        private bool TryClose()
+        {
+            if (_closed)
+            {
+                return false;
+            }
+            _closed = true;
+            return true;
+        }
+
+        private BiffBuffer PrepareAbandonedDirectory()
+        {
+            ZipEntryStream? open = _open;
+            _open = null;
+            open?.Abandon();
+            if (CanSeek)
+            {
+                _output.Seek(Position, SeekOrigin.Begin);
+            }
             return BuildDirectory();
         }
 
