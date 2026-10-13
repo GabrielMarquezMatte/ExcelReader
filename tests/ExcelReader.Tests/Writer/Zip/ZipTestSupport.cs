@@ -149,6 +149,34 @@ namespace ExcelReader.Tests.Writer.Zip
         }
     }
 
+    /// <summary>Throws <see cref="IOException"/> on write number <paramref name="failOnCall"/> without storing it, then accepts every later write.</summary>
+    internal sealed class FailOnceWriteStream(int failOnCall) : Stream
+    {
+        private int _calls;
+
+        internal MemoryStream Written { get; } = new();
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            _calls++;
+            if (_calls == failOnCall)
+            {
+                throw new IOException("transient");
+            }
+            Written.Write(buffer);
+        }
+    }
+
     /// <summary>
     /// Counts every byte but keeps only the first 4 KB and everything at or past 4 GiB, so a Zip64
     /// archive can be inspected without holding it.

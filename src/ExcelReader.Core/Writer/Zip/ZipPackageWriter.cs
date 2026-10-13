@@ -51,6 +51,10 @@ namespace ExcelReader.Core.Writer.Zip
             {
                 throw new InvalidOperationException("The previous ZIP entry must be closed before another is opened.");
             }
+            if (_broken)
+            {
+                throw new InvalidOperationException("A ZIP entry failed, so the archive cannot take more entries.");
+            }
             _open = new ZipEntryStream(this, new ZipEntryRecord(name, level, Position, DateTime.Now));
             return _open;
         }

@@ -251,15 +251,84 @@ namespace ExcelReader.Tests.Writer.Zip
                     entry.Write(chunk);
                 }
             });
-            Assert.Throws<IOException>(entry.Dispose);
-            Assert.Throws<InvalidOperationException>(zip.Finish);
+            AssertFailedEntryIsDead(zip, entry, output.Written);
             zip.Abandon();
             zip.Abandon();
-            Assert.Equal(-1, output.Written.ToArray().AsSpan().IndexOf("PK\u0001\u0002"u8));
             Assert.Throws<ObjectDisposedException>(() => zip.OpenEntry("next.xml", CompressionLevel.Fastest));
         }
 
+        private static void AssertFailedEntryIsDead(ZipPackageWriter zip, Stream entry, MemoryStream written)
+        {
+            long length = written.Length;
+            entry.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => entry.Write(new byte[1]));
+            Assert.Throws<InvalidOperationException>(zip.Finish);
+            Assert.Throws<InvalidOperationException>(() => zip.OpenEntry("next.xml", CompressionLevel.Fastest));
+            Assert.Equal(length, written.Length);
+            Assert.Equal(-1, written.ToArray().AsSpan().IndexOf("PK"u8));
+        }
+
+        [Fact]
+        public void ATransientWriteFailureKillsTheEntry()
+        {
+            var output = new FailOnceWriteStream(failOnCall: 1);
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
+            Assert.Throws<IOException>(() => entry.Write(new byte[64 * 1024]));
+            AssertFailedEntryIsDead(zip, entry, output.Written);
+        }
+
+        [Fact]
+        public async Task ATransientAsyncWriteFailureKillsTheEntry()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var output = new FailOnceWriteStream(failOnCall: 1);
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
+            await Assert.ThrowsAsync<IOException>(async () => await entry.WriteAsync(new byte[64 * 1024], ct));
+            await entry.DisposeAsync();
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await zip.FinishAsync(ct));
+            AssertFailedEntryIsDead(zip, entry, output.Written);
+        }
+
+        [Fact]
+        public async Task ACancelledWriteKillsTheEntryEvenWhenDisposedWithNoToken()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var output = new MemoryStream();
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("big.xml", CompressionLevel.NoCompression);
+            using var cancelled = new CancellationTokenSource();
+            await cancelled.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                async () => await entry.WriteAsync(new byte[64 * 1024], cancelled.Token));
+            await entry.DisposeAsync();
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await zip.FinishAsync(ct));
+            AssertFailedEntryIsDead(zip, entry, output);
+        }
+
         [Theory]
+        [InlineData(CompressionLevel.Fastest)]
+        [InlineData(CompressionLevel.Optimal)]
+        [InlineData(CompressionLevel.NoCompression)]
+        public void AbandonReleasesTheOpenEntryWithoutWriting(CompressionLevel level)
+        {
+            var output = new MemoryStream();
+            var zip = new ZipPackageWriter(output);
+            Stream entry = zip.OpenEntry("a.xml", level);
+            entry.Write(DeflateEncoderTests.SheetXml(2000));
+            long length = output.Length;
+            zip.Abandon();
+            Assert.Equal(length, output.Length);
+            Assert.Throws<ObjectDisposedException>(() => entry.Write(new byte[1]));
+            entry.Dispose();
+            zip.Abandon();
+            Assert.Equal(length, output.Length);
+            Assert.Throws<ObjectDisposedException>(zip.Finish);
+        }
+
+        [Theory]
+        [Trait("Category", "Slow")]
         [InlineData(true)]
         [InlineData(false)]
         public void AnEntryOver4GiBUsesZip64AndSoDoLaterOffsets(bool seekable)
