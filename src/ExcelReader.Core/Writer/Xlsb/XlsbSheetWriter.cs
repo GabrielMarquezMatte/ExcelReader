@@ -5,6 +5,7 @@ using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Writer.Xlsb
 {
@@ -14,7 +15,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private const int SpillThreshold = 64 * 1024;
 
         private readonly XlsbWorkbookWriter _owner;
-        private readonly ZipArchive _zip;
+        private readonly ZipPackageWriter _zip;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
         private readonly bool _offloadWrite;
@@ -41,7 +42,7 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         internal XlsbSheetWriter(
             XlsbWorkbookWriter owner,
-            ZipArchive zip,
+            ZipPackageWriter zip,
             string name,
             int sheetId,
             ExcelSheetVisibility visibility,
@@ -405,8 +406,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return;
             }
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-            Stream stream = entry.Open();
+            Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
         }
 
@@ -438,15 +438,13 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         private void WriteBufferedSheet()
         {
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-            using Stream stream = entry.Open();
+            using Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
             stream.Write(_records.Span);
         }
 
         private async ValueTask WriteBufferedSheetAsync(CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-            Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+            Stream stream = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
             await using (stream.ConfigureAwait(false))
             {
                 await stream.WriteAsync(_records.Memory, ct).ConfigureAwait(false);
