@@ -22,8 +22,9 @@ namespace ExcelReader.Core.Writer.Zip
         private const int MinMatch = 4;
         private const int MaxMatch = 258;
         private const int WindowCapacity = HistoryLength + (1 << 20);
-        // Every byte a 9-bit literal, plus the block header, end-of-block, pending bits and a 4-byte flush.
-        private const int MaxEncodedBlock = (MaxBlockLength * 9 / 8) + 16;
+        // Every byte a 9-bit literal, plus the block header, end-of-block, pending bits and the 8 bytes
+        // each symbol writes ahead of the position it advances to.
+        private const int MaxEncodedBlock = (MaxBlockLength * 9 / 8) + 24;
 
         private byte[] _window;
         private uint[] _table;
@@ -141,6 +142,9 @@ namespace ExcelReader.Core.Writer.Zip
             return headerBytes + 4 + length;
         }
 
+        // Called once per block, so tiered compilation would run the loop as on-stack-replacement code
+        // for the first blocks of a process.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         private int EncodeMatches(int blockEnd, Span<byte> destination, ref BitState state)
         {
             byte[] windowArray = _window;
@@ -184,13 +188,12 @@ namespace ExcelReader.Core.Writer.Zip
                     count += (int)(literal & FixedHuffmanCodes.LengthMask);
                     index++;
                 }
-                if (count >= 32)
-                {
-                    Unsafe.WriteUnaligned(ref Unsafe.Add(ref output, written), (uint)bits);
-                    written += 4;
-                    bits >>= 32;
-                    count -= 32;
-                }
+                // Whole bytes leave the buffer after every symbol, so fewer than 8 bits stay pending
+                // and the next symbol, at most 31 bits, always fits.
+                Unsafe.WriteUnaligned(ref Unsafe.Add(ref output, written), bits);
+                written += count >> 3;
+                bits >>= count & ~7;
+                count &= 7;
             }
             state.Bits = bits;
             state.Count = count;
