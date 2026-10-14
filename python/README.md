@@ -254,8 +254,20 @@ arrays. `format` is inferred from the path's extension (one of xlsx/xlsb/xls/csv
 write_workbook("report.dat", table, types, format="csv")
 ```
 
+The destination can also be a binary object with `write()`, such as `io.BytesIO` or an open file. The
+workbook is built in memory and written in one `write()` call, and with no extension to infer it from,
+`format` is required:
+
+```python
+import io
+
+buffer = io.BytesIO()
+write_workbook(buffer, table, types, format="xlsx")
+payload = buffer.getvalue()
+```
+
 `write_pandas()` and `write_polars()` build the table from a DataFrame instead (both go through
-`write_arrow()`, so `pyarrow` must be installed):
+`write_arrow()`, so `pyarrow` must be installed). They take the same destinations and keywords:
 
 ```python
 from excelreader import write_pandas, write_polars
@@ -313,16 +325,6 @@ with open_writer_to_memory("xlsx") as writer:
     writer.write_row(["name", "qty"])
     writer.end_sheet()
     payload = writer.bytes()
-```
-
-`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path, and
-`write_arrow_to_bytes()`, `write_pandas_to_bytes()` and `write_polars_to_bytes()` for the frame
-writers. With no path to infer it from, each takes an explicit `format`:
-
-```python
-from excelreader import write_pandas_to_bytes
-
-payload = write_pandas_to_bytes(df, format="xlsx")
 ```
 
 ### Arrow
@@ -510,9 +512,13 @@ packages can be encrypted, matching what `open_workbook` can decrypt.
 to disk:
 
 ```python
-from excelreader import encrypt_package_bytes, write_workbook_to_bytes
+import io
 
-secret = encrypt_package_bytes(write_workbook_to_bytes(table, types, format="xlsx"), "hunter2")
+from excelreader import encrypt_package_bytes, write_workbook
+
+buffer = io.BytesIO()
+write_workbook(buffer, table, types, format="xlsx")
+secret = encrypt_package_bytes(buffer.getvalue(), "hunter2")
 ```
 
 ## Benchmarks

@@ -169,3 +169,12 @@ The C ABI is unchanged: no signature moved, and `XL_ABI_VERSION` stays 6. Behavi
 |---|---|
 | `open_bytes(data, "xlsx", password=p)` | `open_workbook(data, "xlsx", password=p)` |
 | `open_bytes(buffer.getvalue())` | `open_workbook(buffer)` |
+
+### Python: one way to write a workbook
+
+`write_workbook_to_bytes()`, `write_arrow_to_bytes()`, `write_pandas_to_bytes()` and `write_polars_to_bytes()` are removed. `write_workbook()`, `write_arrow()`, `write_pandas()` and `write_polars()` take the destination first, a path or a binary object with `write()`, such as `io.BytesIO`. A destination without a path needs `format`. The frame writers now take `format` and `options` as keywords instead of passing `**kwargs` through.
+
+| v6 | v7 |
+|---|---|
+| `payload = write_workbook_to_bytes(table, types, format="xlsx")` | `buffer = io.BytesIO()`<br>`write_workbook(buffer, table, types, format="xlsx")`<br>`payload = buffer.getvalue()` |
+| `write_pandas_to_bytes(df, format="xlsx")` | `write_pandas(buffer, df, format="xlsx")` |

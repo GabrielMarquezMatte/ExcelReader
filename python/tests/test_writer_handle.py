@@ -200,8 +200,10 @@ def test_bytes_on_a_file_writer_raises(tmp_path):
             writer.bytes()
 
 
-def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
-    from excelreader import open_workbook, write_workbook, write_workbook_to_bytes
+def test_write_workbook_to_a_bytesio_matches_write_workbook_to_a_file(tmp_path, xlsx_path):
+    import io
+
+    from excelreader import open_workbook, write_workbook
 
     with open_workbook(xlsx_path) as workbook:
         schema = workbook.sheets[0].infer_schema()
@@ -211,7 +213,9 @@ def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
 
     path = tmp_path / "from-file.xlsx"
     write_workbook(path, table, types, format="xlsx")
-    payload = write_workbook_to_bytes(table, types, format="xlsx")
+    buffer = io.BytesIO()
+    write_workbook(buffer, table, types, format="xlsx")
+    payload = buffer.getvalue()
 
     with open_workbook(path) as workbook:
         from_file = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
