@@ -252,3 +252,17 @@ Every public item lives at the crate root. The raw C interface (`Xl*`, `xl_*`, `
 | `WriterHandle::write_null(t)` | `write_*(None)` |
 | `aggregate_csv_file` / `aggregate_csv_memory`, `CsvParallelOptions` | `aggregate_csv(input, &opts, header_row, parallelism, seed)` |
 | `OpenOptions::csv_max_cell_bytes` / `csv_intern_strings` | `max_cell_bytes` / `intern_strings`, which now apply to CSV too |
+
+### One vocabulary across the bindings
+
+Python, C++ and Rust read a sheet with the same four names: `parse` (typed, whole sheet), `parse_batches` (typed, in batches), `to_arrow` (Arrow, whole sheet) and `to_arrow_stream` (Arrow, in batches). The header row, parallelism and batch size travel together: as keywords in Python, a `ReadOptions` aggregate in C++ and a `ReadOptions` builder in Rust.
+
+| Binding | v7 release candidates | v7 |
+|---|---|---|
+| Python | `sheet.parse_typed(schema, 1, 0)`, `sheet.iter_parse_typed(schema, 1, 500)` | `sheet.parse(schema, parallelism=0)`, `sheet.parse_batches(schema, batch_size=500)`; every read option is keyword-only |
+| Python | `cell.as_date(workbook.is_date1904)` | `cell.as_date()`; the cell carries `date1904` |
+| C++ | `parse_sheet<T>(s, h, n)`, `typed_reader<T>(s, h, b)` | `parse<T>(s, {.header_row = h, .parallelism = n})`, `parse_batches<T>(s, {.batch_size = b})` |
+| C++ | `parse_arrow<T>(...)`, `arrow_stream<T>(...)` | `to_arrow<T>(s, opts)`, `to_arrow_stream<T>(s, opts)` |
+| Rust | `sheet.parse::<T>(h, n)`, `sheet.typed_chunks::<T>(h, b)` | `sheet.parse::<T>(&ReadOptions::new().header_row(h).parallelism(n))`, `sheet.parse_batches::<T>(&opts)` |
+| Rust | `sheet.parse_arrow::<T>(...)`, `sheet.parse_arrow_stream::<T>(...)`, `TypedChunks`, `ArrowChunks` | `sheet.to_arrow::<T>(&opts)`, `sheet.to_arrow_stream::<T>(&opts)`, `TypedBatches`, `ArrowBatches` |
+| Rust | `Date::new(d)`, `Time::new(t)`, `Timestamp::new(ts)` | `Date { days_since_epoch: d }`, `Time { micros_since_midnight: t }`, `Timestamp { micros_since_epoch: ts }` |
