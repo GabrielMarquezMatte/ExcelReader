@@ -1,3 +1,5 @@
+import io
+
 import pytest
 from excelreader import (
     ColumnSpec,
@@ -9,13 +11,9 @@ from excelreader import (
     encrypt_package_bytes,
     open_workbook,
     write_arrow,
-    write_arrow_to_bytes,
     write_pandas,
-    write_pandas_to_bytes,
     write_polars,
-    write_polars_to_bytes,
     write_workbook,
-    write_workbook_to_bytes,
 )
 
 _SCHEMA = [
@@ -231,11 +229,17 @@ def _parse_bytes(payload, format, password=None):
         return workbook.sheets[0].parse_typed(_SCHEMA)
 
 
+def _to_bytes(table):
+    buffer = io.BytesIO()
+    write_workbook(buffer, table, _TYPES, format="xlsx")
+    return buffer.getvalue()
+
+
 @pytest.mark.parametrize(
     ("writer", "frame_module"),
-    [(write_arrow_to_bytes, None), (write_pandas_to_bytes, "pandas"), (write_polars_to_bytes, "polars")],
+    [(write_arrow, None), (write_pandas, "pandas"), (write_polars, "polars")],
 )
-def test_frame_writers_to_bytes_round_trip(writer, frame_module):
+def test_frame_writers_round_trip_through_a_bytesio(writer, frame_module):
     pa = pytest.importorskip("pyarrow")
     data = {"name": ["widget", "gadget"], "qty": [3, 7]}
     if frame_module is None:
@@ -243,7 +247,9 @@ def test_frame_writers_to_bytes_round_trip(writer, frame_module):
     else:
         frame = pytest.importorskip(frame_module).DataFrame(data)
 
-    result = _parse_bytes(writer(frame, format="xlsx", options=WriteOptions(sheet_name="Vendas")), "xlsx")
+    buffer = io.BytesIO()
+    writer(buffer, frame, format="xlsx", options=WriteOptions(sheet_name="Vendas"))
+    result = _parse_bytes(buffer.getvalue(), "xlsx")
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -253,7 +259,7 @@ def test_encrypt_package_bytes_round_trips_without_touching_disk(source_csv):
     with open_workbook(source_csv) as workbook:
         table = workbook.sheets[0].parse_typed(_SCHEMA)
 
-    encrypted = encrypt_package_bytes(write_workbook_to_bytes(table, _TYPES, format="xlsx"), "hunter2")
+    encrypted = encrypt_package_bytes(_to_bytes(table), "hunter2")
     result = _parse_bytes(encrypted, "xlsx", password="hunter2")
 
     assert list(result.columns[0]) == ["widget", "gadget"]
@@ -272,4 +278,35 @@ def test_encrypt_package_bytes_rejects_an_empty_password(source_csv):
         table = workbook.sheets[0].parse_typed(_SCHEMA)
 
     with pytest.raises(ExcelReaderError):
-        encrypt_package_bytes(write_workbook_to_bytes(table, _TYPES, format="xlsx"), "")
+        encrypt_package_bytes(_to_bytes(table), "")
+
+
+def test_write_workbook_writes_into_an_open_binary_file(tmp_path, source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
+    path = tmp_path / "out.bin"
+
+    with path.open("wb") as file:
+        write_workbook(file, table, _TYPES, format="xlsb")
+
+    result = _parse_bytes(path.read_bytes(), "xlsb")
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+def test_write_workbook_to_a_stream_needs_a_format(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
+
+    with pytest.raises(ValueError, match="format"):
+        write_workbook(io.BytesIO(), table, _TYPES)
+    with pytest.raises(ValueError, match="unknown format"):
+        write_workbook(io.BytesIO(), table, _TYPES, format="parquet")
+
+
+def test_write_workbook_rejects_a_destination_it_cannot_write(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
+
+    with pytest.raises(TypeError, match="destination"):
+        write_workbook(42, table, _TYPES, format="xlsx")
