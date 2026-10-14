@@ -110,7 +110,10 @@ impl<A, F> Shared<'_, A, F> {
     /// Keeps the FIRST payload: later panics from sibling workers are dropped rather than racing to
     /// overwrite the one that started the abort.
     fn store_panic(&self, payload: Box<dyn Any + Send>) -> i32 {
-        let mut slot = self.panic.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut slot = self
+            .panic
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if slot.is_none() {
             *slot = Some(payload);
         }
@@ -130,7 +133,10 @@ where
     match catch_unwind(AssertUnwindSafe(|| (shared.seed)())) {
         Ok(accumulator) => {
             unsafe {
-                *out_state = Box::into_raw(Box::new(State { value: accumulator, _nonzero: 0 })) as *mut c_void
+                *out_state = Box::into_raw(Box::new(State {
+                    value: accumulator,
+                    _nonzero: 0,
+                })) as *mut c_void
             };
             XL_OK
         }
@@ -191,9 +197,9 @@ where
     F: Fn() -> A,
 {
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
-    if let Err(payload) =
-        catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(state as *mut State<A>) })))
-    {
+    if let Err(payload) = catch_unwind(AssertUnwindSafe(|| {
+        drop(unsafe { Box::from_raw(state as *mut State<A>) })
+    })) {
         shared.store_panic(payload);
     }
 }
@@ -214,7 +220,11 @@ where
 }
 
 fn shared<A, F>(seed: &F) -> Shared<'_, A, F> {
-    Shared { seed, panic: Mutex::new(None), _marker: std::marker::PhantomData }
+    Shared {
+        seed,
+        panic: Mutex::new(None),
+        _marker: std::marker::PhantomData,
+    }
 }
 
 /// Folds a CSV file or buffer into one `A` across several threads.
@@ -244,7 +254,13 @@ where
     F: Fn() -> A + Sync,
 {
     workbook::check_abi_version()?;
-    aggregate_unchecked(input.into(), options, header_row, degree_of_parallelism, seed)
+    aggregate_unchecked(
+        input.into(),
+        options,
+        header_row,
+        degree_of_parallelism,
+        seed,
+    )
 }
 
 /// [`aggregate_csv`] without the ABI check, for the warm-up run in
@@ -277,7 +293,13 @@ where
         CsvInput::Bytes(data) => {
             let data_len = len_i32(data.len(), "buffer")?;
             unsafe {
-                ffi::xl_csv_aggregate_memory(data.as_ptr(), data_len, &agg, &raw_options, &mut state)
+                ffi::xl_csv_aggregate_memory(
+                    data.as_ptr(),
+                    data_len,
+                    &agg,
+                    &raw_options,
+                    &mut state,
+                )
             }
         }
     };
@@ -308,8 +330,10 @@ where
     };
 
     if status == PANIC_STATUS {
-        if let Some(payload) =
-            shared.panic.into_inner().unwrap_or_else(|poisoned| poisoned.into_inner())
+        if let Some(payload) = shared
+            .panic
+            .into_inner()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
         {
             drop(winner);
             resume_unwind(payload);

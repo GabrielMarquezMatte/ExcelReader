@@ -128,9 +128,7 @@ impl<'w> WriterHandle<'w> {
     /// Writes the next cell of the current row as a date/time, or a blank cell for `None`.
     pub fn write_timestamp(&mut self, value: Option<Timestamp>) -> Result<(), Error> {
         match value {
-            Some(v) => {
-                check(unsafe { ffi::xl_write_timestamp(self.handle, v.micros_since_epoch) })
-            }
+            Some(v) => check(unsafe { ffi::xl_write_timestamp(self.handle, v.micros_since_epoch) }),
             None => self.write_null(ColumnType::Timestamp),
         }
     }

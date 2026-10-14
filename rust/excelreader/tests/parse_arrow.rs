@@ -2,7 +2,8 @@
 
 use arrow::array::{Array, Int64Array, StringArray};
 use arrow::record_batch::RecordBatchReader;
-use excelreader::{ArrowChunks, ExcelMapper, Format, OpenOptions, Workbook};
+use excelreader::ReadOptions;
+use excelreader::{ArrowBatches, ExcelMapper, Format, OpenOptions, Workbook};
 
 #[derive(Default, ExcelMapper)]
 struct Record {
@@ -19,7 +20,11 @@ fn fixture_path() -> String {
 #[test]
 fn parse_arrow_returns_a_record_batch_with_one_column_per_field() {
     let workbook = Workbook::open(fixture_path()).expect("open must succeed");
-    let batch = workbook.sheet(0).expect("sheet 0").parse_arrow::<Record>(1, 1).expect("parse_arrow must succeed");
+    let batch = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow::<Record>(&ReadOptions::new())
+        .expect("parse_arrow must succeed");
 
     assert_eq!(batch.num_columns(), 2);
     assert_eq!(batch.num_rows(), 100);
@@ -27,24 +32,43 @@ fn parse_arrow_returns_a_record_batch_with_one_column_per_field() {
     assert_eq!(batch.schema().field(0).name(), "Coluna1");
     assert_eq!(batch.schema().field(1).name(), "Coluna3");
 
-    assert!(batch.column(0).as_any().downcast_ref::<StringArray>().is_some());
-    assert!(batch.column(1).as_any().downcast_ref::<Int64Array>().is_some());
+    assert!(batch
+        .column(0)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .is_some());
+    assert!(batch
+        .column(1)
+        .as_any()
+        .downcast_ref::<Int64Array>()
+        .is_some());
 }
 
 #[test]
 fn parse_arrow_reports_an_error_without_leaving_a_half_built_batch() {
     let workbook = Workbook::open(fixture_path()).expect("open must succeed");
-    let result = workbook.sheet(0).expect("sheet 0").parse_arrow::<Record>(1_000_000, 1);
+    let result = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow::<Record>(&ReadOptions::new().header_row(1_000_000));
     assert!(result.is_err());
 
-    let batch = workbook.sheet(0).expect("sheet 0").parse_arrow::<Record>(1, 1).expect("parse_arrow must succeed");
+    let batch = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow::<Record>(&ReadOptions::new())
+        .expect("parse_arrow must succeed");
     assert_eq!(batch.num_rows(), 100);
 }
 
 #[test]
 fn arrow_stream_batches_match_the_whole_sheet() {
     let workbook = Workbook::open(fixture_path()).expect("open must succeed");
-    let stream = workbook.sheet(0).expect("sheet 0").parse_arrow_stream::<Record>(1, 8).expect("the stream must open");
+    let stream = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow_stream::<Record>(&ReadOptions::new().batch_size(8))
+        .expect("the stream must open");
     let schema = stream.schema();
 
     let mut rows = 0;
@@ -52,7 +76,11 @@ fn arrow_stream_batches_match_the_whole_sheet() {
     for batch in stream {
         let batch = batch.expect("a batch must read without error");
         assert!(batch.num_rows() <= 8, "batch size must be respected");
-        assert_eq!(batch.schema(), schema, "every batch must share the stream schema");
+        assert_eq!(
+            batch.schema(),
+            schema,
+            "every batch must share the stream schema"
+        );
         rows += batch.num_rows();
         batches += 1;
     }
@@ -64,13 +92,21 @@ fn arrow_stream_batches_match_the_whole_sheet() {
 #[test]
 fn arrow_stream_rejects_a_negative_batch_size() {
     let workbook = Workbook::open(fixture_path()).expect("open must succeed");
-    assert!(workbook.sheet(0).expect("sheet 0").parse_arrow_stream::<Record>(1, -1).is_err());
+    assert!(workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow_stream::<Record>(&ReadOptions::new().batch_size(-1))
+        .is_err());
 }
 
 #[test]
 fn arrow_stream_with_batch_size_zero_yields_one_batch() {
     let workbook = Workbook::open(fixture_path()).expect("open must succeed");
-    let stream = workbook.sheet(0).expect("sheet 0").parse_arrow_stream::<Record>(1, 0).expect("the stream must open");
+    let stream = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow_stream::<Record>(&ReadOptions::new().batch_size(0))
+        .expect("the stream must open");
     let batches: Vec<_> = stream.map(|b| b.expect("a batch must read")).collect();
     assert_eq!(batches.len(), 1, "batch_size 0 is one whole-sheet batch");
     assert_eq!(batches[0].num_rows(), 100);
@@ -80,11 +116,17 @@ fn arrow_stream_with_batch_size_zero_yields_one_batch() {
 fn two_arrow_streams_on_one_workbook_each_yield_every_row() {
     let workbook = Workbook::open(fixture_path()).expect("open must succeed");
     let sheet = workbook.sheet(0).expect("sheet 0");
-    let one = sheet.parse_arrow_stream::<Record>(1, 8).expect("the first stream must open");
-    let two = sheet.parse_arrow_stream::<Record>(1, 8).expect("a second stream must open alongside it");
+    let one = sheet
+        .to_arrow_stream::<Record>(&ReadOptions::new().batch_size(8))
+        .expect("the first stream must open");
+    let two = sheet
+        .to_arrow_stream::<Record>(&ReadOptions::new().batch_size(8))
+        .expect("a second stream must open alongside it");
 
-    let total = |stream: ArrowChunks<'_>| -> usize {
-        stream.map(|batch| batch.expect("a batch must read").num_rows()).sum()
+    let total = |stream: ArrowBatches<'_>| -> usize {
+        stream
+            .map(|batch| batch.expect("a batch must read").num_rows())
+            .sum()
     };
     assert_eq!(total(one), 100);
     assert_eq!(total(two), 100);
@@ -100,18 +142,33 @@ struct CsvRecord {
 
 #[test]
 fn parallel_parse_arrow_matches_the_sequential_row_count() {
-    let mut text = String::from("id,name
-");
+    let mut text = String::from(
+        "id,name
+",
+    );
     for i in 0..200_000 {
-        text.push_str(&format!("{i},name-{i}
-"));
+        text.push_str(&format!(
+            "{i},name-{i}
+"
+        ));
     }
     let path = std::env::temp_dir().join(format!("xlpa-parallel-{}.csv", std::process::id()));
     std::fs::write(&path, text).expect("the csv must be writable");
-    let workbook = OpenOptions::new().format(Format::Csv).open(&path).expect("open must succeed");
+    let workbook = OpenOptions::new()
+        .format(Format::Csv)
+        .open(&path)
+        .expect("open must succeed");
 
-    let sequential = workbook.sheet(0).expect("sheet 0").parse_arrow::<CsvRecord>(1, 1).expect("sequential parse");
-    let parallel = workbook.sheet(0).expect("sheet 0").parse_arrow::<CsvRecord>(1, 0).expect("parallel parse");
+    let sequential = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow::<CsvRecord>(&ReadOptions::new())
+        .expect("sequential parse");
+    let parallel = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow::<CsvRecord>(&ReadOptions::new().parallelism(0))
+        .expect("parallel parse");
     assert_eq!(parallel.num_rows(), sequential.num_rows());
     assert_eq!(parallel.num_rows(), 200_000);
     drop(workbook);

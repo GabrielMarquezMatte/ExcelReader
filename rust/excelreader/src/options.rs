@@ -48,7 +48,10 @@ impl Format {
     /// absent or unrecognized - which the native write then rejects, since a file being created has
     /// no signature bytes to sniff.
     fn from_path(path: &Path) -> Format {
-        let extension = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+        let extension = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default();
         match extension.to_ascii_lowercase().as_str() {
             "xlsx" => Format::Xlsx,
             "xlsb" => Format::Xlsb,
@@ -266,6 +269,63 @@ fn opt_number<T: Default>(value: Option<T>) -> T {
     value.unwrap_or_default()
 }
 
+/// How a sheet is read by [`Sheet::parse`](crate::Sheet::parse),
+/// [`Sheet::parse_batches`](crate::Sheet::parse_batches) and their Arrow counterparts.
+///
+/// ```no_run
+/// use excelreader::ReadOptions;
+///
+/// let options = ReadOptions::new().header_row(2).parallelism(0);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReadOptions {
+    pub(crate) header_row: i32,
+    pub(crate) parallelism: i32,
+    pub(crate) batch_size: i64,
+}
+
+impl Default for ReadOptions {
+    fn default() -> Self {
+        Self {
+            header_row: 1,
+            parallelism: 1,
+            batch_size: 10_000,
+        }
+    }
+}
+
+impl ReadOptions {
+    /// Header in row 1, one thread, 10,000 rows per batch.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 1-based row whose values name the columns; `0` means no header, and columns are bound by
+    /// position.
+    #[must_use]
+    pub fn header_row(mut self, value: i32) -> Self {
+        self.header_row = value;
+        self
+    }
+
+    /// Threads for a whole-sheet read: `0` every processor, `1` sequential, `n` up to `n`. The
+    /// result is the same whatever it is. Batched reads ignore it.
+    #[must_use]
+    pub fn parallelism(mut self, value: i32) -> Self {
+        self.parallelism = value;
+        self
+    }
+
+    /// Rows per batch for a batched read, `0` meaning one unbounded batch. Whole-sheet reads
+    /// ignore it.
+    #[must_use]
+    pub fn batch_size(mut self, value: i64) -> Self {
+        self.batch_size = value;
+        self
+    }
+}
+
 /// Options for [`write_columns`](crate::write_columns), [`write_sheet`](crate::write_sheet) and
 /// [`WriterHandle`](crate::WriterHandle). Every setting is unset by default, meaning "use the
 /// library default"; set only the ones you want to override.
@@ -418,7 +478,10 @@ mod tests {
             .csv_detect_bom(false)
             .max_cell_bytes(1024)
             .to_csv_parallel_raw(1, 4);
-        assert_eq!(raw.struct_size, std::mem::size_of::<XlCsvParallelOptions>() as i32);
+        assert_eq!(
+            raw.struct_size,
+            std::mem::size_of::<XlCsvParallelOptions>() as i32
+        );
         assert_eq!(raw.header_row, 1);
         assert_eq!(raw.degree_of_parallelism, 4);
         assert_eq!(raw.delimiter, b';' as i32);
@@ -452,7 +515,10 @@ mod tests {
     #[test]
     fn write_options_lower_to_the_abi_defaults() {
         let raw = WriteOptions::new().to_raw();
-        assert_eq!(raw.struct_size, std::mem::size_of::<XlWriteOptions>() as i32);
+        assert_eq!(
+            raw.struct_size,
+            std::mem::size_of::<XlWriteOptions>() as i32
+        );
         assert!(raw.sheet_name.is_null(), "an unset sheet name means Sheet1");
         assert_eq!(raw.sheet_name_len, 0);
         assert_eq!(raw.csv_delimiter, 0);
@@ -486,11 +552,16 @@ mod tests {
         assert_eq!(format("out"), ffi::XL_FORMAT_AUTO);
         assert_eq!(format("v1.2/report"), ffi::XL_FORMAT_AUTO);
 
-        let error = auto.format_for(None).expect_err("a writer has no extension to infer from");
+        let error = auto
+            .format_for(None)
+            .expect_err("a writer has no extension to infer from");
         assert_eq!(error.kind(), ErrorKind::InvalidArgument);
 
         let csv = WriteOptions::new().format(Format::Csv);
-        assert_eq!(csv.format_for(Some(Path::new("out.xlsx"))).unwrap(), ffi::XL_FORMAT_CSV);
+        assert_eq!(
+            csv.format_for(Some(Path::new("out.xlsx"))).unwrap(),
+            ffi::XL_FORMAT_CSV
+        );
         assert_eq!(csv.format_for(None).unwrap(), ffi::XL_FORMAT_CSV);
     }
 
@@ -509,7 +580,10 @@ mod tests {
         assert_eq!(std::mem::offset_of!(XlOpenOptions, source_cache_bytes), 88);
         assert_eq!(std::mem::offset_of!(XlOpenOptions, max_buffered_bytes), 96);
         assert_eq!(std::mem::offset_of!(XlOpenOptions, source_block_size), 104);
-        assert_eq!(std::mem::offset_of!(XlOpenOptions, verify_zip_checksums), 108);
+        assert_eq!(
+            std::mem::offset_of!(XlOpenOptions, verify_zip_checksums),
+            108
+        );
         assert_eq!(std::mem::size_of::<XlSource>(), 40);
         assert_eq!(std::mem::size_of::<XlStream>(), 32);
     }

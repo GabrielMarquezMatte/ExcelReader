@@ -1,7 +1,7 @@
-
 use calamine::{open_workbook_auto, Data, Reader};
 use criterion::{criterion_group, criterion_main, Criterion};
 use excelreader::ExcelMapper;
+use excelreader::ReadOptions;
 use excelreader::{Date, Format, OpenOptions};
 
 #[derive(Default, ExcelMapper)]
@@ -82,10 +82,18 @@ fn accumulate_data_cell(acc: &mut i64, cell: &Data) {
 fn bench_excelreader(c: &mut Criterion, group: &str, path: String, format: Format) {
     c.bench_function(group, |b| {
         b.iter_batched(
-            || OpenOptions::new().format(format).open(&path).expect("open must succeed"),
+            || {
+                OpenOptions::new()
+                    .format(format)
+                    .open(&path)
+                    .expect("open must succeed")
+            },
             |workbook| {
-                let table =
-                    workbook.sheet(0).expect("sheet 0").parse::<FullRow>(1, 1).expect("parse must succeed");
+                let table = workbook
+                    .sheet(0)
+                    .expect("sheet 0")
+                    .parse::<FullRow>(&ReadOptions::new())
+                    .expect("parse must succeed");
                 let mut acc = 0i64;
                 for row in table.iter() {
                     acc += accumulate_full_row(&row);
@@ -100,10 +108,18 @@ fn bench_excelreader(c: &mut Criterion, group: &str, path: String, format: Forma
 fn bench_excelreader_parse_only(c: &mut Criterion, group: &str, path: String, format: Format) {
     c.bench_function(group, |b| {
         b.iter_batched(
-            || OpenOptions::new().format(format).open(&path).expect("open must succeed"),
+            || {
+                OpenOptions::new()
+                    .format(format)
+                    .open(&path)
+                    .expect("open must succeed")
+            },
             |workbook| {
-                let table =
-                    workbook.sheet(0).expect("sheet 0").parse::<FullRow>(1, 1).expect("parse must succeed");
+                let table = workbook
+                    .sheet(0)
+                    .expect("sheet 0")
+                    .parse::<FullRow>(&ReadOptions::new())
+                    .expect("parse must succeed");
                 std::hint::black_box(table.len());
                 std::hint::black_box(table);
             },
@@ -148,21 +164,11 @@ fn bench_calamine_xlsb(c: &mut Criterion) {
 }
 
 fn bench_excelreader_xlsx_parse_only(c: &mut Criterion) {
-    bench_excelreader_parse_only(
-        c,
-        "excelreader_xlsx_parse_only",
-        xlsx_path(),
-        Format::Xlsx,
-    );
+    bench_excelreader_parse_only(c, "excelreader_xlsx_parse_only", xlsx_path(), Format::Xlsx);
 }
 
 fn bench_excelreader_xlsb_parse_only(c: &mut Criterion) {
-    bench_excelreader_parse_only(
-        c,
-        "excelreader_xlsb_parse_only",
-        xlsb_path(),
-        Format::Xlsb,
-    );
+    bench_excelreader_parse_only(c, "excelreader_xlsb_parse_only", xlsb_path(), Format::Xlsb);
 }
 
 criterion_group!(

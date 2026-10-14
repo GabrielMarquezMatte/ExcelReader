@@ -8,12 +8,17 @@ const ROWS: usize = 300;
 
 fn workbook_bytes() -> Vec<u8> {
     let mut bytes = Vec::new();
-    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx)).expect("open writer");
+    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx))
+        .expect("open writer");
     for sheet in 0..SHEETS {
-        writer.start_sheet(&format!("sheet{sheet}")).expect("start sheet");
+        writer
+            .start_sheet(&format!("sheet{sheet}"))
+            .expect("start sheet");
         for row in 0..ROWS {
             writer.start_row().expect("start row");
-            writer.write_str(Some(&format!("s{sheet}-r{row}"))).expect("write");
+            writer
+                .write_str(Some(&format!("s{sheet}-r{row}")))
+                .expect("write");
             writer.end_row().expect("end row");
         }
         writer.end_sheet().expect("end sheet");
@@ -26,7 +31,13 @@ fn first_column(cursor: &mut RowCursor<'_>) -> Vec<String> {
     let mut values = Vec::new();
     while let Some(row) = cursor.next_row() {
         let row = row.expect("a row");
-        values.push(row.get(0).expect("a cell").as_str().expect("utf-8").to_string());
+        values.push(
+            row.get(0)
+                .expect("a cell")
+                .as_str()
+                .expect("utf-8")
+                .to_string(),
+        );
     }
     values
 }
@@ -131,7 +142,11 @@ fn every_sheet_of_a_source_reads_in_parallel_like_memory() {
         .collect();
 
     let counters = Counters::default();
-    let workbook = OpenOptions::new().open_source(MemorySource { bytes, counters: counters.clone() })
+    let workbook = OpenOptions::new()
+        .open_source(MemorySource {
+            bytes,
+            counters: counters.clone(),
+        })
         .expect("open source");
     let sheets = workbook.sheets().expect("sheets");
     let parallel: Vec<Vec<String>> = std::thread::scope(|scope| {
@@ -143,7 +158,10 @@ fn every_sheet_of_a_source_reads_in_parallel_like_memory() {
                 scope.spawn(move || first_column(&mut sheet.rows().expect("cursor")))
             })
             .collect();
-        handles.into_iter().map(|handle| handle.join().expect("no panic")).collect()
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("no panic"))
+            .collect()
     });
     for (index, rows) in parallel.iter().enumerate() {
         assert_eq!(rows, &expected[index % SHEETS]);
@@ -156,16 +174,30 @@ fn every_sheet_of_a_source_reads_in_parallel_like_memory() {
 #[test]
 fn an_io_error_reaches_the_caller_with_its_message() {
     let counters = Counters::default();
-    let error = OpenOptions::new().format(Format::Xlsx).open_source(FailingSource(counters.clone())).expect_err("must fail");
-    assert!(error.message().contains("disk on fire"), "{}", error.message());
+    let error = OpenOptions::new()
+        .format(Format::Xlsx)
+        .open_source(FailingSource(counters.clone()))
+        .expect_err("must fail");
+    assert!(
+        error.message().contains("disk on fire"),
+        "{}",
+        error.message()
+    );
     assert_eq!(counters.drops.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn a_panicking_source_becomes_an_error() {
     let counters = Counters::default();
-    let error = OpenOptions::new().format(Format::Xlsx).open_source(PanickingSource(counters.clone())).expect_err("must fail");
-    assert!(error.message().contains("source panicked"), "{}", error.message());
+    let error = OpenOptions::new()
+        .format(Format::Xlsx)
+        .open_source(PanickingSource(counters.clone()))
+        .expect_err("must fail");
+    assert!(
+        error.message().contains("source panicked"),
+        "{}",
+        error.message()
+    );
     assert_eq!(counters.drops.load(Ordering::SeqCst), 1);
 }
 
@@ -174,16 +206,27 @@ fn the_default_cache_fetches_a_small_workbook_once() {
     let bytes = workbook_bytes();
     let cached = Counters::default();
     {
-        let workbook = OpenOptions::new().format(Format::Xlsx).open_source(MemorySource { bytes: bytes.clone(), counters: cached.clone() })
+        let workbook = OpenOptions::new()
+            .format(Format::Xlsx)
+            .open_source(MemorySource {
+                bytes: bytes.clone(),
+                counters: cached.clone(),
+            })
             .expect("open");
         first_column(&mut workbook.sheet(0).expect("sheet").rows().expect("cursor"));
     }
     assert_eq!(cached.reads.load(Ordering::SeqCst), 1);
 
     let uncached = Counters::default();
-    let options = OpenOptions::new().format(Format::Xlsx).source_block_size(-1);
+    let options = OpenOptions::new()
+        .format(Format::Xlsx)
+        .source_block_size(-1);
     {
-        let workbook = options.open_source(MemorySource { bytes, counters: uncached.clone() })
+        let workbook = options
+            .open_source(MemorySource {
+                bytes,
+                counters: uncached.clone(),
+            })
             .expect("open");
         first_column(&mut workbook.sheet(0).expect("sheet").rows().expect("cursor"));
     }
@@ -193,21 +236,36 @@ fn the_default_cache_fetches_a_small_workbook_once() {
 #[test]
 fn a_reader_serves_a_csv_and_an_xlsx() {
     let csv_counters = Counters::default();
-    let csv = OnlyRead::new(b"name,qty
+    let csv = OnlyRead::new(
+        b"name,qty
 widget,7
 gadget,9
-".to_vec(), &csv_counters);
-    let workbook = OpenOptions::new().format(Format::Csv).open_reader(csv).expect("open csv");
+"
+        .to_vec(),
+        &csv_counters,
+    );
+    let workbook = OpenOptions::new()
+        .format(Format::Csv)
+        .open_reader(csv)
+        .expect("open csv");
     let names = first_column(&mut workbook.sheet(0).expect("sheet").rows().expect("cursor"));
     assert_eq!(names, vec!["name", "widget", "gadget"]);
-    assert_eq!(csv_counters.drops.load(Ordering::SeqCst), 0, "the CSV is read as it arrives");
+    assert_eq!(
+        csv_counters.drops.load(Ordering::SeqCst),
+        0,
+        "the CSV is read as it arrives"
+    );
     drop(workbook);
     assert_eq!(csv_counters.drops.load(Ordering::SeqCst), 1);
 
     let xlsx_counters = Counters::default();
     let xlsx = OnlyRead::new(workbook_bytes(), &xlsx_counters);
     let workbook = OpenOptions::new().open_reader(xlsx).expect("open xlsx");
-    assert_eq!(xlsx_counters.drops.load(Ordering::SeqCst), 1, "an XLSX is read whole before open returns");
+    assert_eq!(
+        xlsx_counters.drops.load(Ordering::SeqCst),
+        1,
+        "an XLSX is read whole before open returns"
+    );
     let rows = first_column(&mut workbook.sheet(3).expect("sheet").rows().expect("cursor"));
     assert_eq!(rows.len(), ROWS);
     assert_eq!(rows[0], "s3-r0");

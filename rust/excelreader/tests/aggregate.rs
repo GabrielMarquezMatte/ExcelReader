@@ -67,13 +67,19 @@ impl Drop for TempDir {
 }
 
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn group_by_sum_over_a_file_is_partitioned_and_exact() {
     let dir = TempDir::new("file");
     let path = dir.0.join("groups.csv");
     let (text, expected) = group_fixture();
     std::fs::write(&path, &text).unwrap();
-    assert!(text.len() > 3 * 1024 * 1024, "fixture must clear the 1 MB chunk floor several times over");
+    assert!(
+        text.len() > 3 * 1024 * 1024,
+        "fixture must clear the 1 MB chunk floor several times over"
+    );
 
     let actual = aggregate_csv(&path, &OpenOptions::new(), 1, 8, GroupSums::default).unwrap();
 
@@ -88,17 +94,34 @@ fn group_by_sum_over_a_file_is_partitioned_and_exact() {
 }
 
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn group_by_sum_over_memory_is_partitioned_and_exact() {
     let (text, expected) = group_fixture();
-    let actual = aggregate_csv(text.as_bytes(), &OpenOptions::new(), 1, 4, GroupSums::default).unwrap();
+    let actual = aggregate_csv(
+        text.as_bytes(),
+        &OpenOptions::new(),
+        1,
+        4,
+        GroupSums::default,
+    )
+    .unwrap();
 
     assert_eq!(actual.totals, expected);
-    assert!(actual.combines >= 1, "observed {} combines, expected a partitioned run", actual.combines);
+    assert!(
+        actual.combines >= 1,
+        "observed {} combines, expected a partitioned run",
+        actual.combines
+    );
 }
 
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn a_failing_accumulate_returns_its_own_code() {
     #[derive(Debug)]
     struct AlwaysFails;
@@ -126,7 +149,10 @@ fn a_failing_accumulate_returns_its_own_code() {
 /// case can violate is asserted separately, in
 /// `a_zero_sized_accumulator_never_aliases_two_states_in_combine`.
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn a_zero_sized_accumulator_gets_a_distinct_state_per_partition() {
     use std::sync::atomic::{AtomicI64, Ordering};
     static ROWS: AtomicI64 = AtomicI64::new(0);
@@ -152,7 +178,10 @@ fn a_zero_sized_accumulator_gets_a_distinct_state_per_partition() {
 /// distinct states". A zero-sized accumulator is the case that breaks it: `Box::into_raw` of a ZST
 /// returns the same dangling address every time, so `acc` and `next` are one and the same object.
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn a_zero_sized_accumulator_never_aliases_two_states_in_combine() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static COMBINES: AtomicUsize = AtomicUsize::new(0);
@@ -177,13 +206,22 @@ fn a_zero_sized_accumulator_never_aliases_two_states_in_combine() {
 
     let combines = COMBINES.load(Ordering::Relaxed);
     let aliased = ALIASED.load(Ordering::Relaxed);
-    assert!(combines >= 1, "the fixture must partition, so combine must run at least once");
-    assert_eq!(aliased, 0, "{combines} combine calls, of which {aliased} folded a state into itself");
+    assert!(
+        combines >= 1,
+        "the fixture must partition, so combine must run at least once"
+    );
+    assert_eq!(
+        aliased, 0,
+        "{combines} combine calls, of which {aliased} folded a state into itself"
+    );
 }
 
 /// Every accumulator the library seeds must be dropped exactly once.
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn every_seeded_accumulator_is_dropped_exactly_once() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static SEEDED: AtomicUsize = AtomicUsize::new(0);
@@ -215,13 +253,19 @@ fn every_seeded_accumulator_is_dropped_exactly_once() {
 
     assert_eq!(result.0, 300_000);
     drop(result);
-    assert_eq!(SEEDED.load(Ordering::Relaxed), DROPPED.load(Ordering::Relaxed));
+    assert_eq!(
+        SEEDED.load(Ordering::Relaxed),
+        DROPPED.load(Ordering::Relaxed)
+    );
 }
 
 /// Quoted records that span lines are what make a guessed partition boundary wrong, so the run must
 /// still count each record exactly once.
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn quoted_multi_line_records_straddling_chunks_are_counted_once() {
     struct Rows(i64);
     impl CsvAccumulator for Rows {
@@ -283,10 +327,14 @@ impl CsvAccumulator for RowCounter {
 /// Coverage for a macOS/arm64-only SIGSEGV after a concurrent (`degree_of_parallelism` > 1) run,
 /// seen only with a symbol-stripped dylib; see `StripSymbols` in ExcelReader.Native.csproj.
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn a_call_after_a_partitioned_run_still_succeeds() {
     let (text, _) = group_fixture();
-    let first = aggregate_csv(text.as_bytes(), &OpenOptions::new(), 1, 8, || RowCounter(0)).unwrap();
+    let first =
+        aggregate_csv(text.as_bytes(), &OpenOptions::new(), 1, 8, || RowCounter(0)).unwrap();
     assert_eq!(first.0, 300_000);
 
     let second = aggregate_csv(b"a,b\n1,2\n", &OpenOptions::new(), 0, 0, || RowCounter(0)).unwrap();
@@ -298,7 +346,10 @@ fn a_call_after_a_partitioned_run_still_succeeds() {
 /// the true start is confirmed, and the re-read succeeds without panicking - the stale panic from
 /// the discarded first attempt must not resume and kill an otherwise-successful run.
 #[test]
-#[cfg_attr(target_os = "macos", ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README")]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
+)]
 fn a_panic_from_a_discarded_reread_does_not_resume() {
     struct PanicsOnGarbledRows(i64);
     impl CsvAccumulator for PanicsOnGarbledRows {
@@ -306,7 +357,10 @@ fn a_panic_from_a_discarded_reread_does_not_resume() {
             let mut cells = row.iter();
             let first = cells.next().ok_or(1)?.as_bytes();
             if first != b"1" {
-                panic!("saw a garbled row starting with {:?}", String::from_utf8_lossy(first));
+                panic!(
+                    "saw a garbled row starting with {:?}",
+                    String::from_utf8_lossy(first)
+                );
             }
             self.0 += 1;
             Ok(())
@@ -326,7 +380,10 @@ fn a_panic_from_a_discarded_reread_does_not_resume() {
         text.push_str("\"\n");
     }
 
-    let result = aggregate_csv(text.as_bytes(), &OpenOptions::new(), 0, 8, || PanicsOnGarbledRows(0)).unwrap();
+    let result = aggregate_csv(text.as_bytes(), &OpenOptions::new(), 0, 8, || {
+        PanicsOnGarbledRows(0)
+    })
+    .unwrap();
 
     assert_eq!(result.0, 8);
 }
@@ -348,9 +405,10 @@ fn a_seed_closure_may_borrow_a_local() {
     }
 
     let start = 100i64;
-    let result =
-        aggregate_csv(b"a,b\n1,2\n3,4\n", &OpenOptions::new(), 0, 0, || CountRows(start))
-            .unwrap();
+    let result = aggregate_csv(b"a,b\n1,2\n3,4\n", &OpenOptions::new(), 0, 0, || {
+        CountRows(start)
+    })
+    .unwrap();
     assert_eq!(result.0, start + 3);
 }
 
@@ -362,7 +420,11 @@ fn the_dialect_comes_from_open_options_and_a_str_is_a_path() {
     impl CsvAccumulator for Sum {
         fn accumulate(&mut self, row: RowRef<'_>) -> Result<(), i32> {
             let cell = row.get(1).ok_or(1)?;
-            self.0 += cell.as_str().map_err(|_| 2)?.parse::<i64>().map_err(|_| 3)?;
+            self.0 += cell
+                .as_str()
+                .map_err(|_| 2)?
+                .parse::<i64>()
+                .map_err(|_| 3)?;
             Ok(())
         }
         fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
@@ -380,5 +442,9 @@ fn the_dialect_comes_from_open_options_and_a_str_is_a_path() {
     assert_eq!(from_path.0, 3);
 
     let error = aggregate_csv(&path, &OpenOptions::new(), 1, 1, || Sum(0)).unwrap_err();
-    assert_eq!(error.kind(), ErrorKind::Callback(1), "a comma dialect sees one cell per row");
+    assert_eq!(
+        error.kind(),
+        ErrorKind::Callback(1),
+        "a comma dialect sees one cell per row"
+    );
 }

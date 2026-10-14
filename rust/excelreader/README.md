@@ -15,7 +15,7 @@ excelreader = "7.0"
 ```
 
 ```rust,no_run
-use excelreader::{ExcelMapper, Workbook};
+use excelreader::{ExcelMapper, Workbook, ReadOptions};
 
 #[derive(Default, ExcelMapper)]
 struct Row {
@@ -26,7 +26,7 @@ struct Row {
 }
 
 let workbook = Workbook::open("book.xlsx")?;
-let table = workbook.sheet(0)?.parse::<Row>(1, 1)?;
+let table = workbook.sheet(0)?.parse::<Row>(&ReadOptions::new())?;
 for row in table.iter() { /* ... */ }
 # Ok::<(), excelreader::Error>(())
 ```
@@ -207,12 +207,12 @@ excelreader = { version = "7.0", features = ["arrow"] }
 ```rust,no_run
 # #[cfg(feature = "arrow")]
 # fn main() -> Result<(), excelreader::Error> {
-use excelreader::Workbook;
+use excelreader::{Workbook, ReadOptions};
 # #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
-let batch = workbook.sheet(0)?.parse_arrow::<Row>(1, 1)?;
+let batch = workbook.sheet(0)?.to_arrow::<Row>(&ReadOptions::new())?;
 println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
 # Ok(())
 # }
@@ -222,21 +222,21 @@ println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
 
 Off by default — arrow-rs is a large dependency and the typed-parse path needs none of it.
 
-Batched: `Sheet::parse_arrow_stream` is `parse_arrow` delivered a batch at a time, returning
-`ArrowChunks<'_>`, an `Iterator<Item = Result<RecordBatch, ArrowError>>` that also implements
+Batched: `Sheet::to_arrow_stream` is `parse_arrow` delivered a batch at a time, returning
+`ArrowBatches<'_>`, an `Iterator<Item = Result<RecordBatch, ArrowError>>` that also implements
 `RecordBatchReader`:
 
 ```rust,no_run
 # #[cfg(feature = "arrow")]
 # fn main() -> Result<(), excelreader::Error> {
-use excelreader::Workbook;
+use excelreader::{Workbook, ReadOptions};
 # #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
-let mut chunks = workbook.sheet(0)?.parse_arrow_stream::<Row>(1, 10_000)?;
+let mut chunks = workbook.sheet(0)?.to_arrow_stream::<Row>(&ReadOptions::new())?;
 while let Some(batch) = chunks.next() {
-    let Ok(batch) = batch else { break }; // ArrowChunks does not fuse, unlike TypedChunks
+    let Ok(batch) = batch else { break }; // ArrowBatches does not fuse, unlike TypedBatches
     println!("{} rows", batch.num_rows());
 }
 # Ok(())
@@ -245,8 +245,8 @@ while let Some(batch) = chunks.next() {
 # fn main() {}
 ```
 
-Same `batch_size` semantics as `typed_chunks` below. Unlike `TypedChunks`,
-`ArrowChunks` does not fuse after an error — it follows arrow-rs's own semantics — so break on the
+Same `batch_size` semantics as `parse_batches` below. Unlike `TypedBatches`,
+`ArrowBatches` does not fuse after an error — it follows arrow-rs's own semantics — so break on the
 first `Err` rather than continuing the loop.
 
 ## Writing
@@ -373,16 +373,16 @@ for row in rows.iter() {
 
 ### Chunked reads
 
-For a sheet too large to hold in memory at once, `Sheet::typed_chunks` is `Sheet::parse` delivered
+For a sheet too large to hold in memory at once, `Sheet::parse_batches` is `Sheet::parse` delivered
 a batch at a time:
 
 ```rust,no_run
-use excelreader::Workbook;
+use excelreader::{Workbook, ReadOptions};
 # #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
-let chunks = workbook.sheet(0)?.typed_chunks::<Row>(1, 10_000)?;
+let chunks = workbook.sheet(0)?.parse_batches::<Row>(&ReadOptions::new())?;
 for batch in chunks {
     let batch = batch?;
     for row in batch.iter() { /* ... */ }
@@ -390,11 +390,11 @@ for batch in chunks {
 # Ok::<(), excelreader::Error>(())
 ```
 
-`typed_chunks` returns `TypedChunks<'_, Row>`, an `Iterator<Item = Result<TableView<Row>, Error>>`
+`parse_batches` returns `TypedBatches<'_, Row>`, an `Iterator<Item = Result<TableView<Row>, Error>>`
 that closes the native reader on drop. `batch_size` is rows per batch — `0` means one unbounded
 batch, identical to `parse`; negative is an error. Chunked reads, of either kind (typed or
 Arrow — see [Arrow export](#arrow-export-arrow-feature) above), are independent: several can be live
-on one workbook, and other reads do not disturb them. `TypedChunks` ends after yielding an `Err`, so
+on one workbook, and other reads do not disturb them. `TypedBatches` ends after yielding an `Err`, so
 a `for` loop stops there rather than spinning on it.
 
 ## Parallel CSV aggregation
@@ -441,7 +441,7 @@ thread resumes at address 0 after a signal the runtime sent it, which ends the p
 message. It happens with any `degree_of_parallelism` above 1, and the same runtime built into a
 plain C host does not show it, so a Rust host appears to make it far more likely.
 
-`Sheet::parse` and `Sheet::parse_arrow` with a `degree_of_parallelism` above 1 fan out on XLSX and
+`Sheet::parse` and `Sheet::to_arrow` with a `degree_of_parallelism` above 1 fan out on XLSX and
 XLSB too; this has not been tested on macOS, so treat them the same way.
 
 Until it is fixed upstream, pass a `degree_of_parallelism` of 1 on macOS for a sequential run, or

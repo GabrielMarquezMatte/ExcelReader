@@ -15,16 +15,12 @@ use arrow::record_batch::RecordBatchReader;
 
 use crate::ffi;
 use crate::workbook::{build_specs, check};
-use crate::{Error, ErrorKind, ExcelMapper, Sheet, Workbook};
+use crate::{Error, ErrorKind, ExcelMapper, ReadOptions, Sheet, Workbook};
 
 impl<'w> Sheet<'w> {
     /// [`parse`](Self::parse) into one Arrow [`RecordBatch`], with the same `#[derive(ExcelMapper)]`
-    /// mapping, `header_row` and `degree_of_parallelism`.
-    pub fn parse_arrow<T: ExcelMapper>(
-        &self,
-        header_row: i32,
-        degree_of_parallelism: i32,
-    ) -> Result<RecordBatch, Error> {
+    /// mapping and [`ReadOptions`].
+    pub fn to_arrow<T: ExcelMapper>(&self, options: &ReadOptions) -> Result<RecordBatch, Error> {
         let arena = build_specs::<T>();
 
         let mut array = FFI_ArrowArray::empty();
@@ -36,8 +32,8 @@ impl<'w> Sheet<'w> {
                 self.index(),
                 arena.specs.as_ptr(),
                 arena.specs.len() as i32,
-                header_row,
-                degree_of_parallelism,
+                options.header_row,
+                options.parallelism,
                 &mut array as *mut FFI_ArrowArray as *mut c_void,
                 &mut schema as *mut FFI_ArrowSchema as *mut c_void,
             )
@@ -53,13 +49,12 @@ impl<'w> Sheet<'w> {
         Ok(RecordBatch::from(StructArray::from(data)))
     }
 
-    /// [`parse_arrow`](Self::parse_arrow) delivered a batch at a time. `batch_size` is rows per
-    /// batch, 0 unbounded, negative an error. Any number of streams may be open on one workbook.
-    pub fn parse_arrow_stream<T: ExcelMapper>(
+    /// [`to_arrow`](Self::to_arrow) delivered [`ReadOptions`]'s batch size rows at a time; a
+    /// negative batch size is an error. Any number of streams may be open on one workbook.
+    pub fn to_arrow_stream<T: ExcelMapper>(
         &self,
-        header_row: i32,
-        batch_size: i64,
-    ) -> Result<ArrowChunks<'w>, Error> {
+        options: &ReadOptions,
+    ) -> Result<ArrowBatches<'w>, Error> {
         let arena = build_specs::<T>();
 
         let mut stream = FFI_ArrowArrayStream::empty();
@@ -70,8 +65,8 @@ impl<'w> Sheet<'w> {
                 self.index(),
                 arena.specs.as_ptr(),
                 arena.specs.len() as i32,
-                header_row,
-                batch_size,
+                options.header_row,
+                options.batch_size,
                 &mut stream as *mut FFI_ArrowArrayStream as *mut c_void,
             )
         })?;
@@ -83,24 +78,24 @@ impl<'w> Sheet<'w> {
             )
         })?;
 
-        Ok(ArrowChunks {
+        Ok(ArrowBatches {
             inner,
             _workbook: PhantomData,
         })
     }
 }
 
-/// Batches of [`Sheet::parse_arrow_stream`], one [`RecordBatch`] at a time.
+/// Batches of [`Sheet::to_arrow_stream`], one [`RecordBatch`] at a time.
 ///
 /// Wraps arrow-rs's `'static` reader only to carry the `'a` borrow, which keeps the workbook alive
-/// for at least as long as the stream. Unlike [`TypedChunks`](crate::TypedChunks) it does not fuse
+/// for at least as long as the stream. Unlike [`TypedBatches`](crate::TypedBatches) it does not fuse
 /// after an error, so break on the first `Err` rather than spinning on the latched one.
-pub struct ArrowChunks<'a> {
+pub struct ArrowBatches<'a> {
     inner: ArrowArrayStreamReader,
     _workbook: PhantomData<&'a Workbook>,
 }
 
-impl Iterator for ArrowChunks<'_> {
+impl Iterator for ArrowBatches<'_> {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -108,7 +103,7 @@ impl Iterator for ArrowChunks<'_> {
     }
 }
 
-impl RecordBatchReader for ArrowChunks<'_> {
+impl RecordBatchReader for ArrowBatches<'_> {
     fn schema(&self) -> SchemaRef {
         self.inner.schema()
     }

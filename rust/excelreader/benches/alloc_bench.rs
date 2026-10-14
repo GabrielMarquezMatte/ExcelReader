@@ -1,6 +1,7 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use excelreader::ReadOptions;
 use excelreader::{ExcelMapper, Workbook};
 
 static BYTES_ALLOCATED: AtomicU64 = AtomicU64::new(0);
@@ -93,7 +94,7 @@ fn main() {
     let small_path = fixture_path();
     let large_path = large_fixture_path();
     const ITERATIONS: usize = 200;
-    const ITERATIONS_LARGE: usize = 30; 
+    const ITERATIONS_LARGE: usize = 30;
 
     println!("Bytes allocated per call, Rust binding (System allocator, this process only — excludes the NativeAOT side of the FFI boundary):\n");
 
@@ -112,7 +113,11 @@ fn main() {
         ITERATIONS,
         || Workbook::open(&small_path).expect("open must succeed"),
         |workbook| {
-            let table = workbook.sheet(0).expect("sheet 0").parse::<Row>(1, 1).expect("parse must succeed");
+            let table = workbook
+                .sheet(0)
+                .expect("sheet 0")
+                .parse::<Row>(&ReadOptions::new())
+                .expect("parse must succeed");
             std::hint::black_box(table);
         },
     );
@@ -122,7 +127,11 @@ fn main() {
         ITERATIONS,
         || Workbook::open(&small_path).expect("open must succeed"),
         |workbook| {
-            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 100, false).expect("infer_schema must succeed");
+            let schema = workbook
+                .sheet(0)
+                .expect("sheet 0")
+                .infer_schema(1, 100, false)
+                .expect("infer_schema must succeed");
             std::hint::black_box(schema);
         },
     );
@@ -142,7 +151,11 @@ fn main() {
         ITERATIONS_LARGE,
         || Workbook::open(&large_path).expect("open must succeed"),
         |workbook| {
-            let table = workbook.sheet(0).expect("sheet 0").parse::<LargeRow>(1, 1).expect("parse must succeed");
+            let table = workbook
+                .sheet(0)
+                .expect("sheet 0")
+                .parse::<LargeRow>(&ReadOptions::new())
+                .expect("parse must succeed");
             std::hint::black_box(table);
         },
     );
@@ -152,7 +165,11 @@ fn main() {
         ITERATIONS_LARGE,
         || Workbook::open(&large_path).expect("open must succeed"),
         |workbook| {
-            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 1000, false).expect("infer_schema must succeed");
+            let schema = workbook
+                .sheet(0)
+                .expect("sheet 0")
+                .infer_schema(1, 1000, false)
+                .expect("infer_schema must succeed");
             std::hint::black_box(schema);
         },
     );

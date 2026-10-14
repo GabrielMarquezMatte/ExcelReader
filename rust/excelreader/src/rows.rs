@@ -54,8 +54,12 @@ impl<'a> CellRef<'a> {
     /// The value as a string. Fails when the bytes are not valid UTF-8, which a well-formed
     /// workbook never produces.
     pub fn as_str(&self) -> Result<&'a str, Error> {
-        std::str::from_utf8(self.value)
-            .map_err(|err| Error::new(ErrorKind::Other, format!("cell value is not valid UTF-8: {err}")))
+        std::str::from_utf8(self.value).map_err(|err| {
+            Error::new(
+                ErrorKind::Other,
+                format!("cell value is not valid UTF-8: {err}"),
+            )
+        })
     }
 }
 
@@ -101,7 +105,10 @@ impl<'a> RowRef<'a> {
         } else {
             unsafe { std::slice::from_raw_parts(cells, len) }
         };
-        RowRef { backing: RowBacking::Decoded(slice), len }
+        RowRef {
+            backing: RowBacking::Decoded(slice),
+            len,
+        }
     }
 
     #[must_use]
@@ -129,7 +136,12 @@ impl<'a> RowRef<'a> {
 
     #[must_use]
     pub fn iter(&self) -> CellIter<'a> {
-        CellIter { backing: self.backing, len: self.len, index: 0, offset: 0 }
+        CellIter {
+            backing: self.backing,
+            len: self.len,
+            index: 0,
+            offset: 0,
+        }
     }
 }
 
@@ -199,7 +211,14 @@ fn cell_from_blob(blob: &[u8], offset: usize) -> Option<(CellRef<'_>, usize)> {
     let end = start.checked_add(value_len as usize)?;
     let value = blob.get(start..end)?;
     let cell_type = CellType::from_raw(raw_type)?;
-    Some((CellRef { column, cell_type, value }, end))
+    Some((
+        CellRef {
+            column,
+            cell_type,
+            value,
+        },
+        end,
+    ))
 }
 
 fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
@@ -209,7 +228,11 @@ fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
     } else {
         unsafe { std::slice::from_raw_parts(raw.value, raw.value_len as usize) }
     };
-    Some(CellRef { column: raw.column, cell_type, value })
+    Some(CellRef {
+        column: raw.column,
+        cell_type,
+        value,
+    })
 }
 
 /// Rows are usually well under this; it only sets how often the first oversized row costs a retry.
@@ -262,15 +285,17 @@ impl<'w> RowCursor<'w> {
                 ffi::XL_OK => {
                     self.written = if written > 0 { written as usize } else { 0 };
                     let blob = &self.buffer[..self.written];
-                    return Some(
-                        RowRef::from_blob(blob).ok_or_else(|| {
-                            Error::new(ErrorKind::Other, "native returned a malformed row blob")
-                        }),
-                    );
+                    return Some(RowRef::from_blob(blob).ok_or_else(|| {
+                        Error::new(ErrorKind::Other, "native returned a malformed row blob")
+                    }));
                 }
                 ffi::XL_EOF => return None,
                 ffi::XL_BUFFER_TOO_SMALL => {
-                    let needed = if written > 0 { written as usize } else { self.buffer.len() * 2 };
+                    let needed = if written > 0 {
+                        written as usize
+                    } else {
+                        self.buffer.len() * 2
+                    };
                     if needed <= self.buffer.len() {
                         return Some(Err(Error::new(
                             ErrorKind::Other,
@@ -324,7 +349,11 @@ impl AllRows {
                     return Ok(AllRows { buffer, row_ranges });
                 }
                 ffi::XL_BUFFER_TOO_SMALL => {
-                    let needed = if written > 0 { written as usize } else { buffer.len() * 2 };
+                    let needed = if written > 0 {
+                        written as usize
+                    } else {
+                        buffer.len() * 2
+                    };
                     if needed <= buffer.len() {
                         return Err(Error::new(
                             ErrorKind::Other,
@@ -382,7 +411,9 @@ fn parse_row_ranges(buffer: &[u8]) -> Result<Vec<(usize, usize)>, Error> {
             return Err(malformed_all_rows_blob());
         }
         let start = offset.checked_add(4).ok_or_else(malformed_all_rows_blob)?;
-        let end = start.checked_add(row_length as usize).ok_or_else(malformed_all_rows_blob)?;
+        let end = start
+            .checked_add(row_length as usize)
+            .ok_or_else(malformed_all_rows_blob)?;
         if end > buffer.len() {
             return Err(malformed_all_rows_blob());
         }
@@ -397,7 +428,10 @@ fn parse_row_ranges(buffer: &[u8]) -> Result<Vec<(usize, usize)>, Error> {
 }
 
 fn malformed_all_rows_blob() -> Error {
-    Error::new(ErrorKind::Other, "native returned a malformed all-rows blob")
+    Error::new(
+        ErrorKind::Other,
+        "native returned a malformed all-rows blob",
+    )
 }
 
 #[cfg(test)]
@@ -441,7 +475,11 @@ mod tests {
 
     #[test]
     fn iterates_in_order() {
-        let bytes = blob(&[(0, XL_CELL_STRING, "a"), (1, XL_CELL_STRING, "b"), (2, XL_CELL_STRING, "c")]);
+        let bytes = blob(&[
+            (0, XL_CELL_STRING, "a"),
+            (1, XL_CELL_STRING, "b"),
+            (2, XL_CELL_STRING, "c"),
+        ]);
         let row = RowRef::from_blob(&bytes).expect("well-formed blob");
         let values: Vec<&str> = row.iter().map(|cell| cell.as_str().unwrap()).collect();
         assert_eq!(values, ["a", "b", "c"]);
@@ -493,8 +531,10 @@ mod tests {
         let ranges = parse_row_ranges(&bytes).expect("well-formed buffer");
         assert_eq!(ranges.len(), 3);
 
-        let rows: Vec<RowRef<'_>> =
-            ranges.iter().map(|&(start, end)| RowRef::from_blob(&bytes[start..end]).unwrap()).collect();
+        let rows: Vec<RowRef<'_>> = ranges
+            .iter()
+            .map(|&(start, end)| RowRef::from_blob(&bytes[start..end]).unwrap())
+            .collect();
         assert_eq!(rows[0].len(), 1);
         assert_eq!(rows[0].get(0).unwrap().as_str().unwrap(), "a");
         assert!(rows[1].is_empty());
