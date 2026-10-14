@@ -378,25 +378,25 @@ never held twice, once as Arrow and once as the DataFrame.
 `ExcelReaderError` — the failure crosses the Arrow C Data Interface before this library's own
 exception wrapping ever runs.
 
-### From memory
+### From memory, a stream, or your own bytes
+
+`open_workbook()` takes more than a path. `bytes`, `bytearray`, `memoryview` and `io.BytesIO` are
+read from memory; the format comes from the content, so pass `format` only for a CSV or to skip the
+check.
 
 ```python
-from excelreader import open_bytes
-
-with open_bytes(payload) as workbook:
+with open_workbook(payload) as workbook:
     ...
 ```
 
-### From your own bytes
-
-`open_source()` takes any object with a `size` and a `read_at(offset, buffer)` that fills `buffer`
-and returns the count. The library asks for 4 MiB blocks and caches them, and every sheet can still
-be read on its own thread.
+An object with a `size` and a `read_at(offset, buffer)` that fills `buffer` and returns the count is
+read in blocks on demand: the library asks for 4 MiB blocks and caches them, and every sheet can
+still be read on its own thread.
 
 ```python
 import urllib.request
 
-from excelreader import open_source
+from excelreader import open_workbook
 
 class HttpSource:
     def __init__(self, url):
@@ -411,28 +411,28 @@ class HttpSource:
         buffer[: len(data)] = data
         return len(data)
 
-with open_source(HttpSource("https://example.com/book.xlsx")) as workbook:
+with open_workbook(HttpSource("https://example.com/book.xlsx")) as workbook:
     ...
 ```
 
-`open_stream()` reads anything with `readinto()` or `read()`, such as `sys.stdin.buffer`. A CSV is
-read as it arrives, and its first 16 MiB are kept so that `infer_schema()` followed by a read works;
+Any other object with `readinto()` or `read()`, such as an open file or `sys.stdin.buffer`, is read
+as a stream. A CSV is read as it arrives, and its first 16 MiB are kept so that `infer_schema()` followed by a read works;
 an XLSX, XLSB or XLS is read whole first.
 
 ```python
 import sys
 
-from excelreader import open_stream
+from excelreader import open_workbook
 
-with open_stream(sys.stdin.buffer, "csv") as workbook:
+with open_workbook(sys.stdin.buffer, "csv") as workbook:
     ...
 ```
 
-Both callbacks run with the GIL held. For a file on disk, `open_workbook()` is faster.
+Both callbacks run with the GIL held. For a file on disk, pass its path: that is faster.
 
 ### Reader options
 
-`open_workbook()`/`open_bytes()` take an optional `OpenOptions` for CSV dialect settings and reader
+`open_workbook()` takes an optional `OpenOptions` for CSV dialect settings and reader
 resource limits. Every field defaults to `None`, meaning "use the library default", so you set only
 what you want to change.
 
@@ -469,7 +469,7 @@ check off, for a file whose producer wrote wrong checksums.
 
 ### Encrypted workbooks
 
-`open_workbook()`/`open_bytes()` take a `password` keyword to open a password-protected OOXML
+`open_workbook()` takes a `password` keyword to open a password-protected OOXML
 workbook (.xlsx/.xlsb/.xlsm):
 
 ```python
@@ -504,7 +504,7 @@ encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")
 
 `package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
 Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
-packages can be encrypted, matching what `open_workbook`/`open_bytes` can decrypt.
+packages can be encrypted, matching what `open_workbook` can decrypt.
 
 `encrypt_package_bytes()` does the same over bytes, so the plaintext package never has to be written
 to disk:

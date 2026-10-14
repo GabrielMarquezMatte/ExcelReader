@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import ctypes
+import io
 import operator
+import os
 import struct
 import threading
 from array import array
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, SupportsIndex, overload
+from typing import IO, TYPE_CHECKING, SupportsIndex, overload
 
 if TYPE_CHECKING:
     from typing_extensions import Self
+
+    from excelreader.sources import Source
 
 from excelreader import _native
 from excelreader.arrow_stream import ArrowStream
@@ -711,43 +715,68 @@ def _raw_options(
 
 
 def open_workbook(
-    path: str | Path, format: str | None = None, *, options: OpenOptions | None = None, password: str | None = None
+    source: str | os.PathLike[str] | bytes | bytearray | memoryview | IO[bytes] | Source,
+    format: str | None = None,
+    *,
+    options: OpenOptions | None = None,
+    password: str | None = None,
 ) -> Workbook:
-    """Opens a workbook from disk. `format` is one of auto/xls/xlsx/xlsb/csv; None infers it.
+    """Opens a workbook from a path, bytes in memory, a `Source`, or a readable stream.
 
-    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`. `password` unlocks
-    an encrypted OOXML workbook (.xlsx/.xlsb); omitting it for one raises `PasswordRequiredError`, and
-    a wrong one raises `PasswordIncorrectError`. An explicit xlsx/xlsb `format` works for an encrypted
-    file too, the same as leaving `format` unset — both routes decrypt correctly given the right
-    `password`.
+    `source` picks how the workbook is read:
+
+    - a `str` or path-like: the file on disk.
+    - `bytes`, `bytearray`, `memoryview` or `io.BytesIO`: a copy the native side takes immediately.
+      A `BytesIO` is read whole, whatever its position.
+    - a `Source` (`size` and `read_at`): fetched in blocks on demand, and every sheet can be read on
+      its own thread. The library keeps a reference to it until the workbook and everything read
+      from it are closed. `read_at` runs with the GIL held, so a local file is better opened by path.
+    - any other object with `readinto()` or `read()`, such as an open file, a pipe or
+      `sys.stdin.buffer`: read as a stream that cannot seek. A CSV is read as it arrives, and can be
+      read again from the start (`infer_schema()`, then a read) until 16 MiB of it were read; an
+      XLSX, XLSB or XLS is read whole before the workbook opens. The library never closes it.
+
+    `format` is one of auto/xls/xlsx/xlsb/csv; None infers it, from the extension for a path and from
+    the content otherwise. The content tells XLS, XLSX and XLSB apart, and a stream that is none of
+    them reads as CSV; a CSV in memory or behind a `Source` needs `format="csv"`. `options` overrides reader limits and CSV dialect settings; see
+    `OpenOptions`. `password` unlocks an encrypted OOXML workbook (.xlsx/.xlsb); omitting it for one
+    raises `PasswordRequiredError`, and a wrong one raises `PasswordIncorrectError`.
     """
-    resolved = Path(path)
-    encoded = str(resolved).encode("utf-8")
+    if isinstance(source, (str, os.PathLike)):
+        return _open_path(Path(source), format, options, password)
+    if isinstance(source, io.BytesIO):
+        source = source.getvalue()
+    if isinstance(source, (bytes, bytearray, memoryview)):
+        return _open_memory(source, format, options, password)
+
+    from excelreader import sources
+
+    if hasattr(source, "read_at"):
+        return sources._open_source(source, format, options, password)
+    if hasattr(source, "readinto") or hasattr(source, "read"):
+        return sources._open_stream(source, format, options, password)
+    raise TypeError(
+        "open_workbook() needs a path, bytes, io.BytesIO, a Source, or an object with readinto() or read();"
+        f" got {type(source).__name__}"
+    )
+
+
+def _open_path(path: Path, format: str | None, options: OpenOptions | None, password: str | None) -> Workbook:
+    encoded = str(path).encode("utf-8")
     handle = ctypes.c_void_p()
     lib = _native.load_library()
     raw_options, _raw, _password_buffer = _raw_options(options, password)
-    _check(
-        lib.xl_open_file(
-            encoded, len(encoded), _resolve_format(format, resolved), raw_options, ctypes.byref(handle)
-        )
-    )
+    _check(lib.xl_open_file(encoded, len(encoded), _resolve_format(format, path), raw_options, ctypes.byref(handle)))
     return Workbook(handle)
 
 
-def open_bytes(
-    data: bytes, format: str | None = None, *, options: OpenOptions | None = None, password: str | None = None
+def _open_memory(
+    data: bytes | bytearray | memoryview, format: str | None, options: OpenOptions | None, password: str | None
 ) -> Workbook:
-    """Opens a workbook from an in-memory buffer. The native side copies `data` immediately.
-
-    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`. `password` unlocks
-    an encrypted OOXML workbook — see `open_workbook()` for the full contract.
-    """
+    if not isinstance(data, bytes):
+        data = bytes(data)
     handle = ctypes.c_void_p()
     lib = _native.load_library()
     raw_options, _raw, _password_buffer = _raw_options(options, password)
-    _check(
-        lib.xl_open_memory(
-            data, len(data), _resolve_format(format, None), raw_options, ctypes.byref(handle)
-        )
-    )
+    _check(lib.xl_open_memory(data, len(data), _resolve_format(format, None), raw_options, ctypes.byref(handle)))
     return Workbook(handle)

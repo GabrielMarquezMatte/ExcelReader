@@ -354,7 +354,7 @@ def write_polars_to_bytes(df: Any, *, format: str, options: WriteOptions | None 
 
 def encrypt_package(package_path: str | Path, destination_path: str | Path, password: str) -> None:
     """Wraps a finished plaintext XLSX/XLSB package in an agile-encrypted (ECMA-376 4.4) CFB
-    container — the inverse of passing `password=` to `open_workbook`/`open_bytes`. `package_path`
+    container — the inverse of passing `password=` to `open_workbook`. `package_path`
     is read twice, so it must already be a complete file (write it with `write_workbook` first).
     Encryption parameters are fixed at Excel's own defaults; there are no options.
     """
