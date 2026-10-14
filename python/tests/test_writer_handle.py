@@ -168,36 +168,50 @@ def test_write_row_matches_explicit_calls(tmp_path):
     assert read(sugar) == read(explicit)
 
 
-def test_in_memory_writer_round_trips():
-    from excelreader import open_workbook, open_writer_to_memory
+def test_a_writer_over_a_bytesio_hands_it_the_workbook_on_close():
+    import io
 
-    with open_writer_to_memory("xlsx") as writer:
+    from excelreader import open_workbook
+
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
         writer.start_sheet("Data")
         writer.write_row(["name", "qty"])
         writer.write_row(["widget", 7])
         writer.end_sheet()
-        payload = writer.bytes()
+        assert buffer.getvalue() == b""
 
-    assert isinstance(payload, bytes)
-    assert len(payload) > 0
-
-    with open_workbook(payload, format="xlsx") as workbook:
+    assert not buffer.closed
+    with open_workbook(buffer) as workbook:
         rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert rows[0] == ["name", "qty"]
     assert rows[1][0] == "widget"
 
 
-def test_bytes_on_a_file_writer_raises(tmp_path):
-    from excelreader import ExcelReaderError
+def test_a_writer_over_a_bytesio_finishes_a_sheet_left_open():
+    import io
 
-    path = tmp_path / "file.xlsx"
-    with open_writer(path) as writer:
+    from excelreader import open_workbook
+
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsb") as writer:
         writer.start_sheet("Data")
         writer.write_row(["a"])
-        writer.end_sheet()
-        with pytest.raises(ExcelReaderError):
-            writer.bytes()
+
+    with open_workbook(buffer) as workbook:
+        assert [row[0].value for row in workbook.sheets[0].rows()] == ["a"]
+
+
+def test_a_writer_over_a_stream_needs_a_format_and_a_write_method():
+    import io
+
+    with pytest.raises(ValueError, match="format"):
+        open_writer(io.BytesIO())
+    with pytest.raises(ValueError, match="unknown format"):
+        open_writer(io.BytesIO(), "parquet")
+    with pytest.raises(TypeError, match="destination"):
+        open_writer(42, "xlsx")
 
 
 def test_write_workbook_to_a_bytesio_matches_write_workbook_to_a_file(tmp_path, xlsx_path):

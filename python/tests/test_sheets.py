@@ -1,19 +1,21 @@
 import gc
+import io
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from excelreader import ExcelReaderError, Sheet, SheetVisibility, Workbook, open_workbook, open_writer_to_memory
+from excelreader import ExcelReaderError, Sheet, SheetVisibility, Workbook, open_workbook, open_writer
 
 
 def _two_sheets() -> bytes:
-    with open_writer_to_memory("xlsx") as writer:
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
         for name, values in (("First", ["a1", "a2"]), ("Second", ["b1", "b2", "b3"])):
             writer.start_sheet(name)
             for value in values:
                 writer.write_row([value])
             writer.end_sheet()
-        return writer.bytes()
+    return buffer.getvalue()
 
 
 def _first_column(sheet: Sheet) -> list[str]:
@@ -25,13 +27,14 @@ _PARALLEL_ROWS = 500
 
 
 def _many_sheets() -> bytes:
-    with open_writer_to_memory("xlsx") as writer:
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
         for sheet in range(_PARALLEL_SHEETS):
             writer.start_sheet(f"sheet{sheet}")
             for row in range(_PARALLEL_ROWS):
                 writer.write_row([f"s{sheet}-r{row}", sheet * 1_000_000 + row])
             writer.end_sheet()
-        return writer.bytes()
+    return buffer.getvalue()
 
 
 def test_a_sheet_reads_its_own_rows():
@@ -182,10 +185,11 @@ def test_sheets_compare_by_workbook_and_index():
 
 
 def test_a_sheet_with_no_rows_reads_empty():
-    with open_writer_to_memory("xlsx") as writer:
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
         writer.start_sheet("Empty")
         writer.end_sheet()
-        data = writer.bytes()
+    data = buffer.getvalue()
 
     with open_workbook(data) as workbook:
         sheet = workbook.sheets[0]

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ctypes
 import datetime
+import io
 import os
 from array import array
 from pathlib import Path
@@ -355,39 +356,57 @@ def write_polars(
     write_arrow(destination, df.to_arrow(), format=format, options=options)
 
 
-def encrypt_package(package_path: str | Path, destination_path: str | Path, password: str) -> None:
+def encrypt_package(
+    package: Union[str, os.PathLike, bytes, bytearray, memoryview, io.BytesIO],
+    destination: Destination,
+    password: str,
+) -> None:
     """Wraps a finished plaintext XLSX/XLSB package in an agile-encrypted (ECMA-376 4.4) CFB
-    container — the inverse of passing `password=` to `open_workbook`. `package_path`
-    is read twice, so it must already be a complete file (write it with `write_workbook` first).
-    Encryption parameters are fixed at Excel's own defaults; there are no options.
+    container, the inverse of passing `password=` to `open_workbook`.
+
+    `package` is a path to a complete file, or its bytes (`bytes`, `bytearray`, `memoryview`, or an
+    `io.BytesIO` read whole). `destination` is a path, or a binary object with `write()` that
+    receives the encrypted workbook in one call and is not closed. Encryption parameters are fixed
+    at Excel's own defaults; there are no options.
     """
-    package_encoded = str(Path(package_path)).encode("utf-8")
-    destination_encoded = str(Path(destination_path)).encode("utf-8")
     password_encoded = password.encode("utf-8")
     lib = _native.load_library()
-    _check(
-        lib.xl_encrypt_package(
-            package_encoded, len(package_encoded),
-            destination_encoded, len(destination_encoded),
-            password_encoded, len(password_encoded),
+    if isinstance(package, (str, os.PathLike)) and isinstance(destination, (str, os.PathLike)):
+        package_encoded = str(Path(package)).encode("utf-8")
+        destination_encoded = str(Path(destination)).encode("utf-8")
+        _check(
+            lib.xl_encrypt_package(
+                package_encoded, len(package_encoded),
+                destination_encoded, len(destination_encoded),
+                password_encoded, len(password_encoded),
+            )
         )
-    )
+        return
 
+    if not isinstance(destination, (str, os.PathLike)) and not hasattr(destination, "write"):
+        raise TypeError(
+            f"destination must be a path or an object with write(); got {type(destination).__name__}"
+        )
+    if isinstance(package, (str, os.PathLike)):
+        data = Path(package).read_bytes()
+    elif isinstance(package, io.BytesIO):
+        data = package.getvalue()
+    elif isinstance(package, (bytes, bytearray, memoryview)):
+        data = bytes(package)
+    else:
+        raise TypeError(f"package must be a path or bytes; got {type(package).__name__}")
 
-def encrypt_package_bytes(package: bytes, password: str) -> bytes:
-    """The in-memory twin of `encrypt_package()`: takes a finished XLSX/XLSB package's bytes (from
-    `write_workbook()` into an `io.BytesIO`, say) and returns the encrypted workbook's bytes,
-    so the plaintext never has to be written to disk.
-    """
-    password_encoded = password.encode("utf-8")
     buffer = _native.NativeBuffer()
-    lib = _native.load_library()
     _check(
         lib.xl_encrypt_package_to_memory(
-            package, len(package), password_encoded, len(password_encoded), ctypes.byref(buffer)
+            data, len(data), password_encoded, len(password_encoded), ctypes.byref(buffer)
         )
     )
     try:
-        return ctypes.string_at(buffer.data, buffer.len)
+        encrypted = ctypes.string_at(buffer.data, buffer.len)
     finally:
         lib.xl_free_buffer(ctypes.byref(buffer))
+    if isinstance(destination, (str, os.PathLike)):
+        Path(destination).write_bytes(encrypted)
+    else:
+        destination.write(encrypted)

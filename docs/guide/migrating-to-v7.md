@@ -178,3 +178,10 @@ The C ABI is unchanged: no signature moved, and `XL_ABI_VERSION` stays 6. Behavi
 |---|---|
 | `payload = write_workbook_to_bytes(table, types, format="xlsx")` | `buffer = io.BytesIO()`<br>`write_workbook(buffer, table, types, format="xlsx")`<br>`payload = buffer.getvalue()` |
 | `write_pandas_to_bytes(df, format="xlsx")` | `write_pandas(buffer, df, format="xlsx")` |
+
+The streaming writer and the encryption helper follow the same pattern. `open_writer_to_memory()` and `SheetWriter.bytes()` are removed: `open_writer()` takes a binary object with `write()` and hands it the finished workbook when the writer closes. `encrypt_package_bytes()` is removed: `encrypt_package()` takes the package as a path, `bytes` or `io.BytesIO`, and the destination as a path or an object with `write()`.
+
+| v6 | v7 |
+|---|---|
+| `with open_writer_to_memory("xlsx") as w:`<br>`    ...`<br>`    payload = w.bytes()` | `buffer = io.BytesIO()`<br>`with open_writer(buffer, "xlsx") as w:`<br>`    ...`<br>`payload = buffer.getvalue()` |
+| `secret = encrypt_package_bytes(payload, password)` | `encrypt_package(payload, out, password)` with `out = io.BytesIO()` |
