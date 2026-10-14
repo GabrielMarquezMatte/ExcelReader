@@ -463,6 +463,10 @@ options = OpenOptions(
 single-file batch work, not for a server already reading many files in parallel. See the root README
 for the measured trade.
 
+Each ZIP entry of an XLSX or XLSB is checked against its CRC-32 as it is read, so a damaged file
+raises `ExcelReaderError` instead of returning wrong cells. `verify_zip_checksums=False` turns the
+check off, for a file whose producer wrote wrong checksums.
+
 ### Encrypted workbooks
 
 `open_workbook()`/`open_bytes()` take a `password` keyword to open a password-protected OOXML

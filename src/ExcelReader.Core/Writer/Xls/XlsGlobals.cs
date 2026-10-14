@@ -14,7 +14,8 @@ namespace ExcelReader.Core.Writer.Xls
         }
 
         internal static int[] Write(BiffBuffer buffer, ReadOnlySpan<string> sheetNames,
-            ReadOnlySpan<ExcelSheetVisibility> sheetVisibilities, bool date1904, StyleTable styles)
+            ReadOnlySpan<ExcelSheetVisibility> sheetVisibilities, int activeSheet, bool date1904, StyleTable styles,
+            XlsSharedStrings sharedStrings)
         {
             BiffRecordWriter.WriteBof(buffer, BiffRecord.SubstreamGlobals);
             BiffRecordWriter.WriteInterfaceHdr(buffer, 1200);
@@ -25,17 +26,20 @@ namespace ExcelReader.Core.Writer.Xls
             BiffRecordWriter.WriteDsf(buffer);
             BiffRecordWriter.WriteTabId(buffer, sheetNames.Length);
             BiffRecordWriter.WriteFnGroupCount(buffer);
-            BiffRecordWriter.WriteWindow1(buffer);
+            BiffRecordWriter.WriteU16Records(buffer,
+                [BiffRecord.WinProtect, BiffRecord.Protect, BiffRecord.Password, BiffRecord.Prot4Rev, BiffRecord.Prot4RevPass], 0);
+            BiffRecordWriter.WriteWindow1(buffer, activeSheet);
             BiffRecordWriter.WriteBackup(buffer);
             BiffRecordWriter.WriteHideObj(buffer);
-            if (date1904)
-            {
-                BiffRecordWriter.WriteDate1904(buffer, date1904: true);
-            }
+            BiffRecordWriter.WriteDate1904(buffer, date1904);
             BiffRecordWriter.WritePrecision(buffer);
             BiffRecordWriter.WriteRefreshAll(buffer);
             BiffRecordWriter.WriteBookBool(buffer);
-            BiffRecordWriter.WriteFont(buffer);
+            // Excel writes at least four FONT records; every XF here refers to the first.
+            for (int i = 0; i < 4; i++)
+            {
+                BiffRecordWriter.WriteFont(buffer);
+            }
             Dictionary<string, int> numFmtIds = styles.AssignCustomNumberFormatIds();
             foreach (var (format, id) in numFmtIds)
             {
@@ -62,6 +66,7 @@ namespace ExcelReader.Core.Writer.Xls
                 BiffRecordWriter.WriteBoundSheet(buffer, sheetOffset: 0, sheetNames[i], sheetVisibilities[i]);
             }
 
+            sharedStrings.Write(buffer);
             BiffRecordWriter.WriteEof(buffer);
             return offsetPositions;
         }

@@ -77,6 +77,8 @@ namespace ExcelReader.Core.Writer
         /// style; index 1 is always the builtin date style every date cell already uses.
         /// </summary>
         /// <param name="style">The number format/bold/italic combination to register.</param>
+        /// <exception cref="ArgumentException">The style's number format is longer than 255 characters.</exception>
+        /// <exception cref="Reader.ExcelLimitExceededException">The workbook already has 200 distinct number formats, the most Excel opens.</exception>
         /// <returns>The style's index, for use with <see cref="ISheetWriter{TRow}.SetColumnStyle"/> and <see cref="ISheetWriter{TRow}.StartRowAsync(int, CancellationToken)"/>.</returns>
         int AddStyle(CellStyle style);
     }
@@ -131,7 +133,7 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="columnIndex">The 0-based column index.</param>
         /// <param name="styleId">The style to apply, from <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative or beyond the format's last column, or <paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
         /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         void SetColumnStyle(int columnIndex, int styleId);
 
@@ -141,7 +143,7 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="columnIndex">The 0-based column index.</param>
         /// <param name="width">The column width, in characters.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative or beyond the format's last column, or <paramref name="width"/> is negative or greater than 255.</exception>
         /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         void SetColumnWidth(int columnIndex, double width);
 

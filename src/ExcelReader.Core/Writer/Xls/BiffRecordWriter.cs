@@ -1,4 +1,7 @@
-using ExcelReader.Core.Reader.Internal;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Runtime.InteropServices;
+using System.Text;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer.Xls
@@ -10,10 +13,11 @@ namespace ExcelReader.Core.Writer.Xls
             int len = buffer.BeginRecord(BiffRecord.Bof);
             buffer.WriteU16(BiffRecord.Biff8Version);
             buffer.WriteU16(substreamType);
-            for (int i = 0; i < 12; i++)
-            {
-                buffer.WriteByte(0);
-            }
+            // [MS-XLS] requires rupYear to be 1996 or 1997, and verLowestBiff to be 6.
+            buffer.WriteU16(0x0DBB);
+            buffer.WriteU16(0x07CC);
+            buffer.WriteI32(0);
+            buffer.WriteI32(6);
             buffer.EndRecord(len);
         }
 
@@ -54,8 +58,10 @@ namespace ExcelReader.Core.Writer.Xls
         {
             int len = buffer.BeginRecord(BiffRecord.WriteAccess);
             ReadOnlySpan<byte> name = "ExcelReader"u8;
+            buffer.WriteU16(name.Length);
+            buffer.WriteByte(0);
             buffer.Write(name);
-            for (int i = name.Length; i < 112; i++)
+            for (int i = 3 + name.Length; i < 112; i++)
             {
                 buffer.WriteByte((byte)' ');
             }
@@ -81,16 +87,27 @@ namespace ExcelReader.Core.Writer.Xls
         {
             WriteU16Record(buffer, BiffRecord.FnGroupCount, 17);
         }
-        private static ReadOnlySpan<byte> WriteWindow1Payload => [
-            0xFF, 0x7F, 0xFF, 0x7F, 0x80, 0x70, 0x30, 0x39,
-            0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0xC0, 0x20,
-        ];
-        internal static void WriteWindow1(BiffBuffer buffer)
+        internal static void WriteWindow1(BiffBuffer buffer, int activeSheet)
         {
             int len = buffer.BeginRecord(BiffRecord.Window1);
-            buffer.Write(WriteWindow1Payload);
+            buffer.WriteU16(0x7FFF);
+            buffer.WriteU16(0x7FFF);
+            buffer.WriteU16(0x7080);
+            buffer.WriteU16(0x3930);
+            buffer.WriteU16(0x0038);
+            buffer.WriteU16(activeSheet);
+            buffer.WriteU16(0);
+            buffer.WriteU16(1);
+            buffer.WriteU16(600);
             buffer.EndRecord(len);
+        }
+
+        internal static void WriteU16Records(BiffBuffer buffer, ReadOnlySpan<int> ids, int value)
+        {
+            foreach (int id in ids)
+            {
+                WriteU16Record(buffer, id, value);
+            }
         }
 
         internal static void WriteBackup(BiffBuffer buffer)
@@ -210,80 +227,174 @@ namespace ExcelReader.Core.Writer.Xls
             buffer.WriteU16(0);
             buffer.EndRecord(len);
         }
-        private static ReadOnlySpan<byte> ThirdPayload => [0xB6, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        internal static void WriteWindow2(BiffBuffer buffer)
+        internal static void WriteWindow2(BiffBuffer buffer, bool selected)
         {
             int len = buffer.BeginRecord(BiffRecord.Window2);
-            buffer.Write(ThirdPayload);
+            buffer.WriteU16(selected ? 0x06B6 : 0x00B6);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0x0040);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0);
+            buffer.WriteI32(0);
             buffer.EndRecord(len);
         }
 
+        internal static void WriteSheetSettings(BiffBuffer buffer)
+        {
+            WriteU16Record(buffer, BiffRecord.CalcMode, 1);
+            WriteU16Record(buffer, BiffRecord.CalcCount, 100);
+            WriteU16Record(buffer, BiffRecord.CalcRefMode, 1);
+            WriteU16Record(buffer, BiffRecord.CalcIter, 0);
+            int delta = buffer.BeginRecord(BiffRecord.CalcDelta);
+            buffer.WriteDouble(0.001);
+            buffer.EndRecord(delta);
+            WriteU16Record(buffer, BiffRecord.CalcSaveRecalc, 1);
+            WriteU16Record(buffer, BiffRecord.PrintRowCol, 0);
+            WriteU16Record(buffer, BiffRecord.PrintGrid, 0);
+            WriteU16Record(buffer, BiffRecord.GridSet, 1);
+            int guts = buffer.BeginRecord(BiffRecord.Guts);
+            buffer.WriteI32(0);
+            buffer.WriteI32(0);
+            buffer.EndRecord(guts);
+            int rowHeight = buffer.BeginRecord(BiffRecord.DefaultRowHeight);
+            buffer.WriteU16(0);
+            buffer.WriteU16(DefaultRowHeightTwips);
+            buffer.EndRecord(rowHeight);
+            WriteU16Record(buffer, BiffRecord.WsBool, 0x04C1);
+        }
+
+        internal const int DefaultRowHeightTwips = 255;
+
+        internal static void WriteDefColWidth(BiffBuffer buffer)
+        {
+            WriteU16Record(buffer, BiffRecord.DefColWidth, 8);
+        }
+
+        internal static void WriteRow(BiffBuffer buffer, int row, int colMic, int colMac)
+        {
+            int len = buffer.BeginRecord(BiffRecord.Row);
+            buffer.WriteU16(row);
+            buffer.WriteU16(colMic);
+            buffer.WriteU16(colMac);
+            buffer.WriteU16(DefaultRowHeightTwips);
+            buffer.WriteI32(0);
+            buffer.WriteU16(0x0100);
+            buffer.WriteU16(GeneralStyleXf);
+            buffer.EndRecord(len);
+        }
+
+        private const int GeneralStyleXf = 15;
+
+        // Cell records are written whole into one span: they are most of a sheet's bytes, and going
+        // through BeginRecord/WriteU16/EndRecord field by field measured as most of their cost.
         internal static void WriteBlank(BiffBuffer buffer, int row, int col, int xf)
         {
-            int len = buffer.BeginRecord(BiffRecord.Blank);
-            WriteCellHeader(buffer, row, col, xf);
-            buffer.EndRecord(len);
+            Span<byte> record = CellRecord(buffer, BiffRecord.Blank, 6, row, col, xf);
+            buffer.Advance(record.Length);
         }
 
         internal static void WriteNumber(BiffBuffer buffer, int row, int col, int xf, double value)
         {
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));
-            int len = buffer.BeginRecord(BiffRecord.Number);
-            WriteCellHeader(buffer, row, col, xf);
-            buffer.WriteDouble(value);
-            buffer.EndRecord(len);
+            Span<byte> record = CellRecord(buffer, BiffRecord.Number, 14, row, col, xf);
+            BinaryPrimitives.WriteDoubleLittleEndian(record[10..], value);
+            buffer.Advance(record.Length);
+        }
+
+        /// <summary>
+        /// Opens a run of RK cells: header, row and first column now, then 6 bytes (ixfe, RK) per cell.
+        /// A run of one is an RK record, whose layout is exactly that; a longer run is a MULRK record,
+        /// which only adds the last column. <see cref="EndRkRun"/> fixes the id and length either way.
+        /// </summary>
+        internal static int BeginRkRun(BiffBuffer buffer, int row, int firstCol)
+        {
+            int start = buffer.Length;
+            Span<byte> header = buffer.GetSpan(8);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[4..], (ushort)row);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[6..], (ushort)firstCol);
+            buffer.Advance(8);
+            return start;
+        }
+
+        internal static void AppendRk(BiffBuffer buffer, int xf, int rk)
+        {
+            Span<byte> cell = buffer.GetSpan(6);
+            BinaryPrimitives.WriteUInt16LittleEndian(cell, (ushort)xf);
+            BinaryPrimitives.WriteInt32LittleEndian(cell[2..], rk);
+            buffer.Advance(6);
+        }
+
+        internal static void EndRkRun(BiffBuffer buffer, int start, int firstCol, int count)
+        {
+            Span<byte> header = buffer.Slice(start, 4);
+            if (count == 1)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(header, BiffRecord.Rk);
+                BinaryPrimitives.WriteUInt16LittleEndian(header[2..], 10);
+                return;
+            }
+            BinaryPrimitives.WriteUInt16LittleEndian(header, BiffRecord.MulRk);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[2..], (ushort)(4 + (6 * count) + 2));
+            Span<byte> last = buffer.GetSpan(2);
+            BinaryPrimitives.WriteUInt16LittleEndian(last, (ushort)(firstCol + count - 1));
+            buffer.Advance(2);
         }
 
         internal static void WriteLabel(BiffBuffer buffer, int row, int col, int xf, ReadOnlySpan<char> value)
         {
-            ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
-            bool compressed = BiffStringEncoder.CanCompress(value);
-            int charBytes = compressed ? value.Length : value.Length * 2;
-            if (9 + charBytes <= BiffRecord.MaxPayload)
+            Span<byte> dest = buffer.GetSpan(13 + (value.Length * 2));
+            Span<byte> chars = dest[13..];
+            int charBytes;
+            byte flags = 0;
+            if (Ascii.FromUtf16(value, chars, out _) == OperationStatus.Done)
             {
-                int len = buffer.BeginRecord(BiffRecord.Label);
-                WriteCellHeader(buffer, row, col, xf);
-                buffer.WriteU16(value.Length);
-                buffer.WriteByte((byte)(compressed ? 0 : 1));
-                BiffStringEncoder.WriteChars(buffer, value, compressed);
-                buffer.EndRecord(len);
-                return;
+                charBytes = value.Length;
             }
-            int firstChars = compressed ? 8215 : 4107;
-            int lenSplit = buffer.BeginRecord(BiffRecord.Label);
-            WriteCellHeader(buffer, row, col, xf);
-            buffer.WriteU16(value.Length);
-            buffer.WriteByte((byte)(compressed ? 0 : 1));
-            BiffStringEncoder.WriteChars(buffer, value[..firstChars], compressed);
-            buffer.EndRecord(lenSplit);
-            int offset = firstChars;
-            int maxContChars = compressed ? 8223 : 4111;
-            while (offset < value.Length)
+            else if (BiffStringEncoder.CanCompress(value))
             {
-                int take = Math.Min(maxContChars, value.Length - offset);
-                int contLen = buffer.BeginRecord(0x003C);
-                buffer.WriteByte((byte)(compressed ? 0 : 1));
-                BiffStringEncoder.WriteChars(buffer, value.Slice(offset, take), compressed);
-                buffer.EndRecord(contLen);
-                offset += take;
+                charBytes = Encoding.Latin1.GetBytes(value, chars);
             }
+            else
+            {
+                MemoryMarshal.AsBytes(value).CopyTo(chars);
+                charBytes = value.Length * 2;
+                flags = 1;
+            }
+            Span<byte> record = CellRecord(buffer, BiffRecord.Label, 9 + charBytes, row, col, xf);
+            BinaryPrimitives.WriteUInt16LittleEndian(record[10..], (ushort)value.Length);
+            record[12] = flags;
+            buffer.Advance(record.Length);
+        }
+
+        internal static void WriteLabelSst(BiffBuffer buffer, int row, int col, int xf, int sharedStringIndex)
+        {
+            Span<byte> record = CellRecord(buffer, BiffRecord.LabelSst, 10, row, col, xf);
+            BinaryPrimitives.WriteInt32LittleEndian(record[10..], sharedStringIndex);
+            buffer.Advance(record.Length);
         }
 
         internal static void WriteBool(BiffBuffer buffer, int row, int col, int xf, bool value)
         {
-            int len = buffer.BeginRecord(BiffRecord.BoolErr);
-            WriteCellHeader(buffer, row, col, xf);
-            buffer.WriteByte((byte)(value ? 1 : 0));
-            buffer.WriteByte(0);
-            buffer.EndRecord(len);
+            Span<byte> record = CellRecord(buffer, BiffRecord.BoolErr, 8, row, col, xf);
+            record[10] = (byte)(value ? 1 : 0);
+            record[11] = 0;
+            buffer.Advance(record.Length);
         }
 
-        private static void WriteCellHeader(BiffBuffer buffer, int row, int col, int xf)
+        /// <summary>Reserves a cell record and fills its header and row/col/xf; the caller writes the rest of the payload, then advances by the returned length.</summary>
+        private static Span<byte> CellRecord(BiffBuffer buffer, int id, int payload, int row, int col, int xf)
         {
-            buffer.WriteU16(row);
-            buffer.WriteU16(col);
-            buffer.WriteU16(xf);
+            Span<byte> record = buffer.GetSpan(4 + payload)[..(4 + payload)];
+            BinaryPrimitives.WriteUInt16LittleEndian(record, (ushort)id);
+            BinaryPrimitives.WriteUInt16LittleEndian(record[2..], (ushort)payload);
+            BinaryPrimitives.WriteUInt16LittleEndian(record[4..], (ushort)row);
+            BinaryPrimitives.WriteUInt16LittleEndian(record[6..], (ushort)col);
+            BinaryPrimitives.WriteUInt16LittleEndian(record[8..], (ushort)xf);
+            return record;
         }
+
 
         private static void WriteU16Record(BiffBuffer buffer, int id, int value)
         {

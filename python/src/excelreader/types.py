@@ -31,6 +31,10 @@ class SheetVisibility(IntEnum):
     VERY_HIDDEN = _native.XL_SHEET_VERY_HIDDEN
 
 
+# One past 9999-12-31, the last day Excel shows as a date.
+_MAX_SERIAL = 2_958_466
+
+
 class Cell(NamedTuple):
     """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers."""
 
@@ -42,11 +46,21 @@ class Cell(NamedTuple):
         """Converts a DATE cell's serial value to a date. Returns None for any other cell type.
 
         `date1904` should come from `Workbook.is_date1904` for the workbook this cell came from.
+        Raises `ValueError` for a serial outside what Excel can show as a date.
         """
         if self.type is not CellType.DATE:
             return None
-        epoch = datetime.date(1904, 1, 1) if date1904 else datetime.date(1899, 12, 30)
-        return epoch + datetime.timedelta(days=int(float(self.value)))
+        serial = float(self.value)
+        if not 0 <= serial < _MAX_SERIAL:
+            raise ValueError(f"{self.value} is not an Excel date serial")
+        days = int(serial)
+        if date1904:
+            return datetime.date(1904, 1, 1) + datetime.timedelta(days=days)
+        # Excel counts a 29 February 1900 that never existed, so serials before it sit one day later
+        # against this epoch than those after. Serial 60, that day itself, reads as 28 February.
+        if days < 60:
+            days += 1
+        return datetime.date(1899, 12, 30) + datetime.timedelta(days=days)
 
 
 class ColumnarSheet(NamedTuple):
@@ -121,6 +135,10 @@ class OpenOptions(NamedTuple):
     in 64 MiB by default; a negative block size turns the cache off). `max_buffered_bytes` caps how
     much `open_stream()` reads before an XLSX, XLSB or XLS opens.
 
+    `verify_zip_checksums` (on by default) checks each ZIP entry of an XLSX or XLSB against its
+    CRC-32, so a damaged file raises instead of returning wrong cells. Set it to `False` to read a
+    file whose producer wrote wrong checksums.
+
     Validation happens on the native side, which owns the real limits; an out-of-range value raises
     `ExcelReaderError` with the reason. Fields mirror xl_open_options in
     src/ExcelReader.Native/include/excelreader.h.
@@ -141,6 +159,7 @@ class OpenOptions(NamedTuple):
     source_block_size: int | None = None
     source_cache_bytes: int | None = None
     max_buffered_bytes: int | None = None
+    verify_zip_checksums: bool | None = None
 
 
 class WriteOptions(NamedTuple):

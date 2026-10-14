@@ -29,10 +29,10 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Initializes a new instance of the <see cref="ExcelLimitExceededException"/> class for a specific exceeded limit, building the message from the given values and populating <see cref="LimitName"/>, <see cref="Limit"/>, and <see cref="Actual"/>.</summary>
         /// <param name="limitName">The name of the exceeded limit (e.g. the corresponding <see cref="ExcelReaderOptions"/> property name).</param>
-        /// <param name="limit">The configured limit, in bytes.</param>
-        /// <param name="actual">The actual size, in bytes, that exceeded the limit.</param>
+        /// <param name="limit">The limit, in the unit the named limit is expressed in (bytes, rows, columns, entries, ...).</param>
+        /// <param name="actual">The value, in the same unit, that exceeded the limit.</param>
         public ExcelLimitExceededException(string limitName, long limit, long actual)
-            : base($"{limitName} limit exceeded: {actual} bytes exceeds {limit} bytes.")
+            : base($"{limitName} limit exceeded: {actual} exceeds {limit}.")
         {
             LimitName = limitName;
             Limit = limit;
@@ -42,10 +42,10 @@ namespace ExcelReader.Core.Reader
         /// <summary>Gets the name of the limit that was exceeded.</summary>
         public string LimitName { get; } = string.Empty;
 
-        /// <summary>Gets the configured limit, in bytes, that was exceeded.</summary>
+        /// <summary>Gets the limit that was exceeded, in the unit <see cref="LimitName"/> is expressed in.</summary>
         public long Limit { get; }
 
-        /// <summary>Gets the actual size, in bytes, that exceeded <see cref="Limit"/>.</summary>
+        /// <summary>Gets the value, in the same unit, that exceeded <see cref="Limit"/>.</summary>
         public long Actual { get; }
     }
 }

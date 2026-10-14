@@ -160,6 +160,7 @@ namespace xl
         int64_t source_cache_bytes = 0;                  ///< Block cache of Workbook::open_source. Default 64 MiB.
         int64_t max_buffered_bytes = 0;                  ///< Most bytes Workbook::open_stream reads before an XLSX, XLSB or XLS opens.
         int32_t source_block_size = 0;                   ///< Block size of Workbook::open_source's cache. Default 4 MiB; negative turns the cache off.
+        int32_t verify_zip_checksums = XL_OPT_DEFAULT;   ///< Check each XLSX/XLSB ZIP entry against its CRC-32. On by default; a mismatch fails the read.
 
         std::string password_{}; ///< Set through password().
 
@@ -196,6 +197,7 @@ namespace xl
             opts.source_cache_bytes = source_cache_bytes;
             opts.max_buffered_bytes = max_buffered_bytes;
             opts.source_block_size = source_block_size;
+            opts.verify_zip_checksums = verify_zip_checksums;
             opts.password = password_.empty() ? nullptr : reinterpret_cast<const uint8_t *>(password_.data());
             opts.password_len = static_cast<int32_t>(password_.size());
             return opts;

@@ -376,6 +376,20 @@ namespace ExcelReader.Tests.Writer.Xlsb
         }
 
         [Fact]
+        public void ARowBeyondTheRowLimitThrows()
+        {
+            using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(Stream.Null, leaveOpen: true);
+            XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+            for (int i = 0; i < 1_048_576; i++)
+            {
+                sheet.StartRow().Dispose();
+            }
+
+            ExcelLimitExceededException error = Assert.Throws<ExcelLimitExceededException>(() => sheet.StartRow());
+            Assert.Equal(1_048_577, error.Actual);
+        }
+
+        [Fact]
         public async Task WriteNonNumericFormattableThrowsArgumentException()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
@@ -406,7 +420,11 @@ namespace ExcelReader.Tests.Writer.Xlsb
         [InlineData(-1d)]
         [InlineData(536_870_911d)]
         [InlineData(-536_870_912d)]
-        public async Task IntegralNumberInRkRangeUsesFourByteRkCell(double value)
+        [InlineData(536_870_912d)]
+        [InlineData(0.5d)]
+        [InlineData(1234.56d)]
+        [InlineData(45_292.25d)]
+        public async Task NumberRkGivesBackExactlyUsesFourByteRkCell(double value)
         {
             (int Id, int PayloadLength)[] cells;
             double readBack;
@@ -417,11 +435,11 @@ namespace ExcelReader.Tests.Writer.Xlsb
         }
 
         [Theory]
-        [InlineData(536_870_912d)]
         [InlineData(-536_870_913d)]
-        [InlineData(0.5d)]
+        [InlineData(Math.PI)]
+        [InlineData(123_456_789.123d)]
         [InlineData(1e300d)]
-        public async Task NumberOutsideRkRangeKeepsEightByteRealCell(double value)
+        public async Task NumberRkWouldChangeKeepsEightByteRealCell(double value)
         {
             (int Id, int PayloadLength)[] cells;
             double readBack;
@@ -432,13 +450,13 @@ namespace ExcelReader.Tests.Writer.Xlsb
         }
 
         [Fact]
-        public async Task NegativeZeroKeepsRealCellSoItsSignSurvives()
+        public async Task NegativeZeroKeepsItsSignInAnRkCell()
         {
             (int Id, int PayloadLength)[] cells;
             double readBack;
             (cells, readBack) = await NumericCellAsync(-0.0);
 
-            Assert.Equal([(Brt.CellReal, CellHeaderLength + 8)], cells);
+            Assert.Equal([(Brt.CellRk, CellHeaderLength + 4)], cells);
             Assert.True(double.IsNegative(readBack));
         }
 

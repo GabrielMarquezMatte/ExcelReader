@@ -50,6 +50,8 @@ namespace ExcelReader.Fuzz
             ("csv-parallel", ["csv", "csv-ragged", "csv-parallel-0", "csv-parallel-1", "csv-parallel-2",
                               "csv-parallel-3", "csv-parallel-4", "csv-parallel-5", "csv-parallel-6"]),
             ("inflate", ["inflate-stored", "inflate-fixed", "inflate-dynamic"]),
+            ("deflate", ["deflate-text", "deflate-zeros", "deflate-noise"]),
+            ("deflate-segments", ["deflate-segments-text", "deflate-segments-zeros", "deflate-segments-noise"]),
         ];
 
         internal static async Task GenerateAsync(string rootDirectory)
@@ -101,6 +103,10 @@ namespace ExcelReader.Fuzz
             {
                 seeds[name] = bytes;
             }
+            foreach ((string name, byte[] bytes) in DeflateSeeds())
+            {
+                seeds[name] = bytes;
+            }
             return seeds;
         }
 
@@ -111,6 +117,23 @@ namespace ExcelReader.Fuzz
             yield return ("inflate-stored", Deflate(sheet, CompressionLevel.NoCompression));
             yield return ("inflate-fixed", Deflate(Utf8("fixed block"), CompressionLevel.Optimal));
             yield return ("inflate-dynamic", Deflate(sheet, CompressionLevel.Optimal));
+        }
+
+        private static IEnumerable<(string Name, byte[] Bytes)> DeflateSeeds()
+        {
+            byte[] sheet = Utf8(string.Concat(Enumerable.Range(1, 400).Select(static row => string.Create(
+                CultureInfo.InvariantCulture, $"<row r=\"{row}\"><c r=\"A{row}\"><v>{row * 1.5}</v></c></row>"))));
+            byte[] noise = new byte[5000];
+            for (int i = 0; i < noise.Length; i++)
+            {
+                noise[i] = (byte)((uint)(i * 2654435761u) >> 24);
+            }
+            yield return ("deflate-text", [16, .. sheet]);
+            yield return ("deflate-zeros", [255, .. new byte[70_000]]);
+            yield return ("deflate-noise", [1, .. noise]);
+            yield return ("deflate-segments-text", [1, .. sheet]);
+            yield return ("deflate-segments-zeros", [2, .. new byte[70_000]]);
+            yield return ("deflate-segments-noise", [0, .. noise]);
         }
 
         private static byte[] Deflate(byte[] raw, CompressionLevel level)

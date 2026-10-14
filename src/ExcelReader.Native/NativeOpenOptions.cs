@@ -74,6 +74,8 @@ namespace ExcelReader.Native
         public long SourceCacheBytes;
         public long MaxBufferedBytes;
         public int SourceBlockSize;
+        // Occupies what was tail padding, so the struct's size did not change when it was added.
+        public int VerifyZipChecksums;
 
         internal const int V6Size = 88;
 
@@ -114,6 +116,7 @@ namespace ExcelReader.Native
         internal int? MaxZipEntries { get; init; }
         internal bool? PrefetchDecompression { get; init; }
         internal bool? InternStrings { get; init; }
+        internal bool? VerifyZipChecksums { get; init; }
 
         internal string? Password { get; init; }
 
@@ -174,6 +177,10 @@ namespace ExcelReader.Native
             {
                 options = options with { InternStrings = internStrings };
             }
+            if (VerifyZipChecksums is bool verifyChecksums)
+            {
+                options = options with { VerifyZipChecksums = verifyChecksums };
+            }
             if (Password is not null)
             {
                 options = options with { Password = Password };
@@ -209,7 +216,8 @@ namespace ExcelReader.Native
                 || !NativeOptionDecode.TryState(raw.CsvDetectBom, OptionsName, "csv_detect_bom", out bool? detectBom, out error)
                 || !NativeOptionDecode.TryState(raw.CsvInternStrings, OptionsName, "csv_intern_strings", out bool? csvInternStrings, out error)
                 || !NativeOptionDecode.TryState(raw.PrefetchDecompression, OptionsName, "prefetch_decompression", out bool? prefetch, out error)
-                || !NativeOptionDecode.TryState(raw.InternStrings, OptionsName, "intern_strings", out bool? internStrings, out error))
+                || !NativeOptionDecode.TryState(raw.InternStrings, OptionsName, "intern_strings", out bool? internStrings, out error)
+                || !NativeOptionDecode.TryState(raw.VerifyZipChecksums, OptionsName, "verify_zip_checksums", out bool? verifyChecksums, out error))
             {
                 return false;
             }
@@ -247,6 +255,7 @@ namespace ExcelReader.Native
                 MaxZipEntries = maxZipEntries,
                 PrefetchDecompression = prefetch,
                 InternStrings = internStrings,
+                VerifyZipChecksums = verifyChecksums,
                 Password = password,
                 SourceBlockSize = raw.SourceBlockSize == 0 ? null : raw.SourceBlockSize,
                 SourceCacheBytes = sourceCacheBytes,

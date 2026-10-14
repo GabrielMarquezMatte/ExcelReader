@@ -2,11 +2,15 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal static class SheetColumnValidation
     {
+        // Excel's widest column; BIFF8 stores the width in 16 bits as 256ths of a character.
+        private const double MaxColumnWidth = 255;
+
         internal static void SetColumnStyle(
-            ref Dictionary<int, int>? columnStyles, int columnIndex, int styleId, int styleCount,
+            ref Dictionary<int, int>? columnStyles, int columnIndex, int styleId, int styleCount, int maxColumns,
             WriterState state, object writer)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(columnIndex, maxColumns);
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, styleCount);
             RequireNotStarted(state, writer);
@@ -15,11 +19,13 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         internal static void SetColumnWidth(
-            ref Dictionary<int, double>? columnWidths, int columnIndex, double width,
+            ref Dictionary<int, double>? columnWidths, int columnIndex, double width, int maxColumns,
             WriterState state, object writer)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(columnIndex, maxColumns);
             ArgumentOutOfRangeException.ThrowIfNegative(width);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(width, MaxColumnWidth);
             RequireNotStarted(state, writer);
             columnWidths ??= [];
             columnWidths[columnIndex] = width;
