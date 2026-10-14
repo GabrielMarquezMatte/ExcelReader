@@ -23,7 +23,6 @@ from excelreader.arrow_stream import ArrowStream
 from excelreader.types import (
     Cell,
     CellType,
-    ColumnarSheet,
     ColumnSpec,
     ColumnType,
     ExcelReaderError,
@@ -44,7 +43,6 @@ _FORMATS = _native.FORMATS
 
 _CELL_HEADER = struct.Struct("<iii")
 _INITIAL_ROW_BUFFER = 64 * 1024
-_INITIAL_ALL_ROWS_BUFFER = 1024 * 1024
 
 
 def _last_error() -> str:
@@ -109,24 +107,21 @@ class Workbook:
             raise ExcelReaderError("workbook is closed")
         return self._handle
 
-    @property
-    def sheet_count(self) -> int:
+    def _sheet_count(self) -> int:
         count = ctypes.c_int32()
         _check(self._lib.xl_sheet_count(self._require_handle(), ctypes.byref(count)))
         return count.value
 
-    def sheet_name_at(self, index: int) -> str:
+    def _sheet_name_at(self, index: int) -> str:
         raw, length = _fill_buffer(self._lib.xl_sheet_name_at, self._require_handle(), index, initial=256)
         return raw[:length].decode("utf-8")
 
     @property
-    def sheet_names(self) -> list[str]:
-        """Every sheet's name, in order."""
-        return [self.sheet_name_at(index) for index in range(self.sheet_count)]
-
-    @property
     def sheets(self) -> Sheets:
-        """The workbook's sheets: `len()`, iteration, and lookup by index, slice or name."""
+        """The workbook's sheets: `len()`, iteration, and lookup by index, slice or name.
+
+        `[sheet.name for sheet in workbook.sheets]` lists every sheet's name.
+        """
         return Sheets(self)
 
     @property
@@ -136,7 +131,7 @@ class Workbook:
         return flag.value != 0
 
     def close(self) -> None:
-        """Closes the workbook. A generator that has already started, and any record-batch reader already opened, keep working."""
+        """Closes the workbook. A generator that has already started, and any Arrow stream already opened, keep working."""
         with self._close_lock:
             handle, self._handle = self._handle, None
         if handle is None:
@@ -163,7 +158,7 @@ class Sheets(Sequence["Sheet"]):
         self._workbook = workbook
 
     def __len__(self) -> int:
-        return self._workbook.sheet_count
+        return self._workbook._sheet_count()
 
     @overload
     def __getitem__(self, key: SupportsIndex | str) -> Sheet: ...
@@ -219,7 +214,7 @@ class Sheet:
 
     @property
     def name(self) -> str:
-        return self._workbook.sheet_name_at(self._index)
+        return self._workbook._sheet_name_at(self._index)
 
     @property
     def visibility(self) -> SheetVisibility:
@@ -257,41 +252,11 @@ class Sheet:
         finally:
             self._close_rows(cursor)
 
-    def read_all(self) -> list[list[Cell]]:
-        """Materializes every row of this sheet in one native call.
-
-        Builds one `Cell`/`str` object per cell — for a large sheet, `read_all_columnar()` is
-        substantially faster because it never does that.
-        """
-        cursor = self._open_rows()
-        try:
-            rows = _native.NativeRows()
-            _check(self._lib.xl_rows_read_all_decoded(cursor, ctypes.byref(rows)))
-            try:
-                return [_decode_native_row(rows.rows[index]) for index in range(rows.row_count)]
-            finally:
-                self._lib.xl_free_rows(ctypes.byref(rows))
-        finally:
-            self._close_rows(cursor)
-
-    def read_all_columnar(self) -> ColumnarSheet:
-        """Materializes every row of this sheet as parallel flat arrays.
-
-        The fast path for large sheets: unlike `read_all()`, this never constructs a `Cell`/`str`
-        per cell. Use `decode_cell()` to materialize one cell on demand.
-        """
-        cursor = self._open_rows()
-        try:
-            raw, written = _fill_buffer(self._lib.xl_rows_read_all_blob, cursor, initial=_INITIAL_ALL_ROWS_BUFFER)
-        finally:
-            self._close_rows(cursor)
-        return _decode_columnar(raw, written)
-
     def parse_typed(self, schema: Sequence[ColumnSpec], header_row: int = 1, parallelism: int = 1) -> TypedTable:
         """Reads this whole sheet into typed columns, converting values on the native side.
 
-        By far the fastest path in this library: unlike every other read method, no cell is ever
-        formatted to text, so a large sheet costs a fraction of `read_all_columnar()`.
+        By far the fastest path in this library: unlike `rows()`, no cell is ever formatted to text
+        or turned into a Python object.
 
         `header_row` is a 1-based row number whose values name the columns (that row is skipped and
         never yielded as data); 0 means the sheet has no header, in which case every spec must
@@ -321,7 +286,7 @@ class Sheet:
         the workbook is closed.
 
         Being a generator, it opens nothing until the first iteration, so a bad `batch_size` is not
-        reported until then; `to_record_batch_reader()` raises immediately instead.
+        reported until then; `to_arrow_stream()` raises immediately instead.
         """
         handle = self._workbook._require_handle()
         specs = _build_specs(schema)
@@ -346,57 +311,23 @@ class Sheet:
             self._lib.xl_typed_reader_close(reader)
 
     def to_arrow(self, schema: Sequence[ColumnSpec], header_row: int = 1, parallelism: int = 1) -> object:
-        """The same read as `parse_typed()`, handed to pyarrow as one `StructArray`, zero-copy.
+        """The same read as `parse_typed()`, handed to pyarrow as one column-named `RecordBatch`, zero-copy.
 
-        Requires pyarrow. The returned array owns the native buffers through the Arrow C Data
-        Interface's release callback, so it stays valid after this workbook is closed. Wrap it with
-        `pyarrow.RecordBatch.from_struct_array()` for a column-named batch. `parallelism` works as in
-        `parse_typed()`.
+        Requires pyarrow. The batch owns the native buffers through the Arrow C Data Interface's
+        release callback, so it stays valid after this workbook is closed. `parallelism` works as in
+        `parse_typed()`. To stream instead, see `to_arrow_stream()`.
         """
-        try:
-            import pyarrow
-        except ImportError:
-            raise ImportError(
-                "to_arrow() requires pyarrow — install it with `pip install pyarrow`, or use "
-                "parse_typed(), which returns the same data with no third-party dependency."
-            ) from None
-
+        pyarrow = _import_pyarrow("to_arrow()", "parse_typed()")
         handle = self._workbook._require_handle()
         specs = _build_specs(schema)
         array = _native.ArrowArray()
         arrow_schema = _native.ArrowSchema()
         _check(self._lib.xl_parse_arrow(handle, self._index, specs, len(specs), header_row, parallelism, ctypes.byref(array), ctypes.byref(arrow_schema)))
-        return pyarrow.Array._import_from_c(ctypes.addressof(array), ctypes.addressof(arrow_schema))
+        return pyarrow.RecordBatch._import_from_c(ctypes.addressof(array), ctypes.addressof(arrow_schema))
 
-    def to_record_batch(self, schema: Sequence[ColumnSpec], header_row: int = 1, parallelism: int = 1) -> object:
-        """Same read as `to_arrow()`, wrapped as a column-named `pyarrow.RecordBatch`.
-
-        Requires pyarrow — see `to_arrow()`.
-        """
-        array = self.to_arrow(schema, header_row=header_row, parallelism=parallelism)
-        import pyarrow
-
-        return pyarrow.RecordBatch.from_struct_array(array)
-
-    def to_record_batch_reader(
-        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
-    ) -> object:
-        """The same read as `to_arrow()`, as a streaming `pyarrow.RecordBatchReader`.
-
-        Peak memory is one batch rather than one sheet. Requires pyarrow.
-
-        pyarrow owns the stream once it is imported — exhausting or dropping the reader is what
-        closes the underlying read.
-        """
-        try:
-            import pyarrow
-        except ImportError:
-            raise ImportError(
-                "to_record_batch_reader() requires pyarrow — install it with `pip install "
-                "pyarrow`, or use iter_parse_typed(), which streams the same data with no "
-                "third-party dependency."
-            ) from None
-
+    def _open_arrow_stream(
+        self, schema: Sequence[ColumnSpec], header_row: int, batch_size: int
+    ) -> _native.ArrowArrayStream:
         handle = self._workbook._require_handle()
         specs = _build_specs(schema)
         stream = _native.ArrowArrayStream()
@@ -405,75 +336,37 @@ class Sheet:
                 handle, self._index, specs, len(specs), header_row, batch_size, ctypes.byref(stream)
             )
         )
-        return pyarrow.RecordBatchReader._import_from_c(ctypes.addressof(stream))
+        return stream
 
     def to_arrow_stream(
         self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
     ) -> ArrowStream:
-        """The same read as `to_record_batch_reader()`, as a single-use Arrow PyCapsule stream.
+        """The same read as `to_arrow()`, streamed `batch_size` rows at a time as a single-use Arrow
+        PyCapsule stream. Peak memory is one batch rather than one sheet.
 
-        Needs no third-party package to create; pass it to any consumer of `__arrow_c_stream__`
-        (`polars.DataFrame(stream)`, `pyarrow.RecordBatchReader.from_stream(stream)`, ...).
+        Needs no third-party package to create; pass it to any consumer of `__arrow_c_stream__`:
+        `polars.DataFrame(stream)`, or `pyarrow.RecordBatchReader.from_stream(stream)` for a
+        `RecordBatchReader`. The stream stays valid after this workbook is closed.
         """
-        handle = self._workbook._require_handle()
-        specs = _build_specs(schema)
-        stream = _native.ArrowArrayStream()
-        _check(
-            self._lib.xl_parse_arrow_stream(
-                handle, self._index, specs, len(specs), header_row, batch_size, ctypes.byref(stream)
-            )
-        )
-        return ArrowStream(stream)
-
-    def iter_pandas(
-        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
-    ) -> Iterator[object]:
-        """One `pandas.DataFrame` per batch, streamed. Requires pyarrow and pandas.
-
-        A generator, so a missing dependency is reported at the first iteration, not at the call.
-        """
-        try:
-            import pyarrow  # noqa: F401
-        except ImportError:
-            raise ImportError(
-                "iter_pandas() requires pyarrow — install it with `pip install pyarrow`, or use "
-                "iter_parse_typed(), which streams the same data with no third-party dependency."
-            ) from None
-
-        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        for batch in reader:
-            yield batch.to_pandas(self_destruct=True, split_blocks=True)
-
-    def iter_polars(
-        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
-    ) -> Iterator[object]:
-        """One `polars.DataFrame` per batch, streamed. Requires pyarrow and polars.
-
-        A generator, so a missing dependency is reported at the first iteration, not at the call.
-        """
-        try:
-            import polars
-        except ImportError:
-            raise ImportError(
-                "iter_polars() requires polars — install it with `pip install polars`, or use "
-                "to_record_batch_reader(), which streams the same data with no polars dependency."
-            ) from None
-
-        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        for batch in reader:
-            yield polars.from_arrow(batch, rechunk=False)
+        return ArrowStream(self._open_arrow_stream(schema, header_row, batch_size))
 
     def to_pandas(
-        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000, parallelism: int = 1
     ) -> object:
-        """Same read as `to_arrow()`, materialized as a `pandas.DataFrame`.
+        """Same read as `to_arrow()`, materialized as a `pandas.DataFrame`. Requires pyarrow and pandas.
 
-        `read_all()` concatenates every batch, so this does NOT bound peak memory the way
-        `iter_pandas()` does. What it buys is the conversion: `self_destruct` frees each Arrow
-        chunk as pandas takes it, so the sheet is never held twice. Requires pyarrow and pandas.
+        Streams `batch_size` rows at a time, then concatenates them, so peak memory is not bounded
+        by the batch size; `self_destruct` frees each Arrow chunk as pandas takes it, so the sheet
+        is never held twice. With `parallelism` other than 1 the sheet is parsed whole, as in
+        `parse_typed()`, instead of streamed.
         """
-        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        return reader.read_all().to_pandas(self_destruct=True, split_blocks=True)
+        pyarrow = _import_pyarrow("to_pandas()", "parse_typed()")
+        if parallelism != 1:
+            data = self.to_arrow(schema, header_row=header_row, parallelism=parallelism)
+        else:
+            stream = self._open_arrow_stream(schema, header_row, batch_size)
+            data = pyarrow.RecordBatchReader._import_from_c(ctypes.addressof(stream)).read_all()
+        return data.to_pandas(self_destruct=True, split_blocks=True)
 
     def to_polars(
         self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000, parallelism: int = 1
@@ -494,9 +387,8 @@ class Sheet:
             ) from None
 
         if parallelism != 1:
-            return polars.from_arrow(self.to_record_batch(schema, header_row=header_row, parallelism=parallelism))
-        stream = self.to_arrow_stream(schema, header_row=header_row, batch_size=batch_size)
-        return polars.DataFrame(stream)
+            return polars.from_arrow(self.to_arrow(schema, header_row=header_row, parallelism=parallelism))
+        return polars.DataFrame(self.to_arrow_stream(schema, header_row=header_row, batch_size=batch_size))
 
     def infer_schema(self, header_row: int = 1, sample_size: int = 100, parse_text: bool = False) -> list[ColumnSpec]:
         """Guesses a `parse_typed()`/`to_arrow()` schema by sampling this sheet's cells.
@@ -541,58 +433,15 @@ def _decode_row(blob: bytes, length: int) -> list[Cell]:
     return cells
 
 
-def _decode_native_row(row: _native.NativeRow) -> list[Cell]:
-    cells: list[Cell] = []
-    for index in range(row.cell_count):
-        cell = row.cells[index]
-        value = ctypes.string_at(cell.value, cell.value_len).decode("utf-8")
-        cells.append(Cell(column=cell.column, type=CellType(cell.type), value=value))
-    return cells
-
-
-def _decode_columnar(blob: bytes, length: int) -> ColumnarSheet:
-    # expensive. (ponytail: if this loop measurably dominates for very wide/tall sheets, revisit with
-    row_offsets = array("i", [0])
-    columns = array("i")
-    types = array("i")
-    value_offsets = array("i", [0])
-    values = bytearray()
-
-    row_count = struct.unpack_from("<i", blob, 0)[0]
-    offset = 4
-    cell_index = 0
-    for _ in range(row_count):
-        (row_length,) = struct.unpack_from("<i", blob, offset)
-        offset += 4
-        row_end = offset + row_length
-
-        (cell_count,) = struct.unpack_from("<i", blob, offset)
-        cell_offset = offset + 4
-        for _ in range(cell_count):
-            column, cell_type, value_length = _CELL_HEADER.unpack_from(blob, cell_offset)
-            cell_offset += _CELL_HEADER.size
-            values += blob[cell_offset : cell_offset + value_length]
-            cell_offset += value_length
-            columns.append(column)
-            types.append(cell_type)
-            value_offsets.append(len(values))
-            cell_index += 1
-
-        if cell_offset != row_end:
-            raise ExcelReaderError(f"row blob is malformed: consumed {cell_offset - offset} of {row_length} bytes")
-        row_offsets.append(cell_index)
-        offset = row_end
-
-    if offset != length:
-        raise ExcelReaderError(f"all-rows blob is malformed: consumed {offset} of {length} bytes")
-
-    return ColumnarSheet(
-        row_offsets=_to_columnar_array(row_offsets),
-        columns=_to_columnar_array(columns),
-        types=_to_columnar_array(types),
-        value_offsets=_to_columnar_array(value_offsets),
-        values=bytes(values),
-    )
+def _import_pyarrow(method: str, alternative: str) -> object:
+    try:
+        import pyarrow
+    except ImportError:
+        raise ImportError(
+            f"{method} requires pyarrow — install it with `pip install pyarrow`, or use "
+            f"{alternative}, which returns the same data with no third-party dependency."
+        ) from None
+    return pyarrow
 
 
 def _decode_inferred_schema(schema: _native.NativeInferredSchema) -> list[ColumnSpec]:
@@ -673,19 +522,6 @@ def _decode_validity(column: _native.NativeColumn, row_count: int) -> bytes | No
     if not column.validity:
         return None
     return ctypes.string_at(column.validity, (row_count + 7) // 8)
-
-
-def _to_columnar_array(values: array) -> object:
-    if _numpy is None:
-        return values
-    return _numpy.frombuffer(values, dtype=_numpy.int32)
-
-
-def decode_cell(sheet: ColumnarSheet, index: int) -> Cell:
-    """Materializes the `Cell` at flat cell index `index` in `sheet`, decoding only that one value."""
-    start, end = int(sheet.value_offsets[index]), int(sheet.value_offsets[index + 1])
-    value = bytes(sheet.values[start:end]).decode("utf-8")
-    return Cell(column=int(sheet.columns[index]), type=CellType(int(sheet.types[index])), value=value)
 
 
 def _raw_options(

@@ -16,12 +16,10 @@ from excelreader import (
     OpenOptions,
     PasswordIncorrectError,
     PasswordRequiredError,
-    decode_cell,
     open_workbook,
 )
 from excelreader import _native
 from excelreader import arrow_stream as arrow_stream_module
-from excelreader import reader as reader_module
 
 ENCRYPTED = Path(__file__).resolve().parents[2] / "tests" / "ExcelReader.Tests" / "data" / "encrypted"
 
@@ -85,26 +83,18 @@ def test_reads_from_bytes(xlsx_path):
 
 def test_exposes_sheet_metadata(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        assert workbook.sheet_count >= 1
+        assert len(workbook.sheets) >= 1
         assert workbook.sheets[0].name
         assert workbook.is_date1904 is False
 
 
-def test_sheet_names_matches_sheet_count_and_the_sheets(xlsx_path):
-    with open_workbook(xlsx_path) as workbook:
-        names = workbook.sheet_names
-        assert len(names) == workbook.sheet_count == len(workbook.sheets)
-        assert names[0] == workbook.sheets[0].name
-        assert [(sheet.index, sheet.name) for sheet in workbook.sheets] == list(enumerate(names))
-
-
-def test_sheet_names_does_not_disturb_row_enumeration(xlsx_path):
+def test_listing_sheet_names_does_not_disturb_row_enumeration(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
         rows = workbook.sheets[0].rows()
         first = next(rows)
         second = next(rows)
 
-        assert workbook.sheet_names
+        assert [sheet.name for sheet in workbook.sheets]
 
         third = next(rows)
 
@@ -122,7 +112,7 @@ def test_use_after_close_raises(xlsx_path):
     workbook.close()
 
     with pytest.raises(ExcelReaderError):
-        workbook.sheet_count  # noqa: B018
+        len(workbook.sheets)
 
 
 def test_close_is_idempotent(xlsx_path):
@@ -164,78 +154,12 @@ def test_as_date_returns_none_for_non_date_cells(xlsx_path):
     assert first_data_row[0].as_date() is None
 
 
-def test_read_all_matches_row_by_row_iteration(xlsx_path):
-    with open_workbook(xlsx_path) as workbook:
-        all_rows = list(workbook.sheets[0].rows())
-
-    with open_workbook(xlsx_path) as workbook:
-        bulk_rows = workbook.sheets[0].read_all()
-
-    assert bulk_rows == all_rows
-
-
-def test_read_all_reads_the_whole_sheet_every_time(xlsx_path):
+def test_rows_reads_the_whole_sheet_every_time(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
         sheet = workbook.sheets[0]
-        first = sheet.read_all()
+        first = list(sheet.rows())
         assert first
-        assert sheet.read_all() == first
-
-
-def _columnar_to_rows(sheet) -> list[list[Cell]]:
-    rows = []
-    for row_index in range(len(sheet.row_offsets) - 1):
-        start, end = sheet.row_offsets[row_index], sheet.row_offsets[row_index + 1]
-        rows.append([decode_cell(sheet, cell_index) for cell_index in range(start, end)])
-    return rows
-
-
-@pytest.mark.parametrize("fixture_name", ["xlsx_path", "xlsb_path"])
-def test_read_all_columnar_matches_read_all(fixture_name, request):
-    path = request.getfixturevalue(fixture_name)
-
-    with open_workbook(path) as workbook:
-        expected = workbook.sheets[0].read_all()
-
-    with open_workbook(path) as workbook:
-        sheet = workbook.sheets[0].read_all_columnar()
-
-    assert _columnar_to_rows(sheet) == expected
-
-
-def test_read_all_columnar_without_numpy(xlsx_path, monkeypatch):
-    monkeypatch.setattr(reader_module, "_numpy", None)
-
-    with open_workbook(xlsx_path) as workbook:
-        sheet = workbook.sheets[0].read_all_columnar()
-
-    from array import array
-
-    assert isinstance(sheet.columns, array)
-    with open_workbook(xlsx_path) as workbook:
-        assert _columnar_to_rows(sheet) == workbook.sheets[0].read_all()
-
-
-def test_read_all_columnar_grows_the_buffer(xlsx_path, monkeypatch):
-    monkeypatch.setattr(reader_module, "_INITIAL_ALL_ROWS_BUFFER", 4)
-
-    with open_workbook(xlsx_path) as workbook:
-        grown = workbook.sheets[0].read_all_columnar()
-
-    with open_workbook(xlsx_path) as workbook:
-        expected = workbook.sheets[0].read_all()
-
-    assert _columnar_to_rows(grown) == expected
-
-
-def test_read_all_columnar_reads_the_whole_sheet_every_time(xlsx_path):
-    with open_workbook(xlsx_path) as workbook:
-        sheet = workbook.sheets[0]
-        first = sheet.read_all_columnar()
-        assert len(first.columns) > 0
-        assert _columnar_to_rows(sheet.read_all_columnar()) == _columnar_to_rows(first)
-
-
+        assert list(sheet.rows()) == first
 
 
 @pytest.fixture
@@ -343,15 +267,14 @@ def test_parse_typed_reads_the_whole_sheet_regardless_of_the_row_cursor(typed_cs
     assert len(rest) == 2
 
 
-def test_to_arrow_returns_a_struct_array_matching_parse_typed(typed_csv):
+def test_to_arrow_returns_a_record_batch_matching_parse_typed(typed_csv):
     pa = pytest.importorskip("pyarrow")
 
     with open_workbook(typed_csv) as workbook:
-        array = workbook.sheets[0].to_arrow(_TYPED_SCHEMA)
+        batch = workbook.sheets[0].to_arrow(_TYPED_SCHEMA)
 
-    assert isinstance(array, pa.StructArray)
-    assert len(array) == 2
-    batch = pa.RecordBatch.from_struct_array(array)
+    assert isinstance(batch, pa.RecordBatch)
+    assert batch.num_rows == 2
     assert batch.schema.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
     assert batch.column("name").to_pylist() == ["widget", "gadget"]
     assert batch.column("qty").to_pylist() == [3, 7]
@@ -364,10 +287,10 @@ def test_to_arrow_survives_the_workbook_being_closed(typed_csv):
     pytest.importorskip("pyarrow")
 
     with open_workbook(typed_csv) as workbook:
-        array = workbook.sheets[0].to_arrow([ColumnSpec(ColumnType.I64, name="qty")])
+        batch = workbook.sheets[0].to_arrow([ColumnSpec(ColumnType.I64, name="qty")])
 
     gc.collect()
-    assert array.field(0).to_pylist() == [3, 7]
+    assert batch.column(0).to_pylist() == [3, 7]
 
 
 def test_to_arrow_raises_for_an_unknown_column_name(typed_csv):
@@ -375,17 +298,6 @@ def test_to_arrow_raises_for_an_unknown_column_name(typed_csv):
 
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
         workbook.sheets[0].to_arrow([ColumnSpec(ColumnType.I64, name="nope")])
-
-
-def test_to_record_batch_returns_a_column_named_batch_matching_parse_typed(typed_csv):
-    pa = pytest.importorskip("pyarrow")
-
-    with open_workbook(typed_csv) as workbook:
-        batch = workbook.sheets[0].to_record_batch(_TYPED_SCHEMA)
-
-    assert isinstance(batch, pa.RecordBatch)
-    assert batch.schema.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
-    assert batch.column("qty").to_pylist() == [3, 7]
 
 
 def test_to_pandas_returns_a_dataframe_matching_parse_typed(typed_csv):
@@ -455,15 +367,13 @@ def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
     with open_workbook(path, format="csv") as workbook:
         assert len(list(workbook.sheets[0].rows())[1][0].value) == 200_000
 
-    with pytest.raises(ExcelReaderError), open_workbook(path, format="csv", options=OpenOptions(csv_max_cell_bytes=100_000)) as workbook:
+    with pytest.raises(ExcelReaderError), open_workbook(path, format="csv", options=OpenOptions(max_cell_bytes=100_000)) as workbook:
             list(workbook.sheets[0].rows())
-
-
 
 
 def test_opens_encrypted_workbook_with_password():
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as book:
-        assert book.sheet_count > 0
+        assert len(book.sheets) > 0
 
 
 def test_reports_password_required_without_password():
@@ -478,9 +388,9 @@ def test_reports_password_incorrect_with_wrong_password():
 
 def test_encrypted_rows_match_plaintext():
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as enc:
-        encrypted_rows = enc.sheets[0].read_all()
+        encrypted_rows = list(enc.sheets[0].rows())
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.plain.xlsx") as plain:
-        assert plain.sheets[0].read_all() == encrypted_rows
+        assert list(plain.sheets[0].rows()) == encrypted_rows
 
 
 def test_password_is_not_in_repr():
@@ -575,26 +485,19 @@ def test_abandoning_the_generator_closes_the_reader(batched_csv, monkeypatch):
 
 
 
-def test_to_record_batch_reader_matches_to_record_batch(batched_csv):
-    pytest.importorskip("pyarrow")
+def test_arrow_stream_read_by_pyarrow_matches_to_arrow(batched_csv):
+    pa = pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
-        expected = workbook.sheets[0].to_record_batch(_BATCH_SCHEMA)
+        expected = workbook.sheets[0].to_arrow(_BATCH_SCHEMA)
 
     with open_workbook(batched_csv) as workbook:
-        reader = workbook.sheets[0].to_record_batch_reader(_BATCH_SCHEMA, batch_size=8)
+        reader = pa.RecordBatchReader.from_stream(workbook.sheets[0].to_arrow_stream(_BATCH_SCHEMA, batch_size=8))
         assert reader.schema == expected.schema
         batches = list(reader)
 
-    assert sum(batch.num_rows for batch in batches) == expected.num_rows
+    assert pa.Table.from_batches(batches).equals(pa.Table.from_batches([expected]))
     assert len(batches) == 7, "50 rows at batch size 8 is 7 batches"
     assert all(batch.num_rows <= 8 for batch in batches)
-
-
-def test_to_record_batch_reader_rejects_a_negative_batch_size(batched_csv):
-    pytest.importorskip("pyarrow")
-    with open_workbook(batched_csv) as workbook:
-        with pytest.raises(ExcelReaderError):
-            workbook.sheets[0].to_record_batch_reader(_BATCH_SCHEMA, batch_size=-1)
 
 
 def test_arrow_stream_builds_a_polars_dataframe_in_batches(batched_csv):
@@ -705,44 +608,26 @@ def test_arrow_stream_rejects_a_negative_batch_size(batched_csv):
 
 
 def test_a_stream_and_a_reader_on_one_sheet_each_read_every_row(batched_csv):
-    pytest.importorskip("pyarrow")
+    pa = pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
         sheet = workbook.sheets[0]
         reader = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         next(reader)
-        stream = sheet.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+        stream = pa.RecordBatchReader.from_stream(sheet.to_arrow_stream(_BATCH_SCHEMA, batch_size=4))
 
         assert sum(batch.row_count for batch in reader) == 46
         assert sum(batch.num_rows for batch in stream) == 50
 
 
 def test_a_whole_sheet_read_leaves_an_open_stream_alone(batched_csv):
-    pytest.importorskip("pyarrow")
+    pa = pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
         sheet = workbook.sheets[0]
-        reader = sheet.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+        reader = pa.RecordBatchReader.from_stream(sheet.to_arrow_stream(_BATCH_SCHEMA, batch_size=4))
         reader.read_next_batch()
         assert sheet.parse_typed(_BATCH_SCHEMA).row_count == 50
 
         assert sum(batch.num_rows for batch in reader) == 46
-
-
-def test_iter_pandas_yields_one_frame_per_batch(batched_csv):
-    pytest.importorskip("pyarrow")
-    pytest.importorskip("pandas")
-    with open_workbook(batched_csv) as workbook:
-        frames = list(workbook.sheets[0].iter_pandas(_BATCH_SCHEMA, batch_size=8))
-    assert len(frames) == 7
-    assert sum(len(frame) for frame in frames) == 50
-
-
-def test_iter_polars_yields_one_frame_per_batch(batched_csv):
-    pytest.importorskip("pyarrow")
-    pytest.importorskip("polars")
-    with open_workbook(batched_csv) as workbook:
-        frames = list(workbook.sheets[0].iter_polars(_BATCH_SCHEMA, batch_size=8))
-    assert len(frames) == 7
-    assert sum(frame.height for frame in frames) == 50
 
 
 def test_to_polars_stays_chunked(batched_csv):
@@ -798,6 +683,16 @@ def test_to_polars_in_parallel_matches_the_streamed_frame():
     with open_workbook(_FIXTURE_CSV) as workbook:
         streamed = workbook.sheets[0].to_polars(_FIXTURE_SCHEMA)
         parallel = workbook.sheets[0].to_polars(_FIXTURE_SCHEMA, parallelism=0)
+
+    assert parallel.equals(streamed)
+
+
+def test_to_pandas_in_parallel_matches_the_streamed_frame():
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    with open_workbook(_FIXTURE_CSV) as workbook:
+        streamed = workbook.sheets[0].to_pandas(_FIXTURE_SCHEMA)
+        parallel = workbook.sheets[0].to_pandas(_FIXTURE_SCHEMA, parallelism=0)
 
     assert parallel.equals(streamed)
 

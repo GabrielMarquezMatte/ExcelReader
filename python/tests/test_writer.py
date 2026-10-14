@@ -9,9 +9,6 @@ from excelreader import (
     WriteOptions,
     encrypt_package,
     open_workbook,
-    write_arrow,
-    write_pandas,
-    write_polars,
     write_workbook,
 )
 
@@ -71,7 +68,7 @@ def test_write_workbook_applies_the_sheet_name(source_csv, tmp_path):
     write_workbook(out, table, _TYPES, options=WriteOptions(sheet_name="Vendas"))
 
     with open_workbook(out) as workbook:
-        assert workbook.sheet_names == ["Vendas"]
+        assert [sheet.name for sheet in workbook.sheets] == ["Vendas"]
 
 
 def test_write_workbook_rejects_an_unknown_extension(source_csv, tmp_path):
@@ -90,12 +87,37 @@ def test_write_workbook_reports_a_native_rejection(source_csv, tmp_path):
         write_workbook(tmp_path / "out.xlsx", table, _TYPES, options=WriteOptions(sheet_name="has/slash"))
 
 
-def test_write_arrow_round_trips(tmp_path):
+def test_write_workbook_rejects_a_typed_table_without_types(source_csv, tmp_path):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse_typed(_SCHEMA)
+
+    with pytest.raises(TypeError, match="types"):
+        write_workbook(tmp_path / "out.xlsx", table)
+
+
+def test_write_workbook_rejects_types_for_arrow_data(tmp_path):
     pa = pytest.importorskip("pyarrow")
 
-    batch = pa.RecordBatch.from_pydict({"name": ["widget", "gadget"], "qty": [3, 7]})
+    batch = pa.RecordBatch.from_pydict({"name": ["widget"], "qty": [3]})
+    with pytest.raises(TypeError, match="types"):
+        write_workbook(tmp_path / "out.xlsx", batch, _TYPES)
+
+
+def test_write_workbook_rejects_data_it_cannot_write(tmp_path):
+    pytest.importorskip("pyarrow")
+
+    with pytest.raises(TypeError, match="data"):
+        write_workbook(tmp_path / "out.xlsx", [["widget", 3]])
+
+
+@pytest.mark.parametrize("kind", ["record_batch", "table"])
+def test_write_workbook_writes_arrow_data(tmp_path, kind):
+    pa = pytest.importorskip("pyarrow")
+
+    data = {"name": ["widget", "gadget"], "qty": [3, 7]}
+    frame = pa.RecordBatch.from_pydict(data) if kind == "record_batch" else pa.table(data)
     out = tmp_path / "arrow.xlsx"
-    write_arrow(out, batch)
+    write_workbook(out, frame)
 
     with open_workbook(out) as workbook:
         result = workbook.sheets[0].parse_typed(_SCHEMA)
@@ -104,12 +126,28 @@ def test_write_arrow_round_trips(tmp_path):
     assert list(result.columns[1]) == [3, 7]
 
 
-def test_write_pandas_round_trips(tmp_path):
+def test_write_workbook_leaves_a_pandas_index_out(tmp_path):
     pytest.importorskip("pyarrow")
     pd = pytest.importorskip("pandas")
 
     out = tmp_path / "pandas.xlsx"
-    write_pandas(out, pd.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
+    write_workbook(out, pd.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}, index=[10, 20]))
+
+    with open_workbook(out) as workbook:
+        rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
+
+    assert rows == [["name", "qty"], ["widget", "3"], ["gadget", "7"]]
+
+
+def test_write_workbook_writes_any_arrow_c_stream(tmp_path):
+    pa = pytest.importorskip("pyarrow")
+
+    class Producer:
+        def __arrow_c_stream__(self, requested_schema=None):
+            return pa.table({"name": ["widget", "gadget"], "qty": [3, 7]}).__arrow_c_stream__(requested_schema)
+
+    out = tmp_path / "stream.xlsx"
+    write_workbook(out, Producer())
 
     with open_workbook(out) as workbook:
         result = workbook.sheets[0].parse_typed(_SCHEMA)
@@ -118,7 +156,7 @@ def test_write_pandas_round_trips(tmp_path):
     assert list(result.columns[1]) == [3, 7]
 
 
-def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
+def test_write_workbook_round_trips_a_multi_chunk_pandas_frame(tmp_path):
     pa = pytest.importorskip("pyarrow")
     pd = pytest.importorskip("pandas")
 
@@ -132,7 +170,7 @@ def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
     assert pa.Table.from_pandas(frame, preserve_index=False).column(0).num_chunks > 1
 
     out = tmp_path / "chunked.xlsx"
-    write_pandas(out, frame)
+    write_workbook(out, frame)
 
     with open_workbook(out) as workbook:
         result = workbook.sheets[0].parse_typed(_SCHEMA)
@@ -141,29 +179,29 @@ def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
     assert list(result.columns[1]) == [3, 7]
 
 
-def test_write_pandas_writes_a_header_only_sheet_for_an_empty_frame(tmp_path):
+def test_write_workbook_writes_a_header_only_sheet_for_an_empty_frame(tmp_path):
     pytest.importorskip("pyarrow")
     pd = pytest.importorskip("pandas")
 
     out = tmp_path / "empty.xlsx"
-    write_pandas(
+    write_workbook(
         out,
         pd.DataFrame({"name": pd.Series([], dtype="string"), "qty": pd.Series([], dtype="int64")}),
     )
 
     with open_workbook(out) as workbook:
-        rows = workbook.sheets[0].read_all()
+        rows = list(workbook.sheets[0].rows())
 
     assert [cell.value for cell in rows[0]] == ["name", "qty"]
     assert len(rows) == 1
 
 
-def test_write_polars_round_trips(tmp_path):
+def test_write_workbook_writes_a_polars_frame(tmp_path):
     pytest.importorskip("pyarrow")
     pl = pytest.importorskip("polars")
 
     out = tmp_path / "polars.xlsx"
-    write_polars(out, pl.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
+    write_workbook(out, pl.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
 
     with open_workbook(out) as workbook:
         result = workbook.sheets[0].parse_typed(_SCHEMA)
@@ -172,13 +210,13 @@ def test_write_polars_round_trips(tmp_path):
     assert list(result.columns[1]) == [3, 7]
 
 
-def test_write_arrow_rejects_an_unsupported_arrow_type(tmp_path):
+def test_write_workbook_rejects_an_unsupported_arrow_type(tmp_path):
     pa = pytest.importorskip("pyarrow")
 
     batch = pa.RecordBatch.from_pydict({"nested": [[1, 2], [3]]})
 
     with pytest.raises(ValueError, match="type"):
-        write_arrow(tmp_path / "bad.xlsx", batch)
+        write_workbook(tmp_path / "bad.xlsx", batch)
 
 
 def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path):
@@ -234,11 +272,8 @@ def _to_bytes(table):
     return buffer.getvalue()
 
 
-@pytest.mark.parametrize(
-    ("writer", "frame_module"),
-    [(write_arrow, None), (write_pandas, "pandas"), (write_polars, "polars")],
-)
-def test_frame_writers_round_trip_through_a_bytesio(writer, frame_module):
+@pytest.mark.parametrize("frame_module", [None, "pandas", "polars"])
+def test_frames_round_trip_through_a_bytesio(frame_module):
     pa = pytest.importorskip("pyarrow")
     data = {"name": ["widget", "gadget"], "qty": [3, 7]}
     if frame_module is None:
@@ -247,7 +282,7 @@ def test_frame_writers_round_trip_through_a_bytesio(writer, frame_module):
         frame = pytest.importorskip(frame_module).DataFrame(data)
 
     buffer = io.BytesIO()
-    writer(buffer, frame, format="xlsx", options=WriteOptions(sheet_name="Vendas"))
+    write_workbook(buffer, frame, format="xlsx", options=WriteOptions(sheet_name="Vendas"))
     result = _parse_bytes(buffer.getvalue(), "xlsx")
 
     assert list(result.columns[0]) == ["widget", "gadget"]

@@ -117,15 +117,13 @@ def test_rows_opened_before_close_read_to_the_end_after_it():
     assert [row[0].value for row in rows] == ["b2", "b3"]
 
 
-def test_read_all_and_parse_typed_read_the_named_sheet():
+def test_typed_reads_read_the_named_sheet():
     from excelreader import ColumnSpec, ColumnType
 
     with open_workbook(_two_sheets()) as workbook:
         second = workbook.sheets[1]
         schema = [ColumnSpec(ColumnType.STRING, index=0, nullable=True)]
 
-        assert len(second.read_all()) == 3
-        assert len(second.read_all_columnar().row_offsets) == 4
         assert second.parse_typed(schema, header_row=0).row_count == 3
         assert sum(table.row_count for table in second.iter_parse_typed(schema, header_row=0, batch_size=2)) == 3
         assert len(second.infer_schema(header_row=0)) == 1
@@ -157,15 +155,15 @@ def test_typed_parses_of_every_sheet_run_on_separate_threads():
         assert int(table.columns[0][0]) == sheet * 1_000_000
 
 
-def test_a_record_batch_reader_outlives_its_workbook():
+def test_an_arrow_stream_outlives_its_workbook():
     pyarrow = pytest.importorskip("pyarrow")
     from excelreader import ColumnSpec, ColumnType
 
     schema = [ColumnSpec(ColumnType.I64, index=1)]
     with open_workbook(_many_sheets()) as workbook:
-        reader = workbook.sheets[2].to_record_batch_reader(schema, header_row=0, batch_size=100)
+        stream = workbook.sheets[2].to_arrow_stream(schema, header_row=0, batch_size=100)
 
-    table = reader.read_all()
+    table = pyarrow.RecordBatchReader.from_stream(stream).read_all()
 
     assert isinstance(table, pyarrow.Table)
     assert table.num_rows == _PARALLEL_ROWS
@@ -192,12 +190,7 @@ def test_a_sheet_with_no_rows_reads_empty():
     data = buffer.getvalue()
 
     with open_workbook(data) as workbook:
-        sheet = workbook.sheets[0]
-        assert sheet.read_all() == []
-        columnar = sheet.read_all_columnar()
-        assert list(columnar.row_offsets) == [0]
-        assert columnar.values == b""
-        assert list(sheet.rows()) == []
+        assert list(workbook.sheets[0].rows()) == []
 
 
 class _SlowCheckWorkbook(Workbook):

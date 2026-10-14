@@ -63,31 +63,6 @@ class Cell(NamedTuple):
         return datetime.date(1899, 12, 30) + datetime.timedelta(days=days)
 
 
-class ColumnarSheet(NamedTuple):
-    """Every cell of a sheet as parallel flat arrays, produced by `Sheet.read_all_columnar()`.
-
-    The fast path for large sheets: unlike `Sheet.read_all()`, decoding never constructs one
-    `Cell`/`str` object per cell — only `int` values fill the index arrays below, and `values` holds
-    every cell's raw UTF-8 bytes concatenated. Use `decode_cell()` to materialize a single `Cell` on
-    demand, or slice `values` directly for bulk work.
-
-    Each array is `array.array('i')` normally, or a NumPy `int32` `ndarray` when NumPy is installed
-    (see `reader.py`) — both support the same `len()`/indexing/slicing used here.
-
-    - `row_offsets[i] : row_offsets[i + 1]` are the cell indices belonging to row `i`, indexing into
-      `columns`/`types`/`value_offsets`. Length `row_count + 1`.
-    - `columns[j]` / `types[j]` are cell `j`'s column index and `CellType` value. Length `cell_count`.
-    - `value_offsets[j] : value_offsets[j + 1]` is cell `j`'s byte slice into `values`. Length
-      `cell_count + 1`.
-    """
-
-    row_offsets: Any
-    columns: Any
-    types: Any
-    value_offsets: Any
-    values: bytes
-
-
 class ColumnType(IntEnum):
     """A column's requested type in a `Sheet.parse_typed()`/`to_arrow()` schema.
 
@@ -127,7 +102,8 @@ class OpenOptions(NamedTuple):
     because several of them default to true. Neither leaks up here.
 
     The `max_*` fields are resource limits, not tuning knobs — they bound what a malformed or hostile
-    file can make the reader allocate. Lower them when parsing untrusted uploads.
+    file can make the reader allocate. Lower them when parsing untrusted uploads. `max_cell_bytes`
+    and `intern_strings` apply to every format, a CSV included.
 
     `csv_delimiter` and `csv_quote` are byte values, not strings: pass `ord(';')`, not `';'`.
 
@@ -149,8 +125,6 @@ class OpenOptions(NamedTuple):
     csv_delimiter: int | None = None
     csv_quote: int | None = None
     csv_detect_bom: bool | None = None
-    csv_max_cell_bytes: int | None = None
-    csv_intern_strings: bool | None = None
     max_total_decompressed_bytes: int | None = None
     max_cell_bytes: int | None = None
     max_shared_string_bytes: int | None = None
@@ -188,7 +162,7 @@ class StringColumn:
     """A `ColumnType.STRING` column, held as UTF-8 bytes plus offsets rather than one `str` per row.
 
     Decoding is deferred to `column[i]`, so reading a million-row string column costs no Python
-    objects until something actually asks for a value — the same trade `ColumnarSheet` makes.
+    objects until something actually asks for a value.
     """
 
     __slots__ = ("_data", "_offsets")

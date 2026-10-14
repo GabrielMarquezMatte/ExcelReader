@@ -76,16 +76,16 @@ def _time_and_assert(label: str, func, out_path: Path, n: int) -> None:
 def benchmark_pandas(args: argparse.Namespace, tmp: Path):
     pd = find_spec("pandas")
     if pd is None:
-        print("pandas not installed — skipping write_pandas/to_excel comparison")
+        print("pandas not installed — skipping the pandas write/to_excel comparison")
         print()
         return
     with excelreader.open_workbook(args.path, format="xlsb") as workbook:
         pandas_df = workbook.sheets[0].to_pandas(_FIXTURE_SCHEMA)
 
-    print("write_pandas() [pandas.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
+    print("write_workbook(pandas) [pandas.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
     _time_and_assert(
-        "  write_pandas",
-        lambda p: excelreader.write_pandas(p, pandas_df),
+        "  write_workbook(pandas)",
+        lambda p: excelreader.write_workbook(p, pandas_df),
         tmp / "out_pandas.xlsx",
         args.n,
     )
@@ -93,7 +93,7 @@ def benchmark_pandas(args: argparse.Namespace, tmp: Path):
 
     openpyxl = find_spec("openpyxl")
     if openpyxl is None:
-        print("openpyxl not installed — skipping write_pandas/write_workbook comparison")
+        print("openpyxl not installed — skipping the pandas.DataFrame.to_excel() comparison")
         print()
         return
     print("pandas.DataFrame.to_excel() [same DataFrame, matched work — both write xlsx]:")
@@ -108,17 +108,17 @@ def benchmark_pandas(args: argparse.Namespace, tmp: Path):
 def benchmark_polars(args: argparse.Namespace, tmp: Path):
     pl = find_spec("polars")
     if pl is None:
-        print("polars not installed — skipping write_polars/write_excel comparison")
+        print("polars not installed — skipping the polars write/write_excel comparison")
         print()
         return
     with excelreader.open_workbook(args.path, format="xlsb") as workbook:
         schema = workbook.sheets[0].infer_schema(sample_size=10)
         polars_df = workbook.sheets[0].to_polars(schema)
 
-    print("write_polars() [polars.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
+    print("write_workbook(polars) [polars.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
     _time_and_assert(
-        "  write_polars",
-        lambda p: excelreader.write_polars(p, polars_df),
+        "  write_workbook(polars)",
+        lambda p: excelreader.write_workbook(p, polars_df),
         tmp / "out_polars.xlsx",
         args.n,
     )
@@ -199,7 +199,7 @@ def main() -> int:
         try:
             import pyarrow  # noqa: F401
         except ImportError:
-            print("pyarrow not installed — skipping write_pandas/write_polars/pandas/polars comparisons")
+            print("pyarrow not installed — skipping the DataFrame writes and pandas/polars comparisons")
             return 0
 
         benchmark_pandas(args, tmp)
