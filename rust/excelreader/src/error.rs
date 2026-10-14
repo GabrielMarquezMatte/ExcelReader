@@ -82,8 +82,14 @@ mod tests {
     fn statuses_map_onto_kinds() {
         let kind = |code| Error::from_status(code, String::new()).kind();
         assert_eq!(kind(ffi::XL_INVALID_ARGUMENT), ErrorKind::InvalidArgument);
-        assert_eq!(kind(ffi::XL_STATUS_PASSWORD_REQUIRED), ErrorKind::PasswordRequired);
-        assert_eq!(kind(ffi::XL_STATUS_PASSWORD_INCORRECT), ErrorKind::PasswordIncorrect);
+        assert_eq!(
+            kind(ffi::XL_STATUS_PASSWORD_REQUIRED),
+            ErrorKind::PasswordRequired
+        );
+        assert_eq!(
+            kind(ffi::XL_STATUS_PASSWORD_INCORRECT),
+            ErrorKind::PasswordIncorrect
+        );
         assert_eq!(kind(42), ErrorKind::Callback(42));
         assert_eq!(kind(-5), ErrorKind::Other);
     }

@@ -2,7 +2,9 @@ use crate::ffi::{
     self, XlColumn, XlColumnSpec, XlInferredSchema, XlOpenOptions, XlTable, XlWorkbook,
     XL_BUFFER_TOO_SMALL, XL_EOF, XL_OK,
 };
-use crate::{AllRows, Date, Error, ErrorKind, OpenOptions, RowCursor, Time, Timestamp};
+use crate::{
+    AllRows, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor, Time, Timestamp,
+};
 use std::marker::PhantomData;
 use std::path::Path;
 
@@ -176,7 +178,10 @@ impl Workbook {
     pub fn sheet(&self, index: i32) -> Result<Sheet<'_>, Error> {
         let mut visibility: i32 = 0;
         check(unsafe { ffi::xl_sheet_visibility_at(self.handle, index, &mut visibility) })?;
-        Ok(Sheet { workbook: self, index })
+        Ok(Sheet {
+            workbook: self,
+            index,
+        })
     }
 
     /// Every sheet, in workbook order. Opens nothing.
@@ -184,7 +189,10 @@ impl Workbook {
         let mut count: i32 = 0;
         check(unsafe { ffi::xl_sheet_count(self.handle, &mut count) })?;
         Ok((0..count)
-            .map(|index| Sheet { workbook: self, index })
+            .map(|index| Sheet {
+                workbook: self,
+                index,
+            })
             .collect())
     }
 
@@ -194,7 +202,10 @@ impl Workbook {
         check(unsafe {
             ffi::xl_sheet_index(self.handle, name.as_ptr(), name.len() as i32, &mut index)
         })?;
-        Ok((index >= 0).then_some(Sheet { workbook: self, index }))
+        Ok((index >= 0).then_some(Sheet {
+            workbook: self,
+            index,
+        }))
     }
 
     /// Shared two-pass buffer dance for the `xl_*` functions that write a UTF-8 name into a caller
@@ -306,9 +317,7 @@ impl<'w> Sheet<'w> {
     /// value this crate does not know.
     pub fn visibility(&self) -> Result<SheetVisibility, Error> {
         let mut raw: i32 = 0;
-        check(unsafe {
-            ffi::xl_sheet_visibility_at(self.workbook.handle, self.index, &mut raw)
-        })?;
+        check(unsafe { ffi::xl_sheet_visibility_at(self.workbook.handle, self.index, &mut raw) })?;
         match raw {
             ffi::XL_SHEET_VISIBLE => Ok(SheetVisibility::Visible),
             ffi::XL_SHEET_HIDDEN => Ok(SheetVisibility::Hidden),
@@ -336,14 +345,8 @@ impl<'w> Sheet<'w> {
     /// The fastest way to read a sheet whose columns you know: it converts on the native side and
     /// never formats a cell to text.
     ///
-    /// `header_row` is 1-based, `0` meaning no header (columns are then bound by position).
-    /// `degree_of_parallelism` is `0` for every processor, `1` sequential, `n` up to `n` threads,
-    /// negative an error; the table is the same whatever it is.
-    pub fn parse<T: ExcelMapper>(
-        &self,
-        header_row: i32,
-        degree_of_parallelism: i32,
-    ) -> Result<TableView<T>, Error> {
+    /// Uses [`ReadOptions`]'s header row and parallelism; a negative parallelism is an error.
+    pub fn parse<T: ExcelMapper>(&self, options: &ReadOptions) -> Result<TableView<T>, Error> {
         let arena = build_specs::<T>();
         let mut table = empty_table();
         check(unsafe {
@@ -352,21 +355,20 @@ impl<'w> Sheet<'w> {
                 self.index,
                 arena.specs.as_ptr(),
                 arena.specs.len() as i32,
-                header_row,
-                degree_of_parallelism,
+                options.header_row,
+                options.parallelism,
                 &mut table,
             )
         })?;
         TableView::new(table, arena.bindings, "xl_parse_typed")
     }
 
-    /// [`parse`](Self::parse) delivered a batch at a time. `batch_size` is rows per batch: 0
-    /// unbounded, negative an error. The header row is consumed once, here, not re-read per batch.
-    pub fn typed_chunks<T: ExcelMapper>(
+    /// [`parse`](Self::parse) delivered [`ReadOptions`]'s batch size rows at a time; a negative
+    /// batch size is an error. The header row is consumed once, here, not re-read per batch.
+    pub fn parse_batches<T: ExcelMapper>(
         &self,
-        header_row: i32,
-        batch_size: i64,
-    ) -> Result<TypedChunks<'w, T>, Error> {
+        options: &ReadOptions,
+    ) -> Result<TypedBatches<'w, T>, Error> {
         let arena = build_specs::<T>();
         let mut reader: *mut ffi::XlTypedReader = std::ptr::null_mut();
         check(unsafe {
@@ -375,12 +377,12 @@ impl<'w> Sheet<'w> {
                 self.index,
                 arena.specs.as_ptr(),
                 arena.specs.len() as i32,
-                header_row,
-                batch_size,
+                options.header_row,
+                options.batch_size,
                 &mut reader,
             )
         })?;
-        Ok(TypedChunks {
+        Ok(TypedBatches {
             reader,
             bindings: arena.bindings,
             done: false,
@@ -401,7 +403,11 @@ impl<'w> Sheet<'w> {
         sample_size: i32,
         parse_text: bool,
     ) -> Result<Vec<InferredColumn>, Error> {
-        let flags = if parse_text { ffi::XL_INFER_PARSE_TEXT } else { 0 };
+        let flags = if parse_text {
+            ffi::XL_INFER_PARSE_TEXT
+        } else {
+            0
+        };
         let mut schema = XlInferredSchema {
             columns: std::ptr::null_mut(),
             column_count: 0,
@@ -496,7 +502,10 @@ unsafe fn copy_inferred(schema: &XlInferredSchema) -> Result<Vec<InferredColumn>
             let column_type = ColumnType::from_raw(spec.r#type).ok_or_else(|| {
                 Error::new(
                     ErrorKind::Other,
-                    format!("native library inferred an unknown column type {}", spec.r#type),
+                    format!(
+                        "native library inferred an unknown column type {}",
+                        spec.r#type
+                    ),
                 )
             })?;
             let name = if spec.name_count <= 0 || spec.names.is_null() || spec.name_lens.is_null() {
@@ -655,21 +664,27 @@ pub fn column_bool(col: &XlColumn, row: i64) -> bool {
 /// If `col` is not a date column, or `row` is out of bounds.
 pub fn column_date(col: &XlColumn, row: i64) -> Date {
     check_access(col, row, ffi::XL_T_DATE, "column_date");
-    Date::new(unsafe { *(col.values as *const i32).offset(row as isize) })
+    Date {
+        days_since_epoch: unsafe { *(col.values as *const i32).offset(row as isize) },
+    }
 }
 
 /// # Panics
 /// If `col` is not a time column, or `row` is out of bounds.
 pub fn column_time(col: &XlColumn, row: i64) -> Time {
     check_access(col, row, ffi::XL_T_TIME, "column_time");
-    Time::new(unsafe { *(col.values as *const i64).offset(row as isize) })
+    Time {
+        micros_since_midnight: unsafe { *(col.values as *const i64).offset(row as isize) },
+    }
 }
 
 /// # Panics
 /// If `col` is not a timestamp column, or `row` is out of bounds.
 pub fn column_timestamp(col: &XlColumn, row: i64) -> Timestamp {
     check_access(col, row, ffi::XL_T_TIMESTAMP, "column_timestamp");
-    Timestamp::new(unsafe { *(col.values as *const i64).offset(row as isize) })
+    Timestamp {
+        micros_since_epoch: unsafe { *(col.values as *const i64).offset(row as isize) },
+    }
 }
 
 fn empty_table() -> XlTable {
@@ -779,7 +794,7 @@ impl<T: ExcelMapper> std::fmt::Debug for TableView<T> {
 }
 
 /// Iterator over the batches of one chunked typed read. Closes the native reader on `Drop`.
-pub struct TypedChunks<'a, T: ExcelMapper> {
+pub struct TypedBatches<'a, T: ExcelMapper> {
     reader: *mut ffi::XlTypedReader,
     bindings: Vec<ColumnBinding<T>>,
     done: bool,
@@ -788,9 +803,9 @@ pub struct TypedChunks<'a, T: ExcelMapper> {
 
 // SAFETY: a typed reader owns its native enumerator; ABI v6 lets it be used from any one thread
 // at a time.
-unsafe impl<T: ExcelMapper> Send for TypedChunks<'_, T> {}
+unsafe impl<T: ExcelMapper> Send for TypedBatches<'_, T> {}
 
-impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
+impl<T: ExcelMapper> Iterator for TypedBatches<'_, T> {
     type Item = Result<TableView<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -816,16 +831,16 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
     }
 }
 
-impl<T: ExcelMapper> Drop for TypedChunks<'_, T> {
+impl<T: ExcelMapper> Drop for TypedBatches<'_, T> {
     fn drop(&mut self) {
         unsafe { ffi::xl_typed_reader_close(self.reader) };
     }
 }
 
 /// Progress only - the reader handle is opaque. Needed for `expect_err` on a `Result<Self, _>`.
-impl<T: ExcelMapper> std::fmt::Debug for TypedChunks<'_, T> {
+impl<T: ExcelMapper> std::fmt::Debug for TypedBatches<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TypedChunks")
+        f.debug_struct("TypedBatches")
             .field("columns", &self.bindings.len())
             .field("done", &self.done)
             .finish_non_exhaustive()

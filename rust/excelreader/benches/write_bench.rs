@@ -18,6 +18,7 @@
 //! Machine: state the CPU, OS and toolchain version alongside any number published from this file.
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use excelreader::ReadOptions;
 use excelreader::{
     write_columns, write_sheet, Column, ColumnData, Date, ExcelMapper, Workbook, WriteOptions,
 };
@@ -56,7 +57,7 @@ fn load_rows() -> Vec<Row> {
     let table = workbook
         .sheet(0)
         .expect("sheet 0")
-        .parse::<Row>(1, 1)
+        .parse::<Row>(&ReadOptions::new())
         .expect("the fixture must parse");
     let rows: Vec<Row> = table.iter().collect();
     assert!(!rows.is_empty(), "the fixture parsed to zero rows");
@@ -144,7 +145,9 @@ fn benchmark_write(criterion: &mut Criterion) {
                 sheet.write_string(r, 0, &row.region).unwrap();
                 sheet.write_string(r, 1, &row.country).unwrap();
                 sheet.write_string(r, 2, &row.item_type).unwrap();
-                sheet.write_number(r, 3, row.order_date.days_since_epoch as f64).unwrap();
+                sheet
+                    .write_number(r, 3, row.order_date.days_since_epoch as f64)
+                    .unwrap();
                 sheet.write_number(r, 4, row.order_id as f64).unwrap();
                 sheet.write_number(r, 5, row.units_sold as f64).unwrap();
                 sheet.write_number(r, 6, row.total_revenue).unwrap();

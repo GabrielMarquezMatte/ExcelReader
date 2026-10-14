@@ -67,7 +67,12 @@ fn main() {
             && fs::read_to_string(&generated_def).is_ok_and(|old| old == new_def_content);
         if !up_to_date {
             generate_windows_implib(
-                &implib, &generated_def, &new_def_content, &target_env, &target_arch, &out_dir,
+                &implib,
+                &generated_def,
+                &new_def_content,
+                &target_env,
+                &target_arch,
+                &out_dir,
                 &dll_basename,
             );
         }

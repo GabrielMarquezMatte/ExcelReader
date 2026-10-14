@@ -2,6 +2,7 @@
 //! crate's reader, so a layout mistake on either side shows up as a value mismatch rather than
 //! as a file only Excel could judge.
 
+use excelreader::ReadOptions;
 use excelreader::{
     write_columns, write_columns_to, write_sheet, write_sheet_to, Column, ColumnData, Date,
     ErrorKind, ExcelMapper, Format, OpenOptions, Time, Timestamp, Workbook, WriteOptions,
@@ -104,7 +105,7 @@ fn write_columns_round_trips_every_column_type() {
     let table = workbook
         .sheet(0)
         .expect("sheet 0")
-        .parse::<WrittenRow>(1, 1)
+        .parse::<WrittenRow>(&ReadOptions::new())
         .expect("the written file must parse back");
     assert_eq!(table.len(), 2);
 
@@ -113,9 +114,24 @@ fn write_columns_round_trips_every_column_type() {
     assert_eq!(first.inteiro, 1);
     assert_eq!(first.numero, 0.5);
     assert!(first.ativo);
-    assert_eq!(first.data, Date::new(20454));
-    assert_eq!(first.hora, Time::new(3_600_000_000));
-    assert_eq!(first.instante, Timestamp::new(1_767_225_600_000_000));
+    assert_eq!(
+        first.data,
+        Date {
+            days_since_epoch: 20454
+        }
+    );
+    assert_eq!(
+        first.hora,
+        Time {
+            micros_since_midnight: 3_600_000_000
+        }
+    );
+    assert_eq!(
+        first.instante,
+        Timestamp {
+            micros_since_epoch: 1_767_225_600_000_000
+        }
+    );
 
     let second = table.get(1).expect("row 1 must exist");
     assert_eq!(second.texto, "doi");
@@ -164,7 +180,7 @@ fn write_columns_to_a_writer_round_trips() {
     let table = workbook
         .sheet(0)
         .expect("sheet 0")
-        .parse::<TwoColumnRow>(1, 1)
+        .parse::<TwoColumnRow>(&ReadOptions::new())
         .expect("the written bytes must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0").texto, "uma");
@@ -230,7 +246,7 @@ fn write_columns_writes_nulls_from_the_validity_bitmap() {
     let table = workbook
         .sheet(0)
         .expect("sheet 0")
-        .parse::<NullableRow>(1, 1)
+        .parse::<NullableRow>(&ReadOptions::new())
         .expect("the written file must parse back");
     let rows: Vec<(String, Option<i64>, Option<f64>)> = table
         .iter()
@@ -319,7 +335,11 @@ fn write_columns_honors_the_sheet_name_and_infers_csv() {
 
     let workbook = Workbook::open(&path).expect("the written file must open");
     assert_eq!(
-        workbook.sheet(0).expect("sheet 0").name().expect("name must read back"),
+        workbook
+            .sheet(0)
+            .expect("sheet 0")
+            .name()
+            .expect("name must read back"),
         "Dados"
     );
     drop(workbook);
@@ -359,9 +379,15 @@ fn derived_rows() -> Vec<DerivedRow> {
             inteiro: 1,
             numero: 0.5,
             ativo: true,
-            data: Date::new(20454),
-            hora: Time::new(3_600_000_000),
-            instante: Timestamp::new(1_767_225_600_000_000),
+            data: Date {
+                days_since_epoch: 20454,
+            },
+            hora: Time {
+                micros_since_midnight: 3_600_000_000,
+            },
+            instante: Timestamp {
+                micros_since_epoch: 1_767_225_600_000_000,
+            },
             opcional: Some(7),
         },
         DerivedRow {
@@ -369,9 +395,15 @@ fn derived_rows() -> Vec<DerivedRow> {
             inteiro: 2,
             numero: 1.5,
             ativo: false,
-            data: Date::new(20455),
-            hora: Time::new(7_200_000_000),
-            instante: Timestamp::new(1_767_312_000_000_000),
+            data: Date {
+                days_since_epoch: 20455,
+            },
+            hora: Time {
+                micros_since_midnight: 7_200_000_000,
+            },
+            instante: Timestamp {
+                micros_since_epoch: 1_767_312_000_000_000,
+            },
             opcional: None,
         },
     ]
@@ -387,7 +419,7 @@ fn the_derive_round_trips_every_supported_field_type() {
     let table = workbook
         .sheet(0)
         .expect("sheet 0")
-        .parse::<DerivedRow>(1, 1)
+        .parse::<DerivedRow>(&ReadOptions::new())
         .expect("the written file must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0"), rows[0]);
@@ -409,7 +441,7 @@ fn write_sheet_to_a_writer_round_trips_the_derive() {
     let table = workbook
         .sheet(0)
         .expect("sheet 0")
-        .parse::<DerivedRow>(1, 1)
+        .parse::<DerivedRow>(&ReadOptions::new())
         .expect("the written bytes must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0"), rows[0]);
@@ -435,7 +467,7 @@ fn the_derive_writes_only_the_primary_column_name() {
     workbook
         .sheet(0)
         .expect("sheet 0")
-        .parse::<AliasedRead>(1, 1)
+        .parse::<AliasedRead>(&ReadOptions::new())
         .expect("the header must carry the primary name, not the alias");
 
     std::fs::remove_file(&path).ok();

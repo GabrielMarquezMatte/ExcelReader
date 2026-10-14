@@ -57,7 +57,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 let n = rows.len();
                 #(#declarations)*
                 for (row, r) in rows.iter().enumerate() {
-                    let _ = row; 
+                    let _ = row;
                     #(#pushes)*
                 }
                 ::core::result::Result::Ok(::std::vec![ #(#columns),* ])
@@ -524,7 +524,10 @@ mod tests {
             ))
             .unwrap_or_else(|e| panic!("{ty} must be supported: {e}"));
 
-            assert!(output.contains("ColumnType :: I64"), "{ty} must use an I64 column");
+            assert!(
+                output.contains("ColumnType :: I64"),
+                "{ty} must use an I64 column"
+            );
             assert!(output.contains("try_from"), "{ty} must convert via TryFrom");
         }
     }
@@ -536,7 +539,10 @@ mod tests {
                 r#"struct Row {{ #[excel(name = "V")] v: {ty}, }}"#
             ))
             .unwrap_or_else(|e| panic!("{ty} must be supported: {e}"));
-            assert!(output.contains("ColumnType :: F64"), "{ty} must use an F64 column");
+            assert!(
+                output.contains("ColumnType :: F64"),
+                "{ty} must use an F64 column"
+            );
         }
     }
 

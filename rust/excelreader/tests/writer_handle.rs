@@ -1,6 +1,7 @@
 //! Round-trips through `WriterHandle`, the streaming counterpart to `write_columns`: everything
 //! written here is read back with the same crate's reader, same reasoning as `write_typed.rs`.
 
+use excelreader::ReadOptions;
 use excelreader::{
     Date, ErrorKind, ExcelMapper, Format, OpenOptions, Time, Timestamp, Workbook, WriteOptions,
     WriterHandle,
@@ -43,56 +44,87 @@ struct FullRow {
 /// Writes one header row and one data row through every `write_*` method, then a row of blank
 /// cells through every `write_*(None)`.
 fn write_full_rows(handle: &mut WriterHandle<'_>) {
-    handle.start_sheet("Planilha1").expect("start_sheet must succeed");
+    handle
+        .start_sheet("Planilha1")
+        .expect("start_sheet must succeed");
 
-    handle.start_row().expect("start_row must succeed for the header row");
+    handle
+        .start_row()
+        .expect("start_row must succeed for the header row");
     for header in [
-        "texto",
-        "inteiro",
-        "numero",
-        "ativo",
-        "data",
-        "hora",
-        "instante",
-        "opcional",
+        "texto", "inteiro", "numero", "ativo", "data", "hora", "instante", "opcional",
     ] {
         handle
             .write_str(Some(header))
             .expect("writing a header cell must succeed");
     }
-    handle.end_row().expect("end_row must succeed for the header row");
+    handle
+        .end_row()
+        .expect("end_row must succeed for the header row");
 
-    handle.start_row().expect("start_row must succeed for the data row");
-    handle.write_str(Some("uma")).expect("write_str must succeed");
+    handle
+        .start_row()
+        .expect("start_row must succeed for the data row");
+    handle
+        .write_str(Some("uma"))
+        .expect("write_str must succeed");
     handle.write_i64(Some(1)).expect("write_i64 must succeed");
     handle.write_f64(Some(0.5)).expect("write_f64 must succeed");
-    handle.write_bool(Some(true)).expect("write_bool must succeed");
     handle
-        .write_date(Some(Date::new(20454)))
+        .write_bool(Some(true))
+        .expect("write_bool must succeed");
+    handle
+        .write_date(Some(Date {
+            days_since_epoch: 20454,
+        }))
         .expect("write_date must succeed");
     handle
-        .write_time(Some(Time::new(3_600_000_000)))
+        .write_time(Some(Time {
+            micros_since_midnight: 3_600_000_000,
+        }))
         .expect("write_time must succeed");
     handle
-        .write_timestamp(Some(Timestamp::new(1_767_225_600_000_000)))
+        .write_timestamp(Some(Timestamp {
+            micros_since_epoch: 1_767_225_600_000_000,
+        }))
         .expect("write_timestamp must succeed");
     handle
         .write_i64(Some(7))
         .expect("write_i64(Some) must succeed for the optional column");
-    handle.end_row().expect("end_row must succeed for the data row");
+    handle
+        .end_row()
+        .expect("end_row must succeed for the data row");
 
-    handle.start_row().expect("start_row must succeed for the blank row");
-    handle.write_str(None).expect("write_str(None) must write a blank cell");
-    handle.write_i64(None).expect("write_i64(None) must write a blank cell");
-    handle.write_f64(None).expect("write_f64(None) must write a blank cell");
-    handle.write_bool(None).expect("write_bool(None) must write a blank cell");
-    handle.write_date(None).expect("write_date(None) must write a blank cell");
-    handle.write_time(None).expect("write_time(None) must write a blank cell");
+    handle
+        .start_row()
+        .expect("start_row must succeed for the blank row");
+    handle
+        .write_str(None)
+        .expect("write_str(None) must write a blank cell");
+    handle
+        .write_i64(None)
+        .expect("write_i64(None) must write a blank cell");
+    handle
+        .write_f64(None)
+        .expect("write_f64(None) must write a blank cell");
+    handle
+        .write_bool(None)
+        .expect("write_bool(None) must write a blank cell");
+    handle
+        .write_date(None)
+        .expect("write_date(None) must write a blank cell");
+    handle
+        .write_time(None)
+        .expect("write_time(None) must write a blank cell");
     handle
         .write_timestamp(None)
         .expect("write_timestamp(None) must write a blank cell");
-    handle.write_i64(None).expect("write_i64(None) must write a blank cell");
-    handle.end_row().expect("end_row must succeed for the blank row");
+    handle
+        .write_i64(None)
+        .expect("write_i64(None) must write a blank cell");
+    handle
+        .end_row()
+        .expect("end_row must succeed for the blank row");
 
     handle.end_sheet().expect("end_sheet must succeed");
 }
@@ -100,7 +132,9 @@ fn write_full_rows(handle: &mut WriterHandle<'_>) {
 fn assert_full_rows(workbook: &Workbook) {
     let sheet = workbook.sheet(0).expect("sheet 0");
     assert_eq!(sheet.name().expect("name must read back"), "Planilha1");
-    let table = sheet.parse::<FullRow>(1, 1).expect("the written workbook must parse back");
+    let table = sheet
+        .parse::<FullRow>(&ReadOptions::new())
+        .expect("the written workbook must parse back");
     assert_eq!(table.len(), 2);
 
     let first = table.get(0).expect("row 0 must exist");
@@ -108,8 +142,18 @@ fn assert_full_rows(workbook: &Workbook) {
     assert_eq!(first.inteiro, 1);
     assert_eq!(first.numero, 0.5);
     assert!(first.ativo);
-    assert_eq!(first.data, Date::new(20454));
-    assert_eq!(first.hora, Time::new(3_600_000_000));
+    assert_eq!(
+        first.data,
+        Date {
+            days_since_epoch: 20454
+        }
+    );
+    assert_eq!(
+        first.hora,
+        Time {
+            micros_since_midnight: 3_600_000_000
+        }
+    );
     assert_eq!(first.opcional, Some(7));
 
     let second = table.get(1).expect("row 1 must exist");
@@ -179,7 +223,10 @@ fn writer_handle_rejects_out_of_order_calls() {
             handle.write_i64(Some(1)).is_err(),
             "a cell write before start_row must fail"
         );
-        assert!(handle.end_row().is_err(), "end_row without an open row must fail");
+        assert!(
+            handle.end_row().is_err(),
+            "end_row without an open row must fail"
+        );
         assert!(
             handle.end_sheet().is_err(),
             "end_sheet without an open sheet must fail"

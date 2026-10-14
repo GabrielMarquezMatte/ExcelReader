@@ -1,6 +1,6 @@
 use excelreader::{
-    AllRows, ErrorKind, ExcelMapper, Format, OpenOptions, RowCursor, Sheet, SheetVisibility, TableView,
-    TypedChunks, Workbook, WriteOptions, WriterHandle,
+    AllRows, ErrorKind, ExcelMapper, Format, OpenOptions, RowCursor, Sheet, SheetVisibility,
+    TableView, TypedBatches, Workbook, WriteOptions, WriterHandle,
 };
 
 #[derive(Default, ExcelMapper)]
@@ -11,8 +11,12 @@ struct R {
 
 fn two_sheets() -> Workbook {
     let mut bytes = Vec::new();
-    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx)).expect("open writer");
-    for (name, rows) in [("First", vec!["a1", "a2"]), ("Second", vec!["b1", "b2", "b3"])] {
+    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx))
+        .expect("open writer");
+    for (name, rows) in [
+        ("First", vec!["a1", "a2"]),
+        ("Second", vec!["b1", "b2", "b3"]),
+    ] {
         writer.start_sheet(name).expect("start sheet");
         for value in rows {
             writer.start_row().expect("start row");
@@ -29,7 +33,13 @@ fn first_column(cursor: &mut RowCursor<'_>) -> Vec<String> {
     let mut values = Vec::new();
     while let Some(row) = cursor.next_row() {
         let row = row.expect("no error mid-sheet");
-        values.push(row.get(0).expect("a cell").as_str().expect("utf-8").to_string());
+        values.push(
+            row.get(0)
+                .expect("a cell")
+                .as_str()
+                .expect("utf-8")
+                .to_string(),
+        );
     }
     values
 }
@@ -40,8 +50,14 @@ fn a_sheet_reads_its_own_rows() {
     let second = workbook.sheet(1).expect("sheet 1");
     let first = workbook.sheet(0).expect("sheet 0");
 
-    assert_eq!(first_column(&mut second.rows().expect("cursor")), ["b1", "b2", "b3"]);
-    assert_eq!(first_column(&mut first.rows().expect("cursor")), ["a1", "a2"]);
+    assert_eq!(
+        first_column(&mut second.rows().expect("cursor")),
+        ["b1", "b2", "b3"]
+    );
+    assert_eq!(
+        first_column(&mut first.rows().expect("cursor")),
+        ["a1", "a2"]
+    );
 }
 
 #[test]
@@ -67,7 +83,10 @@ fn a_cursor_dropped_midway_leaves_the_workbook_usable() {
         assert!(cursor.next_row().expect("a row").is_ok());
     }
 
-    assert_eq!(first_column(&mut sheet.rows().expect("cursor")), ["b1", "b2", "b3"]);
+    assert_eq!(
+        first_column(&mut sheet.rows().expect("cursor")),
+        ["b1", "b2", "b3"]
+    );
 }
 
 #[test]
@@ -77,7 +96,10 @@ fn sheet_rejects_an_index_out_of_range_at_the_call() {
     let past_end = workbook.sheet(2).expect_err("past the end");
     assert_eq!(past_end.kind(), ErrorKind::Other);
     assert!(!past_end.message().is_empty());
-    assert_eq!(workbook.sheet(-1).expect_err("negative").kind(), ErrorKind::InvalidArgument);
+    assert_eq!(
+        workbook.sheet(-1).expect_err("negative").kind(),
+        ErrorKind::InvalidArgument
+    );
 }
 
 #[test]
@@ -88,15 +110,32 @@ fn sheets_lists_every_sheet_with_its_name_index_and_visibility() {
     assert_eq!(sheets.len(), 2);
     assert_eq!(sheets[1].index(), 1);
     assert_eq!(sheets[1].name().expect("name"), "Second");
-    assert_eq!(sheets[0].visibility().expect("visibility"), SheetVisibility::Visible);
+    assert_eq!(
+        sheets[0].visibility().expect("visibility"),
+        SheetVisibility::Visible
+    );
 }
 
 #[test]
 fn sheet_by_name_ignores_case_and_reports_a_miss_as_none() {
     let workbook = two_sheets();
 
-    assert_eq!(workbook.sheet_by_name("Second").expect("ok").expect("found").index(), 1);
-    assert_eq!(workbook.sheet_by_name("sEcOnD").expect("ok").expect("found").index(), 1);
+    assert_eq!(
+        workbook
+            .sheet_by_name("Second")
+            .expect("ok")
+            .expect("found")
+            .index(),
+        1
+    );
+    assert_eq!(
+        workbook
+            .sheet_by_name("sEcOnD")
+            .expect("ok")
+            .expect("found")
+            .index(),
+        1
+    );
     assert!(workbook.sheet_by_name("Missing").expect("ok").is_none());
 }
 
@@ -106,14 +145,26 @@ fn read_all_reads_the_named_sheet() {
     let sheet = workbook.sheet(1).expect("sheet 1");
 
     assert_eq!(sheet.read_all().expect("read_all").len(), 3);
-    assert_eq!(workbook.sheet(0).expect("sheet 0").read_all().expect("read_all").len(), 2);
+    assert_eq!(
+        workbook
+            .sheet(0)
+            .expect("sheet 0")
+            .read_all()
+            .expect("read_all")
+            .len(),
+        2
+    );
 }
 
 #[test]
 fn infer_schema_samples_the_named_sheet() {
     let workbook = two_sheets();
 
-    let columns = workbook.sheet(1).expect("sheet 1").infer_schema(0, 10, false).expect("schema");
+    let columns = workbook
+        .sheet(1)
+        .expect("sheet 1")
+        .infer_schema(0, 10, false)
+        .expect("schema");
 
     assert_eq!(columns.len(), 1);
 }
@@ -123,12 +174,17 @@ const PARALLEL_ROWS: usize = 500;
 
 fn many_sheets() -> Workbook {
     let mut bytes = Vec::new();
-    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx)).expect("open writer");
+    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx))
+        .expect("open writer");
     for sheet in 0..PARALLEL_SHEETS {
-        writer.start_sheet(&format!("sheet{sheet}")).expect("start sheet");
+        writer
+            .start_sheet(&format!("sheet{sheet}"))
+            .expect("start sheet");
         for row in 0..PARALLEL_ROWS {
             writer.start_row().expect("start row");
-            writer.write_str(Some(&format!("s{sheet}-r{row}"))).expect("write");
+            writer
+                .write_str(Some(&format!("s{sheet}-r{row}")))
+                .expect("write");
             writer.end_row().expect("end row");
         }
         writer.end_sheet().expect("end sheet");
@@ -151,9 +207,9 @@ fn workbook_and_sheet_cross_threads_and_cursors_move_between_them() {
     assert_send::<RowCursor<'static>>();
     assert_send_sync::<AllRows>();
     assert_send_sync::<TableView<R>>();
-    assert_send::<TypedChunks<'static, R>>();
+    assert_send::<TypedBatches<'static, R>>();
     #[cfg(feature = "arrow")]
-    assert_send::<excelreader::ArrowChunks<'static>>();
+    assert_send::<excelreader::ArrowBatches<'static>>();
 }
 
 #[test]
@@ -193,7 +249,10 @@ fn every_sheet_read_on_its_own_thread_matches_a_sequential_read() {
                 scope.spawn(move || read_sheet(sheet))
             })
             .collect();
-        handles.into_iter().map(|handle| handle.join().expect("no panic")).collect()
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("no panic"))
+            .collect()
     });
 
     for (index, rows) in parallel.iter().enumerate() {

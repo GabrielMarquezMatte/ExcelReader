@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use excelreader::ReadOptions;
 use excelreader::{ExcelMapper, Workbook};
 
 #[derive(Default, ExcelMapper)]
@@ -53,8 +54,11 @@ fn bench_parse_sheet(c: &mut Criterion) {
         b.iter_batched(
             || Workbook::open(&path).expect("open must succeed"),
             |workbook| {
-                let table =
-                    workbook.sheet(0).expect("sheet 0").parse::<Row>(1, 1).expect("parse must succeed");
+                let table = workbook
+                    .sheet(0)
+                    .expect("sheet 0")
+                    .parse::<Row>(&ReadOptions::new())
+                    .expect("parse must succeed");
                 std::hint::black_box(table);
             },
             criterion::BatchSize::SmallInput,
@@ -68,7 +72,10 @@ fn bench_infer_schema(c: &mut Criterion) {
         b.iter_batched(
             || Workbook::open(&path).expect("open must succeed"),
             |workbook| {
-                let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 100, false)
+                let schema = workbook
+                    .sheet(0)
+                    .expect("sheet 0")
+                    .infer_schema(1, 100, false)
                     .expect("infer_schema must succeed");
                 std::hint::black_box(schema);
             },
@@ -93,7 +100,10 @@ fn bench_parse_sheet_large(c: &mut Criterion) {
         b.iter_batched(
             || Workbook::open(&path).expect("open must succeed"),
             |workbook| {
-                let table = workbook.sheet(0).expect("sheet 0").parse::<LargeRow>(1, 1)
+                let table = workbook
+                    .sheet(0)
+                    .expect("sheet 0")
+                    .parse::<LargeRow>(&ReadOptions::new())
                     .expect("parse must succeed");
                 std::hint::black_box(table);
             },
@@ -108,7 +118,10 @@ fn bench_infer_schema_large(c: &mut Criterion) {
         b.iter_batched(
             || Workbook::open(&path).expect("open must succeed"),
             |workbook| {
-                let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 1000, false)
+                let schema = workbook
+                    .sheet(0)
+                    .expect("sheet 0")
+                    .infer_schema(1, 1000, false)
                     .expect("infer_schema must succeed");
                 std::hint::black_box(schema);
             },
@@ -117,15 +130,18 @@ fn bench_infer_schema_large(c: &mut Criterion) {
     });
 }
 
-fn bench_typed_chunks_large(c: &mut Criterion) {
+fn bench_parse_batches_large(c: &mut Criterion) {
     let path = large_fixture_path();
     for batch_size in [1_000_i64, 10_000, 0] {
-        c.bench_function(&format!("typed_chunks_large/{batch_size}"), |b| {
+        c.bench_function(&format!("parse_batches_large/{batch_size}"), |b| {
             b.iter_batched(
                 || Workbook::open(&path).expect("open must succeed"),
                 |workbook| {
-                    let chunks = workbook.sheet(0).expect("sheet 0").typed_chunks::<LargeRow>(1, batch_size)
-                        .expect("typed_chunks must succeed");
+                    let chunks = workbook
+                        .sheet(0)
+                        .expect("sheet 0")
+                        .parse_batches::<LargeRow>(&ReadOptions::new().batch_size(batch_size))
+                        .expect("parse_batches must succeed");
                     let mut rows = 0_i64;
                     for batch in chunks {
                         rows += batch.expect("a batch must read").len();
@@ -146,6 +162,6 @@ criterion_group!(
     bench_open_large,
     bench_parse_sheet_large,
     bench_infer_schema_large,
-    bench_typed_chunks_large
+    bench_parse_batches_large
 );
 criterion_main!(benches);
