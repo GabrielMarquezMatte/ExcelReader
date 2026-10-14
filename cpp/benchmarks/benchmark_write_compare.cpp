@@ -77,7 +77,7 @@ namespace
     {
         static const std::vector<FullRow> rows = []
         {
-            auto workbook = xl::Workbook::open(EXCELREADER_XLSX_FIXTURE_PATH, XL_FORMAT_XLSX);
+            auto workbook = xl::Workbook::open(EXCELREADER_XLSX_FIXTURE_PATH, {.format = XL_FORMAT_XLSX});
             if (!workbook.has_value())
             {
                 std::fprintf(stderr, "missing or unreadable fixture %s\n", EXCELREADER_XLSX_FIXTURE_PATH);
@@ -89,7 +89,7 @@ namespace
                 std::fprintf(stderr, "fixture %s parsed to zero rows\n", EXCELREADER_XLSX_FIXTURE_PATH);
                 std::abort();
             }
-            return table->to_vector();
+            return std::vector(table->begin(), table->end());
         }();
         return rows;
     }
@@ -132,7 +132,7 @@ static void BM_ExcelReader_WriteSheet(benchmark::State &state)
     const std::filesystem::path path = bench_path("sheet.xlsx");
     for (auto _ : state)
     {
-        auto result = xl::write_sheet(path.string(), XL_FORMAT_XLSX, rows);
+        auto result = xl::write_sheet(path.string(), rows);
         if (!result.has_value())
         {
             state.SkipWithError(result.error().message.c_str());
@@ -216,7 +216,7 @@ static void BM_ExcelReader_WriteColumns(benchmark::State &state)
     const std::filesystem::path path = bench_path("columns.xlsx");
     for (auto _ : state)
     {
-        auto result = xl::write_columns(path.string(), XL_FORMAT_XLSX, columns);
+        auto result = xl::write_columns(path.string(), columns);
         if (!result.has_value())
         {
             state.SkipWithError(result.error().message.c_str());

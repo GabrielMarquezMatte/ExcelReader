@@ -127,29 +127,27 @@ namespace
 
     std::vector<std::byte> build_sheets(int sheet_count, int row_count)
     {
-        auto writer = xl::WriterHandle::open_memory(XL_FORMAT_XLSX);
-        std::vector<std::byte> bytes;
-        if (!writer.has_value())
+        std::vector<uint8_t> written;
         {
-            return bytes;
-        }
-        for (int s = 0; s < sheet_count; ++s)
-        {
-            (void)writer->start_sheet("sheet" + std::to_string(s));
-            for (int r = 0; r < row_count; ++r)
+            auto writer = xl::WriterHandle::open(written, {.format = XL_FORMAT_XLSX});
+            if (!writer.has_value())
             {
-                (void)writer->start_row();
-                (void)writer->write("s" + std::to_string(s) + "-r" + std::to_string(r));
-                (void)writer->end_row();
+                return {};
             }
-            (void)writer->end_sheet();
+            for (int s = 0; s < sheet_count; ++s)
+            {
+                (void)writer->start_sheet("sheet" + std::to_string(s));
+                for (int r = 0; r < row_count; ++r)
+                {
+                    (void)writer->start_row();
+                    (void)writer->write("s" + std::to_string(s) + "-r" + std::to_string(r));
+                    (void)writer->end_row();
+                }
+                (void)writer->end_sheet();
+            }
         }
-        auto written = writer->bytes();
-        if (written.has_value())
-        {
-            bytes.resize(written->size());
-            std::memcpy(bytes.data(), written->data(), written->size());
-        }
+        std::vector<std::byte> bytes(written.size());
+        std::memcpy(bytes.data(), written.data(), written.size());
         return bytes;
     }
 
@@ -171,7 +169,7 @@ namespace
 
     std::size_t row_count(const xl::Workbook &workbook)
     {
-        auto decoded = workbook.sheet(0).read_all_decoded();
+        auto decoded = workbook.sheet(0).read_all();
         return decoded.has_value() ? decoded->size() : 0;
     }
 }
@@ -186,9 +184,9 @@ int main()
 
     Counters counters;
     {
-        auto workbook = xl::Workbook::open_source(std::make_unique<MemorySource>(bytes, counters));
-        check(workbook.has_value(), "open_source opens the fixture");
-        check(workbook.has_value() && row_count(*workbook) == expected_rows, "open_source reads every row");
+        auto workbook = xl::Workbook::open(std::make_unique<MemorySource>(bytes, counters));
+        check(workbook.has_value(), "a Source opens the fixture");
+        check(workbook.has_value() && row_count(*workbook) == expected_rows, "a Source reads every row");
     }
     check(counters.destroyed.load() == 1, "the source is destroyed exactly once");
 
@@ -197,29 +195,28 @@ int main()
 
     Counters uncached;
     {
-        xl::OpenOptions options;
-        options.source_block_size = -1;
-        auto workbook = xl::Workbook::open_source(std::make_unique<MemorySource>(bytes, uncached), XL_FORMAT_XLSX, &options);
-        check(workbook.has_value() && row_count(*workbook) == expected_rows, "open_source without the cache reads every row");
+        auto workbook = xl::Workbook::open(std::make_unique<MemorySource>(bytes, uncached),
+                                           {.format = XL_FORMAT_XLSX, .source_block_size = -1});
+        check(workbook.has_value() && row_count(*workbook) == expected_rows, "a Source without the cache reads every row");
     }
     check(uncached.reads.load() > blocks, "without the cache every read reaches read_at");
 
     {
         Counters failing;
-        auto workbook = xl::Workbook::open_source(std::make_unique<FailingSource>(failing), XL_FORMAT_XLSX);
+        auto workbook = xl::Workbook::open(std::make_unique<FailingSource>(failing), {.format = XL_FORMAT_XLSX});
         check(!workbook.has_value() && workbook.error().message.find("disk on fire") != std::string::npos,
               "the source's error message reaches the caller");
         check(failing.destroyed.load() == 1, "a source whose read failed is destroyed exactly once");
     }
     {
         Counters throwing;
-        auto workbook = xl::Workbook::open_source(std::make_unique<ThrowingSource>(throwing), XL_FORMAT_XLSX);
+        auto workbook = xl::Workbook::open(std::make_unique<ThrowingSource>(throwing), {.format = XL_FORMAT_XLSX});
         check(!workbook.has_value() && workbook.error().message.find("boom") != std::string::npos,
               "an exception from the source becomes an error");
         check(throwing.destroyed.load() == 1, "a source that threw is destroyed exactly once");
     }
     {
-        auto workbook = xl::Workbook::open_stream(std::make_unique<ErrorStream>(), XL_FORMAT_XLSX);
+        auto workbook = xl::Workbook::open(std::make_unique<ErrorStream>(), {.format = XL_FORMAT_XLSX});
         check(!workbook.has_value() && workbook.error().message.find("pipe broke") != std::string::npos,
               "the stream's error message reaches the caller");
     }
@@ -228,8 +225,8 @@ int main()
         const std::vector<std::byte> many = build_sheets(sheet_count, 300);
         check(!many.empty(), "build the multi-sheet workbook");
         Counters parallel_counters;
-        auto reference_many = xl::Workbook::open_memory(std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(many.data()), many.size()));
-        auto workbook = xl::Workbook::open_source(std::make_unique<MemorySource>(many, parallel_counters), XL_FORMAT_XLSX);
+        auto reference_many = xl::Workbook::open(std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(many.data()), many.size()));
+        auto workbook = xl::Workbook::open(std::make_unique<MemorySource>(many, parallel_counters), {.format = XL_FORMAT_XLSX});
         check(reference_many.has_value() && workbook.has_value(), "open the multi-sheet workbook both ways");
         if (reference_many.has_value() && workbook.has_value())
         {
@@ -259,12 +256,12 @@ int main()
         const std::string csv = "name,qty\nwidget,7\n";
         std::vector<std::byte> csv_bytes(csv.size());
         std::memcpy(csv_bytes.data(), csv.data(), csv.size());
-        auto workbook = xl::Workbook::open_stream(std::make_unique<ChunkStream>(csv_bytes), XL_FORMAT_CSV);
-        check(workbook.has_value() && row_count(*workbook) == 2, "open_stream reads a CSV");
+        auto workbook = xl::Workbook::open(std::make_unique<ChunkStream>(csv_bytes), {.format = XL_FORMAT_CSV});
+        check(workbook.has_value() && row_count(*workbook) == 2, "an InputStream reads a CSV");
     }
     {
-        auto workbook = xl::Workbook::open_stream(std::make_unique<ChunkStream>(bytes));
-        check(workbook.has_value() && row_count(*workbook) == expected_rows, "open_stream reads an XLSX");
+        auto workbook = xl::Workbook::open(std::make_unique<ChunkStream>(bytes));
+        check(workbook.has_value() && row_count(*workbook) == expected_rows, "an InputStream reads an XLSX");
     }
 
     if (failures != 0)

@@ -34,8 +34,8 @@ struct xl::ExcelMapper<Record>
 
 int main()
 {
-    xl::OpenOptions options{.prefetch_decompression = 1};
-    auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+    const xl::OpenOptions options{.format = XL_FORMAT_XLSB, .prefetch_decompression = XL_OPT_TRUE};
+    auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
     CHECK(workbook.has_value(), "xl::Workbook::open must succeed on the RealExcel.xlsb fixture");
 
     auto table = xl::parse_arrow<Record>(workbook->sheet(0));
@@ -59,7 +59,7 @@ int main()
     CHECK(!failed.has_value(), "xl::parse_arrow<Record> must fail for an out-of-range header_row");
 
     {
-        auto stream_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        auto stream_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
         CHECK(stream_workbook.has_value(), "opening a workbook for the Arrow stream must succeed");
 
         auto stream = xl::arrow_stream<Record>(stream_workbook->sheet(0), 1, 8);
@@ -68,6 +68,7 @@ int main()
         auto schema = stream->schema();
         CHECK(schema.has_value(), "the stream must report a schema");
         CHECK(schema->schema.release != nullptr, "the schema must be a live, owned struct");
+        CHECK(schema->array.release == nullptr, "schema() must leave the table's array empty");
         CHECK(std::strcmp(schema->schema.format, "+s") == 0, "the stream schema must be a struct array");
         CHECK(schema->schema.n_children == 2, "the stream schema must have two child columns");
 
@@ -83,6 +84,8 @@ int main()
             }
             ++batches;
             CHECK((*batch)->array.length <= 8, "no batch may exceed the requested batch size");
+            CHECK((*batch)->schema.release != nullptr && (*batch)->schema.n_children == 2,
+                  "every batch must carry its own schema");
             rows += (*batch)->array.length;
         }
         CHECK(rows == 100, "the stream must deliver all 100 data rows");
@@ -93,10 +96,10 @@ int main()
     }
 
     {
-        auto abandoned_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        auto abandoned_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
         CHECK(abandoned_workbook.has_value(), "opening a workbook for the abandonment test must succeed");
 
-        xl::ArrowArrayGuard kept;
+        xl::ArrowTable kept;
         {
             auto stream = xl::arrow_stream<Record>(abandoned_workbook->sheet(0), 1, 4);
             CHECK(stream.has_value(), "the abandoned stream must open");
@@ -107,39 +110,27 @@ int main()
         CHECK(kept.array.length == 4, "a batch must outlive the stream that produced it");
         kept.release();
         kept.release();
-        CHECK(kept.array.release == nullptr, "releasing must null the release callback");
+        CHECK(kept.array.release == nullptr && kept.schema.release == nullptr, "releasing must null both release callbacks");
     }
 
     {
-        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
-        CHECK(wb.has_value(), "opening a workbook for the batch_size=0 stream must succeed");
-        auto stream = xl::arrow_stream<Record>(wb->sheet(0), 1, 0);
-        CHECK(stream.has_value(), "xl::arrow_stream<Record> with batch_size=0 must succeed");
-        auto batch = stream->next();
-        CHECK(batch.has_value() && batch->has_value(), "batch_size=0 must yield one batch");
-        CHECK((*batch)->array.length == 100, "the one batch must hold all 100 rows");
-        auto end = stream->next();
-        CHECK(end.has_value() && !end->has_value(), "the stream ends after the single batch");
-    }
-
-    {
-        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
-        CHECK(wb.has_value(), "opening a workbook for the negative-batch-size stream must succeed");
-        auto stream = xl::arrow_stream<Record>(wb->sheet(0), 1, -1);
-        CHECK(!stream.has_value(), "a negative batch size must be rejected");
-        if (!stream.has_value())
+        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
+        CHECK(wb.has_value(), "opening a workbook for the non-positive-batch-size stream must succeed");
+        for (int64_t batch_size : {int64_t{0}, int64_t{-1}})
         {
+            auto stream = xl::arrow_stream<Record>(wb->sheet(0), 1, batch_size);
+            CHECK(!stream.has_value(), "a batch size below 1 must be rejected");
             CHECK(stream.error().code == XL_INVALID_ARGUMENT, "the rejection is XL_INVALID_ARGUMENT");
         }
     }
 
     {
-        auto whole_wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        auto whole_wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
         CHECK(whole_wb.has_value(), "opening a workbook for the whole-sheet comparison must succeed");
         auto whole = xl::parse_arrow<Record>(whole_wb->sheet(0));
         CHECK(whole.has_value(), "the whole-sheet parse_arrow must succeed for comparison");
 
-        auto stream_wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        auto stream_wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
         CHECK(stream_wb.has_value(), "opening a workbook for the streamed comparison must succeed");
         auto stream = xl::arrow_stream<Record>(stream_wb->sheet(0), 1, 4);
         CHECK(stream.has_value(), "xl::arrow_stream<Record> at batch_size=4 must succeed");
@@ -177,7 +168,7 @@ int main()
     }
 
     {
-        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
         CHECK(wb.has_value(), "opening a workbook for the foreign-read test must succeed");
         auto stream = xl::arrow_stream<Record>(wb->sheet(0), 1, 4);
         CHECK(stream.has_value(), "the stream opens before the foreign read");
@@ -192,7 +183,7 @@ int main()
     }
 
     {
-        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
         CHECK(wb.has_value(), "opening a workbook for the reader-then-stream test must succeed");
         auto reader = xl::typed_reader<Record>(wb->sheet(0), 1, 8);
         CHECK(reader.has_value(), "the typed reader opens first");
@@ -200,7 +191,7 @@ int main()
         CHECK(stream.has_value(), "an Arrow stream opens while a typed reader is live");
     }
     {
-        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
         CHECK(wb.has_value(), "opening a workbook for the stream-then-reader test must succeed");
         auto stream = xl::arrow_stream<Record>(wb->sheet(0), 1, 8);
         CHECK(stream.has_value(), "the Arrow stream opens first");

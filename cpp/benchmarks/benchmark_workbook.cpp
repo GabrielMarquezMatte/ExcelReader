@@ -95,7 +95,7 @@ static void BM_Open(benchmark::State &state)
     }
     for (auto _ : state)
     {
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSB});
         benchmark::DoNotOptimize(workbook);
         if (!workbook.has_value())
         {
@@ -117,7 +117,7 @@ static void BM_ParseSheet(benchmark::State &state)
     for (auto _ : state)
     {
         state.PauseTiming();
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSB});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message.c_str());
@@ -147,7 +147,7 @@ static void BM_InferSchema(benchmark::State &state)
     for (auto _ : state)
     {
         state.PauseTiming();
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSB});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message.c_str());
@@ -177,7 +177,7 @@ static void BM_Open_Large(benchmark::State &state)
     }
     for (auto _ : state)
     {
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSB});
         benchmark::DoNotOptimize(workbook);
         if (!workbook.has_value())
         {
@@ -199,7 +199,7 @@ static void BM_ParseSheet_Large(benchmark::State &state)
     for (auto _ : state)
     {
         state.PauseTiming();
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSB});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message.c_str());
@@ -229,7 +229,7 @@ static void BM_TypedReaderBatched_Large(benchmark::State &state)
     for (auto _ : state)
     {
         state.PauseTiming();
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSB});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message.c_str());
@@ -256,7 +256,7 @@ static void BM_TypedReaderBatched_Large(benchmark::State &state)
         benchmark::DoNotOptimize(rows);
     }
 }
-BENCHMARK(BM_TypedReaderBatched_Large)->Arg(1000)->Arg(10000)->Arg(0);
+BENCHMARK(BM_TypedReaderBatched_Large)->Arg(1000)->Arg(10000);
 
 static void BM_InferSchema_Large(benchmark::State &state)
 {
@@ -269,7 +269,7 @@ static void BM_InferSchema_Large(benchmark::State &state)
     for (auto _ : state)
     {
         state.PauseTiming();
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSB});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message.c_str());

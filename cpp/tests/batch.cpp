@@ -65,8 +65,7 @@ namespace
     void test_batches_equal_whole_sheet(const std::vector<OwnedRow> &expected)
     {
         const int64_t rows = static_cast<int64_t>(expected.size());
-        for (int64_t batch_size : {int64_t{1}, int64_t{7}, int64_t{8}, int64_t{9}, int64_t{1000},
-                                   int64_t{0}, rows + 10})
+        for (int64_t batch_size : {int64_t{1}, int64_t{7}, int64_t{8}, int64_t{9}, int64_t{1000}, rows + 10})
         {
             auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
             check(workbook.has_value(), "open the fixture for a batched read");
@@ -92,10 +91,7 @@ namespace
                     break;
                 }
                 ++batches;
-                if (batch_size > 0)
-                {
-                    check((*batch)->size() <= batch_size, "no batch exceeds the requested size");
-                }
+                check((*batch)->size() <= batch_size, "no batch exceeds the requested size");
                 for (Row row : **batch)
                 {
                     actual.emplace_back(std::string(row.Coluna1), row.Coluna3);
@@ -104,7 +100,7 @@ namespace
 
             check(actual == expected, "batched rows match the whole-sheet read");
 
-            const int64_t want = batch_size == 0 ? 1 : (rows + batch_size - 1) / batch_size;
+            const int64_t want = (rows + batch_size - 1) / batch_size;
             check(batches == want, "batch count matches ceil(rows / batch_size)");
         }
     }
@@ -151,19 +147,22 @@ namespace
         check(second.has_value(), "a second reader on the same workbook opens");
     }
 
-    void test_negative_batch_size_is_rejected()
+    void test_non_positive_batch_size_is_rejected()
     {
         auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
-        check(workbook.has_value(), "open the fixture for the negative-batch test");
+        check(workbook.has_value(), "open the fixture for the non-positive-batch test");
         if (!workbook.has_value())
         {
             return;
         }
-        auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, -1);
-        check(!reader.has_value(), "a negative batch size is rejected");
-        if (!reader.has_value())
+        for (int64_t batch_size : {int64_t{0}, int64_t{-1}})
         {
-            check(reader.error().code == XL_INVALID_ARGUMENT, "the rejection is XL_INVALID_ARGUMENT");
+            auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, batch_size);
+            check(!reader.has_value(), "a batch size below 1 is rejected");
+            if (!reader.has_value())
+            {
+                check(reader.error().code == XL_INVALID_ARGUMENT, "the rejection is XL_INVALID_ARGUMENT");
+            }
         }
     }
 
@@ -199,7 +198,7 @@ int main()
     test_batches_equal_whole_sheet(expected);
     test_range_for_matches_next(expected);
     test_second_reader_is_allowed();
-    test_negative_batch_size_is_rejected();
+    test_non_positive_batch_size_is_rejected();
     test_foreign_read_leaves_the_reader_alone();
 
     if (failures != 0)
