@@ -119,7 +119,7 @@ class ColumnSpec(NamedTuple):
 
 
 class OpenOptions(NamedTuple):
-    """Reader limits and dialect settings for `open_workbook()`/`open_bytes()`.
+    """Reader limits and dialect settings for `open_workbook()`.
 
     Every field is None for "use the library default", so you only set what you actually want to
     override. That single convention replaces two the C ABI uses internally: numeric fields there
@@ -131,9 +131,10 @@ class OpenOptions(NamedTuple):
 
     `csv_delimiter` and `csv_quote` are byte values, not strings: pass `ord(';')`, not `';'`.
 
-    `source_block_size` and `source_cache_bytes` tune the block cache of `open_source()` (4 MiB blocks
-    in 64 MiB by default; a negative block size turns the cache off). `max_buffered_bytes` caps how
-    much `open_stream()` reads before an XLSX, XLSB or XLS opens.
+    `source_block_size` and `source_cache_bytes` tune the block cache of a `Source` passed to
+    `open_workbook()` (4 MiB blocks in 64 MiB by default; a negative block size turns the cache off).
+    `max_buffered_bytes` caps how much `open_workbook()` reads from a stream before an XLSX, XLSB or
+    XLS opens.
 
     `verify_zip_checksums` (on by default) checks each ZIP entry of an XLSX or XLSB against its
     CRC-32, so a damaged file raises instead of returning wrong cells. Set it to `False` to read a
@@ -249,10 +250,10 @@ class ExcelReaderError(Exception):
 
 
 class PasswordRequiredError(ExcelReaderError):
-    """Raised by `open_workbook()`/`open_bytes()` when the workbook is encrypted and no `password`
+    """Raised by `open_workbook()` when the workbook is encrypted and no `password`
     was supplied. Maps XL_STATUS_PASSWORD_REQUIRED from the native ABI."""
 
 
 class PasswordIncorrectError(ExcelReaderError):
-    """Raised by `open_workbook()`/`open_bytes()` when the supplied `password` did not match the
+    """Raised by `open_workbook()` when the supplied `password` did not match the
     workbook's verifier. Maps XL_STATUS_PASSWORD_INCORRECT from the native ABI."""

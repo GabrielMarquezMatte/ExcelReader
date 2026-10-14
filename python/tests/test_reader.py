@@ -17,7 +17,6 @@ from excelreader import (
     PasswordIncorrectError,
     PasswordRequiredError,
     decode_cell,
-    open_bytes,
     open_workbook,
 )
 from excelreader import _native
@@ -78,7 +77,7 @@ def test_reads_xls(xls_path):
 
 
 def test_reads_from_bytes(xlsx_path):
-    with open_bytes(xlsx_path.read_bytes()) as workbook:
+    with open_workbook(xlsx_path.read_bytes()) as workbook:
         header = next(workbook.sheets[0].rows())
 
     assert header[0].value == "Coluna1"
@@ -432,10 +431,10 @@ def test_open_options_reaches_the_csv_reader(tmp_path):
         assert [cell.value for cell in next(workbook.sheets[0].rows())] == ["name", "qty", "price"]
 
 
-def test_open_options_apply_to_open_bytes_too(tmp_path):
+def test_open_options_apply_to_bytes_too(tmp_path):
     data = b"name;qty\nwidget;3\n"
 
-    with open_bytes(data, format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
+    with open_workbook(data, format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
         assert [cell.value for cell in next(workbook.sheets[0].rows())] == ["name", "qty"]
 
 

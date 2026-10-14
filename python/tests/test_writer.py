@@ -7,7 +7,6 @@ from excelreader import (
     WriteOptions,
     encrypt_package,
     encrypt_package_bytes,
-    open_bytes,
     open_workbook,
     write_arrow,
     write_arrow_to_bytes,
@@ -228,7 +227,7 @@ def test_encrypt_package_rejects_an_empty_password(source_csv, tmp_path):
 
 
 def _parse_bytes(payload, format, password=None):
-    with open_bytes(payload, format=format, password=password) as workbook:
+    with open_workbook(payload, format=format, password=password) as workbook:
         return workbook.sheets[0].parse_typed(_SCHEMA)
 
 
@@ -260,7 +259,7 @@ def test_encrypt_package_bytes_round_trips_without_touching_disk(source_csv):
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
     with pytest.raises(PasswordIncorrectError):
-        open_bytes(encrypted, format="xlsx", password="wrong")
+        open_workbook(encrypted, format="xlsx", password="wrong")
 
 
 def test_encrypt_package_bytes_rejects_bytes_that_are_not_a_package():

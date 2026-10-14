@@ -169,7 +169,7 @@ def test_write_row_matches_explicit_calls(tmp_path):
 
 
 def test_in_memory_writer_round_trips():
-    from excelreader import open_bytes, open_writer_to_memory
+    from excelreader import open_workbook, open_writer_to_memory
 
     with open_writer_to_memory("xlsx") as writer:
         writer.start_sheet("Data")
@@ -181,7 +181,7 @@ def test_in_memory_writer_round_trips():
     assert isinstance(payload, bytes)
     assert len(payload) > 0
 
-    with open_bytes(payload, format="xlsx") as workbook:
+    with open_workbook(payload, format="xlsx") as workbook:
         rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert rows[0] == ["name", "qty"]
@@ -201,7 +201,7 @@ def test_bytes_on_a_file_writer_raises(tmp_path):
 
 
 def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
-    from excelreader import open_bytes, write_workbook, write_workbook_to_bytes
+    from excelreader import open_workbook, write_workbook, write_workbook_to_bytes
 
     with open_workbook(xlsx_path) as workbook:
         schema = workbook.sheets[0].infer_schema()
@@ -215,7 +215,7 @@ def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
 
     with open_workbook(path) as workbook:
         from_file = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
-    with open_bytes(payload, format="xlsx") as workbook:
+    with open_workbook(payload, format="xlsx") as workbook:
         from_memory = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
 
     assert from_file == from_memory

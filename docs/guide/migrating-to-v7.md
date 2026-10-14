@@ -160,3 +160,12 @@ The C ABI is unchanged: no signature moved, and `XL_ABI_VERSION` stays 6. Behavi
 `xl_write_options.date1904` now applies to XLSX as well as XLSB and XLS; v6 ignored it for XLSX.
 
 `xl_csv_aggregate` keeps its signature. Inside, it opens a [`CsvReader`](xref:ExcelReader.Core.Reader.Csv.CsvReader) with the dialect from the native struct and calls `SheetParallel`.
+
+### Python: one way to open a workbook
+
+`open_bytes()` is removed. `open_workbook()` takes the bytes instead, and also accepts a `bytearray`, a `memoryview` or an `io.BytesIO`. It also takes a `Source` or a readable stream, the inputs that 7.0's release candidates opened with `open_source()` and `open_stream()`, which are gone as well. Arguments and keywords are unchanged.
+
+| v6 | v7 |
+|---|---|
+| `open_bytes(data, "xlsx", password=p)` | `open_workbook(data, "xlsx", password=p)` |
+| `open_bytes(buffer.getvalue())` | `open_workbook(buffer)` |
