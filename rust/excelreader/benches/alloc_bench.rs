@@ -1,7 +1,7 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
+use excelreader::{ExcelMapper, Workbook};
 
 static BYTES_ALLOCATED: AtomicU64 = AtomicU64::new(0);
 
@@ -112,7 +112,7 @@ fn main() {
         ITERATIONS,
         || Workbook::open(&small_path).expect("open must succeed"),
         |workbook| {
-            let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+            let table = workbook.sheet(0).expect("sheet 0").parse::<Row>(1, 1).expect("parse must succeed");
             std::hint::black_box(table);
         },
     );
@@ -122,7 +122,7 @@ fn main() {
         ITERATIONS,
         || Workbook::open(&small_path).expect("open must succeed"),
         |workbook| {
-            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 100).expect("infer_schema must succeed");
+            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 100, false).expect("infer_schema must succeed");
             std::hint::black_box(schema);
         },
     );
@@ -142,7 +142,7 @@ fn main() {
         ITERATIONS_LARGE,
         || Workbook::open(&large_path).expect("open must succeed"),
         |workbook| {
-            let table = parse_sheet::<LargeRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+            let table = workbook.sheet(0).expect("sheet 0").parse::<LargeRow>(1, 1).expect("parse must succeed");
             std::hint::black_box(table);
         },
     );
@@ -152,7 +152,7 @@ fn main() {
         ITERATIONS_LARGE,
         || Workbook::open(&large_path).expect("open must succeed"),
         |workbook| {
-            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 1000).expect("infer_schema must succeed");
+            let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 1000, false).expect("infer_schema must succeed");
             std::hint::black_box(schema);
         },
     );

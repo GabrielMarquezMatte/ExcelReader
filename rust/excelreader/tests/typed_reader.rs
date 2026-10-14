@@ -1,5 +1,4 @@
-use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
-use excelreader::XL_INVALID_ARGUMENT;
+use excelreader::{ErrorKind, ExcelMapper, TypedChunks, Workbook};
 
 #[derive(Default, ExcelMapper)]
 struct Record {
@@ -14,12 +13,12 @@ fn fixture_path() -> String {
 }
 
 fn open() -> Workbook {
-    Workbook::open(&fixture_path()).expect("open must succeed")
+    Workbook::open(fixture_path()).expect("open must succeed")
 }
 
 fn whole_sheet() -> Vec<(String, i64)> {
     let workbook = open();
-    let table = parse_sheet::<Record>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook.sheet(0).expect("sheet 0").parse::<Record>(1, 1).expect("parse must succeed");
     (0..table.len())
         .map(|i| {
             let row = table.get(i).expect("row must be in range");
@@ -67,7 +66,7 @@ fn a_negative_batch_size_is_rejected() {
     let workbook = open();
     let error = workbook.sheet(0).expect("sheet 0").typed_chunks::<Record>(1, -1)
         .expect_err("a negative batch size must be rejected");
-    assert_eq!(error.code(), XL_INVALID_ARGUMENT);
+    assert_eq!(error.kind(), ErrorKind::InvalidArgument);
 }
 
 /// After the sheet is exhausted the iterator must stay exhausted - a second `next()` must not
@@ -90,7 +89,7 @@ fn two_readers_on_one_workbook_each_yield_every_row() {
     let one = sheet.typed_chunks::<Record>(1, 8).expect("first reader must open");
     let two = sheet.typed_chunks::<Record>(1, 8).expect("a second reader must open alongside it");
 
-    let count = |chunks: excelreader::workbook::TypedChunks<'_, Record>| -> i64 {
+    let count = |chunks: TypedChunks<'_, Record>| -> i64 {
         chunks.map(|batch| batch.expect("a batch must read").len()).sum()
     };
     assert_eq!(count(one), 100);

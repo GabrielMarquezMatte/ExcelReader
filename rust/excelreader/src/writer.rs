@@ -1,4 +1,4 @@
-//! Writing a columnar table to a workbook file, through the ABI's single `xl_write_typed` export.
+//! Writing a columnar table to a workbook, through the ABI's single-shot `xl_write_typed` exports.
 //!
 //! Two layers sit here. [`write_columns`] takes buffers the caller already owns and hands them
 //! straight to the ABI - the borrow is the whole point, and the lifetimes on [`Column`] are what
@@ -6,13 +6,12 @@
 //! something the compiler enforces. [`write_sheet`] sits on top for callers holding a slice of
 //! structs, and pays exactly one transpose to get them into columns.
 
-use crate::workbook::{check, check_abi_version};
-use crate::{
-    Error, WriteOptions, XlColumn, XlColumnSpec, XlTable, XL_FORMAT_AUTO, XL_FORMAT_CSV,
-    XL_FORMAT_XLS, XL_FORMAT_XLSB, XL_FORMAT_XLSX, XL_INVALID_ARGUMENT, XL_T_BOOL, XL_T_DATE,
-    XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
-};
+use crate::ffi::{self, XlColumn, XlColumnSpec, XlTable};
+use crate::workbook::{buffer_to_vec, check, check_abi_version, len_i32, path_str};
+use crate::{ColumnType, Error, ErrorKind, WriteOptions};
+use std::io::Write;
 use std::os::raw::c_void;
+use std::path::Path;
 
 /// One column's buffers, borrowed from the caller. Each variant's slice is that column type's
 /// exact wire layout (see `excelreader.h`), so nothing is converted on the way out.
@@ -56,17 +55,17 @@ impl ColumnData<'_> {
     }
 
     /// The `XL_T_*` tag this variant writes as.
-    #[must_use]
-    pub fn xl_type(&self) -> i32 {
+    pub(crate) fn xl_type(&self) -> i32 {
         match self {
-            ColumnData::Str { .. } => XL_T_STRING,
-            ColumnData::I64(_) => XL_T_I64,
-            ColumnData::F64(_) => XL_T_F64,
-            ColumnData::Bool(_) => XL_T_BOOL,
-            ColumnData::Date(_) => XL_T_DATE,
-            ColumnData::Time(_) => XL_T_TIME,
-            ColumnData::Timestamp(_) => XL_T_TIMESTAMP,
+            ColumnData::Str { .. } => ColumnType::String,
+            ColumnData::I64(_) => ColumnType::I64,
+            ColumnData::F64(_) => ColumnType::F64,
+            ColumnData::Bool(_) => ColumnType::Bool,
+            ColumnData::Date(_) => ColumnType::Date,
+            ColumnData::Time(_) => ColumnType::Time,
+            ColumnData::Timestamp(_) => ColumnType::Timestamp,
         }
+        .raw()
     }
 
     fn pointers(&self) -> (*const c_void, *const u8, i64) {
@@ -110,27 +109,8 @@ impl Column<'_> {
     }
 }
 
-/// Infers an `XL_FORMAT_*` from a path's extension, case-insensitively. Returns
-/// [`XL_FORMAT_AUTO`] when the extension is absent or unrecognized - and since `xl_write_typed`
-/// rejects `AUTO` with a message of its own, an unrecognized path fails the write rather than
-/// silently picking a format.
-#[must_use]
-pub fn format_from_path(path: &str) -> i32 {
-    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
-    let Some((_, extension)) = name.rsplit_once('.') else {
-        return XL_FORMAT_AUTO;
-    };
-    match extension.to_ascii_lowercase().as_str() {
-        "xlsx" => XL_FORMAT_XLSX,
-        "xlsb" => XL_FORMAT_XLSB,
-        "xls" => XL_FORMAT_XLS,
-        "csv" => XL_FORMAT_CSV,
-        _ => XL_FORMAT_AUTO,
-    }
-}
-
 fn invalid(message: String) -> Error {
-    Error::from_status(XL_INVALID_ARGUMENT, message)
+    Error::new(ErrorKind::InvalidArgument, message)
 }
 
 /// Returns the row count every column agreed on, or the first problem found.
@@ -191,126 +171,122 @@ fn validate(columns: &[Column<'_>]) -> Result<i64, Error> {
     Ok(rows)
 }
 
+/// The ABI's column specs and table for `columns`, borrowing every buffer. `specs` and `table`
+/// point into the other three fields, so the whole value must outlive the FFI call.
+struct RawTable {
+    specs: Vec<XlColumnSpec>,
+    table: XlTable,
+    _columns: Vec<XlColumn>,
+    _names: Vec<*const u8>,
+    _name_lens: Vec<i32>,
+}
+
+fn raw_table(columns: &[Column<'_>]) -> Result<RawTable, Error> {
+    let row_count = validate(columns)?;
+    let names: Vec<*const u8> = columns
+        .iter()
+        .map(|c| c.name.map_or(std::ptr::null(), str::as_ptr))
+        .collect();
+    let name_lens: Vec<i32> = columns
+        .iter()
+        .map(|c| c.name.map_or(0, |n| n.len() as i32))
+        .collect();
+    let specs: Vec<XlColumnSpec> = columns
+        .iter()
+        .enumerate()
+        .map(|(index, column)| XlColumnSpec {
+            names: &names[index],
+            name_lens: &name_lens[index],
+            name_count: i32::from(column.name.is_some()),
+            index: 0,
+            r#type: column.data.xl_type(),
+            nullable: 0,
+        })
+        .collect();
+    let raw_columns: Vec<XlColumn> = columns.iter().map(Column::to_raw).collect();
+    let table = XlTable {
+        column_count: columns.len() as i32,
+        row_count,
+        columns: raw_columns.as_ptr().cast_mut(),
+    };
+    Ok(RawTable {
+        specs,
+        table,
+        _columns: raw_columns,
+        _names: names,
+        _name_lens: name_lens,
+    })
+}
+
 /// Writes `columns` to `path` as a single sheet, then closes the file. One-shot: no writer handle
 /// exists before or after, and every buffer reachable from `columns` and `options` is borrowed for
 /// the duration of the call and never freed by the native library.
 ///
-/// `format` must be one of `XL_FORMAT_XLS`/`XLSX`/`XLSB`/`CSV`. [`XL_FORMAT_AUTO`] is an error: a
-/// file being created has no signature bytes to sniff. Use [`format_from_path`] to infer one.
+/// The format is [`WriteOptions::format`], or inferred from the extension when that is
+/// [`Format::Auto`](crate::Format::Auto) - an unrecognized extension is then an error, since a file
+/// being created has no signature bytes to sniff.
 ///
 /// On failure the destination may exist and be incomplete; cleaning it up is the caller's.
 pub fn write_columns(
-    path: &str,
-    format: i32,
+    path: impl AsRef<Path>,
     columns: &[Column<'_>],
-    options: Option<&WriteOptions>,
+    options: &WriteOptions,
 ) -> Result<(), Error> {
     check_abi_version()?;
-    let row_count = validate(columns)?;
-
-    let names: Vec<*const u8> = columns
-        .iter()
-        .map(|c| c.name.map_or(std::ptr::null(), str::as_ptr))
-        .collect();
-    let name_lens: Vec<i32> = columns
-        .iter()
-        .map(|c| c.name.map_or(0, |n| n.len() as i32))
-        .collect();
-    let specs: Vec<XlColumnSpec> = columns
-        .iter()
-        .enumerate()
-        .map(|(index, column)| XlColumnSpec {
-            names: &names[index],
-            name_lens: &name_lens[index],
-            name_count: i32::from(column.name.is_some()),
-            index: 0,
-            r#type: column.data.xl_type(),
-            nullable: 0,
-        })
-        .collect();
-    let raw_columns: Vec<XlColumn> = columns.iter().map(Column::to_raw).collect();
-
-    let table = XlTable {
-        column_count: columns.len() as i32,
-        row_count,
-        columns: raw_columns.as_ptr().cast_mut(),
-    };
-    let raw_options = options.map(WriteOptions::to_raw);
-    let options_ptr = crate::options::ptr_or_null(&raw_options);
-
-    let status = unsafe {
-        crate::xl_write_typed(
+    let path = path.as_ref();
+    let format = options.format_for(Some(path))?;
+    let path = path_str(path)?;
+    let path_len = len_i32(path.len(), "path")?;
+    let raw = raw_table(columns)?;
+    let raw_options = options.to_raw();
+    check(unsafe {
+        ffi::xl_write_typed(
             path.as_ptr(),
-            path.len() as i32,
+            path_len,
             format,
-            specs.as_ptr(),
-            &table,
-            options_ptr,
+            raw.specs.as_ptr(),
+            &raw.table,
+            &raw_options,
         )
-    };
-    check(status)
+    })
 }
 
-/// In-memory equivalent of [`write_columns`]: same validation and column lowering, but the
-/// workbook is built in memory and returned as bytes instead of being written to a path - so,
-/// unlike [`write_columns`], there is no path to infer a format from and `format` is always
-/// required.
-///
-/// # Errors
-/// Anything [`write_columns`] reports.
-pub fn write_columns_to_memory(
-    format: i32,
+/// [`write_columns`] to any [`Write`]: the workbook is built in memory, then written to `writer`
+/// in one `write_all`. [`WriteOptions::format`] must be set - there is no extension to infer one
+/// from.
+pub fn write_columns_to(
+    mut writer: impl Write,
     columns: &[Column<'_>],
-    options: Option<&WriteOptions>,
-) -> Result<Vec<u8>, Error> {
+    options: &WriteOptions,
+) -> Result<(), Error> {
     check_abi_version()?;
-    let row_count = validate(columns)?;
-
-    let names: Vec<*const u8> = columns
-        .iter()
-        .map(|c| c.name.map_or(std::ptr::null(), str::as_ptr))
-        .collect();
-    let name_lens: Vec<i32> = columns
-        .iter()
-        .map(|c| c.name.map_or(0, |n| n.len() as i32))
-        .collect();
-    let specs: Vec<XlColumnSpec> = columns
-        .iter()
-        .enumerate()
-        .map(|(index, column)| XlColumnSpec {
-            names: &names[index],
-            name_lens: &name_lens[index],
-            name_count: i32::from(column.name.is_some()),
-            index: 0,
-            r#type: column.data.xl_type(),
-            nullable: 0,
-        })
-        .collect();
-    let raw_columns: Vec<XlColumn> = columns.iter().map(Column::to_raw).collect();
-
-    let table = XlTable {
-        column_count: columns.len() as i32,
-        row_count,
-        columns: raw_columns.as_ptr().cast_mut(),
-    };
-    let raw_options = options.map(WriteOptions::to_raw);
-    let options_ptr = crate::options::ptr_or_null(&raw_options);
-
-    let mut buffer = crate::XlBuffer {
+    let format = options.format_for(None)?;
+    let raw = raw_table(columns)?;
+    let raw_options = options.to_raw();
+    let mut buffer = ffi::XlBuffer {
         data: std::ptr::null_mut(),
         len: 0,
     };
-    let status = unsafe {
-        crate::xl_write_typed_to_memory(format, specs.as_ptr(), &table, options_ptr, &mut buffer)
-    };
-    check(status)?;
-    Ok(crate::workbook::buffer_to_vec(buffer))
+    check(unsafe {
+        ffi::xl_write_typed_to_memory(
+            format,
+            raw.specs.as_ptr(),
+            &raw.table,
+            &raw_options,
+            &mut buffer,
+        )
+    })?;
+    let bytes = buffer_to_vec(buffer);
+    writer
+        .write_all(&bytes)
+        .and_then(|()| writer.flush())
+        .map_err(|e| Error::io(&e))
 }
 
 /// Wraps a finished plaintext XLSX/XLSB package at `package_path` in an agile-encrypted (ECMA-376
 /// 4.4) CFB container, written to `destination_path` (overwriting an existing file). The result
-/// opens with the same password via [`crate::OpenOptions::password`]. Encryption parameters are
-/// fixed at Excel's own defaults - there are no options.
+/// opens with the same password via [`OpenOptions::password`](crate::OpenOptions::password).
+/// Encryption parameters are fixed at Excel's own defaults - there are no options.
 ///
 /// `package_path` is read twice, so it must already be a finished file (write it with
 /// [`write_columns`]/[`write_sheet`] first).
@@ -318,23 +294,31 @@ pub fn write_columns_to_memory(
 /// # Errors
 /// `package_path` does not exist, is not readable, or is not a valid plaintext OOXML package;
 /// `password` is empty; or the usual file I/O failures on either path.
-pub fn encrypt_package(package_path: &str, destination_path: &str, password: &str) -> Result<(), Error> {
+pub fn encrypt_package(
+    package_path: impl AsRef<Path>,
+    destination_path: impl AsRef<Path>,
+    password: &str,
+) -> Result<(), Error> {
     check_abi_version()?;
-    let status = unsafe {
-        crate::xl_encrypt_package(
+    let package_path = path_str(package_path.as_ref())?;
+    let destination_path = path_str(destination_path.as_ref())?;
+    let package_path_len = len_i32(package_path.len(), "package_path")?;
+    let destination_path_len = len_i32(destination_path.len(), "destination_path")?;
+    let password_len = len_i32(password.len(), "password")?;
+    check(unsafe {
+        ffi::xl_encrypt_package(
             package_path.as_ptr(),
-            package_path.len() as i32,
+            package_path_len,
             destination_path.as_ptr(),
-            destination_path.len() as i32,
+            destination_path_len,
             password.as_ptr(),
-            password.len() as i32,
+            password_len,
         )
-    };
-    check(status)
+    })
 }
 
-/// The owning twin of [`ColumnData`], produced by [`ExcelWriter::to_columns`]. A transposed range
-/// of structs has to own its columns somewhere; this is that somewhere.
+/// The owning twin of [`ColumnData`], produced by `#[derive(ExcelMapper)]`'s [`ExcelWriter`] impl.
+/// A transposed range of structs has to own its columns somewhere; this is that somewhere.
 pub enum OwnedColumnData {
     Str { offsets: Vec<i32>, data: Vec<u8> },
     I64(Vec<i64>),
@@ -356,9 +340,7 @@ pub struct OwnedColumn {
 }
 
 impl OwnedColumn {
-    /// Borrows this column in the shape [`write_columns`] takes.
-    #[must_use]
-    pub fn as_column(&self) -> Column<'_> {
+    fn as_column(&self) -> Column<'_> {
         let data = match &self.data {
             OwnedColumnData::Str { offsets, data } => ColumnData::Str { offsets, data },
             OwnedColumnData::I64(v) => ColumnData::I64(v),
@@ -411,50 +393,44 @@ pub fn set_valid(validity: &mut [u8], row: usize) {
     validity[row / 8] |= 1 << (row % 8);
 }
 
-/// Implemented by any struct [`write_sheet`] can write. Derive it with
-/// `#[derive(ExcelMapper)]`, which emits this alongside the reading half, or write it by hand.
+/// Implemented by any struct [`write_sheet`] can write. Derive it with `#[derive(ExcelMapper)]`,
+/// which emits this alongside the reading half.
 pub trait ExcelWriter: Sized {
     /// Transposes `rows` into one column per field, in field order.
     ///
     /// # Errors
     /// Only for values the ABI cannot represent: a string column past 2 GiB, or an integer that
     /// does not fit `i64`. Ordinary data never fails here.
+    #[doc(hidden)]
     fn to_columns(rows: &[Self]) -> Result<Vec<OwnedColumn>, Error>;
 }
 
 /// Writes `rows` to `path` as a single sheet, using the same field mapping
-/// [`parse_sheet`](crate::workbook::parse_sheet) reads with.
+/// [`Sheet::parse`](crate::Sheet::parse) reads with. The format is chosen as in
+/// [`write_columns`].
 ///
 /// `rows` is walked ONCE and each field appended to its own column buffer. That transpose is the
 /// only copy this makes - it is what the ABI's columnar shape costs a row-shaped caller. If you
 /// already hold columnar buffers, call [`write_columns`] and pay nothing.
-///
-/// # Errors
-/// Anything [`ExcelWriter::to_columns`] or [`write_columns`] reports.
 pub fn write_sheet<T: ExcelWriter>(
-    path: &str,
-    format: i32,
+    path: impl AsRef<Path>,
     rows: &[T],
-    options: Option<&WriteOptions>,
+    options: &WriteOptions,
 ) -> Result<(), Error> {
     let owned = T::to_columns(rows)?;
     let borrowed: Vec<Column<'_>> = owned.iter().map(OwnedColumn::as_column).collect();
-    write_columns(path, format, &borrowed, options)
+    write_columns(path, &borrowed, options)
 }
 
-/// In-memory equivalent of [`write_sheet`]: same transpose, but returns bytes instead of writing
-/// to a path - see [`write_columns_to_memory`] for why `format` is always required here.
-///
-/// # Errors
-/// Anything [`ExcelWriter::to_columns`] or [`write_columns_to_memory`] reports.
-pub fn write_sheet_to_memory<T: ExcelWriter>(
-    format: i32,
+/// [`write_sheet`] to any [`Write`], as [`write_columns_to`] does it.
+pub fn write_sheet_to<T: ExcelWriter>(
+    writer: impl Write,
     rows: &[T],
-    options: Option<&WriteOptions>,
-) -> Result<Vec<u8>, Error> {
+    options: &WriteOptions,
+) -> Result<(), Error> {
     let owned = T::to_columns(rows)?;
     let borrowed: Vec<Column<'_>> = owned.iter().map(OwnedColumn::as_column).collect();
-    write_columns_to_memory(format, &borrowed, options)
+    write_columns_to(writer, &borrowed, options)
 }
 
 #[cfg(test)]
@@ -462,27 +438,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_is_inferred_from_the_extension() {
-        assert_eq!(format_from_path("out.xlsx"), XL_FORMAT_XLSX);
-        assert_eq!(format_from_path("out.XLSB"), XL_FORMAT_XLSB);
-        assert_eq!(format_from_path("out.xls"), XL_FORMAT_XLS);
-        assert_eq!(format_from_path("out.csv"), XL_FORMAT_CSV);
-        assert_eq!(format_from_path("out.txt"), XL_FORMAT_AUTO);
-        assert_eq!(format_from_path("out"), XL_FORMAT_AUTO);
-        assert_eq!(format_from_path("v1.2/report"), XL_FORMAT_AUTO);
-    }
-
-    #[test]
     fn validate_rejects_a_short_validity_bitmap() {
         let values = [1i64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let bitmap = [0u8]; 
+        let bitmap = [0u8];
         let columns = [Column {
             name: Some("a"),
             data: ColumnData::I64(&values),
             validity: Some(&bitmap),
         }];
         let error = validate(&columns).expect_err("a 1-byte bitmap cannot cover 9 rows");
-        assert_eq!(error.code(), XL_INVALID_ARGUMENT);
+        assert_eq!(error.kind(), ErrorKind::InvalidArgument);
     }
 
     #[test]
@@ -531,6 +496,7 @@ mod tests {
             "3 rows next to a 2-row column must be rejected"
         );
     }
+
     #[test]
     fn push_str_appends_bytes_and_one_offset_per_value() {
         let mut offsets = vec![0i32];
