@@ -30,6 +30,8 @@ def default_rid() -> str:
         return f"win-{arch}"
     if system == "Darwin":
         return f"osx-{arch}"
+    if platform.libc_ver()[0] != "glibc":
+        return f"linux-musl-{arch}"
     return f"linux-{arch}"
 
 

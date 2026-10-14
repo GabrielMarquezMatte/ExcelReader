@@ -24,7 +24,8 @@ jobs:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     outputs:
-      languages: ${{ steps.languages.outputs.value }}
+      csharp: ${{ github.event_name != 'pull_request' || steps.filter.outputs.csharp == 'true' }}
+      python: ${{ github.event_name != 'pull_request' || steps.filter.outputs.python == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -45,39 +46,32 @@ jobs:
               - 'python/**'
               - '.github/workflows/codeql.yml'
 
-      - name: Select languages
-        id: languages
-        run: |
-          if [ '${{ github.event_name }}' != 'pull_request' ]; then
-            echo 'value=["csharp","python"]' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          languages=()
-          if [ '${{ steps.filter.outputs.csharp }}' = 'true' ]; then
-            languages+=('"csharp"')
-          fi
-          if [ '${{ steps.filter.outputs.python }}' = 'true' ]; then
-            languages+=('"python"')
-          fi
-          echo "value=[$(IFS=,; echo "${languages[*]}")]" >> "$GITHUB_OUTPUT"
-
+  # Both languages always get a job: "Analyze (csharp)" and "Analyze (python)" are required checks, and
+  # a check whose job never starts stays pending. An unchanged language's job skips its steps instead.
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.languages != '[]'
 
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ fromJSON(needs.changes.outputs.languages) }}
+        language: [csharp, python]
+
+    env:
+      RUN: ${{ needs.changes.outputs[matrix.language] }}
 
     steps:
+      - name: Skip (language unchanged)
+        if: env.RUN != 'true'
+        run: echo "No ${{ matrix.language }} changes; skipping the analysis."
+
       - name: Checkout
+        if: env.RUN == 'true'
         uses: actions/checkout@v7
 
       - name: Setup .NET
-        if: matrix.language == 'csharp'
+        if: env.RUN == 'true' && matrix.language == 'csharp'
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -85,6 +79,7 @@ jobs:
           cache-dependency-path: '**/*.csproj'
 
       - name: Initialize CodeQL
+        if: env.RUN == 'true'
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
@@ -93,13 +88,14 @@ jobs:
       # Only the shipped projects: tests, benchmarks and the fuzz harness double the build for code
       # no one runs against untrusted input.
       - name: Build (Release)
-        if: matrix.language == 'csharp'
+        if: env.RUN == 'true' && matrix.language == 'csharp'
         run: |
           for project in src/*/*.csproj; do
             dotnet build "$project" --configuration Release -p:RunAnalyzers=false
           done
 
       - name: Perform CodeQL Analysis
+        if: env.RUN == 'true'
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"

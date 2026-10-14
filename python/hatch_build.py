@@ -43,6 +43,8 @@ def platform_tag() -> str:
     system = platform.system()
     if system == "Linux":
         library = (LIB_DIR / "ExcelReader.Native.so").read_bytes()
+        if b"libc.musl-" in library:
+            return next(tag for tag in platform_tags() if tag.startswith("musllinux_"))
         return f"manylinux_{glibc_floor(library)}_{machine}"
     if system == "Darwin":
         library = (LIB_DIR / "ExcelReader.Native.dylib").read_bytes()
