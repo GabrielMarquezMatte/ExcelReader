@@ -51,7 +51,7 @@ static const std::vector<Row> &fixture_rows()
             std::fprintf(stderr, "fixture %s parsed to zero rows\n", EXCELREADER_LARGE_FIXTURE_PATH);
             std::abort();
         }
-        return table->to_vector();
+        return std::vector(table->begin(), table->end());
     }();
     return rows;
 }
@@ -89,7 +89,7 @@ static void BM_WriteSheet(benchmark::State &state)
     const std::filesystem::path path = bench_path("sheet.xlsx");
     for (auto _ : state)
     {
-        auto result = xl::write_sheet(path.string(), XL_FORMAT_XLSX, rows);
+        auto result = xl::write_sheet(path.string(), rows);
         benchmark::DoNotOptimize(result);
         if (!result.has_value())
         {
@@ -158,7 +158,7 @@ static void BM_WriteColumns(benchmark::State &state)
     const std::filesystem::path path = bench_path("columns.xlsx");
     for (auto _ : state)
     {
-        auto result = xl::write_columns(path.string(), XL_FORMAT_XLSX, columns);
+        auto result = xl::write_columns(path.string(), columns);
         benchmark::DoNotOptimize(result);
         if (!result.has_value())
         {

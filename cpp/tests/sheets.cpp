@@ -25,7 +25,8 @@ namespace
 
     std::vector<uint8_t> build(int sheet_count, int row_count)
     {
-        auto writer = xl::WriterHandle::open_memory(XL_FORMAT_XLSX);
+        std::vector<uint8_t> bytes;
+        auto writer = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
         check(writer.has_value(), "open the in-memory writer");
         if (!writer.has_value())
         {
@@ -44,9 +45,8 @@ namespace
             }
             check(writer->end_sheet().has_value(), "end a sheet");
         }
-        auto bytes = writer->bytes();
-        check(bytes.has_value(), "read the written bytes");
-        return bytes.has_value() ? std::move(*bytes) : std::vector<uint8_t>{};
+        check(writer->finish().has_value(), "finish the in-memory writer");
+        return bytes;
     }
 
     std::vector<std::string> drain(xl::RowCursor &cursor)
@@ -77,7 +77,7 @@ int main()
     const std::vector<uint8_t> two = build(2, 3);
 
     {
-        auto workbook = xl::Workbook::open_memory(two);
+        auto workbook = xl::Workbook::open(two);
         check(workbook.has_value(), "open the two-sheet workbook");
         if (workbook.has_value())
         {
@@ -109,22 +109,15 @@ int main()
             auto negative = workbook->sheet(-1).rows();
             check(!negative.has_value() && negative.error().code == XL_INVALID_ARGUMENT, "a negative sheet index is an invalid argument");
 
-            auto decoded = workbook->sheet(1).read_all_decoded();
-            check(decoded.has_value() && decoded->size() == 3, "read_all_decoded reads the whole named sheet");
-            auto partial = workbook->sheet(1).rows();
-            check(partial.has_value() && partial->next_row().has_value(), "open a cursor and read one row");
-            if (partial.has_value())
-            {
-                auto rest = partial->read_all_decoded();
-                check(rest.has_value() && rest->size() == 2, "the cursor's read_all_decoded returns the rows it has left");
-            }
+            auto decoded = workbook->sheet(1).read_all();
+            check(decoded.has_value() && decoded->size() == 3, "read_all reads the whole named sheet");
             auto schema = workbook->sheet(1).infer_schema(0, 10);
             check(schema.has_value() && schema->size() == 1, "infer_schema samples the named sheet");
         }
     }
 
     {
-        auto workbook = xl::Workbook::open_memory(two);
+        auto workbook = xl::Workbook::open(two);
         check(workbook.has_value(), "open for two cursors");
         if (workbook.has_value())
         {
@@ -142,7 +135,7 @@ int main()
     }
 
     {
-        auto workbook = xl::Workbook::open_memory(two);
+        auto workbook = xl::Workbook::open(two);
         check(workbook.has_value(), "open for the moved cursor");
         if (workbook.has_value())
         {
@@ -151,7 +144,7 @@ int main()
             if (cursor.has_value())
             {
                 xl::RowCursor moved = std::move(*cursor);
-                check(cursor->handle() == nullptr, "a moved-from cursor holds nothing");
+                check(cursor->next_row().error().code == XL_INVALID_HANDLE, "a moved-from cursor holds nothing");
                 check(drain(moved).size() == 3, "the moved-to cursor reads every row");
             }
             check(read_sheet(workbook->sheet(0)).size() == 3, "the workbook still reads after the cursors are gone");
@@ -159,7 +152,7 @@ int main()
     }
 
     {
-        auto workbook = xl::Workbook::open_memory(two);
+        auto workbook = xl::Workbook::open(two);
         check(workbook.has_value(), "open for the move-assigned cursor");
         if (workbook.has_value())
         {
@@ -170,7 +163,7 @@ int main()
             {
                 check(a->next_row().has_value(), "the overwritten cursor advances");
                 *a = std::move(*b);
-                check(b->handle() == nullptr, "a move-assigned-from cursor holds nothing");
+                check(b->next_row().error().code == XL_INVALID_HANDLE, "a move-assigned-from cursor holds nothing");
                 const auto values = drain(*a);
                 check(values.size() == 3 && values.front() == "s1-r0", "the move-assigned cursor reads the other sheet from the top");
             }
@@ -179,11 +172,11 @@ int main()
 
     {
         const std::vector<uint8_t> empty_book = build(1, 0);
-        auto workbook = xl::Workbook::open_memory(empty_book);
+        auto workbook = xl::Workbook::open(empty_book);
         check(workbook.has_value(), "open the empty workbook");
         if (workbook.has_value())
         {
-            auto decoded = workbook->sheet(0).read_all_decoded();
+            auto decoded = workbook->sheet(0).read_all();
             check(decoded.has_value() && decoded->empty(), "an empty sheet decodes to no rows");
         }
     }
@@ -192,7 +185,7 @@ int main()
         std::optional<xl::RowCursor> survivor;
         std::optional<xl::Sheet> stale;
         {
-            auto workbook = xl::Workbook::open_memory(two);
+            auto workbook = xl::Workbook::open(two);
             check(workbook.has_value(), "open for the outliving cursor");
             if (workbook.has_value())
             {
@@ -220,7 +213,7 @@ int main()
         constexpr int sheet_count = 6;
         constexpr int row_count = 500;
         const std::vector<uint8_t> many = build(sheet_count, row_count);
-        auto workbook = xl::Workbook::open_memory(many);
+        auto workbook = xl::Workbook::open(many);
         check(workbook.has_value(), "open the many-sheet workbook");
         if (workbook.has_value())
         {

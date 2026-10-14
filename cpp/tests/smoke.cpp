@@ -75,17 +75,14 @@ static int test_parse(xl::Workbook &workbook)
 
 static int test_sheets(xl::Workbook &workbook)
 {
-    auto count = workbook.sheet_count();
-    CHECK(count.has_value(), "sheet_count must succeed");
-    CHECK(*count >= 1, "the fixture has at least one sheet");
+    auto sheets = workbook.sheets();
+    CHECK(sheets.has_value(), "sheets must succeed");
+    CHECK(!sheets->empty(), "the fixture has at least one sheet");
 
-    auto names = workbook.sheet_names();
-    CHECK(names.has_value(), "sheet_names must succeed");
-    CHECK(names->size() == static_cast<size_t>(*count), "sheet_names must return one name per sheet");
-
-    auto first = workbook.sheet_name_at(0);
-    CHECK(first.has_value(), "sheet_name_at(0) must succeed");
-    CHECK(*first == names->front(), "sheet_name_at(0) must be the first of sheet_names");
+    auto first = sheets->front().name();
+    CHECK(first.has_value(), "the first sheet's name must be readable");
+    auto same = workbook.sheet(0).name();
+    CHECK(same.has_value() && *same == *first, "sheet(0) must be the first of sheets()");
 
     CHECK(workbook.is_date1904().has_value(), "is_date1904 must succeed");
     return 0;
@@ -119,19 +116,18 @@ static std::string encrypted_fixture_path(std::string_view filename)
 static int test_password_open()
 {
     xl::OpenOptions options{};
-    options.password("hunter2");
-    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), XL_FORMAT_AUTO, &options);
+    options.password = "hunter2";
+    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), options);
     CHECK(workbook.has_value(), "opening an encrypted workbook with the correct password must succeed");
-    auto count = workbook->sheet_count();
-    CHECK(count.has_value(), "sheet_count must succeed on the decrypted workbook");
-    CHECK(*count > 0, "the decrypted workbook must have at least one sheet");
+    auto sheets = workbook->sheets();
+    CHECK(sheets.has_value(), "sheets must succeed on the decrypted workbook");
+    CHECK(!sheets->empty(), "the decrypted workbook must have at least one sheet");
     return 0;
 }
 
 static int test_password_required()
 {
-    xl::OpenOptions options{};
-    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), XL_FORMAT_AUTO, &options);
+    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"));
     CHECK(!workbook.has_value(), "opening an encrypted workbook without a password must fail");
     CHECK(workbook.error().code == XL_STATUS_PASSWORD_REQUIRED,
           "the failure must report XL_STATUS_PASSWORD_REQUIRED");
@@ -140,9 +136,7 @@ static int test_password_required()
 
 static int test_password_incorrect()
 {
-    xl::OpenOptions options{};
-    options.password("wrong");
-    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), XL_FORMAT_AUTO, &options);
+    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), {.password = "wrong"});
     CHECK(!workbook.has_value(), "opening an encrypted workbook with the wrong password must fail");
     CHECK(workbook.error().code == XL_STATUS_PASSWORD_INCORRECT,
           "the failure must report XL_STATUS_PASSWORD_INCORRECT");
@@ -153,13 +147,20 @@ int main()
 {
     CHECK(xl::abi_version() == XL_ABI_VERSION, "the linked native library must speak this header's ABI revision");
 
-    xl::OpenOptions options{.prefetch_decompression = 1};
-    auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+    xl::OpenOptions options{.format = XL_FORMAT_XLSB, .prefetch_decompression = XL_OPT_TRUE};
+    auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
     CHECK(workbook.has_value(), "xl::Workbook::open must succeed on the RealExcel.xlsb fixture");
 
     auto missing = xl::Workbook::open("does-not-exist.xlsx");
     CHECK(!missing.has_value(), "opening a missing file must fail");
     CHECK(!missing.error().message.empty(), "a failure must carry the native error detail");
+
+    auto wrong_format = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, {.format = XL_FORMAT_XLSX});
+    CHECK(!wrong_format.has_value(), "OpenOptions::format must reach the open: an XLSB is not an XLSX");
+
+    auto bad_limit = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, {.max_cell_bytes = -1});
+    CHECK(!bad_limit.has_value() && bad_limit.error().code == XL_INVALID_ARGUMENT,
+          "an out-of-range limit must fail the open with XL_INVALID_ARGUMENT");
 
     if (int failed = test_sheets(*workbook))
     {
