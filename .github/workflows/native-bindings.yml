@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     steps:
       - name: Checkout
@@ -172,7 +172,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     steps:
       - name: Checkout
@@ -201,6 +201,12 @@ jobs:
 
       - name: Run the Python tests
         run: pytest python/tests -v
+
+      - name: Build the wheel and check it installs here
+        run: |
+          pip install build
+          python -m build --wheel python/ --outdir dist/
+          python python/scripts/check_wheel_tag.py dist
 
       - name: Build the C smoke test
         run: |
