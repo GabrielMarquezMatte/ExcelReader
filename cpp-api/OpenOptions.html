@@ -193,6 +193,12 @@
 <td>Block size of Workbook::open_source's cache. Default 4 MiB; negative turns the cache off.</td>
 </tr>
 <tr>
+<td><code>verify_zip_checksums</code></td>
+<td>int32_t</td>
+<td><code>XL_OPT_DEFAULT</code></td>
+<td>Check each XLSX/XLSB ZIP entry against its CRC-32. On by default; a mismatch fails the read.</td>
+</tr>
+<tr>
 <td><code>password_</code></td>
 <td>std::string</td>
 <td><code>{}</code></td>

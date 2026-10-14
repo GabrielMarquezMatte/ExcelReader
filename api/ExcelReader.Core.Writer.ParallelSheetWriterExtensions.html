@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ParallelSheetWriterExtensions | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ParallelSheetWriterExtensions | ExcelReader ">
+      
+      <meta name="description" content="Record writes that format and compress batches of rows on several threads and write them in order. Memory is bounded by  batches of  rows.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Writer_ParallelSheetWriterExtensions.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Writer.ParallelSheetWriterExtensions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions">
+
+
+
+  <h1 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions" class="text-break">
+Class ParallelSheetWriterExtensions  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Writer.html">Writer</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Record writes that format and compress batches of rows on several threads and write them in
+order. Memory is bounded by <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_DegreeOfParallelism">DegreeOfParallelism</a> batches of
+<a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_BatchRows">BatchRows</a> rows.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class ParallelSheetWriterExtensions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ParallelSheetWriterExtensions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>The source is enumerated by one flow at a time, never concurrently. A <code>writeRow</code> delegate runs on pool
+threads, several at once, so whatever it captures must be safe to use concurrently; the layouts
+from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a> are. Rows may be written through the normal API before
+and after a call, but not while one is running. A call that throws, a cancelled one included,
+ends the sheet and its workbook. With shared strings on, string indexes depend on thread
+timing, so two runs give the same content in files that differ byte for byte.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsbSheetWriter, IAsyncEnumerable&lt;T&gt;, ExcelRecordLayout&lt;T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a header row from <code class="paramref">layout</code>, then one row per record, in parallel batches.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsbSheetWriter sheet, IAsyncEnumerable&lt;T&gt; records, ExcelRecordLayout&lt;T&gt; layout, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html">XlsbSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsb_XlsbRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsb.XlsbRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsbSheetWriter, IAsyncEnumerable&lt;T&gt;, Action&lt;XlsbRowWriter, T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes one row per record in parallel batches, calling <code class="paramref">writeRow</code> to populate each row. No header is written.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsbSheetWriter sheet, IAsyncEnumerable&lt;T&gt; records, Action&lt;XlsbRowWriter, T&gt; writeRow, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html">XlsbSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>writeRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a>, T&gt;</dt>
+    <dd><p>Populates a row's cells from a single record. It runs on pool threads, several at once.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">writeRow</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsbSheetWriter, IEnumerable&lt;T&gt;, ExcelRecordLayout&lt;T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a header row from <code class="paramref">layout</code>, then one row per record, in parallel batches.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsbSheetWriter sheet, IEnumerable&lt;T&gt; records, ExcelRecordLayout&lt;T&gt; layout, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html">XlsbSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsb_XlsbRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsb.XlsbRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsbSheetWriter, IEnumerable&lt;T&gt;, Action&lt;XlsbRowWriter, T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes one row per record in parallel batches, calling <code class="paramref">writeRow</code> to populate each row. No header is written.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsbSheetWriter sheet, IEnumerable&lt;T&gt; records, Action&lt;XlsbRowWriter, T&gt; writeRow, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html">XlsbSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>writeRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a>, T&gt;</dt>
+    <dd><p>Populates a row's cells from a single record. It runs on pool threads, several at once.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">writeRow</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsxSheetWriter, IAsyncEnumerable&lt;T&gt;, ExcelRecordLayout&lt;T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a header row from <code class="paramref">layout</code>, then one row per record, in parallel batches.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsxSheetWriter sheet, IAsyncEnumerable&lt;T&gt; records, ExcelRecordLayout&lt;T&gt; layout, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html">XlsxSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsx_XlsxRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsx.XlsxRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsxSheetWriter, IAsyncEnumerable&lt;T&gt;, Action&lt;XlsxRowWriter, T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes one row per record in parallel batches, calling <code class="paramref">writeRow</code> to populate each row. No header is written.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsxSheetWriter sheet, IAsyncEnumerable&lt;T&gt; records, Action&lt;XlsxRowWriter, T&gt; writeRow, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html">XlsxSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>writeRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.html">XlsxRowWriter</a>, T&gt;</dt>
+    <dd><p>Populates a row's cells from a single record. It runs on pool threads, several at once.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">writeRow</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsxSheetWriter, IEnumerable&lt;T&gt;, ExcelRecordLayout&lt;T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes a header row from <code class="paramref">layout</code>, then one row per record, in parallel batches.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsxSheetWriter sheet, IEnumerable&lt;T&gt; records, ExcelRecordLayout&lt;T&gt; layout, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html">XlsxSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsx_XlsxRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsx.XlsxRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteRecordsParallelAsync&lt;T&gt;(XlsxSheetWriter, IEnumerable&lt;T&gt;, Action&lt;XlsxRowWriter, T&gt;, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes one row per record in parallel batches, calling <code class="paramref">writeRow</code> to populate each row. No header is written.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteRecordsParallelAsync&lt;T&gt;(this XlsxSheetWriter sheet, IEnumerable&lt;T&gt; records, Action&lt;XlsxRowWriter, T&gt; writeRow, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html">XlsxSheetWriter</a></dt>
+    <dd><p>The sheet to write rows to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>writeRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.html">XlsxRowWriter</a>, T&gt;</dt>
+    <dd><p>Populates a row's cells from a single record. It runs on pool threads, several at once.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code> or <code class="paramref">writeRow</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The sheet has already been ended.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>A row is still active on the sheet.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The records do not fit in the sheet's 1,048,576 rows.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteTableParallelAsync&lt;T&gt;(XlsbSheetWriter, IAsyncEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes <code class="paramref">records</code> as an Excel table named <code class="paramref">name</code>: a header row from
+<code class="paramref">layout</code>, one row per record in parallel batches, then closes the table.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteTableParallelAsync&lt;T&gt;(this XlsbSheetWriter sheet, IAsyncEnumerable&lt;T&gt; records, string name, ExcelRecordLayout&lt;T&gt; layout, ExcelTableOptions? tableOptions = null, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html">XlsbSheetWriter</a></dt>
+    <dd><p>The sheet to write to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The table name; see <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_BeginTable_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_">BeginTable(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?)</a>.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>tableOptions</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
+    <dd><p>Position and style. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code>, <code class="paramref">name</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteTableParallelAsync&lt;T&gt;(XlsbSheetWriter, IEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes <code class="paramref">records</code> as an Excel table named <code class="paramref">name</code>: a header row from
+<code class="paramref">layout</code>, one row per record in parallel batches, then closes the table.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteTableParallelAsync&lt;T&gt;(this XlsbSheetWriter sheet, IEnumerable&lt;T&gt; records, string name, ExcelRecordLayout&lt;T&gt; layout, ExcelTableOptions? tableOptions = null, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html">XlsbSheetWriter</a></dt>
+    <dd><p>The sheet to write to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The table name; see <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_BeginTable_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_">BeginTable(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?)</a>.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>tableOptions</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
+    <dd><p>Position and style. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code>, <code class="paramref">name</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteTableParallelAsync&lt;T&gt;(XlsxSheetWriter, IAsyncEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes <code class="paramref">records</code> as an Excel table named <code class="paramref">name</code>: a header row from
+<code class="paramref">layout</code>, one row per record in parallel batches, then closes the table.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteTableParallelAsync&lt;T&gt;(this XlsxSheetWriter sheet, IAsyncEnumerable&lt;T&gt; records, string name, ExcelRecordLayout&lt;T&gt; layout, ExcelTableOptions? tableOptions = null, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html">XlsxSheetWriter</a></dt>
+    <dd><p>The sheet to write to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The table name; see <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_BeginTable_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_">BeginTable(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?)</a>.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>tableOptions</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
+    <dd><p>Position and style. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code>, <code class="paramref">name</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)">
+  WriteTableParallelAsync&lt;T&gt;(XlsxSheetWriter, IEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes <code class="paramref">records</code> as an Excel table named <code class="paramref">name</code>: a header row from
+<code class="paramref">layout</code>, one row per record in parallel batches, then closes the table.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ValueTask WriteTableParallelAsync&lt;T&gt;(this XlsxSheetWriter sheet, IEnumerable&lt;T&gt; records, string name, ExcelRecordLayout&lt;T&gt; layout, ExcelTableOptions? tableOptions = null, ParallelWriteOptions? options = null, CancellationToken ct = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sheet</code> <a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html">XlsxSheetWriter</a></dt>
+    <dd><p>The sheet to write to.</p>
+</dd>
+    <dt><code>records</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The records to write, one row each, in enumeration order.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The table name; see <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_BeginTable_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_">BeginTable(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?)</a>.</p>
+</dd>
+    <dt><code>layout</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The columns to write, from <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a>.</p>
+</dd>
+    <dt><code>tableOptions</code> <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
+    <dd><p>Position and style. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html#ExcelReader_Core_Writer_ExcelTableOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+    <dd><p>Degree of parallelism and batch size. Defaults to <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default">Default</a>.</p>
+</dd>
+    <dt><code>ct</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>A token to cancel the operation between batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.valuetask">ValueTask</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The record type being written.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p><code class="paramref">sheet</code>, <code class="paramref">records</code>, <code class="paramref">name</code> or <code class="paramref">layout</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">options</code> holds a negative degree or a batch size below 1.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.operationcanceledexception">OperationCanceledException</a></dt>
+    <dd><p><code class="paramref">ct</code> was cancelled. Unlike a serial write cancelled between rows, this ends the sheet and its workbook.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ParallelSheetWriterExtensions.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

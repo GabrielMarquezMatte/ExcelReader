@@ -98,6 +98,9 @@ file can make the reader allocate. Lower them when parsing untrusted uploads.</p
 <p><code>source_block_size</code> and <code>source_cache_bytes</code> tune the block cache of <code>open_source()</code> (4 MiB blocks
 in 64 MiB by default; a negative block size turns the cache off). <code>max_buffered_bytes</code> caps how
 much <code>open_stream()</code> reads before an XLSX, XLSB or XLS opens.</p>
+<p><code>verify_zip_checksums</code> (on by default) checks each ZIP entry of an XLSX or XLSB against its
+CRC-32, so a damaged file raises instead of returning wrong cells. Set it to <code>False</code> to read a
+file whose producer wrote wrong checksums.</p>
 <p>Validation happens on the native side, which owns the real limits; an out-of-range value raises
 <code>ExcelReaderError</code> with the reason. Fields mirror xl_open_options in
 src/ExcelReader.Native/include/excelreader.h.</p>
@@ -186,6 +189,11 @@ src/ExcelReader.Native/include/excelreader.h.</p>
 <tr>
 <td><code>max_buffered_bytes</code></td>
 <td>int | None</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td><code>verify_zip_checksums</code></td>
+<td>bool | None</td>
 <td><code>None</code></td>
 </tr>
 </tbody>

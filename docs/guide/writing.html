@@ -300,23 +300,114 @@ they have nothing to overlap and do not offer it.</p>
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">10.910 ms</td>
-<td style="text-align: right;">6.865 ms</td>
-<td style="text-align: right;">37%</td>
+<td style="text-align: right;">8.337 ms</td>
+<td style="text-align: right;">5.175 ms</td>
+<td style="text-align: right;">38%</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">7.555 ms</td>
-<td style="text-align: right;">5.614 ms</td>
-<td style="text-align: right;">26%</td>
+<td style="text-align: right;">5.572 ms</td>
+<td style="text-align: right;">3.419 ms</td>
+<td style="text-align: right;">39%</td>
 </tr>
 </tbody>
 </table>
-<p>Allocations are unchanged (4.02 MB vs. 4.03–4.04 MB) — the background writer hands over buffers the row
+<p>Allocations are unchanged (4.02 MB either way) — the background writer hands over buffers the row
 writer already owns rather than copying them.</p>
 <p>The same caveat as the read side applies: <strong>do not enable it for concurrent server workloads</strong>. A
 caller already writing many files in parallel is CPU-saturated, and an extra background thread per
 writer only doubles thread demand for no gain. It's meant for single-file batch work.</p>
+<h2 id="write-records-in-parallel-xlsxxlsb">Write records in parallel (XLSX/XLSB)</h2>
+<p><code>PrefetchWrite</code> moves compression off the calling thread, but the rows are still built on one thread,
+and building them is most of a write. <code>WriteRecordsParallelAsync</code> and <code>WriteTableParallelAsync</code> use
+several cores for both: the records are cut into batches, each batch is formatted and compressed on
+a pool thread, and the batches reach the file in order. They are extensions on
+<a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html"><code>XlsxSheetWriter</code></a> and
+<a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html"><code>XlsbSheetWriter</code></a>, and take an <code>IEnumerable&lt;T&gt;</code>
+or an <code>IAsyncEnumerable&lt;T&gt;</code>. The cell-by-cell API stays single-threaded, and XLS and CSV have no
+parallel form.</p>
+<!-- snippet: writing-parallel -->
+<pre><code class="lang-csharp">await using var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true);
+XlsxSheetWriter sheet = wb.AddSheet(&quot;S1&quot;);
+
+// Header row from the layout, then one row per record.
+await sheet.WriteRecordsParallelAsync(records, ExcelRecordLayout.FromAttributes&lt;Metric&gt;());
+
+// Or format each row yourself; this delegate runs on several threads at once.
+await sheet.WriteRecordsParallelAsync(records, static (XlsxRowWriter row, Metric record) =&gt;
+{
+    row.Write(record.Name);
+    row.Write(record.Value);
+}, new ParallelWriteOptions { DegreeOfParallelism = 4 });
+
+await sheet.EndAsync();
+</code></pre>
+<p>The rules:</p>
+<ul>
+<li><strong>Your delegate runs on several threads at once</strong>, though never twice at once on the same row
+writer. Whatever it captures must be thread-safe. The library's own layouts are.</li>
+<li><strong>Order is kept.</strong> Rows come out in the order the source yields them, and the source itself is
+enumerated by one flow at a time, never concurrently.</li>
+<li><strong>Rows may be written before and after the call, not during it.</strong> Row numbering carries on, and
+the call can be made more than once on a sheet.</li>
+<li><strong>A failure or a cancellation ends the sheet and the workbook.</strong> A serial <code>WriteRecordsAsync</code>
+cancelled between rows leaves the sheet usable; a parallel call does not. The original exception is
+rethrown once every batch in flight has stopped.</li>
+<li><strong>With <code>UseSharedStrings</code>, string indexes depend on thread timing</strong>, so two runs give files that
+differ byte for byte. Their content is the same.</li>
+<li>More than 1,048,576 rows throws <code>ExcelLimitExceededException</code>.</li>
+</ul>
+<p><a class="xref" href="../../api/ExcelReader.Core.Writer.ParallelWriteOptions.html"><code>ParallelWriteOptions</code></a> has two knobs.
+<code>DegreeOfParallelism</code> is the most batches in flight at once (0, the default, means one per core).
+<code>BatchRows</code> is the rows per batch, 8,192 by default. Memory grows with their product: at the
+defaults each batch in flight holds about 3 MB (its formatted rows, the compressor's window and the
+compressed result), whatever the size of the sheet.</p>
+<p>Writing 1,000,000 rows of four columns (text, integer, date, number) to a <code>MemoryStream</code> at
+<code>Fastest</code>, on a Ryzen 7 5700X, median of 9 runs:</p>
+<table>
+<thead>
+<tr>
+<th>Write</th>
+<th style="text-align: right;">XLSX</th>
+<th style="text-align: right;">XLSB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Serial</td>
+<td style="text-align: right;">187.3 ms</td>
+<td style="text-align: right;">123.6 ms</td>
+</tr>
+<tr>
+<td>Serial, <code>PrefetchWrite</code></td>
+<td style="text-align: right;">117.8 ms</td>
+<td style="text-align: right;">67.6 ms</td>
+</tr>
+<tr>
+<td>Parallel, 1 batch in flight</td>
+<td style="text-align: right;">172.7 ms</td>
+<td style="text-align: right;">120.6 ms</td>
+</tr>
+<tr>
+<td>Parallel, 2</td>
+<td style="text-align: right;">92.1 ms</td>
+<td style="text-align: right;">63.2 ms</td>
+</tr>
+<tr>
+<td>Parallel, 4</td>
+<td style="text-align: right;">49.9 ms</td>
+<td style="text-align: right;">40.9 ms</td>
+</tr>
+<tr>
+<td>Parallel, 8</td>
+<td style="text-align: right;">35.7 ms</td>
+<td style="text-align: right;">27.7 ms</td>
+</tr>
+</tbody>
+</table>
+<p>The file comes out 0.18% (XLSX) or 0.04% (XLSB) larger, because each batch is compressed on its own.
+As with <code>PrefetchWrite</code>, this is for single-file batch work: a server already writing many files at
+once has no idle cores to give it.</p>
 
 </article>
 
