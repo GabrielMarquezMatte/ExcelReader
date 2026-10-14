@@ -83,7 +83,7 @@ def _frame(rows: int) -> pl.DataFrame:
 
 
 def _generate(data_dir: Path, rows: int) -> dict[str, Path]:
-    from excelreader import encrypt_package, write_polars
+    from excelreader import encrypt_package, write_workbook
 
     data_dir.mkdir(parents=True, exist_ok=True)
     paths = {
@@ -101,7 +101,7 @@ def _generate(data_dir: Path, rows: int) -> dict[str, Path]:
     if not paths["plain.xlsx"].exists():
         df.write_excel(paths["plain.xlsx"], autofit=False)
     if not paths["plain.xlsb"].exists():
-        write_polars(paths["plain.xlsb"], df)
+        write_workbook(paths["plain.xlsb"], df)
     for suffix in ("xlsx", "xlsb"):
         if not paths[f"encrypted.{suffix}"].exists():
             encrypt_package(paths[f"plain.{suffix}"], paths[f"encrypted.{suffix}"], PASSWORD)

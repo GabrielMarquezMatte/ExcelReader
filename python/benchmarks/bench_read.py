@@ -9,7 +9,7 @@ to_polars() at parallelism 1 and 0 against polars.read_csv and pandas.read_csv. 
 zero rows or zero cells is a harness bug, not a result — this script asserts against that instead of
 silently publishing a zero.
 
-NOTE: read_all()/rows() build one Cell tuple per cell; polars.read_excel returns a typed columnar
+NOTE: rows() builds one Cell tuple per cell; polars.read_excel returns a typed columnar
 DataFrame with type inference. That is not matched work (see STYLEGUIDE.md "Tests and
 Benchmarks") — this script labels the comparison, it does not pretend it is apples-to-apples.
 The parse_typed/parse_arrow variants are the closest thing to matched work against polars: they
@@ -40,14 +40,6 @@ def _report(name: str, times: list[float], n: int) -> None:
     print(f"{name}: min={min(times):.4f}s median={statistics.median(times):.4f}s (n={n})")
 
 
-def bench_read_all(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path) as workbook:
-        all_rows = workbook.sheets[0].read_all()
-    row_count = len(all_rows)
-    cell_count = sum(len(row) for row in all_rows)
-    return row_count, cell_count
-
-
 def bench_rows(path: Path) -> tuple[int, int]:
     with excelreader.open_workbook(path) as workbook:
         row_count = 0
@@ -56,12 +48,6 @@ def bench_rows(path: Path) -> tuple[int, int]:
             row_count += 1
             cell_count += len(row)
     return row_count, cell_count
-
-
-def bench_read_all_columnar(path: Path) -> tuple[int, int]:
-    with excelreader.open_workbook(path) as workbook:
-        sheet = workbook.sheets[0].read_all_columnar()
-    return len(sheet.row_offsets) - 1, len(sheet.columns)
 
 
 _T = excelreader.ColumnType
@@ -94,8 +80,8 @@ def bench_parse_typed(path: Path) -> tuple[int, int]:
 
 def bench_to_arrow(path: Path) -> tuple[int, int]:
     with excelreader.open_workbook(path) as workbook:
-        array = workbook.sheets[0].to_arrow(_FIXTURE_SCHEMA)
-    return len(array), len(array) * array.type.num_fields
+        batch = workbook.sheets[0].to_arrow(_FIXTURE_SCHEMA)
+    return batch.num_rows, batch.num_rows * batch.num_columns
 
 
 def bench_iter_parse_typed(path: Path) -> tuple[int, int]:
@@ -107,14 +93,18 @@ def bench_iter_parse_typed(path: Path) -> tuple[int, int]:
     return rows, rows * len(_FIXTURE_SCHEMA)
 
 
-def bench_record_batch_reader(path: Path) -> tuple[int, int]:
+def _record_batch_reader(workbook):
+    import pyarrow
+
+    return pyarrow.RecordBatchReader.from_stream(workbook.sheets[0].to_arrow_stream(_FIXTURE_SCHEMA, batch_size=10000))
+
+
+def bench_arrow_stream(path: Path) -> tuple[int, int]:
     rows = 0
     with excelreader.open_workbook(path) as workbook:
-        for batch in workbook.sheets[0].to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
+        for batch in _record_batch_reader(workbook):
             rows += batch.num_rows
     return rows, rows * len(_FIXTURE_SCHEMA)
-
-
 
 
 class _ProcessMemoryCountersEx(ctypes.Structure):
@@ -149,7 +139,7 @@ def peak_leg_whole_sheet(path: Path) -> tuple[int, int]:
     """Whole-sheet Arrow read, sampled once while the full table is live. Returns (rows, peak)."""
     base = _private_bytes()
     with excelreader.open_workbook(path) as workbook:
-        batch = workbook.sheets[0].to_record_batch(_FIXTURE_SCHEMA)
+        batch = workbook.sheets[0].to_arrow(_FIXTURE_SCHEMA)
         peak = _private_bytes() - base
         rows = batch.num_rows
     return rows, peak
@@ -161,7 +151,7 @@ def peak_leg_streamed(path: Path) -> tuple[int, int]:
     rows = 0
     peak = 0
     with excelreader.open_workbook(path) as workbook:
-        for batch in workbook.sheets[0].to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
+        for batch in _record_batch_reader(workbook):
             rows += batch.num_rows
             peak = max(peak, _private_bytes() - base)
             del batch
@@ -174,7 +164,7 @@ _PEAK_LEGS = {"whole_sheet": peak_leg_whole_sheet, "streamed": peak_leg_streamed
 def _measure_peaks(path: Path) -> dict[str, int]:
     """Runs each peak leg in a FRESH subprocess and collects its number.
 
-    In-process would read zero: the legs above allocate far more than these reads do (read_all alone
+    In-process would read zero: the legs above allocate far more than these reads do (rows() alone
     builds ~900k Cell tuples), a heap is not handed back to the OS on free, and so by the time we got
     here the growth we are trying to see would already be absorbed by slack.
     """
@@ -313,16 +303,8 @@ def main() -> int:
     print(f"file: {args.path}")
     print()
 
-    print("excelreader.read_all():")
-    _time_and_assert("  read_all", bench_read_all, args.path, args.n)
-    print()
-
     print("excelreader.rows() (per-row iteration):")
     _time_and_assert("  rows", bench_rows, args.path, args.n)
-    print()
-
-    print("excelreader.read_all_columnar() [no per-cell Cell/str objects — the fast path]:")
-    _time_and_assert("  read_all_columnar", bench_read_all_columnar, args.path, args.n)
     print()
 
     if args.path.resolve() == DEFAULT_PATH.resolve():
@@ -344,12 +326,12 @@ def main() -> int:
             _time_and_assert("  to_arrow", bench_to_arrow, args.path, args.n)
             print()
 
-            print("excelreader.to_record_batch_reader() (batched):")
-            _time_and_assert("  record_batch_reader", bench_record_batch_reader, args.path, args.n)
+            print("excelreader.to_arrow_stream() read by pyarrow (batched):")
+            _time_and_assert("  arrow_stream", bench_arrow_stream, args.path, args.n)
             print()
 
             if sys.platform == "win32":
-                print("peak memory [to_record_batch whole sheet vs to_record_batch_reader(batch_size=10000)]:")
+                print("peak memory [to_arrow whole sheet vs to_arrow_stream(batch_size=10000)]:")
                 peaks = _measure_peaks(args.path)
                 saved = peaks["whole_sheet"] - peaks["streamed"]
                 print(f"  streaming holds {saved} bytes ({saved / 1024 / 1024:.1f} MiB) less at the peak")

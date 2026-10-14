@@ -22,7 +22,7 @@ elsewhere, set `EXCELREADER_NATIVE_LIB` to its full path.
 from excelreader import open_workbook
 
 with open_workbook("book.xlsx") as workbook:
-    print(workbook.sheet_count, workbook.sheets[0].name)
+    print(len(workbook.sheets), workbook.sheets[0].name)
     for row in workbook.sheets[0].rows():
         for cell in row:
             print(cell.column, cell.type.name, cell.value)
@@ -59,7 +59,7 @@ with excelreader.open_workbook("report.xlsx") as workbook, ThreadPoolExecutor() 
 
 `rows()` and `iter_parse_typed()` are generators: the native cursor opens at the first `next()`. A
 generator that has already started keeps working after `workbook.close()`; one that has not started
-raises at its first `next()`. A `RecordBatchReader` opens its stream at the call, so it works after
+raises at its first `next()`. `to_arrow_stream()` opens its stream at the call, so it works after
 `close()` even if never started.
 
 ### Formats
@@ -82,47 +82,28 @@ as_date = cell.as_date(workbook.is_date1904)
 
 `as_date()` returns `None` for any cell that isn't `CellType.DATE`.
 
-### Reading everything at once
+### Reading a sheet
 
-`rows()` iterates row-by-row; `read_all()` materializes the whole sheet in one call:
+A sheet reads in one of these shapes:
 
-```python
-all_rows = workbook.sheets[0].read_all()
-```
+| Method | Returns | Knob | Needs |
+|---|---|---|---|
+| `rows()` | one list of `Cell` per row, streamed | — | nothing |
+| `parse_typed()` | the whole sheet as a `TypedTable` | `parallelism` | nothing |
+| `iter_parse_typed()` | one `TypedTable` per batch | `batch_size` | nothing |
+| `to_arrow()` | the whole sheet as a `pyarrow.RecordBatch` | `parallelism` | pyarrow |
+| `to_arrow_stream()` | an Arrow PyCapsule stream of batches | `batch_size` | nothing |
+| `to_pandas()` / `to_polars()` | a DataFrame | `batch_size`, `parallelism` | pandas + pyarrow / polars |
 
-This holds every row in memory at once, so prefer `rows()` for very large sheets.
-
-### Reading everything at once, faster
-
-`read_all()`/`rows()` build one `Cell`/`str` object per cell, which dominates wall-clock time on a
-large sheet. `read_all_columnar()` decodes the same data into parallel flat arrays instead — no
-per-cell object construction — and is several times faster on large sheets:
-
-```python
-columnar = workbook.sheets[0].read_all_columnar()
-# columnar.row_offsets[i]:row_offsets[i+1]  -> cell indices for row i
-# columnar.columns[j] / columnar.types[j]   -> cell j's column index / CellType
-# columnar.value_offsets[j]:[j+1]           -> cell j's byte slice into columnar.values
-```
-
-Materialize a single cell on demand instead of decoding every value up front:
-
-```python
-from excelreader import decode_cell
-
-first_cell = decode_cell(columnar, 0)
-```
-
-Each array is a stdlib `array.array('i')`, or a NumPy `int32` array if NumPy is installed
-(`pip install -e "python[numpy]"`) — NumPy is optional and never required.
+`infer_schema()` guesses the schema every typed method takes.
 
 ### Typed columns — the fastest path
 
-Everything above hands back cell *text*, which means the library formats every value to a string on
-the way out. `parse_typed()` skips that entirely: you give it a schema, and the conversion happens
-natively, straight into typed column buffers. On a 65,536 × 14 sheet it is ~8× faster than
-`read_all_columnar()`, ~25× faster than `read_all()`, and faster than `polars.read_excel()` — see
-[Reading](#reading) below for the measured numbers.
+`rows()` hands back cell *text*, which means the library formats every value to a string on the way
+out and builds one Python object per cell. `parse_typed()` skips that entirely: you give it a schema,
+and the conversion happens natively, straight into typed column buffers. On a 65,536 × 14 sheet it is
+~30× faster than `rows()`, and faster than `polars.read_excel()` — see [Reading](#reading) below for
+the measured numbers.
 
 ```python
 from excelreader import ColumnSpec, ColumnType
@@ -142,6 +123,9 @@ day[0]                     # 15477 — days since 1970-01-01
 revenue[0]                 # 14862.69
 table.validity[2]          # bit-packed nulls, or None when the column has none
 ```
+
+Each non-string column is a stdlib `array.array`, or a NumPy array if NumPy is installed
+(`pip install -e "python[numpy]"`) — NumPy is optional and never required.
 
 Leave `name` out to resolve a column by position instead: `ColumnSpec(ColumnType.I64, index=3)`.
 `header_row` defaults to 1 (the first row names the columns); pass `header_row=0` for a sheet with no
@@ -179,12 +163,12 @@ Being a generator, `iter_parse_typed()` opens nothing until the first iteration,
 
 #### Reading a large sheet on several threads
 
-`parse_typed()`, `to_arrow()`, `to_record_batch()` and `to_polars()` take `parallelism`: `1` (the
+`parse_typed()`, `to_arrow()`, `to_pandas()` and `to_polars()` take `parallelism`: `1` (the
 default) reads on one thread, `0` uses every core, `n` up to n threads. XLSX, XLSB and CSV are split. XLS, or a
 sheet under 256 KiB, is read on one thread with the same result. The table is identical
 either way. Every partition's columns are held until they are merged, so the peak memory is higher
-than a sequential read of the same file. `to_polars()` with `parallelism` other than 1 parses the whole
-file instead of streaming it in batches.
+than a sequential read of the same file. `to_pandas()` and `to_polars()` with `parallelism` other
+than 1 parse the whole file instead of streaming it in batches.
 
 `xl_parse_typed` on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:
 
@@ -266,14 +250,15 @@ write_workbook(buffer, table, types, format="xlsx")
 payload = buffer.getvalue()
 ```
 
-`write_pandas()` and `write_polars()` build the table from a DataFrame instead (both go through
-`write_arrow()`, so `pyarrow` must be installed). They take the same destinations and keywords:
+`write_workbook()` also takes Arrow-shaped data in place of a `TypedTable`: a `pyarrow.RecordBatch`
+or `Table`, a pandas DataFrame (its index is not written), or any table exposing
+`__arrow_c_stream__`, such as a polars DataFrame. Each column's type comes from its Arrow type, so
+leave `types` out. This path requires `pyarrow`:
 
 ```python
-from excelreader import write_pandas, write_polars
-
-write_pandas("report.xlsx", df)          # requires pandas + pyarrow
-write_polars("report.xlsx", polars_df)   # requires polars + pyarrow
+write_workbook("report.xlsx", df)          # pandas
+write_workbook("report.xlsx", polars_df)   # polars
+write_workbook("report.xlsx", record_batch)
 ```
 
 `WriteOptions` sets the sheet name and CSV dialect, mirroring `xl_write_options` — every field
@@ -309,10 +294,13 @@ with open_writer("out.xlsx") as writer:
     writer.end_sheet()
 ```
 
-`write_row` picks each cell's type from the Python value. For control over a column's type — or to
-write a typed blank — use the explicit methods: `write_str`, `write_i64`, `write_f64`, `write_bool`,
-`write_date`, `write_time`, `write_timestamp`, and `write_null(ColumnType.I64)`. A `None` passed to
-`write_row` becomes a blank string cell.
+`write_row` picks each cell's type from the Python value: `str`, `bool`, `int` (64-bit), `float`,
+`datetime.datetime` (an aware one is converted to UTC), `datetime.date` and `datetime.time`. A `None`
+becomes a blank string cell; the tuple `(None, ColumnType.I64)` writes a blank cell of that type:
+
+```python
+writer.write_row(["widget", (None, ColumnType.I64), 2.5])
+```
 
 To build a workbook without touching the filesystem, open the writer over a binary object with
 `write()`, such as `io.BytesIO`. It needs `format`, and receives the finished workbook in one
@@ -334,49 +322,40 @@ payload = buffer.getvalue()
 ### Arrow
 
 With `pyarrow` installed, `to_arrow()` runs the same read and hands the buffers to pyarrow zero-copy
-over the Arrow C Data Interface:
+over the Arrow C Data Interface, as one column-named `pyarrow.RecordBatch`:
+
+```python
+with open_workbook("sales.xlsb") as workbook:
+    batch = workbook.sheets[0].to_arrow(schema)
+```
+
+pyarrow owns the buffers from that point on, so the result stays valid after the workbook is closed.
+
+#### Streaming: Arrow streams, pandas, and polars
+
+`to_arrow_stream()` is `to_arrow()` a batch at a time — peak memory is one batch rather than one
+sheet. It returns a single-use stream implementing the Arrow PyCapsule interface
+(`__arrow_c_stream__`) and needs no third-party package itself; hand it to any consumer, such as
+pyarrow for a `RecordBatchReader`:
 
 ```python
 import pyarrow as pa
 
 with open_workbook("sales.xlsb") as workbook:
-    array = workbook.sheets[0].to_arrow(schema)
-
-batch = pa.RecordBatch.from_struct_array(array)
-```
-
-pyarrow owns the buffers from that point on, so the result stays valid after the workbook is closed.
-
-#### Streaming: RecordBatchReader, pandas, and polars
-
-`to_record_batch_reader()` is `to_arrow()` a batch at a time, as a streaming
-`pyarrow.RecordBatchReader` — peak memory is one batch rather than one sheet:
-
-```python
-with open_workbook("sales.xlsb") as workbook:
-    reader = workbook.sheets[0].to_record_batch_reader(schema, batch_size=10_000)
+    reader = pa.RecordBatchReader.from_stream(workbook.sheets[0].to_arrow_stream(schema, batch_size=10_000))
     for batch in reader:
-        ...
+        frame = batch.to_pandas()   # or polars.from_arrow(batch), for one DataFrame per batch
 ```
 
-Same `batch_size` rules as `iter_parse_typed()` above, except `to_record_batch_reader()` raises
-immediately rather than on the first iteration. The reader keeps working after the workbook is closed.
+Same `batch_size` rules as `iter_parse_typed()` above, except `to_arrow_stream()` raises
+immediately rather than on the first iteration. The stream keeps working after the workbook is closed.
 
-`iter_pandas()`/`iter_polars()` build on it, yielding one DataFrame per batch (requires pyarrow, plus
-pandas or polars respectively):
-
-```python
-with open_workbook("sales.xlsb") as workbook:
-    for frame in workbook.sheets[0].iter_polars(schema, batch_size=10_000):
-        ...
-```
-
-`to_pandas()`/`to_polars()` materialize the whole sheet as a single DataFrame and also take a
-`batch_size`, but the two spend it differently — do not blur them. `to_polars()` genuinely streams:
-polars consumes the reader batch by batch, so the whole sheet is never resident as Arrow buffers at
-once. `to_pandas()` does **not** bound peak memory the same way — `RecordBatchReader.read_all()`
-concatenates every batch before pandas ever sees them. What `batch_size` buys `to_pandas()` instead is
-the conversion: `self_destruct=True` frees each Arrow chunk as pandas consumes it, so the sheet is
+`to_pandas()`/`to_polars()` materialize the whole sheet as a single DataFrame and both take
+`batch_size` and `parallelism`, but they spend `batch_size` differently — do not blur them.
+`to_polars()` genuinely streams: polars consumes the stream batch by batch, so the whole sheet is
+never resident as Arrow buffers at once. `to_pandas()` does **not** bound peak memory the same way —
+it concatenates every batch before pandas ever sees them. What `batch_size` buys `to_pandas()` instead
+is the conversion: `self_destruct=True` frees each Arrow chunk as pandas consumes it, so the sheet is
 never held twice, once as Arrow and once as the DataFrame.
 
 **A faulted stream surfaces differently from every other native error in this library**: pyarrow's
@@ -452,6 +431,7 @@ with open_workbook("export.csv", format="csv", options=OpenOptions(csv_delimiter
 ```
 
 `csv_delimiter` and `csv_quote` are byte values, so pass `ord(";")` rather than `";"`.
+`max_cell_bytes` and `intern_strings` apply to every format, a CSV included.
 
 The `max_*` fields are resource limits rather than tuning knobs: they bound what a malformed or
 hostile file can make the reader allocate, and exceeding one raises `ExcelReaderError`. Lower them
@@ -497,7 +477,7 @@ An explicit `format="xlsx"`/`format="xlsb"` works for an encrypted file too, the
 `format` unset — both routes decrypt correctly given the right `password`.
 
 Writing an encrypted workbook is a second step: write the plaintext package with `write_workbook`
-(or any of the `write_*` helpers), then wrap it with `encrypt_package`, which produces an
+or `open_writer`, then wrap it with `encrypt_package`, which produces an
 agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a
 `dataIntegrity` HMAC:
 
@@ -538,24 +518,22 @@ fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter 3.2.9.
 
 | API | Median | What it produces |
 |---|---:|---|
-| `to_record_batch_reader()` | 31.9 ms | Arrow record batches, streamed |
+| `to_arrow_stream()`, read by pyarrow | 31.9 ms | Arrow record batches, streamed |
 | `to_arrow()` | 31.8 ms | the same parse, handed to pyarrow zero-copy |
 | `parse_typed()` | 33.5 ms | typed columnar buffers, converted natively |
 | `iter_parse_typed()` | 34.2 ms | the same typed buffers, in batches |
 | `to_polars()` | 34.6 ms | typed columnar DataFrame, schema inferred |
 | `polars.read_excel()` | 125.6 ms | typed columnar DataFrame, types inferred |
-| `read_all_columnar()` | 463.3 ms | raw columnar cells, no per-cell Python objects |
 | `rows()` | 1,034.6 ms | one `Cell` object per cell, streamed per row |
-| `read_all()` | 1,631.0 ms | one `Cell` object per cell, all at once |
 
 The batched readers cost the same as their whole-sheet counterparts and lower the peak memory:
-`to_record_batch_reader(batch_size=10000)` peaks at 11.4 MiB against 18.8 MiB for one whole-sheet
+`to_arrow_stream(batch_size=10000)` peaks at 11.4 MiB against 18.8 MiB for one whole-sheet
 record batch on this file.
 
 Only the `to_polars()` / `polars.read_excel()` pair is a like-for-like comparison (~3.6x), and even
 that one is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules
 are not identical. The rows above it produce different things and are listed to show what each API
-costs, not to rank them — `read_all()` is ~49x slower than `parse_typed()` because it materializes
+costs, not to rank them — `rows()` is ~30x slower than `parse_typed()` because it materializes
 917,504 Python objects, which is the price of that shape, not a slow parser.
 
 CSV, from `65K_Records_Data.csv` (8.2 MB), same 14 typed columns:
@@ -583,14 +561,14 @@ threads](#reading-a-large-sheet-on-several-threads).
 | `write_workbook()` → xls | 44.4 ms | 17.7 MB |
 | `write_workbook()` → xlsb | 71.5 ms | 5.1 MB |
 | `write_workbook()` → xlsx | 90.6 ms | 5.1 MB |
-| `write_polars()` → xlsx | 487.4 ms | 5.1 MB |
-| `write_pandas()` → xlsx | 493.8 ms | 5.1 MB |
+| `write_workbook(polars_df)` → xlsx | 487.4 ms | 5.1 MB |
+| `write_workbook(pandas_df)` → xlsx | 493.8 ms | 5.1 MB |
 | `polars.DataFrame.write_excel()` | 4,670.4 ms | 5.6 MB |
 | `pandas.DataFrame.to_excel()` | 7,192.9 ms | 5.5 MB |
 
 The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
-`write_polars()` is ~9.6x faster than polars' own `write_excel()`, and `write_pandas()` ~14.6x
-faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
+`write_workbook(polars_df)` is ~9.6x faster than polars' own `write_excel()`, and
+`write_workbook(pandas_df)` ~14.6x faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
 through Arrow and then a Python list before reaching the native columns, which is most of the gap
 between the ~490 ms rows and the 90 ms one. Handing `write_workbook()` buffers that are already
 columnar — what `parse_typed()` returns — skips all of it.

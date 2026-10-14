@@ -13,6 +13,7 @@ import ctypes
 import datetime
 import io
 import os
+import sys
 from array import array
 from pathlib import Path
 from typing import IO, Any, Union
@@ -128,28 +129,40 @@ Destination = Union[str, os.PathLike, IO[bytes]]
 
 def write_workbook(
     destination: Destination,
-    table: TypedTable,
-    types: list[ColumnType],
+    data: Any,
+    types: list[ColumnType] | None = None,
     *,
     format: str | None = None,
     options: WriteOptions | None = None,
 ) -> None:
-    """Writes `table` as a single sheet to `destination`: a path, or a binary object with `write()`
+    """Writes `data` as a single sheet to `destination`: a path, or a binary object with `write()`
     such as `io.BytesIO` or an open file.
 
-    `table` is what `Sheet.parse_typed()` returns, so reading a sheet and writing it back out is a
-    round-trip through the same buffers. `types` gives each column's `ColumnType` and is required
-    positionally: a `TypedTable` carries raw buffers (an `array`/`StringColumn`/NumPy array), and
-    nothing about a raw buffer's element size alone distinguishes, say, I64 from TIME — both are
-    8-byte-per-row arrays. The type tag has to travel with the call, not be guessed from the data.
+    `data` is one of:
+
+    - a `TypedTable`, what `Sheet.parse_typed()` returns, so reading a sheet and writing it back out
+      is a round-trip through the same buffers. `types` then gives each column's `ColumnType` and is
+      required: a `TypedTable` carries raw buffers, and nothing about a raw buffer's element size
+      alone distinguishes, say, I64 from TIME — both are 8-byte-per-row arrays.
+    - a `pyarrow.RecordBatch` or `pyarrow.Table`, a `pandas.DataFrame` (its index is not written),
+      or any other table exposing `__arrow_c_stream__`, such as a `polars.DataFrame`. Each column's
+      type comes from its Arrow type, so `types` must be None. Requires pyarrow.
 
     `format` is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
     with `write()` has no extension, so it needs `format`. The whole workbook is built in memory and
     handed to `write()` in one call, at the object's current position; the object is not closed.
 
-    `table.names` becomes the header row. `options` sets the sheet name and CSV dialect; see
+    The column names become the header row. `options` sets the sheet name and CSV dialect; see
     `WriteOptions`.
     """
+    if isinstance(data, TypedTable):
+        if types is None:
+            raise TypeError("types is required when data is a TypedTable: one ColumnType per column")
+        table = data
+    else:
+        if types is not None:
+            raise TypeError("types must be None unless data is a TypedTable; Arrow data carries its own types")
+        table, types = _table_from_arrow(_arrow_table(data))
     if isinstance(destination, (str, os.PathLike)):
         _write_file(Path(destination), table, types, format, options)
         return
@@ -206,6 +219,7 @@ def _write_memory(
 _ARROW_TYPES = {
     "string": ColumnType.STRING,
     "large_string": ColumnType.STRING,
+    "string_view": ColumnType.STRING,
     "int64": ColumnType.I64,
     "int32": ColumnType.I64,
     "double": ColumnType.F64,
@@ -325,35 +339,26 @@ def _table_from_arrow(batch: Any) -> tuple[TypedTable, list[ColumnType]]:
     return table, types
 
 
-def _arrow_from_pandas(df: Any) -> Any:
-    import pyarrow
+def _arrow_table(data: Any) -> Any:
+    try:
+        import pyarrow
+    except ImportError:
+        raise ImportError(
+            "write_workbook() requires pyarrow to write Arrow or DataFrame data — install it with "
+            "`pip install pyarrow`, or pass a TypedTable and its types."
+        ) from None
 
-    return pyarrow.Table.from_pandas(df, preserve_index=False)
-
-
-def write_arrow(
-    destination: Destination, batch: Any, *, format: str | None = None, options: WriteOptions | None = None
-) -> None:
-    """Writes a `pyarrow.RecordBatch` (or `Table`) to `destination`, as `write_workbook()` does.
-    Requires pyarrow."""
-    table, types = _table_from_arrow(batch)
-    write_workbook(destination, table, types, format=format, options=options)
-
-
-def write_pandas(
-    destination: Destination, df: Any, *, format: str | None = None, options: WriteOptions | None = None
-) -> None:
-    """Writes a `pandas.DataFrame` to `destination`, as `write_workbook()` does. Requires pyarrow and
-    pandas."""
-    write_arrow(destination, _arrow_from_pandas(df), format=format, options=options)
-
-
-def write_polars(
-    destination: Destination, df: Any, *, format: str | None = None, options: WriteOptions | None = None
-) -> None:
-    """Writes a `polars.DataFrame` to `destination`, as `write_workbook()` does. Requires pyarrow and
-    polars."""
-    write_arrow(destination, df.to_arrow(), format=format, options=options)
+    if isinstance(data, (pyarrow.RecordBatch, pyarrow.Table)):
+        return data
+    pandas = sys.modules.get("pandas")
+    if pandas is not None and isinstance(data, pandas.DataFrame):
+        return pyarrow.Table.from_pandas(data, preserve_index=False)
+    if hasattr(data, "__arrow_c_stream__"):
+        return pyarrow.RecordBatchReader._import_from_c_capsule(data.__arrow_c_stream__()).read_all()
+    raise TypeError(
+        "data must be a TypedTable, a pyarrow RecordBatch or Table, a pandas DataFrame, or an object "
+        f"with __arrow_c_stream__; got {type(data).__name__}"
+    )
 
 
 def encrypt_package(
