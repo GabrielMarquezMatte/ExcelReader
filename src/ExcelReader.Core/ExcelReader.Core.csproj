@@ -8,10 +8,16 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- Pack fails on any binary break against the baseline; move it to each new release. -->
+  <PropertyGroup>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>7.0.0-rc.2</PackageValidationBaselineVersion>
+  </PropertyGroup>
+
   <!-- NuGet package metadata -->
   <PropertyGroup>
     <PackageId>ExcelReader.NET</PackageId>
-    <Version>1.0.0</Version>
+    <Version>$(PackageValidationBaselineVersion)-dev</Version>
     <Authors>Gabriel Matte</Authors>
     <Title>ExcelReader</Title>
     <Description>High-performance, low-allocation .NET library for reading and writing XLSX, XLSB, XLS, and CSV — streaming readers, typed row parsing, and workbook writers for all four formats.</Description>

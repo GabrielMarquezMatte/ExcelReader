@@ -20,6 +20,21 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
   `src/ExcelReader.Core/PublicAPI/PublicAPI.Unshipped.txt`. A bot promotes `Unshipped` →
   `Shipped` automatically after each release — don't edit `Shipped.txt` by hand.
 
+- **Minor versions don't break callers.** [docs/guide/versioning.md](docs/guide/versioning.md) is the
+  policy; in practice:
+  - A new member on a library-implemented interface (`IExcelWorkbook`, `IExcelSheet`,
+    `IExcelRowEnumerator`, `IWorkbookWriter`, `ISheetWriter`, `ITableSheetWriter`, `IRowWriter`)
+    gets a default implementation. A user-implemented one (`IExcelCellConverter`, `IExcelCellWriter`,
+    `IExcelRowMap`, `IExcelRecordMap`, `IRowRecord`, `IRowAccumulator`) gets no new member a user
+    would have to implement.
+  - A feature only some formats support goes on the concrete types first, or on its own interface
+    the way `ITableSheetWriter` sits beside `ISheetWriter`.
+  - New inputs go on the options object or a new overload, never as a new optional parameter on an
+    existing method.
+  - `dotnet pack` runs package validation against `PackageValidationBaselineVersion` in the
+    `ExcelReader.Core` and `ExcelReader.Arrow` projects, and CI runs it on every pull request.
+    After each release, move the baseline to the version just published.
+
 - **Tests are required for behavior changes.** Run the suite before opening a PR:
 
   ```bash

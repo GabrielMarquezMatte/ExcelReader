@@ -5,7 +5,10 @@ namespace ExcelReader.Core.Reader
     /// <summary>
     /// Identifies the kind of value a <see cref="Cell"/> holds.
     /// </summary>
-    /// <remarks>A formula cell reports the type of its cached result, the same in every format.</remarks>
+    /// <remarks>
+    /// A formula cell reports the type of its cached result, the same in every format.
+    /// <para>A minor version can add values, so a <see langword="switch"/> over this enum should have a default branch. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</para>
+    /// </remarks>
     [SuppressMessage("Design", "CA1027:Mark enums with FlagsAttribute", Justification = "Not flags: the values match the native XL_CELL_* codes, and 5 belonged to the removed Formula.")]
     public enum CellType
     {
