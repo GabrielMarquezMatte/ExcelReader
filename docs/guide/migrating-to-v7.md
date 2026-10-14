@@ -185,3 +185,24 @@ The streaming writer and the encryption helper follow the same pattern. `open_wr
 |---|---|
 | `with open_writer_to_memory("xlsx") as w:`<br>`    ...`<br>`    payload = w.bytes()` | `buffer = io.BytesIO()`<br>`with open_writer(buffer, "xlsx") as w:`<br>`    ...`<br>`payload = buffer.getvalue()` |
 | `secret = encrypt_package_bytes(payload, password)` | `encrypt_package(payload, out, password)` with `out = io.BytesIO()` |
+
+### Python: one shape per read
+
+A sheet reads as rows (`rows()`), a typed table (`parse_typed()`, or `iter_parse_typed()` in batches), Arrow (`to_arrow()`, or `to_arrow_stream()` in batches) or a DataFrame (`to_pandas()`, `to_polars()`). `write_workbook()` takes a `TypedTable` or any Arrow-compatible table, including pandas and polars DataFrames. `SheetWriter` writes whole rows only.
+
+| v6 | v7 |
+|---|---|
+| `workbook.sheet_count` | `len(workbook.sheets)` |
+| `workbook.sheet_names` | `[s.name for s in workbook.sheets]` |
+| `workbook.sheet_name_at(i)` | `workbook.sheets[i].name` |
+| `sheet.read_all()` | `list(sheet.rows())`, or `parse_typed()` for speed |
+| `sheet.read_all_columnar()`, `ColumnarSheet`, `decode_cell()` | `sheet.parse_typed(sheet.infer_schema())` |
+| `sheet.to_arrow()` returning a `StructArray` | `sheet.to_arrow()` returns a `pyarrow.RecordBatch` |
+| `sheet.to_record_batch(...)` | `sheet.to_arrow(...)` |
+| `sheet.to_record_batch_reader(...)` | `pyarrow.RecordBatchReader.from_stream(sheet.to_arrow_stream(...))` |
+| `sheet.iter_pandas(...)`, `sheet.iter_polars(...)` | iterate the reader above and convert each batch |
+| `write_arrow(dest, batch)`, `write_pandas(dest, df)`, `write_polars(dest, df)` | `write_workbook(dest, batch_or_df)` |
+| `writer.start_row()`, `write_str(v)` … `write_timestamp(v)`, `end_row()` | `writer.write_row([...])` |
+| `writer.write_null(ColumnType.X)` | `(None, ColumnType.X)` as a value in `write_row` |
+| `OpenOptions(csv_max_cell_bytes=n)`, `OpenOptions(csv_intern_strings=b)` | `OpenOptions(max_cell_bytes=n)`, `OpenOptions(intern_strings=b)`, which now apply to CSV too |
+| `from excelreader import ArrowStream` | `from excelreader.arrow_stream import ArrowStream` |
