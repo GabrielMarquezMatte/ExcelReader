@@ -206,3 +206,26 @@ A sheet reads as rows (`rows()`), a typed table (`parse_typed()`, or `iter_parse
 | `writer.write_null(ColumnType.X)` | `(None, ColumnType.X)` as a value in `write_row` |
 | `OpenOptions(csv_max_cell_bytes=n)`, `OpenOptions(csv_intern_strings=b)` | `OpenOptions(max_cell_bytes=n)`, `OpenOptions(intern_strings=b)`, which now apply to CSV too |
 | `from excelreader import ArrowStream` | `from excelreader.arrow_stream import ArrowStream` |
+
+### C++: one overload set per operation
+
+`Workbook::open` takes a path, a byte span, a `Source` or an `InputStream`. `write_columns`, `write_sheet` and `WriterHandle::open` take a path or a `std::vector<std::uint8_t>&`. Options are passed as `const Options& = {}`, and the format moved into `OpenOptions::format` and `WriteOptions::format` (`XL_FORMAT_AUTO` infers it from a path's extension).
+
+| v6 | v7 |
+|---|---|
+| `Workbook::open(path, format, &opts)` | `Workbook::open(path, {.format = format, ...})` |
+| `Workbook::open_memory(span, ...)`, `open_source(...)`, `open_stream(...)` | `Workbook::open(span | source | stream, opts)` |
+| `sheet_count()`, `sheet_name_at(i)`, `sheet_names()` | `sheets()`, `sheet(i).name()` |
+| `Sheet::read_all_decoded()`, `RowCursor::read_all_decoded()` | `Sheet::read_all()` |
+| `typed_reader` / `arrow_stream` with `batch_size = 0` | `parse_sheet` / `parse_arrow` |
+| `TableView::to_vector()` | `std::vector(t.begin(), t.end())` |
+| `handle()`, `from_raw`, constructors from C handles, `to_c()` | removed or private |
+| `XlType<T>`, `FieldBinding` | `xl::detail` |
+| `OpenOptions::password(sv)` | `OpenOptions::password` field |
+| `OpenOptions::csv_max_cell_bytes`, `csv_intern_strings` | `max_cell_bytes`, `intern_strings`, which now apply to CSV too |
+| `write_columns_to_memory(format, cols, &opts)` | `write_columns(out_vector, cols, {.format = format})` |
+| `write_sheet_to_memory(format, rows, &opts)` | `write_sheet(out_vector, rows, {.format = format})` |
+| `format_from_path(path)` | internal |
+| `WriterHandle::open_memory(format, &opts)` + `bytes()` | `WriterHandle::open(out_vector, {.format = format})` + `finish()` |
+| `aggregate_csv_file` / `aggregate_csv_memory` with `CsvParallelOptions` | `aggregate_csv(path | span, seed, opts, header_row, dop)` |
+| `ArrowSchemaGuard`, `ArrowArrayGuard` | `ArrowTable` |
