@@ -120,6 +120,18 @@ The write-side counterpart to <a class="xref" href="ExcelReader.Core.Parser.Exce
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html">ParallelSheetWriterExtensions</a></dt>
+      <dd><p>Record writes that format and compress batches of rows on several threads and write them in
+order. Memory is bounded by <a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_DegreeOfParallelism">DegreeOfParallelism</a> batches of
+<a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_BatchRows">BatchRows</a> rows.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ParallelWriteOptions.html">ParallelWriteOptions</a></dt>
+      <dd><p>Configures the parallel record writes of <a class="xref" href="ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html">ParallelSheetWriterExtensions</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html">SheetWriterExtensions</a></dt>
       <dd><p>Convenience methods layered on <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html">ISheetWriter&lt;TRow&gt;</a>: write a whole collection of
 records to a sheet in one call, driving the start-row/write/dispose lifecycle per record.</p>

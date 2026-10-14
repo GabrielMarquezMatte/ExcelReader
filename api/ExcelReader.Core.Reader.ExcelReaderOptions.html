@@ -161,7 +161,7 @@ Exceeding a byte or entry-count limit throws <a class="xref" href="ExcelReader.C
 
   <h3 id="ExcelReader_Core_Reader_ExcelReaderOptions_Csv" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.Csv">
   Csv
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the delimited-text settings used when a source is opened as
@@ -200,7 +200,7 @@ settings have nothing to act on.</p>
 
   <h3 id="ExcelReader_Core_Reader_ExcelReaderOptions_Default" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.Default">
   Default
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L95"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the default options instance, used whenever a reader is opened without explicit options.</p>
@@ -232,7 +232,7 @@ settings have nothing to act on.</p>
 
   <h3 id="ExcelReader_Core_Reader_ExcelReaderOptions_InternStrings" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.InternStrings">
   InternStrings
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L56"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets a value indicating whether text cells not served by a shared-string table (inline and
@@ -304,7 +304,7 @@ real-world, mixed-cardinality CSV corpus.</p>
 
   <h3 id="ExcelReader_Core_Reader_ExcelReaderOptions_MaxPasswordSpinCount" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.MaxPasswordSpinCount">
   MaxPasswordSpinCount
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L84"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the maximum password-derivation iteration count accepted from an encrypted
@@ -448,7 +448,7 @@ may materialize.</p>
 
   <h3 id="ExcelReader_Core_Reader_ExcelReaderOptions_Password" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.Password">
   Password
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L63"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the password used to open an encrypted workbook. Defaults to <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>
@@ -526,7 +526,7 @@ with work already saturating the CPU.</p>
 
   <h3 id="ExcelReader_Core_Reader_ExcelReaderOptions_VerifyEncryptedIntegrity" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.VerifyEncryptedIntegrity">
   VerifyEncryptedIntegrity
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L75"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets a value indicating whether an encrypted workbook's <code>dataIntegrity</code> HMAC is
@@ -560,6 +560,44 @@ everything, so it always verifies regardless of this setting. With verification 
 ciphertext tampering is not detected, though corrupt ciphertext still fails loudly downstream
 when the decrypted bytes fail ZIP and XML parsing. Standard encryption has no HMAC field, so
 this setting does not apply to it.</p>
+</div>
+
+
+
+
+  <a id="ExcelReader_Core_Reader_ExcelReaderOptions_VerifyZipChecksums_" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums*"></a>
+
+  <h3 id="ExcelReader_Core_Reader_ExcelReaderOptions_VerifyZipChecksums" data-uid="ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums">
+  VerifyZipChecksums
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/ExcelReaderOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether each ZIP entry read from an XLSX or XLSB package is
+checked against the CRC-32 its central directory records. Defaults to <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool VerifyZipChecksums { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="ExcelReader_Core_Reader_ExcelReaderOptions_VerifyZipChecksums_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A mismatch throws <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.invaliddataexception">InvalidDataException</a> when the entry's last bytes are read, so
+rows before the damage may already have been returned. Turn it off to read a package whose
+producer wrote wrong checksums; damaged data then surfaces only if it also breaks parsing.</p>
 </div>
 
 

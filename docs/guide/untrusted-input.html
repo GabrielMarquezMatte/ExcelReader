@@ -199,6 +199,15 @@ bytes. Anything else escaping a read of a file — an <code>IndexOutOfRangeExcep
 <code>OutOfMemoryException</code>, a hang — is a bug; please report it privately as described in
 <a href="../../SECURITY.html">SECURITY.md</a>. See <a href="errors.html">Errors across languages</a> for how these map onto the
 bindings.</p>
+<h2 id="damaged-packages">Damaged packages</h2>
+<p>An XLSX or XLSB package is a ZIP archive, and each of its entries carries a CRC-32 of its data.
+The reader checks it as the entry is read and throws <code>InvalidDataException</code> on a mismatch, so a file
+cut short or altered in transit does not come back as plausible but wrong cells. A sheet is checked
+when its last byte is read, which means the rows before the damage may already have been returned:
+treat the exception as invalidating everything read from that file. The checksum guards against
+accidents, not tampering, since whoever alters the data can recompute it.
+<a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_VerifyZipChecksums"><code>ExcelReaderOptions.VerifyZipChecksums</code></a>
+turns the check off.</p>
 <h2 id="what-the-reader-does-not-do">What the reader does not do</h2>
 <ul>
 <li><strong>It evaluates nothing.</strong> A formula cell reports the result Excel cached when it saved the file,

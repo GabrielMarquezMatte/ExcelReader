@@ -431,6 +431,9 @@ when parsing untrusted uploads.</p>
 <p><code>prefetch_decompression=True</code> overlaps inflating an XLSX/XLSB sheet with parsing it — worth it for
 single-file batch work, not for a server already reading many files in parallel. See the root README
 for the measured trade.</p>
+<p>Each ZIP entry of an XLSX or XLSB is checked against its CRC-32 as it is read, so a damaged file
+raises <code>ExcelReaderError</code> instead of returning wrong cells. <code>verify_zip_checksums=False</code> turns the
+check off, for a file whose producer wrote wrong checksums.</p>
 <h3 id="encrypted-workbooks">Encrypted workbooks</h3>
 <p><code>open_workbook()</code>/<code>open_bytes()</code> take a <code>password</code> keyword to open a password-protected OOXML
 workbook (.xlsx/.xlsb/.xlsm):</p>

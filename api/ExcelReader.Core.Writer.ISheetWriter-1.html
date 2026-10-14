@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Writer_ISheetWriter_1" data-uid="ExcelReader.Core.Writer.ISheetWriter`1" class="text-break">
-Interface ISheetWriter&lt;TRow&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L91"><i class="bi bi-code-slash"></i></a>
+Interface ISheetWriter&lt;TRow&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L93"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -144,7 +144,7 @@ then ends the sheet. The sheet's leading structure is written when the first row
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_End" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.End">
   End()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L154"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_EndAsync_System_Threading_CancellationToken_">EndAsync(CancellationToken)</a>: finalizes the sheet without the
@@ -173,7 +173,7 @@ void End()</code></pre>
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_EndAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.EndAsync(System.Threading.CancellationToken)">
   EndAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L164"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Finalizes the sheet, writing any trailing structure so the sheet is complete within the
@@ -213,7 +213,7 @@ started afterward.</p>
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_SetColumnStyle_System_Int32_System_Int32_" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.SetColumnStyle(System.Int32,System.Int32)">
   SetColumnStyle(int, int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L138"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Applies <code class="paramref">styleId</code> to every cell of column <code class="paramref">columnIndex</code>
@@ -246,7 +246,7 @@ that does not carry its own row style. Must be called before the first row is st
   <h4 class="section">Exceptions</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
-    <dd><p><code class="paramref">columnIndex</code> is negative, or <code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+    <dd><p><code class="paramref">columnIndex</code> is negative or beyond the format's last column, or <code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
 </dd>
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
     <dd><p>The first row has already been started.</p>
@@ -259,7 +259,7 @@ that does not carry its own row style. Must be called before the first row is st
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_SetColumnWidth_System_Int32_System_Double_" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.SetColumnWidth(System.Int32,System.Double)">
   SetColumnWidth(int, double)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L148"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Sets the display width, in characters, of column <code class="paramref">columnIndex</code>. Must be
@@ -292,7 +292,7 @@ called before the first row is started.</p>
   <h4 class="section">Exceptions</h4>
   <dl class="parameters">
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
-    <dd><p><code class="paramref">columnIndex</code> or <code class="paramref">width</code> is negative.</p>
+    <dd><p><code class="paramref">columnIndex</code> is negative or beyond the format's last column, or <code class="paramref">width</code> is negative or greater than 255.</p>
 </dd>
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
     <dd><p>The first row has already been started.</p>
@@ -305,7 +305,7 @@ called before the first row is started.</p>
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_StartRow" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.StartRow">
   StartRow()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L100"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Threading_CancellationToken_">StartRowAsync(CancellationToken)</a>: begins the next
@@ -339,7 +339,7 @@ row, without the async/await machinery, for native/unmanaged callers whose ABI i
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_StartRow_System_Int32_" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.StartRow(System.Int32)">
   StartRow(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L109"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Int32_System_Threading_CancellationToken_">StartRowAsync(int, CancellationToken)</a>: begins the
@@ -385,7 +385,7 @@ next row with <code class="paramref">styleId</code> applied to its cells, withou
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Int32_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.StartRowAsync(System.Int32,System.Threading.CancellationToken)">
   StartRowAsync(int, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L128"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins the next row, applying <code class="paramref">styleId</code> (from <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>)
@@ -434,7 +434,7 @@ to its cells.</p>
 
   <h3 id="ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.ISheetWriter`1.StartRowAsync(System.Threading.CancellationToken)">
   StartRowAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L118"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins the next row, in order starting from the first, and returns its writer. Only one row
@@ -475,7 +475,7 @@ disposed before starting the next one.</p>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L91" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L93" class="edit-link">Edit this page</a>
         </div>
 
 

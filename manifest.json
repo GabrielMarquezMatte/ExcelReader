@@ -1447,6 +1447,34 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ParallelSheetWriterExtensions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.yml\" sourcestartlinenumber=\"1\">Record writes that format and compress batches of rows on several threads and write them in\norder. Memory is bounded by <xref href=\"ExcelReader.Core.Writer.ParallelWriteOptions.DegreeOfParallelism\" data-throw-if-not-resolved=\"false\"></xref> batches of\n<xref href=\"ExcelReader.Core.Writer.ParallelWriteOptions.BatchRows\" data-throw-if-not-resolved=\"false\"></xref> rows.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ParallelWriteOptions.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ParallelWriteOptions.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ParallelWriteOptions",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ParallelWriteOptions.yml\" sourcestartlinenumber=\"1\">Configures the parallel record writes of <xref href=\"ExcelReader.Core.Writer.ParallelSheetWriterExtensions\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/api/ExcelReader.Core.Writer.SheetWriterExtensions.yml",
       "output": {
         ".html": {

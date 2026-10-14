@@ -122,7 +122,8 @@
 <pre><code class="lang-python">def as_date(date1904: bool = False) -&gt; datetime.date | None
 </code></pre>
 <p>Converts a DATE cell's serial value to a date. Returns None for any other cell type.</p>
-<p><code>date1904</code> should come from <code>Workbook.is_date1904</code> for the workbook this cell came from.</p>
+<p><code>date1904</code> should come from <code>Workbook.is_date1904</code> for the workbook this cell came from.
+Raises <code>ValueError</code> for a serial outside what Excel can show as a date.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>

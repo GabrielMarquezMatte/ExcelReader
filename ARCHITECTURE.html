@@ -330,6 +330,21 @@ round-trip check between the two directions: they don't share a derivation imple
 against a shared bug, so the fixtures in <code>tests/ExcelReader.Tests/data/encrypted/</code> (paired with
 plaintext produced by an independent implementation) remain the only correctness oracle for
 decryption specifically.</p>
+<p>XLSX and XLSB packages are written by <code>Writer/Zip/ZipPackageWriter</code>, not <code>ZipArchive</code>. It writes the
+layout <code>ZipArchive</code> uses in create mode (patched local headers on seekable streams, data descriptors
+otherwise, Zip64 only when a field overflows). <code>CompressionLevel.Fastest</code> entries go through
+<code>DeflateEncoder</code>, a fixed-Huffman deflate with a stored-block fallback, and are checksummed by
+<code>Crc32</code>, which folds 128 or 256 bits at a time with PCLMULQDQ. <code>Optimal</code> and <code>SmallestSize</code> keep
+zlib through <code>DeflateStream</code>. When a write faults, <code>Abandon</code> still writes a central directory for
+the entries that completed, as disposing <code>ZipArchive</code> did; a failed entry write marks the whole
+archive failed, so nothing more can be added to it.</p>
+<p><code>WriteRecordsParallelAsync</code> and <code>WriteTableParallelAsync</code> (<code>Writer/Parallel/</code>) cut a record source into
+batches. Each batch is formatted on a pool thread by a detached copy of the sheet writer, which has
+its own buffer and never touches the ZIP, then compressed into a byte-aligned deflate segment that
+refers to nothing outside itself. The calling flow appends segments in order through
+<code>ZipEntryStream.AppendSegmentAsync</code>, which merges CRCs with <code>Crc32.Combine</code>. Once an entry has
+received a segment, everything written to it is a segment, including later serial rows, so no
+compressor ever carries history across one.</p>
 <h2 id="the-excelreader-cli">The <code>excelreader</code> CLI</h2>
 <p><code>src/ExcelReader.Cli/</code> is a thin <code>dotnet tool</code> shell (<code>excelreader</code>) over Core's public API — it
 parses no spreadsheet bytes of its own. It splits in two on purpose: <code>Commands</code> is a one-line-per-

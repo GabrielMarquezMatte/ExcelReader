@@ -128,21 +128,21 @@
 </tr>
 <tr>
 <td>Workbook writing</td>
-<td style="text-align: right;">10.913 ms, 4.02 MB</td>
+<td style="text-align: right;">8.337 ms, 4.02 MB</td>
 <td style="text-align: right;">-</td>
-<td style="text-align: right;">18.166 ms, 4.02 MB</td>
-<td style="text-align: right;">15.128 ms, 15.84 MB</td>
+<td style="text-align: right;">18.437 ms, 4.02 MB</td>
+<td style="text-align: right;">15.332 ms, 15.84 MB</td>
 </tr>
 <tr>
 <td>Workbook writing, shared strings</td>
-<td style="text-align: right;">10.848 ms, 4.06 MB</td>
+<td style="text-align: right;">8.358 ms, 4.06 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 </tbody>
 </table>
-<p>ExcelReader is ~5.3x faster than Sylvan for raw XLSX reads, allocating ~543x less, and ~15.6x faster than OfficeIMO. For typed parsing it is ~5.3x faster than Sylvan (~5.4x async against async). For XLSX writing, ExcelReader is ~1.4x faster than SpreadCheetah while allocating ~3.9x less memory, and ~1.7x faster than OfficeIMO.</p>
+<p>ExcelReader is ~5.3x faster than Sylvan for raw XLSX reads, allocating ~543x less, and ~15.6x faster than OfficeIMO. For typed parsing it is ~5.3x faster than Sylvan (~5.4x async against async). For XLSX writing, ExcelReader is ~1.8x faster than SpreadCheetah while allocating ~3.9x less memory, and ~2.2x faster than OfficeIMO.</p>
 <p>OfficeIMO.Excel's typed parsing is hand-mapped from its <code>OpenDataReader</code>, because <code>RowsAs&lt;T&gt;</code> needs an <code>r</code> attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.</p>
 <p>Reading a shared-strings XLSX workbook with typed parsing is ~14% faster than the inline-string sheet above (9.216 ms vs. 10.668 ms) and allocates ~41% less (2.29 MB vs. 3.87 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.</p>
 <h3 id="xlsb-biff12">XLSB (BIFF12)</h3>
@@ -177,17 +177,17 @@
 </tr>
 <tr>
 <td>Workbook writing</td>
-<td style="text-align: right;">7.478 ms, 4.02 MB</td>
+<td style="text-align: right;">5.572 ms, 4.02 MB</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Workbook writing, shared strings</td>
-<td style="text-align: right;">7.370 ms, 4.06 MB</td>
+<td style="text-align: right;">5.595 ms, 4.05 MB</td>
 <td style="text-align: right;">-</td>
 </tr>
 </tbody>
 </table>
-<p>XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x faster than XLSX reads, typed parsing is ~1.4x faster than XLSX parsing, and writing is ~1.5x faster than XLSX writing. Against OfficeIMO's XLSB reader, ExcelReader is ~2.3x faster while allocating ~1,800x less. The XLSB writer is also ~2.0x faster than SpreadCheetah's XLSX writer on this benchmark while allocating ~75% less memory.</p>
+<p>XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x faster than XLSX reads, typed parsing is ~1.4x faster than XLSX parsing, and writing is ~1.5x faster than XLSX writing. Against OfficeIMO's XLSB reader, ExcelReader is ~2.3x faster while allocating ~1,800x less. The XLSB writer is also ~2.8x faster than SpreadCheetah's XLSX writer on this benchmark while allocating ~75% less memory.</p>
 <h3 id="xls-biff8">XLS (BIFF8)</h3>
 <table>
 <thead>
@@ -213,13 +213,13 @@
 </tr>
 <tr>
 <td>Workbook writing</td>
-<td style="text-align: right;">5.296 ms, 16.03 MB</td>
+<td style="text-align: right;">4.859 ms, 16.31 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 </tbody>
 </table>
-<p>ExcelReader is ~1.3x faster than Sylvan for generated XLS reads while allocating ~605x less memory, and ~1.8x faster than OfficeIMO. The XLS writer is ~2.1x faster than the XLSX writer in this benchmark (<code>XlsWriteBenchmark</code>, 5.296 ms vs 10.964 ms in the same run). Most of its 16.03 MB is the benchmark's pre-sized 16 MB destination <code>MemoryStream</code>; the typed-record table below measures it at 4.03 MB like the other formats.</p>
+<p>ExcelReader is ~1.3x faster than Sylvan for generated XLS reads while allocating ~605x less memory, and ~1.8x faster than OfficeIMO. The XLS writer is ~1.7x faster than the XLSX writer in this benchmark (<code>XlsWriteBenchmark</code>, 4.859 ms vs 8.375 ms in the same run). Most of its 16.31 MB is the benchmark's pre-sized 16 MB destination <code>MemoryStream</code>; the typed-record table below measures it at 4.31 MB, close to the other formats.</p>
 <h3 id="csv">CSV</h3>
 <table>
 <thead>
@@ -588,6 +588,165 @@
 </tbody>
 </table>
 <p>Without prefetch a read is inflate plus parse, so the faster inflate converts directly; with prefetch the two overlap and the read is bounded by the slower stage, which is why the prefetch columns above moved little.</p>
+<h3 id="write-path-managed-deflate-and-crc-32">Write path: managed deflate and CRC-32</h3>
+<p>XLSX and XLSB packages are written by the library's own ZIP writer. <code>CompressionLevel.Fastest</code>, the default, compresses with a managed fixed-Huffman deflate encoder and checksums with a managed CRC-32 that folds with PCLMULQDQ. Each piece alone on the same Ryzen 7 5700X: the deflate rows against zlib-ng at <code>Fastest</code>, which <code>ZipArchive</code> used, and the CRC row against <code>System.IO.Hashing.Crc32</code>, the fastest managed alternative (<code>ZipArchive</code> itself calls zlib's native CRC, which was not measured):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">zlib-ng <code>Fastest</code> / System.IO.Hashing</th>
+<th style="text-align: right;">Managed</th>
+<th style="text-align: right;">Ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deflate, writer XLSX sheet (6.0 MB)</td>
+<td style="text-align: right;">4.75 ms</td>
+<td style="text-align: right;">2.98 ms</td>
+<td style="text-align: right;">1.59x, same size</td>
+</tr>
+<tr>
+<td>Deflate, writer XLSB sheet (4.6 MB)</td>
+<td style="text-align: right;">4.60 ms</td>
+<td style="text-align: right;">2.52 ms</td>
+<td style="text-align: right;">1.82x, same size</td>
+</tr>
+<tr>
+<td>Deflate, 65K real XLSX sheet (34.4 MB)</td>
+<td style="text-align: right;">60.3 ms</td>
+<td style="text-align: right;">38.4 ms</td>
+<td style="text-align: right;">1.57x, same size</td>
+</tr>
+<tr>
+<td>CRC-32, 64 KB chunks in cache</td>
+<td style="text-align: right;">16.4 GB/s</td>
+<td style="text-align: right;">35.8 GB/s</td>
+<td style="text-align: right;">2.19x</td>
+</tr>
+</tbody>
+</table>
+<p>Whole writes of 50,000 rows by four columns (text, integer, date, number) into a <code>MemoryStream</code>, before and after the switch. Each figure is the median of three interleaved runs of 41 writes:</p>
+<table>
+<thead>
+<tr>
+<th>Write</th>
+<th style="text-align: right;"><code>ZipArchive</code></th>
+<th style="text-align: right;">Managed ZIP writer</th>
+<th style="text-align: right;">Change</th>
+<th style="text-align: right;">File size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>XLSX, <code>Fastest</code></td>
+<td style="text-align: right;">10.43 ms</td>
+<td style="text-align: right;">9.11 ms</td>
+<td style="text-align: right;">-12.7%</td>
+<td style="text-align: right;">773,487 B → 774,344 B</td>
+</tr>
+<tr>
+<td>XLSX, <code>Fastest</code> + <code>PrefetchWrite</code></td>
+<td style="text-align: right;">6.15 ms</td>
+<td style="text-align: right;">5.84 ms</td>
+<td style="text-align: right;">-5.0%</td>
+<td style="text-align: right;">same as above</td>
+</tr>
+<tr>
+<td>XLSX, <code>Optimal</code></td>
+<td style="text-align: right;">30.90 ms</td>
+<td style="text-align: right;">31.38 ms</td>
+<td style="text-align: right;">within noise</td>
+<td style="text-align: right;">483,613 B → 483,607 B</td>
+</tr>
+<tr>
+<td>XLSB, <code>Fastest</code></td>
+<td style="text-align: right;">7.66 ms</td>
+<td style="text-align: right;">5.42 ms</td>
+<td style="text-align: right;">-29.2%</td>
+<td style="text-align: right;">861,060 B → 861,568 B</td>
+</tr>
+<tr>
+<td>XLSB, <code>Fastest</code> + <code>PrefetchWrite</code></td>
+<td style="text-align: right;">5.37 ms</td>
+<td style="text-align: right;">3.08 ms</td>
+<td style="text-align: right;">-42.6%</td>
+<td style="text-align: right;">same as above</td>
+</tr>
+<tr>
+<td>XLSB, <code>Optimal</code></td>
+<td style="text-align: right;">38.17 ms</td>
+<td style="text-align: right;">37.98 ms</td>
+<td style="text-align: right;">within noise</td>
+<td style="text-align: right;">466,917 B → 466,917 B</td>
+</tr>
+</tbody>
+</table>
+<p>XLSB gains more because deflate was a larger share of its write; with <code>PrefetchWrite</code> an XLSX write is bounded by building the XML, so the faster deflate moves it little.</p>
+<p>The encoder's limits are deliberate:</p>
+<ul>
+<li>It emits fixed-Huffman blocks only, so <code>Optimal</code> and <code>SmallestSize</code> still go through zlib, inside the same container.</li>
+<li>A block covers at most 65,535 input bytes, so any block that would grow is written stored instead. Incompressible input grows by at most 5 bytes per block.</li>
+</ul>
+<h3 id="parallel-record-writes">Parallel record writes</h3>
+<p><code>WriteRecordsParallelAsync</code> formats and compresses batches of 8,192 records on pool threads and appends them to the sheet in order. Writing 1,000,000 rows by four columns (text, integer, date, number) into a pre-sized <code>MemoryStream</code> at <code>Fastest</code>, on the same Ryzen 7 5700X. Each figure is the median of 9 writes after 3 warm-up writes, from a console harness rather than BenchmarkDotNet:</p>
+<table>
+<thead>
+<tr>
+<th>Write</th>
+<th style="text-align: right;">XLSX</th>
+<th style="text-align: right;">vs serial</th>
+<th style="text-align: right;">XLSB</th>
+<th style="text-align: right;">vs serial</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Serial</td>
+<td style="text-align: right;">187.3 ms</td>
+<td style="text-align: right;">1.0x</td>
+<td style="text-align: right;">123.6 ms</td>
+<td style="text-align: right;">1.0x</td>
+</tr>
+<tr>
+<td>Serial, <code>PrefetchWrite</code></td>
+<td style="text-align: right;">117.8 ms</td>
+<td style="text-align: right;">1.6x</td>
+<td style="text-align: right;">67.6 ms</td>
+<td style="text-align: right;">1.8x</td>
+</tr>
+<tr>
+<td>Parallel, 1 batch in flight</td>
+<td style="text-align: right;">172.7 ms</td>
+<td style="text-align: right;">1.1x</td>
+<td style="text-align: right;">120.6 ms</td>
+<td style="text-align: right;">1.0x</td>
+</tr>
+<tr>
+<td>Parallel, 2</td>
+<td style="text-align: right;">92.1 ms</td>
+<td style="text-align: right;">2.0x</td>
+<td style="text-align: right;">63.2 ms</td>
+<td style="text-align: right;">2.0x</td>
+</tr>
+<tr>
+<td>Parallel, 4</td>
+<td style="text-align: right;">49.9 ms</td>
+<td style="text-align: right;">3.8x</td>
+<td style="text-align: right;">40.9 ms</td>
+<td style="text-align: right;">3.0x</td>
+</tr>
+<tr>
+<td>Parallel, 8</td>
+<td style="text-align: right;">35.7 ms</td>
+<td style="text-align: right;">5.2x</td>
+<td style="text-align: right;">27.7 ms</td>
+<td style="text-align: right;">4.5x</td>
+</tr>
+</tbody>
+</table>
+<p>It scales because a write is bound by building rows, not by deflate: <code>PrefetchWrite</code> already takes deflate off the calling thread and stops at 1.6x to 1.8x, so compressing chunks in parallel would add nothing on top of it, while formatting the rows in parallel does.</p>
+<p>Each batch is compressed with no reference to the one before it, which costs 0.18% of file size for XLSX (15,481,372 B to 15,508,760 B) and 0.04% for XLSB (16,863,131 B to 16,869,306 B). The process's peak working set rose by 12 MB over the serial write with 4 batches in flight and by 23 MB with 8, about 3 MB per batch, and does not depend on the number of rows.</p>
 <h3 id="matched-work-reads-_materialized">Matched-work reads (<code>*_Materialized</code>)</h3>
 <p>Every read benchmark class has a <code>*_Materialized</code> sibling that calls <code>cell.GetString()</code> per text cell — the same UTF-16 materialization Sylvan's ADO.NET-style API is forced to pay — while keeping <code>TryParse</code>/<code>TryGetDateTime</code> for numeric and date cells, exactly mirroring the competitor accumulator. These are the matched-work counterparts to the zero-copy rows above.</p>
 <p>These run in the same suite, on the same Ryzen 7 5700X machine, as the span-based rows above, so the ratios below are directly comparable — no cross-machine caveat needed.</p>
@@ -707,27 +866,27 @@
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">12.099 ms</td>
+<td style="text-align: right;">8.922 ms</td>
 <td style="text-align: right;">4.02 MB</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">7.597 ms</td>
+<td style="text-align: right;">6.113 ms</td>
 <td style="text-align: right;">4.02 MB</td>
 </tr>
 <tr>
 <td>XLS</td>
-<td style="text-align: right;">5.021 ms</td>
-<td style="text-align: right;">4.03 MB</td>
+<td style="text-align: right;">6.292 ms</td>
+<td style="text-align: right;">4.31 MB</td>
 </tr>
 <tr>
 <td>CSV</td>
-<td style="text-align: right;">4.762 ms</td>
+<td style="text-align: right;">4.824 ms</td>
 <td style="text-align: right;">4.00 MB</td>
 </tr>
 </tbody>
 </table>
-<p>Relative ordering: CSV and XLS close at the front, then XLSB, then XLSX — the record-mapping layer adds little overhead over hand-written cell-by-cell writes (XLSB 7.597 ms vs. 7.478 ms, XLSX 12.099 ms vs. 10.913 ms).</p>
+<p>Relative ordering: CSV at the front, XLSB and XLS close behind it, then XLSX — the record-mapping layer adds little overhead over hand-written cell-by-cell writes (XLSB 6.113 ms vs. 5.572 ms, XLSX 8.922 ms vs. 8.337 ms).</p>
 <h3 id="native-and-arrow-string-writes">Native and Arrow string writes</h3>
 <p><code>WritePathBenchmark</code>: 100,000 rows of four text columns written from UTF-8 buffers, the way the C ABI's <code>xl_write_typed</code> and <code>ArrowWriteExtensions.WriteRecordBatch</code> hand them over, plus 100,000 rows that each carry a row style.</p>
 <table>
@@ -741,8 +900,8 @@
 <tbody>
 <tr>
 <td>Native string columns → XLSX</td>
-<td style="text-align: right;">20.487 ms</td>
-<td style="text-align: right;">18.02 KB</td>
+<td style="text-align: right;">14.559 ms</td>
+<td style="text-align: right;">15.74 KB</td>
 </tr>
 <tr>
 <td>Native string columns → CSV</td>
@@ -751,17 +910,17 @@
 </tr>
 <tr>
 <td>Arrow <code>StringArray</code> → XLSX</td>
-<td style="text-align: right;">26.644 ms</td>
-<td style="text-align: right;">18.06 KB</td>
+<td style="text-align: right;">20.343 ms</td>
+<td style="text-align: right;">15.79 KB</td>
 </tr>
 <tr>
 <td>Styled rows → XLSX</td>
-<td style="text-align: right;">7.068 ms</td>
-<td style="text-align: right;">18.20 KB</td>
+<td style="text-align: right;">5.411 ms</td>
+<td style="text-align: right;">15.92 KB</td>
 </tr>
 </tbody>
 </table>
-<p>Text arrives through <code>IRowWriter.WriteUtf8</code>, which the XLSX and CSV writers copy through as bytes whenever the text needs no escaping, so none of these allocate per cell: the ~18 KB is per-workbook ZIP and part setup, which CSV does not have.</p>
+<p>Text arrives through <code>IRowWriter.WriteUtf8</code>, which the XLSX and CSV writers copy through as bytes whenever the text needs no escaping, so none of these allocate per cell: the ~16 KB is per-workbook ZIP and part setup, which CSV does not have.</p>
 <h3 id="ref-struct-typed-parsing-zero-copy">Ref struct typed parsing (zero-copy)</h3>
 <p>A <code>ref struct</code> model (see <a href="../guide/parsing.html#parse-into-a-ref-struct-zero-copy">Parse into a ref struct</a>) extends <code>ExcelParser.FromAttributes&lt;T&gt;</code>'s reflection/attribute-driven column mapping to <code>ref struct</code> targets, binding a <code>ReadOnlySpan&lt;byte&gt;</code> property directly to the cell's raw bytes instead of allocating a <code>string</code>. Same generated XLSX workbook, same 50,000 rows, same four columns — only the target type and binding strategy change:</p>
 <table>

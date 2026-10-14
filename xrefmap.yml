@@ -2855,6 +2855,19 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Reader.ExcelReaderOptions.VerifyEncryptedIntegrity
   nameWithType: ExcelReaderOptions.VerifyEncryptedIntegrity
+- uid: ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums
+  name: VerifyZipChecksums
+  href: api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_VerifyZipChecksums
+  commentId: P:ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums
+  fullName: ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums
+  nameWithType: ExcelReaderOptions.VerifyZipChecksums
+- uid: ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums*
+  name: VerifyZipChecksums
+  href: api/ExcelReader.Core.Reader.ExcelReaderOptions.html#ExcelReader_Core_Reader_ExcelReaderOptions_VerifyZipChecksums_
+  commentId: Overload:ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums
+  isSpec: "True"
+  fullName: ExcelReader.Core.Reader.ExcelReaderOptions.VerifyZipChecksums
+  nameWithType: ExcelReaderOptions.VerifyZipChecksums
 - uid: ExcelReader.Core.Reader.ExcelSheetList`1
   name: ExcelSheetList<TSheet>
   href: api/ExcelReader.Core.Reader.ExcelSheetList-1.html
@@ -6548,6 +6561,179 @@ references:
   fullName.vb: ExcelReader.Core.Writer.IWorkbookWriter(Of TSheet).FlushAsync
   nameWithType: IWorkbookWriter<TSheet>.FlushAsync
   nameWithType.vb: IWorkbookWriter(Of TSheet).FlushAsync
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions
+  name: ParallelSheetWriterExtensions
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html
+  commentId: T:ExcelReader.Core.Writer.ParallelSheetWriterExtensions
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions
+  nameWithType: ParallelSheetWriterExtensions
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync*
+  name: WriteRecordsParallelAsync
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync_
+  commentId: Overload:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsbSheetWriter, IAsyncEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IAsyncEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IAsyncEnumerable<T>, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IAsyncEnumerable(Of T), ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsbSheetWriter, IAsyncEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IAsyncEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsb.XlsbRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsbSheetWriter, IAsyncEnumerable<T>, Action<XlsbRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsb_XlsbRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsb.XlsbRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IAsyncEnumerable(Of T), Action(Of XlsbRowWriter, T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IAsyncEnumerable<T>, System.Action<ExcelReader.Core.Writer.Xlsb.XlsbRowWriter, T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IAsyncEnumerable(Of T), System.Action(Of ExcelReader.Core.Writer.Xlsb.XlsbRowWriter, T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsbSheetWriter, IAsyncEnumerable<T>, Action<XlsbRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IAsyncEnumerable(Of T), Action(Of XlsbRowWriter, T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsbSheetWriter, IEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IEnumerable<T>, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IEnumerable(Of T), ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsbSheetWriter, IEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsb.XlsbRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsbSheetWriter, IEnumerable<T>, Action<XlsbRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsb_XlsbRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsb.XlsbRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IEnumerable(Of T), Action(Of XlsbRowWriter, T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IEnumerable<T>, System.Action<ExcelReader.Core.Writer.Xlsb.XlsbRowWriter, T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IEnumerable(Of T), System.Action(Of ExcelReader.Core.Writer.Xlsb.XlsbRowWriter, T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsbSheetWriter, IEnumerable<T>, Action<XlsbRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsbSheetWriter, IEnumerable(Of T), Action(Of XlsbRowWriter, T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsxSheetWriter, IAsyncEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IAsyncEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IAsyncEnumerable<T>, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IAsyncEnumerable(Of T), ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsxSheetWriter, IAsyncEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IAsyncEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsx.XlsxRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsxSheetWriter, IAsyncEnumerable<T>, Action<XlsxRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsx_XlsxRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsx.XlsxRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IAsyncEnumerable(Of T), Action(Of XlsxRowWriter, T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IAsyncEnumerable<T>, System.Action<ExcelReader.Core.Writer.Xlsx.XlsxRowWriter, T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IAsyncEnumerable(Of T), System.Action(Of ExcelReader.Core.Writer.Xlsx.XlsxRowWriter, T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsxSheetWriter, IAsyncEnumerable<T>, Action<XlsxRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IAsyncEnumerable(Of T), Action(Of XlsxRowWriter, T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsxSheetWriter, IEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IEnumerable<T>, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IEnumerable(Of T), ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsxSheetWriter, IEnumerable<T>, ExcelRecordLayout<T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IEnumerable(Of T), ExcelRecordLayout(Of T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsx.XlsxRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteRecordsParallelAsync<T>(XlsxSheetWriter, IEnumerable<T>, Action<XlsxRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteRecordsParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsx_XlsxRowWriter___0__ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsx.XlsxRowWriter,``0},ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IEnumerable(Of T), Action(Of XlsxRowWriter, T), ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IEnumerable<T>, System.Action<ExcelReader.Core.Writer.Xlsx.XlsxRowWriter, T>, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IEnumerable(Of T), System.Action(Of ExcelReader.Core.Writer.Xlsx.XlsxRowWriter, T), ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteRecordsParallelAsync<T>(XlsxSheetWriter, IEnumerable<T>, Action<XlsxRowWriter, T>, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteRecordsParallelAsync(Of T)(XlsxSheetWriter, IEnumerable(Of T), Action(Of XlsxRowWriter, T), ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync*
+  name: WriteTableParallelAsync
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync_
+  commentId: Overload:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync
+  nameWithType: ParallelSheetWriterExtensions.WriteTableParallelAsync
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteTableParallelAsync<T>(XlsbSheetWriter, IAsyncEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteTableParallelAsync(Of T)(XlsbSheetWriter, IAsyncEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IAsyncEnumerable<T>, string, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ExcelTableOptions?, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IAsyncEnumerable(Of T), String, ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ExcelTableOptions, ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(XlsbSheetWriter, IAsyncEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(XlsbSheetWriter, IAsyncEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteTableParallelAsync<T>(XlsbSheetWriter, IEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_System_Collections_Generic_IEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter,System.Collections.Generic.IEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteTableParallelAsync(Of T)(XlsbSheetWriter, IEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IEnumerable<T>, string, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ExcelTableOptions?, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter, System.Collections.Generic.IEnumerable(Of T), String, ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ExcelTableOptions, ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(XlsbSheetWriter, IEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(XlsbSheetWriter, IEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteTableParallelAsync<T>(XlsxSheetWriter, IAsyncEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IAsyncEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IAsyncEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteTableParallelAsync(Of T)(XlsxSheetWriter, IAsyncEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IAsyncEnumerable<T>, string, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ExcelTableOptions?, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IAsyncEnumerable(Of T), String, ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ExcelTableOptions, ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(XlsxSheetWriter, IAsyncEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(XlsxSheetWriter, IAsyncEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name: WriteTableParallelAsync<T>(XlsxSheetWriter, IEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html#ExcelReader_Core_Writer_ParallelSheetWriterExtensions_WriteTableParallelAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_ExcelReader_Core_Writer_ParallelWriteOptions_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,ExcelReader.Core.Writer.ParallelWriteOptions,System.Threading.CancellationToken)
+  name.vb: WriteTableParallelAsync(Of T)(XlsxSheetWriter, IEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IEnumerable<T>, string, ExcelReader.Core.Writer.ExcelRecordLayout<T>, ExcelReader.Core.Writer.ExcelTableOptions?, ExcelReader.Core.Writer.ParallelWriteOptions?, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter, System.Collections.Generic.IEnumerable(Of T), String, ExcelReader.Core.Writer.ExcelRecordLayout(Of T), ExcelReader.Core.Writer.ExcelTableOptions, ExcelReader.Core.Writer.ParallelWriteOptions, System.Threading.CancellationToken)
+  nameWithType: ParallelSheetWriterExtensions.WriteTableParallelAsync<T>(XlsxSheetWriter, IEnumerable<T>, string, ExcelRecordLayout<T>, ExcelTableOptions?, ParallelWriteOptions?, CancellationToken)
+  nameWithType.vb: ParallelSheetWriterExtensions.WriteTableParallelAsync(Of T)(XlsxSheetWriter, IEnumerable(Of T), String, ExcelRecordLayout(Of T), ExcelTableOptions, ParallelWriteOptions, CancellationToken)
+- uid: ExcelReader.Core.Writer.ParallelWriteOptions
+  name: ParallelWriteOptions
+  href: api/ExcelReader.Core.Writer.ParallelWriteOptions.html
+  commentId: T:ExcelReader.Core.Writer.ParallelWriteOptions
+  fullName: ExcelReader.Core.Writer.ParallelWriteOptions
+  nameWithType: ParallelWriteOptions
+- uid: ExcelReader.Core.Writer.ParallelWriteOptions.BatchRows
+  name: BatchRows
+  href: api/ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_BatchRows
+  commentId: P:ExcelReader.Core.Writer.ParallelWriteOptions.BatchRows
+  fullName: ExcelReader.Core.Writer.ParallelWriteOptions.BatchRows
+  nameWithType: ParallelWriteOptions.BatchRows
+- uid: ExcelReader.Core.Writer.ParallelWriteOptions.BatchRows*
+  name: BatchRows
+  href: api/ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_BatchRows_
+  commentId: Overload:ExcelReader.Core.Writer.ParallelWriteOptions.BatchRows
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ParallelWriteOptions.BatchRows
+  nameWithType: ParallelWriteOptions.BatchRows
+- uid: ExcelReader.Core.Writer.ParallelWriteOptions.Default
+  name: Default
+  href: api/ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default
+  commentId: P:ExcelReader.Core.Writer.ParallelWriteOptions.Default
+  fullName: ExcelReader.Core.Writer.ParallelWriteOptions.Default
+  nameWithType: ParallelWriteOptions.Default
+- uid: ExcelReader.Core.Writer.ParallelWriteOptions.Default*
+  name: Default
+  href: api/ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_Default_
+  commentId: Overload:ExcelReader.Core.Writer.ParallelWriteOptions.Default
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ParallelWriteOptions.Default
+  nameWithType: ParallelWriteOptions.Default
+- uid: ExcelReader.Core.Writer.ParallelWriteOptions.DegreeOfParallelism
+  name: DegreeOfParallelism
+  href: api/ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_DegreeOfParallelism
+  commentId: P:ExcelReader.Core.Writer.ParallelWriteOptions.DegreeOfParallelism
+  fullName: ExcelReader.Core.Writer.ParallelWriteOptions.DegreeOfParallelism
+  nameWithType: ParallelWriteOptions.DegreeOfParallelism
+- uid: ExcelReader.Core.Writer.ParallelWriteOptions.DegreeOfParallelism*
+  name: DegreeOfParallelism
+  href: api/ExcelReader.Core.Writer.ParallelWriteOptions.html#ExcelReader_Core_Writer_ParallelWriteOptions_DegreeOfParallelism_
+  commentId: Overload:ExcelReader.Core.Writer.ParallelWriteOptions.DegreeOfParallelism
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ParallelWriteOptions.DegreeOfParallelism
+  nameWithType: ParallelWriteOptions.DegreeOfParallelism
 - uid: ExcelReader.Core.Writer.SheetWriterExtensions
   name: SheetWriterExtensions
   href: api/ExcelReader.Core.Writer.SheetWriterExtensions.html

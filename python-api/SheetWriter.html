@@ -148,6 +148,7 @@ the order and continue, or close to discard.</p>
 <h3 id="write_i64">write_i64</h3>
 <pre><code class="lang-python">def write_i64(value: int | None) -&gt; None
 </code></pre>
+<p>Writes the next cell as a whole number. Raises <code>OverflowError</code> outside the signed 64-bit range.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -292,7 +293,8 @@ the order and continue, or close to discard.</p>
 <p><code>start_row()</code>, one inferred write per value, <code>end_row()</code>.</p>
 <p>The type of each value picks the write method. <code>None</code> becomes a blank <em>string</em> cell — it is
 the one case inference cannot resolve; use <code>write_null(ColumnType.X)</code> for a typed blank.</p>
-<p>Raises <code>TypeError</code>, before writing anything, for a value whose type has no mapping.</p>
+<p>Raises, before writing anything, <code>TypeError</code> for a value whose type has no mapping and
+<code>OverflowError</code> for an <code>int</code> outside the signed 64-bit range.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>

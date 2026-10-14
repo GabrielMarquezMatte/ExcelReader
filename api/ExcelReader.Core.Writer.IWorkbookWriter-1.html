@@ -243,7 +243,7 @@ sheets are all hidden is rejected when it is ended, since Excel reports such a f
 
   <h3 id="ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_" data-uid="ExcelReader.Core.Writer.IWorkbookWriter`1.AddStyle(ExcelReader.Core.Writer.CellStyle)">
   AddStyle(CellStyle)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L83"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Registers <code class="paramref">style</code> and returns its index, reusing the index of an
@@ -277,6 +277,15 @@ style; index 1 is always the builtin date style every date cell already uses.</p
 
 
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>The style's number format is longer than 255 characters.</p>
+</dd>
+    <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
+    <dd><p>The workbook already has 200 distinct number formats, the most Excel opens.</p>
+</dd>
+  </dl>
 
 
 
