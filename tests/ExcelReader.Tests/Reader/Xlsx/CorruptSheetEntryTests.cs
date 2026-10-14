@@ -28,7 +28,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
             return count;
         }
 
-        // Damage at +4096 decodes as a stream that ends early: before the fix every reader stopped at 298 rows without an error.
+        // The damage either breaks the deflate stream or decodes as garbage XML that trips a limit.
+        // Either way the read must fail, not stop early without an error.
         [Theory]
         [InlineData(4096, false)]
         [InlineData(4096, true)]
@@ -40,7 +41,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Array.Fill(bytes, (byte)0xFF, entry + offset, 512);
             using XlsxWorkbook workbook = Excel.FromXlsx(bytes, new ExcelReaderOptions { PrefetchDecompression = prefetch });
 
-            Assert.Throws<InvalidDataException>(() => CountRows(workbook));
+            Exception failure = Assert.ThrowsAny<Exception>(() => CountRows(workbook));
+            Assert.True(failure is InvalidDataException or ExcelLimitExceededException, failure.GetType().Name);
         }
     }
 }

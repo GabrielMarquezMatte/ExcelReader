@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Reader.Zip
 {
@@ -14,15 +15,21 @@ namespace ExcelReader.Core.Reader.Zip
         private readonly Channel<(byte[] Buffer, int Length)> _channel;
         private readonly CancellationTokenSource _cts;
         private readonly Task _producer;
+        private readonly long _declaredLength;
+        private readonly uint? _expectedCrc;
         private byte[]? _currentBuffer;
         private int _currentLength;
         private int _currentOffset;
         private ExceptionDispatchInfo? _producerException;
         private bool _disposed;
 
-        internal PrefetchStream(Stream inner)
+        // With expectedCrc, the producer checksums what it reads and fails instead of handing over the
+        // chunk that completes declaredLength, so the check runs off the consumer's thread.
+        internal PrefetchStream(Stream inner, long declaredLength = 0, uint? expectedCrc = null)
         {
             _inner = inner;
+            _declaredLength = declaredLength;
+            _expectedCrc = expectedCrc;
             _channel = Channel.CreateBounded<(byte[] Buffer, int Length)>(new BoundedChannelOptions(ChannelCapacity)
             {
                 SingleReader = true,
@@ -190,6 +197,8 @@ namespace ExcelReader.Core.Reader.Zip
         private async Task ProduceAsync(CancellationToken token)
         {
             byte[]? pending = null;
+            long produced = 0;
+            uint crc = 0;
             try
             {
                 while (true)
@@ -199,6 +208,15 @@ namespace ExcelReader.Core.Reader.Zip
                     if (read <= 0)
                     {
                         break;
+                    }
+                    if (_expectedCrc is uint expected)
+                    {
+                        crc = Crc32.Append(crc, pending.AsSpan(0, read));
+                        produced += read;
+                        if (produced == _declaredLength && crc != expected)
+                        {
+                            throw new InvalidDataException(LimitedReadStream.ChecksumMismatch);
+                        }
                     }
                     await _channel.Writer.WriteAsync((pending, read), token).ConfigureAwait(false);
                     pending = null;

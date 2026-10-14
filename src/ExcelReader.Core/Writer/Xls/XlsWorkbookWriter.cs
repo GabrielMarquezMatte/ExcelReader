@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xlsx;
@@ -20,6 +21,9 @@ namespace ExcelReader.Core.Writer.Xls
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
         private readonly StyleTable _styles = new();
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
+            Justification = "Released with the sheet buffers once End or EndAsync has written the workbook.")]
+        private readonly XlsSharedStrings _sharedStrings = new();
         private readonly List<XlsSheetWriter> _sheets = [];
         private bool _ended;
         private XlsSheetWriter? _activeSheet;
@@ -76,6 +80,11 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal int StyleCount => _styles.Count;
 
+        internal int AddSharedString(ReadOnlySpan<char> value)
+        {
+            return _sharedStrings.Add(value);
+        }
+
         internal void RegisterSheet(XlsSheetWriter sheet)
         {
             _sheets.Add(sheet);
@@ -87,31 +96,39 @@ namespace ExcelReader.Core.Writer.Xls
             _activeSheet = null;
         }
 
-        private BiffBuffer BuildGlobals(out int workbookSize)
+        private BiffBuffer BuildGlobals(List<XlsSheetLayout> layouts, out int workbookSize)
         {
             string[] names = new string[_sheets.Count];
             ExcelSheetVisibility[] visibilities = new ExcelSheetVisibility[_sheets.Count];
-            bool anyVisible = false;
+            int activeSheet = -1;
             for (int i = 0; i < _sheets.Count; i++)
             {
                 names[i] = _sheets[i].Name;
                 visibilities[i] = _sheets[i].Visibility;
-                anyVisible |= visibilities[i] is ExcelSheetVisibility.Visible;
+                if (activeSheet < 0 && visibilities[i] is ExcelSheetVisibility.Visible)
+                {
+                    activeSheet = i;
+                }
             }
-            WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsWorkbookWriter));
+            WriterStateGuard.RequireVisibleSheet(activeSheet >= 0, nameof(XlsWorkbookWriter));
 
-            BiffBuffer globals = new(1024);
+            for (int i = 0; i < _sheets.Count; i++)
+            {
+                layouts.Add(new XlsSheetLayout(_sheets[i], selected: i == activeSheet));
+            }
+
+            BiffBuffer globals = new(4096 + _sharedStrings.EstimatedLength);
             try
             {
-                int[] offsetPositions = XlsGlobals.Write(globals, names, visibilities, _date1904, _styles);
+                int[] offsetPositions = XlsGlobals.Write(globals, names, visibilities, activeSheet, _date1904, _styles, _sharedStrings);
                 int offset = globals.Length;
-                workbookSize = offset;
-                for (int i = 0; i < _sheets.Count; i++)
+                for (int i = 0; i < layouts.Count; i++)
                 {
                     globals.PatchI32(offsetPositions[i], offset);
-                    offset += _sheets[i].SubstreamLength;
-                    workbookSize += _sheets[i].SubstreamLength;
+                    layouts[i].Place(offset);
+                    offset += layouts[i].Length;
                 }
+                workbookSize = offset;
                 return globals;
             }
             catch
@@ -144,8 +161,17 @@ namespace ExcelReader.Core.Writer.Xls
             return _faulted ? FailureCleanup.DisposeAsync(_stream) : _stream.DisposeAsync();
         }
 
+        private static void DisposeLayouts(List<XlsSheetLayout> layouts)
+        {
+            foreach (XlsSheetLayout layout in layouts)
+            {
+                layout.Dispose();
+            }
+        }
+
         private void ReleaseSheetBuffers()
         {
+            _sharedStrings.Dispose();
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
                 sheet.ReleaseBuffer();
@@ -169,25 +195,23 @@ namespace ExcelReader.Core.Writer.Xls
                     throw new InvalidOperationException("A workbook must contain at least one sheet.");
                 }
 
-                using BiffBuffer globals = BuildGlobals(out int workbookSize);
-                using BiffBuffer frame = new(64);
-                OleCompoundWriter.Write(_stream, workbookSize, dest =>
+                List<XlsSheetLayout> layouts = [];
+                try
                 {
-                    dest.Write(globals.Span);
-                    foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
+                    using BiffBuffer globals = BuildGlobals(layouts, out int workbookSize);
+                    OleCompoundWriter.Write(_stream, workbookSize, dest =>
                     {
-                        frame.Reset();
-                        BiffRecordWriter.WriteBof(frame, BiffRecord.SubstreamWorksheet);
-                        BiffRecordWriter.WriteDimension(frame, sheet.RowCount, sheet.ColCount);
-                        BiffRecordWriter.WriteWindow2(frame);
-                        dest.Write(frame.Span);
-                        dest.Write(sheet.ColInfoMemory.Span);
-                        dest.Write(sheet.CellsMemory.Span);
-                        frame.Reset();
-                        BiffRecordWriter.WriteEof(frame);
-                        dest.Write(frame.Span);
-                    }
-                });
+                        dest.Write(globals.Span);
+                        foreach (XlsSheetLayout layout in layouts)
+                        {
+                            layout.WriteTo(dest);
+                        }
+                    });
+                }
+                finally
+                {
+                    DisposeLayouts(layouts);
+                }
             }
             catch
             {
@@ -218,25 +242,23 @@ namespace ExcelReader.Core.Writer.Xls
                     throw new InvalidOperationException("A workbook must contain at least one sheet.");
                 }
 
-                using BiffBuffer globals = BuildGlobals(out int workbookSize);
-                using BiffBuffer frame = new(64);
-                await OleCompoundWriter.WriteAsync(_stream, workbookSize, async (dest, canc) =>
+                List<XlsSheetLayout> layouts = [];
+                try
                 {
-                    await dest.WriteAsync(globals.Memory, canc).ConfigureAwait(false);
-                    foreach (XlsSheetWriter sheet in _sheets)
+                    using BiffBuffer globals = BuildGlobals(layouts, out int workbookSize);
+                    await OleCompoundWriter.WriteAsync(_stream, workbookSize, async (dest, canc) =>
                     {
-                        frame.Reset();
-                        BiffRecordWriter.WriteBof(frame, BiffRecord.SubstreamWorksheet);
-                        BiffRecordWriter.WriteDimension(frame, sheet.RowCount, sheet.ColCount);
-                        BiffRecordWriter.WriteWindow2(frame);
-                        await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
-                        await dest.WriteAsync(sheet.ColInfoMemory, canc).ConfigureAwait(false);
-                        await dest.WriteAsync(sheet.CellsMemory, canc).ConfigureAwait(false);
-                        frame.Reset();
-                        BiffRecordWriter.WriteEof(frame);
-                        await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
-                    }
-                }, ct).ConfigureAwait(false);
+                        await dest.WriteAsync(globals.Memory, canc).ConfigureAwait(false);
+                        foreach (XlsSheetLayout layout in layouts)
+                        {
+                            await layout.WriteToAsync(dest, canc).ConfigureAwait(false);
+                        }
+                    }, ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    DisposeLayouts(layouts);
+                }
             }
             catch
             {

@@ -12,10 +12,16 @@ namespace ExcelReader.Core.Reader.Internal
         private const int MaxPowerOfFive = 64;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryParse(ReadOnlySpan<byte> s, out double value) => TryParse(s, MaxMantissaDigits, out value);
+        public static bool TryParse(ReadOnlySpan<byte> s, out double value)
+        {
+            return TryParse(s, MaxMantissaDigits, out value);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryParseLossless(ReadOnlySpan<byte> s, out double value) => TryParse(s, MaxLosslessDigits, out value);
+        public static bool TryParseLossless(ReadOnlySpan<byte> s, out double value)
+        {
+            return TryParse(s, MaxLosslessDigits, out value);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool TryParse(ReadOnlySpan<byte> s, int maxDigits, out double value)

@@ -878,7 +878,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private void EmitScalarValueFast(Kind kind, ReadOnlySpan<byte> v, int valueStart, int col, int style)
             {
-                if (kind == Kind.IsoDate || (kind == Kind.Formula && (v.IndexOf((byte)'&') >= 0 || v.IndexOf("_x"u8) >= 0)))
+                if (kind == Kind.IsoDate || (kind == Kind.Formula && (v.IndexOfAny((byte)'&', (byte)'\r') >= 0 || v.IndexOf("_x"u8) >= 0)))
                 {
                     EmitScalarValue(kind, v, col, style);
                     return;
@@ -950,11 +950,40 @@ namespace ExcelReader.Core.Reader.Xlsx
                 int s = inner.IndexOf(openTag);
                 if (s < 0)
                 {
-                    return default;
+                    return AttributedElementText(inner, openTag, closeTag);
                 }
                 s += openTag.Length;
                 int e = inner[s..].IndexOf(closeTag);
                 return e < 0 ? default : inner.Slice(s, e);
+            }
+
+            // Excel writes <v xml:space="preserve"> for a formula's text result with whitespace at either end.
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private static ReadOnlySpan<byte> AttributedElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)
+            {
+                ReadOnlySpan<byte> name = openTag[..^1];
+                int from = 0;
+                while (true)
+                {
+                    int s = inner[from..].IndexOf(name);
+                    if (s < 0)
+                    {
+                        return default;
+                    }
+                    int afterName = from + s + name.Length;
+                    if (afterName < inner.Length && inner[afterName] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
+                    {
+                        int gt = inner[afterName..].IndexOf((byte)'>');
+                        if (gt < 0 || inner[afterName + gt - 1] == (byte)'/')
+                        {
+                            return default;
+                        }
+                        int textStart = afterName + gt + 1;
+                        int e = inner[textStart..].IndexOf(closeTag);
+                        return e < 0 ? default : inner.Slice(textStart, e);
+                    }
+                    from = afterName;
+                }
             }
 
             private void AppendDecoded(ReadOnlySpan<byte> src)

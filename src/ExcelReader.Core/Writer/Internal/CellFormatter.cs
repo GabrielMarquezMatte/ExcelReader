@@ -10,70 +10,93 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal static class CellFormatter
     {
+        // A raw carriage return is escaped too: an XML parser reads it as a line feed.
         private const string Special =
             "&<>\"'_" +
-            "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000B\u000C" +
+            "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000B\u000C\u000D" +
             "\u000E\u000F\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F";
 
-        private static readonly SearchValues<char> SpecialChars = SearchValues.Create(Special);
+        // U+FFFE and U+FFFF are not XML characters, so they are written as _xHHHH_ as well.
+        private static readonly SearchValues<char> SpecialChars = SearchValues.Create(Special + "\uFFFE\uFFFF");
 
-        private static readonly SearchValues<byte> SpecialBytes = SearchValues.Create(Encoding.ASCII.GetBytes(Special));
+        // 0xEF leads the UTF-8 form of U+FFFE and U+FFFF, and of every other U+F000..U+FFFF character.
+        private static readonly SearchValues<byte> SpecialBytes = SearchValues.Create([.. Encoding.ASCII.GetBytes(Special), 0xEF]);
 
-        [SkipLocalsInit]
-        private static void WriteRef(BiffBuffer xml, int columnIndex, int rowNumber)
+        // <c r="XFD1048576" s="2147483647" t="inlineStr">
+        private const int MaxCellOpenLength = 48;
+        // <v>-2.2250738585072014E-308</v></c>
+        private const int MaxValueLength = 40;
+
+        /// <summary>
+        /// Writes the cell's start tag, through its closing <c>&gt;</c>, at the start of <paramref name="dest"/>
+        /// and returns its length. Cells are written whole into one span: separate small writes to the
+        /// buffer, each checking capacity, cost more than formatting the cell.
+        /// </summary>
+        private static int WriteCellOpen(Span<byte> dest, int columnIndex, int rowNumber, bool includeReference,
+            int styleId, ReadOnlySpan<byte> typeAttr)
         {
-            Span<byte> buf = stackalloc byte[10];
-            int len = ColumnName.Write(buf, columnIndex);
-            Utf8Formatter.TryFormat(rowNumber, buf[len..], out int rowLen);
-            xml.Write(buf[..(len + rowLen)]);
-        }
-
-        private static void WriteCellOpen(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference,
-            int styleId, ReadOnlySpan<byte> typeAttr, bool selfClose)
-        {
-            xml.Write("<c"u8);
+            "<c"u8.CopyTo(dest);
+            int pos = 2;
             if (includeReference)
             {
-                xml.Write(" r=\""u8);
-                WriteRef(xml, columnIndex, rowNumber);
-                xml.WriteByte((byte)'"');
+                " r=\""u8.CopyTo(dest[pos..]);
+                pos += 4;
+                pos += ColumnName.Write(dest[pos..], columnIndex);
+                Utf8Formatter.TryFormat(rowNumber, dest[pos..], out int written);
+                pos += written;
+                dest[pos++] = (byte)'"';
             }
             if (styleId != 0)
             {
-                xml.Write(" s=\""u8);
-                WriteValue(xml, styleId, sizeHint: 8);
-                xml.WriteByte((byte)'"');
+                " s=\""u8.CopyTo(dest[pos..]);
+                pos += 4;
+                Utf8Formatter.TryFormat(styleId, dest[pos..], out int written);
+                pos += written;
+                dest[pos++] = (byte)'"';
             }
-            xml.Write(typeAttr);
-            xml.Write(selfClose ? "/>"u8 : ">"u8);
+            typeAttr.CopyTo(dest[pos..]);
+            pos += typeAttr.Length;
+            dest[pos++] = (byte)'>';
+            return pos;
         }
 
         internal static void WriteEmpty(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: true);
+            Span<byte> dest = xml.GetSpan(MaxCellOpenLength + 1);
+            int pos = WriteCellOpen(dest, columnIndex, rowNumber, includeReference, styleId, default);
+            "/>"u8.CopyTo(dest[(pos - 1)..]);
+            xml.Advance(pos + 1);
         }
 
         internal static void WriteString(BiffBuffer xml, ReadOnlySpan<char> value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"inlineStr\""u8, selfClose: false);
-            xml.Write(HasEdgeWhitespace(value) ? "<is><t xml:space=\"preserve\">"u8 : "<is><t>"u8);
+            ReadOnlySpan<byte> textOpen = HasEdgeWhitespace(value) ? "<is><t xml:space=\"preserve\">"u8 : "<is><t>"u8;
+            Span<byte> dest = xml.GetSpan(MaxCellOpenLength + textOpen.Length);
+            int pos = WriteCellOpen(dest, columnIndex, rowNumber, includeReference, styleId, " t=\"inlineStr\""u8);
+            textOpen.CopyTo(dest[pos..]);
+            xml.Advance(pos + textOpen.Length);
             WriteEscaped(xml, value);
             xml.Write("</t></is></c>"u8);
         }
 
         internal static void WritePlainUtf8String(BiffBuffer xml, ReadOnlySpan<byte> utf8, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"inlineStr\""u8, selfClose: false);
-            xml.Write("<is><t>"u8);
-            xml.Write(utf8);
-            xml.Write("</t></is></c>"u8);
+            Span<byte> dest = xml.GetSpan(MaxCellOpenLength + 20 + utf8.Length);
+            int pos = WriteCellOpen(dest, columnIndex, rowNumber, includeReference, styleId, " t=\"inlineStr\""u8);
+            "<is><t>"u8.CopyTo(dest[pos..]);
+            pos += 7;
+            utf8.CopyTo(dest[pos..]);
+            pos += utf8.Length;
+            "</t></is></c>"u8.CopyTo(dest[pos..]);
+            xml.Advance(pos + 13);
         }
 
         /// <summary>
         /// True when <see cref="WriteString"/> would emit <paramref name="utf8"/>'s own bytes unchanged:
         /// non-empty, within the cell limit, valid UTF-8, nothing to escape, and no whitespace at either
-        /// end. Every escaped character is ASCII, and UTF-8 multi-byte sequences never contain an ASCII
-        /// byte, so a byte search over the same set is exact.
+        /// end. Every escaped ASCII character is searched as its own byte, which no UTF-8 multi-byte
+        /// sequence contains; text with a character from U+F000 up is never plain, so that U+FFFE and
+        /// U+FFFF are escaped.
         /// </summary>
         internal static bool IsPlainUtf8Text(ReadOnlySpan<byte> utf8)
         {
@@ -97,101 +120,77 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal static void WriteSharedString(BiffBuffer xml, int sharedStringIndex, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"s\""u8, selfClose: false);
-            xml.Write("<v>"u8);
-            WriteValue(xml, sharedStringIndex, sizeHint: 16);
-            xml.Write("</v></c>"u8);
+            Span<byte> dest = xml.GetSpan(MaxCellOpenLength + MaxValueLength);
+            int pos = WriteValueOpen(dest, columnIndex, rowNumber, includeReference, styleId, " t=\"s\""u8);
+            Utf8Formatter.TryFormat(sharedStringIndex, dest[pos..], out int written);
+            WriteValueClose(xml, dest, pos + written);
         }
 
         internal static void WriteBool(BiffBuffer xml, bool value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"b\""u8, selfClose: false);
-            xml.Write("<v>"u8);
-            xml.WriteByte(value ? (byte)'1' : (byte)'0');
-            xml.Write("</v></c>"u8);
+            Span<byte> dest = xml.GetSpan(MaxCellOpenLength + MaxValueLength);
+            int pos = WriteValueOpen(dest, columnIndex, rowNumber, includeReference, styleId, " t=\"b\""u8);
+            dest[pos] = value ? (byte)'1' : (byte)'0';
+            WriteValueClose(xml, dest, pos + 1);
         }
 
         internal static void WriteDateTime(BiffBuffer xml, DateTime value, bool date1904, int columnIndex, int rowNumber, bool includeReference, int styleId)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
-            xml.Write("<v>"u8);
-            WriteValue(xml, ExcelEpoch.OADateToSerial(value.ToOADate(), date1904), sizeHint: 32);
-            xml.Write("</v></c>"u8);
+            WriteNumber(xml, ExcelEpoch.OADateToSerial(value.ToOADate(), date1904), columnIndex, rowNumber, includeReference, styleId);
+        }
+
+        internal static void WriteNumber(BiffBuffer xml, double value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
+        {
+            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
+            Span<byte> dest = xml.GetSpan(MaxCellOpenLength + MaxValueLength);
+            int pos = WriteValueOpen(dest, columnIndex, rowNumber, includeReference, styleId, default);
+            TryFormatDouble(value, dest[pos..], out int written);
+            WriteValueClose(xml, dest, pos + written);
         }
 
         internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
             where T : IUtf8SpanFormattable
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
-            xml.Write("<v>"u8);
-            WriteValue(xml, value, sizeHint: 64);
-            xml.Write("</v></c>"u8);
-        }
-
-        internal static void WriteNumber(BiffBuffer xml, int value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
-        {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
-            xml.Write("<v>"u8);
-            WriteValue(xml, value, sizeHint: 16);
-            xml.Write("</v></c>"u8);
-        }
-
-        internal static void WriteNumber(BiffBuffer xml, long value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
-        {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
-            xml.Write("<v>"u8);
-            WriteValue(xml, value, sizeHint: 32);
-            xml.Write("</v></c>"u8);
-        }
-
-        internal static void WriteNumber(BiffBuffer xml, double value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
-        {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
-            xml.Write("<v>"u8);
-            WriteValue(xml, value, sizeHint: 32);
-            xml.Write("</v></c>"u8);
-        }
-
-        internal static void WriteNumber(BiffBuffer xml, decimal value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
-        {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
-            xml.Write("<v>"u8);
-            WriteValue(xml, value, sizeHint: 64);
-            xml.Write("</v></c>"u8);
-        }
-
-        private static void WriteValue(BiffBuffer xml, int value, int sizeHint)
-        {
-            int size = sizeHint;
-            int written;
-            while (!Utf8Formatter.TryFormat(value, xml.GetSpan(size), out written))
+            if (typeof(T) == typeof(double))
             {
+                WriteNumber(xml, Unsafe.As<T, double>(ref value), columnIndex, rowNumber, includeReference, styleId);
+                return;
+            }
+            if (typeof(T) == typeof(float))
+            {
+                CellValueGuards.ThrowIfNonFinite(Unsafe.As<T, float>(ref value), nameof(value));
+            }
+            int size = 64;
+            while (true)
+            {
+                Span<byte> dest = xml.GetSpan(MaxCellOpenLength + size);
+                int pos = WriteValueOpen(dest, columnIndex, rowNumber, includeReference, styleId, default);
+                if (value.TryFormat(dest[pos..^ValueCloseLength], out int written, default, CultureInfo.InvariantCulture))
+                {
+                    if (!CellValueGuards.IsAlwaysFinite<T>() && typeof(T) != typeof(float))
+                    {
+                        CellValueGuards.ThrowIfNotFiniteNumberText(dest.Slice(pos, written), typeof(T), nameof(value));
+                    }
+                    WriteValueClose(xml, dest, pos + written);
+                    return;
+                }
                 size = checked(size * 2);
             }
-            xml.Advance(written);
         }
 
-        private static void WriteValue(BiffBuffer xml, long value, int sizeHint)
+        private const int ValueCloseLength = 8;
+
+        private static int WriteValueOpen(Span<byte> dest, int columnIndex, int rowNumber, bool includeReference, int styleId, ReadOnlySpan<byte> typeAttr)
         {
-            int size = sizeHint;
-            int written;
-            while (!Utf8Formatter.TryFormat(value, xml.GetSpan(size), out written))
-            {
-                size = checked(size * 2);
-            }
-            xml.Advance(written);
+            int pos = WriteCellOpen(dest, columnIndex, rowNumber, includeReference, styleId, typeAttr);
+            "<v>"u8.CopyTo(dest[pos..]);
+            return pos + 3;
         }
 
-        private static void WriteValue(BiffBuffer xml, double value, int sizeHint)
+        private static void WriteValueClose(BiffBuffer xml, Span<byte> dest, int pos)
         {
-            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
-            int size = sizeHint;
-            int written;
-            while (!TryFormatDouble(value, xml.GetSpan(size), out written))
-            {
-                size = checked(size * 2);
-            }
-            xml.Advance(written);
+            "</v></c>"u8.CopyTo(dest[pos..]);
+            xml.Advance(pos + ValueCloseLength);
         }
 
         /// <summary>
@@ -247,33 +246,6 @@ namespace ExcelReader.Core.Writer.Internal
             Utf8Formatter.TryFormat(magnitude % divisor, destination[written..], out n, new StandardFormat('D', (byte)scale));
             written += n;
             return true;
-        }
-
-        private static void WriteValue<T>(BiffBuffer xml, T value, int sizeHint)
-            where T : IUtf8SpanFormattable
-        {
-            if (typeof(T) == typeof(double))
-            {
-                WriteValue(xml, Unsafe.As<T, double>(ref value), sizeHint);
-                return;
-            }
-            if (typeof(T) == typeof(float))
-            {
-                CellValueGuards.ThrowIfNonFinite(Unsafe.As<T, float>(ref value), nameof(value));
-            }
-            int size = sizeHint;
-            int written;
-            Span<byte> destination = xml.GetSpan(size);
-            while (!value.TryFormat(destination, out written, default, CultureInfo.InvariantCulture))
-            {
-                size = checked(size * 2);
-                destination = xml.GetSpan(size);
-            }
-            if (!CellValueGuards.IsAlwaysFinite<T>() && typeof(T) != typeof(double) && typeof(T) != typeof(float))
-            {
-                CellValueGuards.ThrowIfNotFiniteNumberText(destination[..written], typeof(T), nameof(value));
-            }
-            xml.Advance(written);
         }
 
         internal static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)

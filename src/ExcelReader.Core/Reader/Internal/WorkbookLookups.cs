@@ -81,13 +81,14 @@ namespace ExcelReader.Core.Reader.Internal
 
         internal static LimitedReadStream Wrap(
             Stream opened, DecompressedByteCounter counter, ExcelReaderOptions options,
-            string entryLimitName, long entryLimit, long uncompressedSize)
+            string entryLimitName, long entryLimit, long uncompressedSize, uint? expectedCrc = null)
         {
             if (!options.PrefetchDecompression || uncompressedSize < PrefetchMinUncompressedSize)
             {
-                return new LimitedReadStream(opened, uncompressedSize, counter, entryLimitName, entryLimit);
+                return new LimitedReadStream(opened, uncompressedSize, counter, entryLimitName, entryLimit, expectedCrc);
             }
-            return new LimitedReadStream(new PrefetchStream(opened), uncompressedSize, counter, entryLimitName, entryLimit);
+            return new LimitedReadStream(
+                new PrefetchStream(opened, uncompressedSize, expectedCrc), uncompressedSize, counter, entryLimitName, entryLimit);
         }
 
         internal static int InitialBufferCapacity(long entryLength)

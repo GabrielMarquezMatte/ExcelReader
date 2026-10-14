@@ -112,7 +112,7 @@ namespace ExcelReader.Core.Writer
             sheet.EndTable();
         }
 
-        private static Action<TRow, T> ShiftToTable<TRow, T>(Action<TRow, T> writeRow, ExcelTableOptions? options)
+        internal static Action<TRow, T> ShiftToTable<TRow, T>(Action<TRow, T> writeRow, ExcelTableOptions? options)
             where TRow : IRowWriter
         {
             int firstColumn = (options ?? ExcelTableOptions.Default).FirstColumn;
@@ -127,7 +127,7 @@ namespace ExcelReader.Core.Writer
             };
         }
 
-        private static async ValueTask WriteHeaderAsync<TRow>(ISheetWriter<TRow> sheet, string[] headers, CancellationToken ct)
+        internal static async ValueTask WriteHeaderAsync<TRow>(ISheetWriter<TRow> sheet, string[] headers, CancellationToken ct)
             where TRow : IRowWriter
         {
             TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);

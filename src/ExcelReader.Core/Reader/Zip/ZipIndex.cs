@@ -1,9 +1,11 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Zip.Inflate;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Reader.Zip
 {
@@ -15,6 +17,7 @@ namespace ExcelReader.Core.Reader.Zip
         internal long LocalHeaderOffset { get; init; }
         internal long CompressedSize { get; init; }
         internal long UncompressedSize { get; init; }
+        internal uint Crc { get; init; }
         internal ushort Method { get; init; }
         internal ushort Flags { get; init; }
     }
@@ -65,9 +68,11 @@ namespace ExcelReader.Core.Reader.Zip
         private readonly ReadOnlyMemory<byte> _directory;
         private readonly byte[]? _directoryRented;
         private readonly ZipEntryRef[] _entries;
+        private readonly bool _verifyChecksums;
         private int _disposed;
 
-        private ZipIndex(ByteSource source, ReadOnlyMemory<byte> directory, byte[]? directoryRented, ZipEntryRef[] entries, int count)
+        private ZipIndex(
+            ByteSource source, ReadOnlyMemory<byte> directory, byte[]? directoryRented, ZipEntryRef[] entries, int count, bool verifyChecksums)
         {
             _source = source;
             HasMemory = source.TryGetMemory(out _file);
@@ -75,6 +80,7 @@ namespace ExcelReader.Core.Reader.Zip
             _directoryRented = directoryRented;
             _entries = entries;
             Count = count;
+            _verifyChecksums = verifyChecksums;
         }
 
         internal int Count { get; }
@@ -237,7 +243,7 @@ namespace ExcelReader.Core.Reader.Zip
             {
                 int count = WalkCentralDirectory(directory.Span, ref entries, options);
                 ThrowIfDuplicateEntryNames(directory, entries, count);
-                return new ZipIndex(source, directory, directoryRented, entries, count);
+                return new ZipIndex(source, directory, directoryRented, entries, count, options.VerifyZipChecksums);
             }
             catch
             {
@@ -335,6 +341,11 @@ namespace ExcelReader.Core.Reader.Zip
             {
                 part = ReadPart(dataOffset, entry);
             }
+            if (_verifyChecksums && Crc32.Append(0, part.Memory.Span) != entry.Crc)
+            {
+                part.Dispose();
+                ThrowChecksumMismatch();
+            }
             counter.Add(entry.UncompressedSize);
             return part;
         }
@@ -370,6 +381,10 @@ namespace ExcelReader.Core.Reader.Zip
                     {
                         throw new InvalidDataException("The ZIP entry produced more data than its declared uncompressed size.");
                     }
+                }
+                if (_verifyChecksums && Crc32.Append(0, rented.AsSpan(0, size)) != entry.Crc)
+                {
+                    ThrowChecksumMismatch();
                 }
             }
             catch
@@ -416,7 +431,8 @@ namespace ExcelReader.Core.Reader.Zip
                 ? ToReadableMemoryStream(CompressedSlice(dataOffset, entry.CompressedSize))
                 : new ByteSourceStream(_source, dataOffset, entry.CompressedSize);
             Stream opened = entry.Method == 0 ? raw : new InflateStream(raw);
-            return WorkbookLookups.Wrap(opened, counter, options, entryLimitName, entryLimit, entry.UncompressedSize);
+            return WorkbookLookups.Wrap(
+                opened, counter, options, entryLimitName, entryLimit, entry.UncompressedSize, _verifyChecksums ? entry.Crc : null);
         }
 
         private static void ThrowIfPartTooLarge(in ZipEntryRef entry, DecompressedByteCounter counter, string entryLimitName, long entryLimit)
@@ -694,6 +710,7 @@ namespace ExcelReader.Core.Reader.Zip
                     LocalHeaderOffset = localOffset,
                     CompressedSize = compressed,
                     UncompressedSize = uncompressed,
+                    Crc = fields.Crc,
                     Method = fields.Method,
                     Flags = fields.Flags,
                 };
@@ -712,6 +729,7 @@ namespace ExcelReader.Core.Reader.Zip
             internal ushort NameLength { get; init; }
             internal ushort ExtraLength { get; init; }
             internal ushort CommentLength { get; init; }
+            internal uint Crc { get; init; }
             internal uint CompressedSize { get; init; }
             internal uint UncompressedSize { get; init; }
             internal uint LocalHeaderOffset { get; init; }
@@ -723,6 +741,7 @@ namespace ExcelReader.Core.Reader.Zip
             {
                 Flags = BinaryPrimitives.ReadUInt16LittleEndian(record[8..]),
                 Method = BinaryPrimitives.ReadUInt16LittleEndian(record[10..]),
+                Crc = BinaryPrimitives.ReadUInt32LittleEndian(record[16..]),
                 CompressedSize = BinaryPrimitives.ReadUInt32LittleEndian(record[20..]),
                 UncompressedSize = BinaryPrimitives.ReadUInt32LittleEndian(record[24..]),
                 NameLength = BinaryPrimitives.ReadUInt16LittleEndian(record[28..]),
@@ -829,6 +848,12 @@ namespace ExcelReader.Core.Reader.Zip
                 ArrayPool<byte>.Shared.Return(rented);
                 throw;
             }
+        }
+
+        [DoesNotReturn]
+        private static void ThrowChecksumMismatch()
+        {
+            throw new InvalidDataException(LimitedReadStream.ChecksumMismatch);
         }
 
         private static MemoryStream ToReadableMemoryStream(ReadOnlyMemory<byte> compressed)

@@ -342,7 +342,8 @@ namespace ExcelReader.Tests.Writer.Xls
                     r.Write(i);
                     for (int c = 1; c < cols; c++)
                     {
-                        r.Write(i + (c * 0.5));
+                        // Thirds fit no RK form, so each cell stays an 8-byte NUMBER.
+                        r.Write(i + (c / 3.0));
                     }
                 }
                 s.End();
@@ -360,7 +361,7 @@ namespace ExcelReader.Tests.Writer.Xls
                     Assert.True(e.Current[0].TryParse(Inv, out int first));
                     Assert.Equal(read, first);
                     Assert.True(e.Current[cols - 1].TryParse(Inv, out double last));
-                    Assert.Equal(read + ((cols - 1) * 0.5), last);
+                    Assert.Equal(read + ((cols - 1) / 3.0), last);
                 }
                 read++;
             }

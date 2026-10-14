@@ -9,10 +9,14 @@ namespace ExcelReader.Core.Writer.Internal
     {
         private const int ChannelCapacity = 4;
 
+        // A queue item with this length carries no bytes: it marks the point a DrainAsync call waits for.
+        private const int BarrierLength = -1;
+
         private readonly Stream _inner;
         private readonly Channel<(byte[] Buffer, int Length, bool Owned)> _channel;
         private readonly Task _consumer;
         private ExceptionDispatchInfo? _consumerException;
+        private TaskCompletionSource? _barrier;
         private bool _writerCompleted;
         private bool _disposed;
 
@@ -174,6 +178,28 @@ namespace ExcelReader.Core.Writer.Internal
             await _inner.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Waits until everything enqueued so far has reached the inner stream and the consumer is idle.
+        /// The stream stays writable, which <see cref="FlushAsync"/> does not allow.
+        /// </summary>
+        internal async ValueTask DrainAsync(CancellationToken cancellationToken = default)
+        {
+            ThrowIfFaulted();
+            var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _barrier = barrier;
+            try
+            {
+                await _channel.Writer.WriteAsync(([], BarrierLength, Owned: false), cancellationToken).ConfigureAwait(false);
+            }
+            catch (ChannelClosedException)
+            {
+                ThrowIfFaulted();
+                throw;
+            }
+            await barrier.Task.ConfigureAwait(false);
+            ThrowIfFaulted();
+        }
+
         private void CompleteWriterOnce()
         {
             if (!_writerCompleted)
@@ -196,6 +222,11 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 await foreach ((byte[] buf, int len, bool owned) in _channel.Reader.ReadAllAsync().ConfigureAwait(false))
                 {
+                    if (len == BarrierLength)
+                    {
+                        _barrier?.TrySetResult();
+                        continue;
+                    }
                     try
                     {
                         await _inner.WriteAsync(buf.AsMemory(0, len)).ConfigureAwait(false);
@@ -212,8 +243,12 @@ namespace ExcelReader.Core.Writer.Internal
                 _channel.Writer.TryComplete();
                 while (_channel.Reader.TryRead(out (byte[] Buffer, int Length, bool Owned) queued))
                 {
-                    ReturnBuffer(queued.Buffer, queued.Owned);
+                    if (queued.Length != BarrierLength)
+                    {
+                        ReturnBuffer(queued.Buffer, queued.Owned);
+                    }
                 }
+                _barrier?.TrySetResult();
             }
         }
 

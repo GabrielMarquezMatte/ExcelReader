@@ -39,7 +39,7 @@ foreach (Row row in workbook.FirstSheet)
 
 - [Reading rows](docs/guide/reading.md) — opening a workbook, enumerating rows, auto-detecting the format, async reads, prefetch decompression, and the ADO.NET `IDataReader` bridge.
 - [Typed parsing](docs/guide/parsing.md) — binding rows to your own types with attributes, the compile-time generator (Native AOT / trimming), the fluent API, required columns, custom converters, and the zero-copy `ref struct` path.
-- [Writing workbooks](docs/guide/writing.md) — XLSX, XLSB (BIFF12) and XLS (BIFF8) writers, cell styles, typed records, and prefetch compression.
+- [Writing workbooks](docs/guide/writing.md) — XLSX, XLSB (BIFF12) and XLS (BIFF8) writers, cell styles, typed records, prefetch compression, and parallel record writes.
 - [CSV](docs/guide/csv.md) — reading, dialect sniffing, parallel parsing, and writing delimited text.
 - [Encrypted workbooks](docs/guide/encryption.md) — opening password-protected packages and encrypting written ones.
 - [Reading untrusted files](docs/guide/untrusted-input.md) — the resource limits that bound what one hostile file can cost, and how to reject one cleanly.
@@ -85,8 +85,10 @@ errors to stderr, so `convert` is safe to pipe.
 - String conversion allocates only when you call `GetString()`.
 - The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in `sheetData`, and CDATA text runs.
 - Readers bound untrusted input by default: 512 MB total decompressed ZIP data, 32 MB per cell/row value buffer, and 128 MB for shared strings. Pass `ExcelReaderOptions` to the `Excel.From*`/`Excel.Open*` factories to tune these limits; set a limit to `0` to opt out and restore unlimited behavior for that limit. `CsvReader` has its own `CsvReaderOptions.MaxCellBytes` (default 32 MB) for the same purpose.
+- Each ZIP entry of an XLSX or XLSB package is checked against its CRC-32 as it is read, so a damaged file throws `InvalidDataException` instead of returning wrong cells. `ExcelReaderOptions.VerifyZipChecksums = false` turns the check off.
 - The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells; shared strings are opt-in.
 - The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package; shared strings are opt-in.
+- `WriteRecordsParallelAsync` and `WriteTableParallelAsync` format and compress batches of records on several cores and write them in order, for XLSX and XLSB. On a Ryzen 7 5700X a 1,000,000-row sheet writes in 50 ms as XLSX with 4 batches in flight and 36 ms with 8, against 187 ms serially; XLSB takes 41 ms and 28 ms against 124 ms. Memory stays at about 3 MB per batch in flight. See [Write records in parallel](docs/guide/writing.md#write-records-in-parallel-xlsxxlsb) and the [benchmarks](docs/performance/benchmarks.md#parallel-record-writes).
 - The XLS writer buffers records in memory and assembles the OLE container at `EndAsync`; choose it when write throughput matters more than peak allocation.
 - `Excel.EncryptPackage`/`EncryptPackageAsync` wrap a written XLSX/XLSB package in agile ECMA-376 encryption; see [Encrypted workbooks](docs/guide/encryption.md).
 

@@ -18,6 +18,8 @@ from excelreader.types import ColumnType, WriteOptions
 
 _EPOCH_DATE = datetime.date(1970, 1, 1)
 _EPOCH_DATETIME = datetime.datetime(1970, 1, 1)
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63 - 1
 
 
 def _encode(value: str) -> tuple[Any, int]:
@@ -74,9 +76,13 @@ class SheetWriter:
         _check(self._lib.xl_write_string(handle, pointer, length))
 
     def write_i64(self, value: int | None) -> None:
+        """Writes the next cell as a whole number. Raises `OverflowError` outside the signed 64-bit range."""
         if value is None:
             self.write_null(ColumnType.I64)
             return
+        # ctypes would keep the low 64 bits of a larger value without complaint.
+        if not _INT64_MIN <= value <= _INT64_MAX:
+            raise OverflowError(f"{value} does not fit a 64-bit integer cell; write it with write_f64 or write_str")
         _check(self._lib.xl_write_int64(self._require_handle(), value))
 
     def write_f64(self, value: float | None) -> None:
@@ -126,7 +132,8 @@ class SheetWriter:
         The type of each value picks the write method. `None` becomes a blank *string* cell — it is
         the one case inference cannot resolve; use `write_null(ColumnType.X)` for a typed blank.
 
-        Raises `TypeError`, before writing anything, for a value whose type has no mapping.
+        Raises, before writing anything, `TypeError` for a value whose type has no mapping and
+        `OverflowError` for an `int` outside the signed 64-bit range.
         """
         for position, value in enumerate(values):
             if not _is_writable(value):
@@ -134,6 +141,8 @@ class SheetWriter:
                     f"write_row cannot infer a cell type for {type(value).__name__} "
                     f"at position {position}"
                 )
+            if type(value) is int and not _INT64_MIN <= value <= _INT64_MAX:
+                raise OverflowError(f"{value} at position {position} does not fit a 64-bit integer cell")
 
         self.start_row()
         for value in values:

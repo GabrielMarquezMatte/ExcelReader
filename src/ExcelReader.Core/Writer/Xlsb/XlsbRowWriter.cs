@@ -215,9 +215,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             }
             if (value is IConvertible convertible)
             {
-                double converted = convertible.ToDouble(CultureInfo.InvariantCulture);
-                CellValueGuards.ThrowIfNonFiniteConversion(converted, typeof(T), nameof(value));
-                return converted;
+                return ConvertToDouble(convertible, typeof(T));
             }
             Span<byte> bytes = stackalloc byte[64];
             if (value.TryFormat(bytes, out int written, default, CultureInfo.InvariantCulture) &&
@@ -226,8 +224,25 @@ namespace ExcelReader.Core.Writer.Xlsb
                 CellValueGuards.ThrowIfNonFiniteConversion(parsed, typeof(T), nameof(value));
                 return parsed;
             }
-            throw new ArgumentException(
-                $"Cannot convert value of type '{typeof(T)}' to a numeric cell value.", nameof(value));
+            CellValueGuards.ThrowUnrepresentable(typeof(T), nameof(value));
+            return default;
+        }
+
+        // IConvertible types with no numeric form (char, DateTime) throw InvalidCastException from ToDouble.
+        private static double ConvertToDouble(IConvertible value, Type sourceType)
+        {
+            double converted;
+            try
+            {
+                converted = value.ToDouble(CultureInfo.InvariantCulture);
+            }
+            catch (InvalidCastException)
+            {
+                CellValueGuards.ThrowUnrepresentable(sourceType, nameof(value));
+                return default;
+            }
+            CellValueGuards.ThrowIfNonFiniteConversion(converted, sourceType, nameof(value));
+            return converted;
         }
 
         /// <summary>
