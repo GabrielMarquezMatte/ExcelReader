@@ -101,6 +101,13 @@ jobs:
         if: env.RUN == 'true' && matrix.os == 'ubuntu-latest'
         run: dotnet format whitespace ExcelReader.slnx --verify-no-changes
 
+      # Packing runs package validation, which fails on any binary break against the last release.
+      - name: Validate packages against the last release
+        if: env.RUN == 'true' && matrix.os == 'ubuntu-latest'
+        run: |
+          dotnet pack src/ExcelReader.Core/ExcelReader.Core.csproj --configuration Release --no-build --output ./package-validation
+          dotnet pack src/ExcelReader.Arrow/ExcelReader.Arrow.csproj --configuration Release --no-build --output ./package-validation
+
       - name: Test (Release)
         if: env.RUN == 'true'
         run: >-

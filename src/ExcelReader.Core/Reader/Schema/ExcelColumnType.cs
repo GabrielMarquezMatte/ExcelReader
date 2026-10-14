@@ -8,6 +8,7 @@ namespace ExcelReader.Core.Reader.Schema
     /// The underlying values are fixed: they are the XL_T_* constants of the native C ABI
     /// (see <c>src/ExcelReader.Native/include/excelreader.h</c>), which marshals this enum with a
     /// plain integer cast rather than a translation table. Renumbering a member is a silent ABI break.
+    /// <para>A minor version can add values, so a <see langword="switch"/> over this enum should have a default branch. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</para>
     /// </remarks>
     public enum ExcelColumnType
     {
