@@ -140,7 +140,7 @@ def write_workbook(
 
     `data` is one of:
 
-    - a `TypedTable`, what `Sheet.parse_typed()` returns, so reading a sheet and writing it back out
+    - a `TypedTable`, what `Sheet.parse()` returns, so reading a sheet and writing it back out
       is a round-trip through the same buffers. `types` then gives each column's `ColumnType` and is
       required: a `TypedTable` carries raw buffers, and nothing about a raw buffer's element size
       alone distinguishes, say, I64 from TIME — both are 8-byte-per-row arrays.

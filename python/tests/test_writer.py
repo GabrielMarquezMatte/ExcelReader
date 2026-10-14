@@ -29,13 +29,13 @@ def source_csv(tmp_path):
 @pytest.mark.parametrize("extension", ["xlsx", "xlsb", "xls", "csv"])
 def test_write_workbook_round_trips_every_format(source_csv, tmp_path, extension):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     out = tmp_path / f"out.{extension}"
     write_workbook(out, table, _TYPES)
 
     with open_workbook(out) as workbook:
-        result = workbook.sheets[0].parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse(_SCHEMA)
 
     assert result.row_count == 2
     assert list(result.columns[0]) == ["widget", "gadget"]
@@ -48,13 +48,13 @@ def test_write_workbook_round_trips_a_nullable_column(tmp_path):
     schema = [ColumnSpec(ColumnType.I64, name="qty", nullable=True)]
 
     with open_workbook(source) as workbook:
-        table = workbook.sheets[0].parse_typed(schema)
+        table = workbook.sheets[0].parse(schema)
 
     out = tmp_path / "out.xlsx"
     write_workbook(out, table, [spec.type for spec in schema])
 
     with open_workbook(out) as workbook:
-        result = workbook.sheets[0].parse_typed(schema)
+        result = workbook.sheets[0].parse(schema)
 
     assert result.row_count == 3
     assert result.validity[0][0] & 0b111 == 0b101
@@ -62,7 +62,7 @@ def test_write_workbook_round_trips_a_nullable_column(tmp_path):
 
 def test_write_workbook_applies_the_sheet_name(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     out = tmp_path / "named.xlsx"
     write_workbook(out, table, _TYPES, options=WriteOptions(sheet_name="Vendas"))
@@ -73,7 +73,7 @@ def test_write_workbook_applies_the_sheet_name(source_csv, tmp_path):
 
 def test_write_workbook_rejects_an_unknown_extension(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     with pytest.raises(ValueError, match="format"):
         write_workbook(tmp_path / "out.parquet", table, _TYPES)
@@ -81,7 +81,7 @@ def test_write_workbook_rejects_an_unknown_extension(source_csv, tmp_path):
 
 def test_write_workbook_reports_a_native_rejection(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     with pytest.raises(ExcelReaderError):
         write_workbook(tmp_path / "out.xlsx", table, _TYPES, options=WriteOptions(sheet_name="has/slash"))
@@ -89,7 +89,7 @@ def test_write_workbook_reports_a_native_rejection(source_csv, tmp_path):
 
 def test_write_workbook_rejects_a_typed_table_without_types(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     with pytest.raises(TypeError, match="types"):
         write_workbook(tmp_path / "out.xlsx", table)
@@ -120,7 +120,7 @@ def test_write_workbook_writes_arrow_data(tmp_path, kind):
     write_workbook(out, frame)
 
     with open_workbook(out) as workbook:
-        result = workbook.sheets[0].parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -150,7 +150,7 @@ def test_write_workbook_writes_any_arrow_c_stream(tmp_path):
     write_workbook(out, Producer())
 
     with open_workbook(out) as workbook:
-        result = workbook.sheets[0].parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -173,7 +173,7 @@ def test_write_workbook_round_trips_a_multi_chunk_pandas_frame(tmp_path):
     write_workbook(out, frame)
 
     with open_workbook(out) as workbook:
-        result = workbook.sheets[0].parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -204,7 +204,7 @@ def test_write_workbook_writes_a_polars_frame(tmp_path):
     write_workbook(out, pl.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
 
     with open_workbook(out) as workbook:
-        result = workbook.sheets[0].parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -221,7 +221,7 @@ def test_write_workbook_rejects_an_unsupported_arrow_type(tmp_path):
 
 def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     plain = tmp_path / "plain.xlsx"
     write_workbook(plain, table, _TYPES)
@@ -230,7 +230,7 @@ def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path)
     encrypt_package(plain, encrypted, "hunter2")
 
     with open_workbook(encrypted, password="hunter2") as workbook:
-        result = workbook.sheets[0].parse_typed(_SCHEMA)
+        result = workbook.sheets[0].parse(_SCHEMA)
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
@@ -238,7 +238,7 @@ def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path)
 
 def test_encrypt_package_rejects_the_wrong_password_on_open(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     plain = tmp_path / "plain.xlsx"
     write_workbook(plain, table, _TYPES)
@@ -252,7 +252,7 @@ def test_encrypt_package_rejects_the_wrong_password_on_open(source_csv, tmp_path
 
 def test_encrypt_package_rejects_an_empty_password(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     plain = tmp_path / "plain.xlsx"
     write_workbook(plain, table, _TYPES)
@@ -263,7 +263,7 @@ def test_encrypt_package_rejects_an_empty_password(source_csv, tmp_path):
 
 def _parse_bytes(payload, format, password=None):
     with open_workbook(payload, format=format, password=password) as workbook:
-        return workbook.sheets[0].parse_typed(_SCHEMA)
+        return workbook.sheets[0].parse(_SCHEMA)
 
 
 def _to_bytes(table):
@@ -295,7 +295,7 @@ def test_encrypt_package_takes_paths_and_buffers_on_both_sides(
     tmp_path, source_csv, package_kind, destination_kind
 ):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
     plain = _to_bytes(table)
     plain_path = tmp_path / "plain.xlsx"
     plain_path.write_bytes(plain)
@@ -319,7 +319,7 @@ def test_encrypt_package_rejects_bytes_that_are_not_a_package():
 
 def test_encrypt_package_rejects_an_empty_password_in_memory(source_csv):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     with pytest.raises(ExcelReaderError):
         encrypt_package(_to_bytes(table), io.BytesIO(), "")
@@ -334,7 +334,7 @@ def test_encrypt_package_rejects_inputs_it_cannot_use():
 
 def test_write_workbook_writes_into_an_open_binary_file(tmp_path, source_csv):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
     path = tmp_path / "out.bin"
 
     with path.open("wb") as file:
@@ -347,7 +347,7 @@ def test_write_workbook_writes_into_an_open_binary_file(tmp_path, source_csv):
 
 def test_write_workbook_to_a_stream_needs_a_format(source_csv):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     with pytest.raises(ValueError, match="format"):
         write_workbook(io.BytesIO(), table, _TYPES)
@@ -357,7 +357,7 @@ def test_write_workbook_to_a_stream_needs_a_format(source_csv):
 
 def test_write_workbook_rejects_a_destination_it_cannot_write(source_csv):
     with open_workbook(source_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_SCHEMA)
+        table = workbook.sheets[0].parse(_SCHEMA)
 
     with pytest.raises(TypeError, match="destination"):
         write_workbook(42, table, _TYPES, format="xlsx")

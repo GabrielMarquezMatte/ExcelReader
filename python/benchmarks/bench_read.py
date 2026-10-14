@@ -4,7 +4,7 @@ Usage:  python python/benchmarks/bench_read.py [path] [--n N] [--csv CSV]
 
 `path` defaults to tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb, resolved relative to
 the repository root. Reports min and median over N iterations (default 10) for every available
-read path, then a CSV comparison (`--csv`, default the fixture's .csv twin) of parse_typed() and
+read path, then a CSV comparison (`--csv`, default the fixture's .csv twin) of parse() and
 to_polars() at parallelism 1 and 0 against polars.read_csv and pandas.read_csv. A variant that reads
 zero rows or zero cells is a harness bug, not a result — this script asserts against that instead of
 silently publishing a zero.
@@ -74,7 +74,7 @@ _FIXTURE_SCHEMA = [
 
 def bench_parse_typed(path: Path) -> tuple[int, int]:
     with excelreader.open_workbook(path) as workbook:
-        table = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA)
+        table = workbook.sheets[0].parse(_FIXTURE_SCHEMA)
     return table.row_count, table.row_count * len(table.columns)
 
 
@@ -84,11 +84,11 @@ def bench_to_arrow(path: Path) -> tuple[int, int]:
     return batch.num_rows, batch.num_rows * batch.num_columns
 
 
-def bench_iter_parse_typed(path: Path) -> tuple[int, int]:
+def bench_parse_batches(path: Path) -> tuple[int, int]:
     """Batched counterpart to bench_parse_typed: one batch resident instead of the whole sheet."""
     rows = 0
     with excelreader.open_workbook(path) as workbook:
-        for table in workbook.sheets[0].iter_parse_typed(_FIXTURE_SCHEMA, batch_size=10000):
+        for table in workbook.sheets[0].parse_batches(_FIXTURE_SCHEMA, batch_size=10000):
             rows += table.row_count
     return rows, rows * len(_FIXTURE_SCHEMA)
 
@@ -203,7 +203,7 @@ _CSV_DATES = ["Order Date", "Ship Date"]
 
 def bench_csv_parse_typed(path: Path, parallelism: int) -> tuple[int, int]:
     with excelreader.open_workbook(path, format="csv") as workbook:
-        table = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA, parallelism=parallelism)
+        table = workbook.sheets[0].parse(_FIXTURE_SCHEMA, parallelism=parallelism)
     return table.row_count, table.row_count * len(table.columns)
 
 
@@ -233,7 +233,7 @@ def _bench_csv(path: Path, n: int) -> None:
     print(f"csv: {path}")
     print()
     for parallelism in (1, 0):
-        print(f"excelreader.parse_typed(parallelism={parallelism}):")
+        print(f"excelreader.parse(parallelism={parallelism}):")
         _time_and_assert(f"  csv parse_typed p={parallelism}", functools.partial(bench_csv_parse_typed, parallelism=parallelism), path, n)
         print()
     try:
@@ -308,12 +308,12 @@ def main() -> int:
     print()
 
     if args.path.resolve() == DEFAULT_PATH.resolve():
-        print("parse_typed() [schema-driven typed columns, native-side conversion]:")
+        print("parse() [schema-driven typed columns, native-side conversion]:")
         _time_and_assert("  parse_typed", bench_parse_typed, args.path, args.n)
         print()
 
-        print("excelreader.iter_parse_typed() (batched):")
-        _time_and_assert("  iter_parse_typed", bench_iter_parse_typed, args.path, args.n)
+        print("excelreader.parse_batches() (batched):")
+        _time_and_assert("  parse_batches", bench_parse_batches, args.path, args.n)
         print()
 
         try:

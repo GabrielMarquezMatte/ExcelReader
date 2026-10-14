@@ -57,7 +57,7 @@ with excelreader.open_workbook("report.xlsx") as workbook, ThreadPoolExecutor() 
     tables = list(pool.map(lambda sheet: sheet.to_arrow(sheet.infer_schema()), workbook.sheets))
 ```
 
-`rows()` and `iter_parse_typed()` are generators: the native cursor opens at the first `next()`. A
+`rows()` and `parse_batches()` are generators: the native cursor opens at the first `next()`. A
 generator that has already started keeps working after `workbook.close()`; one that has not started
 raises at its first `next()`. `to_arrow_stream()` opens its stream at the call, so it works after
 `close()` even if never started.
@@ -89,8 +89,8 @@ A sheet reads in one of these shapes:
 | Method | Returns | Knob | Needs |
 |---|---|---|---|
 | `rows()` | one list of `Cell` per row, streamed | — | nothing |
-| `parse_typed()` | the whole sheet as a `TypedTable` | `parallelism` | nothing |
-| `iter_parse_typed()` | one `TypedTable` per batch | `batch_size` | nothing |
+| `parse()` | the whole sheet as a `TypedTable` | `parallelism` | nothing |
+| `parse_batches()` | one `TypedTable` per batch | `batch_size` | nothing |
 | `to_arrow()` | the whole sheet as a `pyarrow.RecordBatch` | `parallelism` | pyarrow |
 | `to_arrow_stream()` | an Arrow PyCapsule stream of batches | `batch_size` | nothing |
 | `to_pandas()` / `to_polars()` | a DataFrame | `batch_size`, `parallelism` | pandas + pyarrow / polars |
@@ -100,7 +100,7 @@ A sheet reads in one of these shapes:
 ### Typed columns — the fastest path
 
 `rows()` hands back cell *text*, which means the library formats every value to a string on the way
-out and builds one Python object per cell. `parse_typed()` skips that entirely: you give it a schema,
+out and builds one Python object per cell. `parse()` skips that entirely: you give it a schema,
 and the conversion happens natively, straight into typed column buffers. On a 65,536 × 14 sheet it is
 ~30× faster than `rows()`, and faster than `polars.read_excel()` — see [Reading](#reading) below for
 the measured numbers.
@@ -109,7 +109,7 @@ the measured numbers.
 from excelreader import ColumnSpec, ColumnType
 
 with open_workbook("sales.xlsb") as workbook:
-    table = workbook.sheets[0].parse_typed([
+    table = workbook.sheets[0].parse([
         ColumnSpec(ColumnType.STRING, name="Region"),
         ColumnSpec(ColumnType.DATE, name="Order Date"),
         ColumnSpec(ColumnType.F64, name="Total Revenue", nullable=True),
@@ -134,12 +134,12 @@ header, where every spec must resolve by index.
 A column that fails to convert is an error unless its spec sets `nullable=True`, which records the
 failure in `table.validity` and keeps reading.
 
-`parse_typed()` always reads the whole sheet from its first row, independent of any `rows()`
+`parse()` always reads the whole sheet from its first row, independent of any `rows()`
 generator in progress.
 
 #### Reading a sheet a batch at a time
 
-For a sheet too large to hold in memory at once, `iter_parse_typed()` is `parse_typed()` a batch at a
+For a sheet too large to hold in memory at once, `parse_batches()` is `parse()` a batch at a
 time — a generator yielding one `TypedTable` per batch:
 
 ```python
@@ -149,21 +149,21 @@ with open_workbook("sales.xlsb") as workbook:
         ColumnSpec(ColumnType.DATE, name="Order Date"),
         ColumnSpec(ColumnType.F64, name="Total Revenue", nullable=True),
     ]
-    for batch in workbook.sheets[0].iter_parse_typed(schema, batch_size=10_000):
+    for batch in workbook.sheets[0].parse_batches(schema, batch_size=10_000):
         region, day, revenue = batch.columns
         ...
 ```
 
-`batch_size` is rows per batch; `0` means one unbounded batch, identical to `parse_typed()`, and a
+`batch_size` is rows per batch; `0` means one unbounded batch, identical to `parse()`, and a
 negative value is an error. Chunked reads are independent: several can be open on one workbook at
 once, typed or Arrow (see [Arrow](#arrow) below), and none disturbs another.
 
-Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
+Being a generator, `parse_batches()` opens nothing until the first iteration, so a bad
 `batch_size` is only raised there, not at the call.
 
 #### Reading a large sheet on several threads
 
-`parse_typed()`, `to_arrow()`, `to_pandas()` and `to_polars()` take `parallelism`: `1` (the
+`parse()`, `to_arrow()`, `to_pandas()` and `to_polars()` take `parallelism`: `1` (the
 default) reads on one thread, `0` uses every core, `n` up to n threads. XLSX, XLSB and CSV are split. XLS, or a
 sheet under 256 KiB, is read on one thread with the same result. The table is identical
 either way. Every partition's columns are held until they are merged, so the peak memory is higher
@@ -194,7 +194,7 @@ don't, `infer_schema()` samples the sheet and guesses one for you:
 with open_workbook("sales.xlsb") as workbook:
     sheet = workbook.sheets[0]
     schema = sheet.infer_schema()   # header_row=1, sample_size=100 by default
-    table = sheet.parse_typed(schema)
+    table = sheet.parse(schema)
 ```
 
 By default each column's type comes from the `CellType` Excel already stored for its sampled cells,
@@ -211,12 +211,12 @@ still a guess over the sample, so a value further down can fail to convert:
 with open_workbook("sales.csv") as workbook:
     sheet = workbook.sheets[0]
     schema = sheet.infer_schema(parse_text=True)
-    table = sheet.parse_typed(schema, parallelism=0)
+    table = sheet.parse(schema, parallelism=0)
 ```
 
 ### Writing
 
-`write_workbook()` writes a `TypedTable` (what `parse_typed()` returns) back out as a single sheet,
+`write_workbook()` writes a `TypedTable` (what `parse()` returns) back out as a single sheet,
 through the same `xl_write_typed` native export — one-shot, no writer handle before or after the call:
 
 ```python
@@ -224,7 +224,7 @@ from excelreader import ColumnType, write_workbook
 
 with open_workbook("sales.xlsb") as workbook:
     sheet = workbook.sheets[0]
-    table = sheet.parse_typed(sheet.infer_schema())
+    table = sheet.parse(sheet.infer_schema())
 
 types = [ColumnType.STRING, ColumnType.DATE, ColumnType.F64]  # one per table.columns, in order
 write_workbook("sales_copy.xlsx", table, types)
@@ -347,7 +347,7 @@ with open_workbook("sales.xlsb") as workbook:
         frame = batch.to_pandas()   # or polars.from_arrow(batch), for one DataFrame per batch
 ```
 
-Same `batch_size` rules as `iter_parse_typed()` above, except `to_arrow_stream()` raises
+Same `batch_size` rules as `parse_batches()` above, except `to_arrow_stream()` raises
 immediately rather than on the first iteration. The stream keeps working after the workbook is closed.
 
 `to_pandas()`/`to_polars()` materialize the whole sheet as a single DataFrame and both take
@@ -520,8 +520,8 @@ fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter 3.2.9.
 |---|---:|---|
 | `to_arrow_stream()`, read by pyarrow | 31.9 ms | Arrow record batches, streamed |
 | `to_arrow()` | 31.8 ms | the same parse, handed to pyarrow zero-copy |
-| `parse_typed()` | 33.5 ms | typed columnar buffers, converted natively |
-| `iter_parse_typed()` | 34.2 ms | the same typed buffers, in batches |
+| `parse()` | 33.5 ms | typed columnar buffers, converted natively |
+| `parse_batches()` | 34.2 ms | the same typed buffers, in batches |
 | `to_polars()` | 34.6 ms | typed columnar DataFrame, schema inferred |
 | `polars.read_excel()` | 125.6 ms | typed columnar DataFrame, types inferred |
 | `rows()` | 1,034.6 ms | one `Cell` object per cell, streamed per row |
@@ -533,15 +533,15 @@ record batch on this file.
 Only the `to_polars()` / `polars.read_excel()` pair is a like-for-like comparison (~3.6x), and even
 that one is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules
 are not identical. The rows above it produce different things and are listed to show what each API
-costs, not to rank them — `rows()` is ~30x slower than `parse_typed()` because it materializes
+costs, not to rank them — `rows()` is ~30x slower than `parse()` because it materializes
 917,504 Python objects, which is the price of that shape, not a slow parser.
 
 CSV, from `65K_Records_Data.csv` (8.2 MB), same 14 typed columns:
 
 | API | Median |
 |---|---:|
-| `parse_typed(parallelism=1)` | 23.6 ms |
-| `parse_typed(parallelism=0)` | 12.0 ms |
+| `parse(parallelism=1)` | 23.6 ms |
+| `parse(parallelism=0)` | 12.0 ms |
 | `to_polars(parallelism=1)` | 25.0 ms |
 | `to_polars(parallelism=0)` | 10.8 ms |
 | `polars.read_csv(try_parse_dates=True)` | 7.3 ms |
@@ -571,7 +571,7 @@ The two DataFrame comparisons are matched work — same DataFrame in, xlsx out b
 `write_workbook(pandas_df)` ~14.6x faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
 through Arrow and then a Python list before reaching the native columns, which is most of the gap
 between the ~490 ms rows and the 90 ms one. Handing `write_workbook()` buffers that are already
-columnar — what `parse_typed()` returns — skips all of it.
+columnar — what `parse()` returns — skips all of it.
 
 `write_workbook(xlsx)` at 90.6 ms lands within ~5 ms of the C++ binding's
 `xl::write_columns` on the same 14 columns (85.4 ms), which is the expected result: both are thin wrappers

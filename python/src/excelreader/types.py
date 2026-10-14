@@ -36,16 +36,17 @@ _MAX_SERIAL = 2_958_466
 
 
 class Cell(NamedTuple):
-    """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers."""
+    """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers;
+    `date1904` is the date system of the workbook it came from."""
 
     column: int
     type: CellType
     value: str
+    date1904: bool = False
 
-    def as_date(self, date1904: bool = False) -> datetime.date | None:
+    def as_date(self) -> datetime.date | None:
         """Converts a DATE cell's serial value to a date. Returns None for any other cell type.
 
-        `date1904` should come from `Workbook.is_date1904` for the workbook this cell came from.
         Raises `ValueError` for a serial outside what Excel can show as a date.
         """
         if self.type is not CellType.DATE:
@@ -54,7 +55,7 @@ class Cell(NamedTuple):
         if not 0 <= serial < _MAX_SERIAL:
             raise ValueError(f"{self.value} is not an Excel date serial")
         days = int(serial)
-        if date1904:
+        if self.date1904:
             return datetime.date(1904, 1, 1) + datetime.timedelta(days=days)
         # Excel counts a 29 February 1900 that never existed, so serials before it sit one day later
         # against this epoch than those after. Serial 60, that day itself, reads as 28 February.
@@ -64,7 +65,7 @@ class Cell(NamedTuple):
 
 
 class ColumnType(IntEnum):
-    """A column's requested type in a `Sheet.parse_typed()`/`to_arrow()` schema.
+    """A column's requested type in a `Sheet.parse()`/`to_arrow()` schema.
 
     Mirrors XL_T_* in src/ExcelReader.Native/include/excelreader.h — the values are ABI, do not
     renumber them. The buffer layout each one produces is documented on `TypedTable.columns`.
@@ -200,7 +201,7 @@ class StringColumn:
 
 
 class TypedTable(NamedTuple):
-    """The result of `Sheet.parse_typed()`: one flat buffer per column, already type-converted.
+    """The result of `Sheet.parse()`: one flat buffer per column, already type-converted.
 
     - `names[i]` is column `i`'s name as requested, or its index as a string when the spec resolved
       by index.

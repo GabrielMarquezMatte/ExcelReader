@@ -82,7 +82,7 @@ def test_a_typed_blank_reads_back_as_a_null_of_that_type(tmp_path):
 
     with open_workbook(path) as workbook:
         assert workbook.sheets[0].infer_schema() == [ColumnSpec(ColumnType.I64, name="qty", nullable=True)]
-        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty", nullable=True)])
+        table = workbook.sheets[0].parse([ColumnSpec(ColumnType.I64, name="qty", nullable=True)])
 
     assert table.row_count == 2
     assert table.validity[0][0] & 0b11 == 0b10
@@ -170,7 +170,7 @@ def test_an_aware_datetime_is_written_in_utc(tmp_path):
         writer.end_sheet()
 
     with open_workbook(path) as workbook:
-        stamps = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.TIMESTAMP, name="at")]).columns[0]
+        stamps = workbook.sheets[0].parse([ColumnSpec(ColumnType.TIMESTAMP, name="at")]).columns[0]
 
     assert stamps[0] == stamps[1]
 
@@ -228,7 +228,7 @@ def test_write_workbook_to_a_bytesio_matches_write_workbook_to_a_file(tmp_path, 
 
     with open_workbook(xlsx_path) as workbook:
         schema = workbook.sheets[0].infer_schema()
-        table = workbook.sheets[0].parse_typed(schema)
+        table = workbook.sheets[0].parse(schema)
 
     types = [spec.type for spec in schema]
 

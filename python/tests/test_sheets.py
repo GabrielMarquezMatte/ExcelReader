@@ -124,8 +124,8 @@ def test_typed_reads_read_the_named_sheet():
         second = workbook.sheets[1]
         schema = [ColumnSpec(ColumnType.STRING, index=0, nullable=True)]
 
-        assert second.parse_typed(schema, header_row=0).row_count == 3
-        assert sum(table.row_count for table in second.iter_parse_typed(schema, header_row=0, batch_size=2)) == 3
+        assert second.parse(schema, header_row=0).row_count == 3
+        assert sum(table.row_count for table in second.parse_batches(schema, header_row=0, batch_size=2)) == 3
         assert len(second.infer_schema(header_row=0)) == 1
 
 
@@ -148,7 +148,7 @@ def test_typed_parses_of_every_sheet_run_on_separate_threads():
 
     schema = [ColumnSpec(ColumnType.I64, index=1)]
     with open_workbook(_many_sheets()) as workbook, ThreadPoolExecutor(max_workers=_PARALLEL_SHEETS) as pool:
-        tables = list(pool.map(lambda sheet: sheet.parse_typed(schema, header_row=0), workbook.sheets))
+        tables = list(pool.map(lambda sheet: sheet.parse(schema, header_row=0), workbook.sheets))
 
     for sheet, table in enumerate(tables):
         assert table.row_count == _PARALLEL_ROWS
