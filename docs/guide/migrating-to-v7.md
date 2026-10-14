@@ -229,3 +229,26 @@ A sheet reads as rows (`rows()`), a typed table (`parse_typed()`, or `iter_parse
 | `WriterHandle::open_memory(format, &opts)` + `bytes()` | `WriterHandle::open(out_vector, {.format = format})` + `finish()` |
 | `aggregate_csv_file` / `aggregate_csv_memory` with `CsvParallelOptions` | `aggregate_csv(path | span, seed, opts, header_row, dop)` |
 | `ArrowSchemaGuard`, `ArrowArrayGuard` | `ArrowTable` |
+
+### Rust: one path per item, no raw FFI
+
+Every public item lives at the crate root. The raw C interface (`Xl*`, `xl_*`, `XL_*`) is private, and integer codes became the enums `Format`, `ColumnType` and `ErrorKind`. `OpenOptions` and `WriteOptions` are builder-only and carry the format.
+
+| v6 | v7 |
+|---|---|
+| `excelreader::workbook::*`, `writer::*`, `rows::*`, … | `excelreader::*` |
+| `XL_FORMAT_*`, `XL_T_*`, `Error::code()` | `Format`, `ColumnType`, `Error::kind()` |
+| `Workbook::open_with(path, fmt, Some(&o))` | `o.format(fmt).open(path)` |
+| `Workbook::open_memory` / `open_source` / `open_reader` | `OpenOptions::open_bytes` / `open_source` / `open_reader` |
+| `sheet_count` / `sheet_names` / `sheet_name_at` | `sheets()`, `Sheet::name()` |
+| `parse_sheet` / `parse_sheet_parallel` | `sheet.parse::<T>(header_row, parallelism)` |
+| `parse_arrow` / `parse_arrow_parallel` / `parse_arrow_stream` | `sheet.parse_arrow::<T>(…)` / `sheet.parse_arrow_stream::<T>(…)` |
+| `read_all_decoded` / `read_all_blob` | `read_all()` |
+| `infer_schema_parse_text(h, n)` | `infer_schema(h, n, true)` |
+| `write_columns(path, fmt, cols, opts)` | `write_columns(path, cols, &opts)`, format in `WriteOptions` |
+| `write_columns_to_memory` / `write_sheet_to_memory` | `write_columns_to(writer, …)` / `write_sheet_to(writer, …)` |
+| `WriterHandle::open` / `open_with` | `WriterHandle::create(path, &opts)` |
+| `WriterHandle::open_memory` + `bytes()` | `WriterHandle::new(writer, &opts)` + `finish()` |
+| `WriterHandle::write_null(t)` | `write_*(None)` |
+| `aggregate_csv_file` / `aggregate_csv_memory`, `CsvParallelOptions` | `aggregate_csv(input, &opts, header_row, parallelism, seed)` |
+| `OpenOptions::csv_max_cell_bytes` / `csv_intern_strings` | `max_cell_bytes` / `intern_strings`, which now apply to CSV too |
