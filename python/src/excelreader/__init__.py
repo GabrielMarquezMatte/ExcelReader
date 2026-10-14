@@ -20,13 +20,12 @@ from excelreader.types import (
 )
 from excelreader.writer import (
     encrypt_package,
-    encrypt_package_bytes,
     write_arrow,
     write_pandas,
     write_polars,
     write_workbook,
 )
-from excelreader.writer_handle import SheetWriter, open_writer, open_writer_to_memory
+from excelreader.writer_handle import SheetWriter, open_writer
 
 __all__ = [
     "ArrowStream",
@@ -50,10 +49,8 @@ __all__ = [
     "WriteOptions",
     "decode_cell",
     "encrypt_package",
-    "encrypt_package_bytes",
     "open_workbook",
     "open_writer",
-    "open_writer_to_memory",
     "write_arrow",
     "write_pandas",
     "write_polars",

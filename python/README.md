@@ -314,17 +314,21 @@ write a typed blank — use the explicit methods: `write_str`, `write_i64`, `wri
 `write_date`, `write_time`, `write_timestamp`, and `write_null(ColumnType.I64)`. A `None` passed to
 `write_row` becomes a blank string cell.
 
-To build a workbook without touching the filesystem, use `open_writer_to_memory` and read the result
-out with `bytes()`:
+To build a workbook without touching the filesystem, open the writer over a binary object with
+`write()`, such as `io.BytesIO`. It needs `format`, and receives the finished workbook in one
+`write()` call when the writer closes:
 
 ```python
-from excelreader import open_writer_to_memory
+import io
 
-with open_writer_to_memory("xlsx") as writer:
+from excelreader import open_writer
+
+buffer = io.BytesIO()
+with open_writer(buffer, "xlsx") as writer:
     writer.start_sheet("Data")
     writer.write_row(["name", "qty"])
     writer.end_sheet()
-    payload = writer.bytes()
+payload = buffer.getvalue()
 ```
 
 ### Arrow
@@ -504,21 +508,21 @@ write_workbook("plain.xlsx", table, types)
 encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")
 ```
 
-`package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
-Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
-packages can be encrypted, matching what `open_workbook` can decrypt.
+The package must already be a finished file; it is read, not removed. Encryption parameters are
+fixed at Excel's own defaults — there are no options — and only XLSX/XLSB packages can be encrypted,
+matching what `open_workbook` can decrypt.
 
-`encrypt_package_bytes()` does the same over bytes, so the plaintext package never has to be written
-to disk:
+Either side can stay in memory, so the plaintext package never has to be written to disk: the
+package can be `bytes` or an `io.BytesIO`, and the destination any binary object with `write()`:
 
 ```python
 import io
 
-from excelreader import encrypt_package_bytes, write_workbook
+from excelreader import encrypt_package, write_workbook
 
-buffer = io.BytesIO()
-write_workbook(buffer, table, types, format="xlsx")
-secret = encrypt_package_bytes(buffer.getvalue(), "hunter2")
+plain, secret = io.BytesIO(), io.BytesIO()
+write_workbook(plain, table, types, format="xlsx")
+encrypt_package(plain, secret, "hunter2")
 ```
 
 ## Benchmarks

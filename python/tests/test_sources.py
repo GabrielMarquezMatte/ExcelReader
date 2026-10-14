@@ -6,7 +6,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from excelreader import ExcelReaderError, OpenOptions, open_workbook, open_writer_to_memory
+from excelreader import ExcelReaderError, OpenOptions, open_workbook, open_writer
 from excelreader import sources as sources_module
 
 SHEETS = 4
@@ -14,13 +14,14 @@ ROWS = 300
 
 
 def _workbook_bytes() -> bytes:
-    with open_writer_to_memory("xlsx") as writer:
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
         for sheet in range(SHEETS):
             writer.start_sheet(f"sheet{sheet}")
             for row in range(ROWS):
                 writer.write_row([f"s{sheet}-r{row}"])
             writer.end_sheet()
-        return writer.bytes()
+    return buffer.getvalue()
 
 
 def _first_column(sheet) -> list[str]:
