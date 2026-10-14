@@ -208,7 +208,7 @@ static void BM_ExcelReader_Csv_Full(benchmark::State &state)
             state.SkipWithError(workbook.error().message);
             return;
         }
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         if (!table.has_value())
         {
             state.SkipWithError(table.error().message);

@@ -75,7 +75,7 @@ static int test_write_columns_round_trip()
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+        auto table = xl::parse<WrittenRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 2, "two rows were written");
 
@@ -124,7 +124,7 @@ static int test_encrypt_package_round_trip()
     {
         auto workbook = xl::Workbook::open(encrypted_path.string(), {.password = "hunter2"});
         CHECK(workbook.has_value(), "the encrypted file must open with the right password");
-        auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+        auto table = xl::parse<WrittenRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the decrypted file must parse back");
         CHECK(table->size() == 2, "two rows were written");
         WrittenRow first = *table->begin();
@@ -181,7 +181,7 @@ static int test_write_columns_to_memory_round_trip()
 
     auto workbook = xl::Workbook::open(bytes, {.format = XL_FORMAT_XLSX});
     CHECK(workbook.has_value(), "the returned bytes must open");
-    auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+    auto table = xl::parse<WrittenRow>(workbook->sheet(0));
     CHECK(table.has_value(), "the returned bytes must parse back");
     CHECK(table->size() == 2, "two rows were written");
 
@@ -291,7 +291,7 @@ static int test_bool_round_trip()
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<FlagRow>(workbook->sheet(0));
+        auto table = xl::parse<FlagRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 3, "three rows were written");
 
@@ -329,7 +329,7 @@ static int test_optional_round_trip()
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<NullableRow>(workbook->sheet(0));
+        auto table = xl::parse<NullableRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 3, "three rows were written");
 
@@ -389,7 +389,7 @@ static int test_write_sheet_round_trip()
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 2, "two rows were written");
 
@@ -434,7 +434,7 @@ static int test_write_sheet_to_memory_round_trip()
 
     auto workbook = xl::Workbook::open(bytes);
     CHECK(workbook.has_value(), "the returned bytes must open");
-    auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+    auto table = xl::parse<FullRow>(workbook->sheet(0));
     CHECK(table.has_value(), "the returned bytes must parse back");
     CHECK(table->size() == 2, "two rows were written");
 
@@ -518,7 +518,7 @@ static int test_writer_handle()
         CHECK(workbook.has_value(), "the file xl_close_write_handle produced must open");
         auto name = workbook->sheet(0).name();
         CHECK(name.has_value() && *name == "Planilha1", "xl_start_sheet's name must reach the file");
-        auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+        auto table = xl::parse<WrittenRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 1, "exactly one data row was written");
         WrittenRow first = *table->begin();
@@ -618,7 +618,7 @@ static int test_writer_handle_class_round_trip()
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the file WriterHandle produced must open");
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 2, "two data rows were written");
 

@@ -53,8 +53,8 @@ struct xl::ExcelMapper<AliasRow>
 
 static int test_parse(xl::Workbook &workbook)
 {
-    auto table = xl::parse_sheet<Row>(workbook.sheet(0));
-    CHECK(table.has_value(), "xl::parse_sheet<Row> must succeed");
+    auto table = xl::parse<Row>(workbook.sheet(0));
+    CHECK(table.has_value(), "xl::parse<Row> must succeed");
     CHECK(table->size() == 100, "RealExcel.xlsb has 100 data rows");
 
     auto it = table->begin();
@@ -101,8 +101,8 @@ static int test_infer_schema(const xl::Workbook &workbook)
 
 static int test_parse_with_alias(xl::Workbook &workbook)
 {
-    auto table = xl::parse_sheet<AliasRow>(workbook.sheet(0));
-    CHECK(table.has_value(), "xl::parse_sheet<AliasRow> must succeed by resolving the second candidate name");
+    auto table = xl::parse<AliasRow>(workbook.sheet(0));
+    CHECK(table.has_value(), "xl::parse<AliasRow> must succeed by resolving the second candidate name");
     CHECK(table->size() == 100, "RealExcel.xlsb has 100 data rows");
     AliasRow first = *table->begin();
     return 0;

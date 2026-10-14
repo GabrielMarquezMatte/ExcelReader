@@ -64,19 +64,17 @@ namespace xl
         }
     };
 
-    /// @brief parse_sheet into Arrow instead of `T`.
+    /// @brief parse into Arrow instead of `T`.
     /// @tparam T Row type, mapped by `ExcelMapper<T>`.
     /// @param sheet The sheet to read.
-    /// @param header_row As for parse_sheet.
-    /// @param degree_of_parallelism As for parse_sheet.
+    /// @param options Header row and parallelism.
     template <typename T>
-    std::expected<ArrowTable, Error> parse_arrow(Sheet sheet, int32_t header_row = 1,
-                                                 int32_t degree_of_parallelism = 1)
+    std::expected<ArrowTable, Error> to_arrow(Sheet sheet, const ReadOptions &options = {})
     {
         ArrowTable result;
         const int32_t status = detail::with_specs<T>(
             sheet, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
-            { return xl_parse_arrow(handle, index, specs, count, header_row, degree_of_parallelism,
+            { return xl_parse_arrow(handle, index, specs, count, options.header_row, options.parallelism,
                                     &result.array, &result.schema); });
         if (status != XL_OK)
         {
@@ -85,7 +83,7 @@ namespace xl
         return result;
     }
 
-    /// @brief typed_reader's Arrow counterpart: record batches pulled one at a time.
+    /// @brief parse_batches's Arrow counterpart: record batches pulled one at a time.
     ///
     /// Use from one thread at a time.
     class ArrowStream
@@ -183,20 +181,18 @@ namespace xl
     /// @brief Opens an ArrowStream over a sheet.
     /// @tparam T Row type, mapped by `ExcelMapper<T>`.
     /// @param sheet The sheet to read.
-    /// @param header_row As for parse_sheet.
-    /// @param batch_size As for typed_reader.
+    /// @param options Header row and batch size.
     template <typename T>
-    std::expected<ArrowStream, Error> arrow_stream(Sheet sheet, int32_t header_row = 1,
-                                                   int64_t batch_size = 10000)
+    std::expected<ArrowStream, Error> to_arrow_stream(Sheet sheet, const ReadOptions &options = {})
     {
-        if (std::optional<Error> problem = detail::check_batch_size(batch_size))
+        if (std::optional<Error> problem = detail::check_batch_size(options.batch_size))
         {
             return std::unexpected(std::move(*problem));
         }
         ArrowArrayStream stream{};
         const int32_t status = detail::with_specs<T>(
             sheet, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
-            { return xl_parse_arrow_stream(handle, index, specs, count, header_row, batch_size, &stream); });
+            { return xl_parse_arrow_stream(handle, index, specs, count, options.header_row, options.batch_size, &stream); });
         if (status != XL_OK)
         {
             return std::unexpected(detail::make_error(status));
