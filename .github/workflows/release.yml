@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     steps:
       - name: Checkout
@@ -92,7 +92,7 @@ jobs:
             macOS)   src=ExcelReader.Native.dylib; os=osx;  ext=dylib ;;
             *)       src=ExcelReader.Native.so;   os=linux; ext=so ;;
           esac
-          arch=$([ "$(uname -m 2>/dev/null || echo x64)" = "arm64" ] && echo arm64 || echo x64)
+          case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; *) arch=x64 ;; esac
           mkdir -p release-assets
           cp "python/src/excelreader/_lib/${src}" "release-assets/excelreader-native-${os}-${arch}.${ext}"
 
@@ -116,7 +116,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     steps:
       - name: Checkout
@@ -133,7 +133,7 @@ jobs:
         id: rid
         shell: bash
         run: |
-          arch=$([ "$(uname -m 2>/dev/null || echo x64)" = "arm64" ] && echo arm64 || echo x64)
+          case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; *) arch=x64 ;; esac
           case "${{ runner.os }}" in
             Windows) os=win ;;
             macOS)   os=osx ;;
@@ -175,7 +175,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     steps:
       - name: Checkout
@@ -208,6 +208,9 @@ jobs:
         run: |
           pip install build
           python -m build --wheel python/ --outdir dist/
+
+      - name: Check the wheel installs here
+        run: python python/scripts/check_wheel_tag.py dist
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v7
