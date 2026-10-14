@@ -1238,7 +1238,7 @@ namespace xl
     /// @brief Maps a row type to columns.
     ///
     /// Specialize it with a `static constexpr auto get_bindings()` that returns a std::tuple of
-    /// make_field results; parse_sheet, typed_reader, parse_arrow and write_sheet all read the same
+    /// make_field results; parse, parse_batches, to_arrow and write_sheet all read the same
     /// mapping.
     /// @tparam T The row type.
     template <typename T>
@@ -1383,7 +1383,7 @@ namespace xl
             {
                 return std::nullopt;
             }
-            return Error{XL_INVALID_ARGUMENT, "batch_size must be positive; parse_sheet and parse_arrow read a whole sheet"};
+            return Error{XL_INVALID_ARGUMENT, "batch_size must be positive; parse and to_arrow read a whole sheet"};
         }
 
     }
@@ -1533,21 +1533,30 @@ namespace xl
     };
 
 
+    /// @brief How parse, parse_batches, to_arrow and to_arrow_stream read a sheet.
+    struct ReadOptions
+    {
+        /// 1-based row holding the headers; 0 when the sheet has none.
+        int32_t header_row = 1;
+        /// Threads for a whole-sheet read: 0 uses every processor, 1 runs sequentially. The result
+        /// is the same either way. Batched reads ignore it.
+        int32_t parallelism = 1;
+        /// Rows per batch for a batched read; must be positive. Whole-sheet reads ignore it.
+        int64_t batch_size = 10000;
+    };
+
     /// @brief Reads a whole sheet as `T`.
     /// @tparam T Row type, mapped by `ExcelMapper<T>`.
     /// @param sheet The sheet to read.
-    /// @param header_row 1-based row holding the headers; 0 when the sheet has none.
-    /// @param degree_of_parallelism Threads to split an XLSX, XLSB or CSV across: 0 uses every
-    /// processor, 1 runs sequentially. The result is the same either way.
+    /// @param options Header row and parallelism.
     /// @return Every row after the header.
     template <typename T>
-    std::expected<TableView<T>, Error> parse_sheet(Sheet sheet, int32_t header_row = 1,
-                                                   int32_t degree_of_parallelism = 1)
+    std::expected<TableView<T>, Error> parse(Sheet sheet, const ReadOptions &options = {})
     {
         xl_table table{};
         const int32_t status = detail::with_specs<T>(
             sheet, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
-            { return xl_parse_typed(handle, index, specs, count, header_row, degree_of_parallelism, &table); });
+            { return xl_parse_typed(handle, index, specs, count, options.header_row, options.parallelism, &table); });
         if (status != XL_OK)
         {
             return std::unexpected(detail::make_error(status));
@@ -1556,7 +1565,7 @@ namespace xl
     }
 
 
-    /// @brief parse_sheet delivered a batch at a time.
+    /// @brief parse delivered a batch at a time.
     ///
     /// An input range of `std::expected<TableView<T>, Error>` that stops after the first error. Each
     /// batch owns its memory and outlives the reader. Use from one thread at a time.
@@ -1671,20 +1680,18 @@ namespace xl
     /// @brief Opens a TypedReader over a sheet.
     /// @tparam T Row type, mapped by `ExcelMapper<T>`.
     /// @param sheet The sheet to read.
-    /// @param header_row As for parse_sheet.
-    /// @param batch_size Rows per batch; must be positive.
+    /// @param options Header row and batch size.
     template <typename T>
-    std::expected<TypedReader<T>, Error> typed_reader(Sheet sheet, int32_t header_row = 1,
-                                                      int64_t batch_size = 10000)
+    std::expected<TypedReader<T>, Error> parse_batches(Sheet sheet, const ReadOptions &options = {})
     {
-        if (std::optional<Error> problem = detail::check_batch_size(batch_size))
+        if (std::optional<Error> problem = detail::check_batch_size(options.batch_size))
         {
             return std::unexpected(std::move(*problem));
         }
         xl_typed_reader *reader = nullptr;
         const int32_t status = detail::with_specs<T>(
             sheet, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
-            { return xl_typed_reader_open(handle, index, specs, count, header_row, batch_size, &reader); });
+            { return xl_typed_reader_open(handle, index, specs, count, options.header_row, options.batch_size, &reader); });
         if (status != XL_OK)
         {
             return std::unexpected(detail::make_error(status));
@@ -2085,7 +2092,7 @@ namespace xl
 
     /// @brief Writes rows as one sheet.
     /// @param path File to create.
-    /// @param rows Input range of a row type with an ExcelMapper, the mapping parse_sheet reads with.
+    /// @param rows Input range of a row type with an ExcelMapper, the mapping parse reads with.
     /// An empty std::optional field writes a blank cell.
     /// @param options As for write_columns.
     template <std::ranges::input_range R>

@@ -47,8 +47,8 @@ namespace
         {
             return {};
         }
-        auto table = xl::parse_sheet<Row>(workbook->sheet(0));
-        check(table.has_value(), "parse_sheet succeeds");
+        auto table = xl::parse<Row>(workbook->sheet(0));
+        check(table.has_value(), "parse succeeds");
         if (!table.has_value())
         {
             return {};
@@ -73,8 +73,8 @@ namespace
             {
                 return;
             }
-            auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, batch_size);
-            check(reader.has_value(), "typed_reader opens");
+            auto reader = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = batch_size});
+            check(reader.has_value(), "parse_batches opens");
             if (!reader.has_value())
             {
                 return;
@@ -113,8 +113,8 @@ namespace
         {
             return;
         }
-        auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, 8);
-        check(reader.has_value(), "typed_reader opens for the range-for read");
+        auto reader = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = 8});
+        check(reader.has_value(), "parse_batches opens for the range-for read");
         if (!reader.has_value())
         {
             return;
@@ -141,9 +141,9 @@ namespace
         {
             return;
         }
-        auto first = xl::typed_reader<Row>(workbook->sheet(0), 1, 8);
+        auto first = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = 8});
         check(first.has_value(), "the first reader opens");
-        auto second = xl::typed_reader<Row>(workbook->sheet(0), 1, 8);
+        auto second = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = 8});
         check(second.has_value(), "a second reader on the same workbook opens");
     }
 
@@ -157,7 +157,7 @@ namespace
         }
         for (int64_t batch_size : {int64_t{0}, int64_t{-1}})
         {
-            auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, batch_size);
+            auto reader = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = batch_size});
             check(!reader.has_value(), "a batch size below 1 is rejected");
             if (!reader.has_value())
             {
@@ -174,7 +174,7 @@ namespace
         {
             return;
         }
-        auto reader = xl::typed_reader<Row>(workbook->sheet(0), 1, 4);
+        auto reader = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = 4});
         check(reader.has_value(), "the reader opens before the foreign read");
         if (!reader.has_value())
         {
@@ -183,7 +183,7 @@ namespace
         auto first = reader->next();
         check(first.has_value() && first->has_value(), "the first batch reads before the foreign read");
 
-        auto stolen = xl::parse_sheet<Row>(workbook->sheet(0));
+        auto stolen = xl::parse<Row>(workbook->sheet(0));
         check(stolen.has_value(), "the foreign whole-sheet read succeeds");
 
         auto after = reader->next();

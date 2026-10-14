@@ -93,7 +93,7 @@ template<> struct xl::ExcelMapper<Row> {
 };
 
 auto workbook = xl::Workbook::open("book.xlsx");
-auto table = xl::parse_sheet<Row>(workbook->sheet(0));
+auto table = xl::parse<Row>(workbook->sheet(0));
 for (const auto& row : *table) { /* ... */ }
 ```
 
@@ -140,7 +140,7 @@ One open workbook can be read from several threads, which loads the shared-strin
 std::vector<std::thread> threads;
 for (xl::Sheet sheet : sheets)
 {
-    threads.emplace_back([sheet] { auto table = xl::parse_sheet<Row>(sheet); /* ... */ });
+    threads.emplace_back([sheet] { auto table = xl::parse<Row>(sheet); /* ... */ });
 }
 for (std::thread &thread : threads)
 {
@@ -182,16 +182,16 @@ for (auto row : rows)
 }
 ```
 
-`xl::parse_sheet<T>` remains the fastest way to read a sheet whose columns you know.
+`xl::parse<T>` remains the fastest way to read a sheet whose columns you know.
 
 ### Chunked reads
 
-For a sheet too large to hold in memory at once, `xl::typed_reader<T>` is `xl::parse_sheet<T>`
+For a sheet too large to hold in memory at once, `xl::parse_batches<T>` is `xl::parse<T>`
 delivered a batch at a time:
 
 ```cpp
 auto workbook = xl::Workbook::open("book.xlsx").value();
-auto reader = xl::typed_reader<Row>(workbook.sheet(0), 1, 10'000).value();
+auto reader = xl::parse_batches<Row>(workbook.sheet(0), {.batch_size = 10'000}).value();
 for (auto &batch : reader)
 {
     if (!batch) { break; }
@@ -199,11 +199,11 @@ for (auto &batch : reader)
 }
 ```
 
-`typed_reader` returns `std::expected<xl::TypedReader<T>, xl::Error>`; `next()` returns
+`parse_batches` returns `std::expected<xl::TypedReader<T>, xl::Error>`; `next()` returns
 `std::expected<std::optional<TableView<T>>, Error>`, an empty optional at end of sheet, and
 `TypedReader` is also an input range, so the range-`for` above works directly. `batch_size` is rows
 per batch and must be positive (`0` or negative is `XL_INVALID_ARGUMENT`; read a whole sheet with
-`parse_sheet`). Each batch is independent and outlives the reader.
+`parse`). Each batch is independent and outlives the reader.
 
 Several typed readers and Arrow streams may be open on one workbook at once; each read is
 independent.
@@ -279,16 +279,16 @@ Arrow implementation you already link.
 #include <xl/excelreader_arrow.hpp>
 
 auto workbook = xl::Workbook::open("book.xlsx");
-auto table = xl::parse_arrow<Row>(workbook->sheet(0));
+auto table = xl::to_arrow<Row>(workbook->sheet(0));
 // table->array / table->schema are a top-level struct array; both release in ~ArrowTable.
 ```
 
-Batched: `xl::arrow_stream<T>` is `xl::parse_arrow<T>` delivered a batch at a time. `next()` returns
+Batched: `xl::to_arrow_stream<T>` is `xl::to_arrow<T>` delivered a batch at a time. `next()` returns
 an `xl::ArrowTable` holding the batch and its own copy of the schema (`schema()` returns one whose
 `array` is empty); each releases exactly once and outlives the stream that produced it:
 
 ```cpp
-auto stream = xl::arrow_stream<Row>(workbook->sheet(0), 1, 10'000);
+auto stream = xl::to_arrow_stream<Row>(workbook->sheet(0), {.batch_size = 10'000});
 while (true)
 {
     auto batch = stream->next();
@@ -297,13 +297,13 @@ while (true)
 }
 ```
 
-Same `header_row`/`batch_size` meaning as `xl::typed_reader` above.
+Same `header_row`/`batch_size` meaning as `xl::parse_batches` above.
 
 ## Writing
 
 Two layers, mirroring the two on the reading side.
 
-`xl::write_sheet<T>` uses the same `xl::ExcelMapper<T>` specialization `xl::parse_sheet<T>` reads
+`xl::write_sheet<T>` uses the same `xl::ExcelMapper<T>` specialization `xl::parse<T>` reads
 with, so a round trip needs one mapping, not two:
 
 ```cpp
@@ -414,15 +414,15 @@ on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz, MSVC 19.51 (Release), Google B
 | Benchmark | RealExcel.xlsb (100 rows) | 65K_Records_Data.xlsb (65,535 rows) |
 |---|---:|---:|
 | `open` (from memory) | 24.0 µs | 1.17 ms |
-| `parse_sheet` (4 or 6 bound columns) | 47.8 µs | 24.7 ms |
-| `typed_reader`, batches of 1,000 / 10,000 rows | - | 23.8 ms / 23.8 ms |
+| `parse` (4 or 6 bound columns) | 47.8 µs | 24.7 ms |
+| `parse_batches`, batches of 1,000 / 10,000 rows | - | 23.8 ms / 23.8 ms |
 | `infer_schema` (sample 100 / 1,000 rows) | 75.6 µs | 579.1 µs |
 
 `open` here is the byte-span overload, which copies the caller's buffer before returning (the caller may free
 it afterwards), so it scales with file size: 1.17 ms is mostly copying the 3.7 MB fixture. Opening by
 path reads only the package directory and stays nearly flat — see the Rust suite below.
-`parse_sheet` scales linearly with rows × columns, at roughly 380 ns/row here. Draining the same
-sheet through the batched typed reader costs the same as one whole-sheet `parse_sheet` while holding
+`parse` scales linearly with rows × columns, at roughly 380 ns/row here. Draining the same
+sheet through the batched typed reader costs the same as one whole-sheet `parse` while holding
 only one batch in memory at a time. `infer_schema` scales with its sample size, not the file's total
 row count.
 
@@ -436,7 +436,7 @@ sides decode every cell into an owned value (`std::string` for text, not the zer
 
 | Library | Mean |
 |---|---:|
-| ExcelReader (`parse_sheet<FullRow>`) | 62.9 ms |
+| ExcelReader (`parse<FullRow>`) | 62.9 ms |
 | DuckDB (`read_xlsx`, summing every column in SQL) | 410.8 ms |
 | xlsxio (`xlsxioread_sheet_next_cell_*`) | 512.9 ms |
 | xlnt (`worksheet::rows()` + `cell::to_string()`/`value<double>()`) | 2,394.1 ms |
@@ -469,7 +469,7 @@ because the DuckDB comparison above only links under MSVC.
 
 Two workloads:
 
-- **Typed:** `parse_sheet<FullRow>` against zsv plus the same conversions done by hand (`std::string`
+- **Typed:** `parse<FullRow>` against zsv plus the same conversions done by hand (`std::string`
   for text, ISO dates, `std::from_chars` for the integers and doubles), one owned `FullRow` per row.
   All three produce the same checksum.
 - **Cells:** every cell's bytes counted. ExcelReader goes through `RowCursor` (`xl_rows_next_view`), zsv
