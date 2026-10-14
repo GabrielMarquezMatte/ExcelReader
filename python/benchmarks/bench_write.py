@@ -4,7 +4,7 @@ Usage:  python python/benchmarks/bench_write.py [path] [--n N]
 
 `path` is the READ source used to build the data this script writes back out — it defaults to the
 same 65K_Records_Data.xlsb fixture bench_read.py uses, resolved relative to the repository root.
-The fixture is parsed ONCE via parse_typed()/to_pandas()/to_polars() before any timing starts;
+The fixture is parsed ONCE via parse()/to_pandas()/to_polars() before any timing starts;
 every benchmark below writes that same in-memory table repeatedly, so what's measured is the write
 path alone, not read+write. Reports min and median over N iterations (default 10) for every
 available write path, into a fresh temp file per run. A write that produces an empty or missing
@@ -153,7 +153,7 @@ def main() -> int:
     print(f"source file: {args.path}")
 
     with excelreader.open_workbook(args.path, format="xlsb") as workbook:
-        table = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA)
+        table = workbook.sheets[0].parse(_FIXTURE_SCHEMA)
     print(f"parsed {table.row_count} rows x {len(table.columns)} columns once, before any timing")
     print()
 

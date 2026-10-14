@@ -142,7 +142,8 @@ def test_as_date_converts_the_serial_value(xlsx_path):
         first_data_row = next(rows)
         date1904 = workbook.is_date1904
 
-    assert first_data_row[1].as_date(date1904) == date(2026, 1, 1)
+    assert first_data_row[1].date1904 == date1904
+    assert first_data_row[1].as_date() == date(2026, 1, 1)
 
 
 def test_as_date_returns_none_for_non_date_cells(xlsx_path):
@@ -187,7 +188,7 @@ _TYPED_SCHEMA = [
 
 def test_parse_typed_returns_every_column_type(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.sheets[0].parse_typed(_TYPED_SCHEMA)
+        table = workbook.sheets[0].parse(_TYPED_SCHEMA)
 
     assert table.row_count == 2
     assert table.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
@@ -203,7 +204,7 @@ def test_parse_typed_returns_every_column_type(typed_csv):
 
 def test_parse_typed_resolves_columns_by_index_when_name_is_none(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, index=1)])
+        table = workbook.sheets[0].parse([ColumnSpec(ColumnType.I64, index=1)])
 
     assert list(table.columns[0]) == [3, 7]
     assert table.names == ["1"]
@@ -211,7 +212,7 @@ def test_parse_typed_resolves_columns_by_index_when_name_is_none(typed_csv):
 
 def test_parse_typed_string_column_supports_len_and_indexing(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.STRING, name="name")])
+        table = workbook.sheets[0].parse([ColumnSpec(ColumnType.STRING, name="name")])
 
     column = table.columns[0]
     assert len(column) == 2
@@ -221,7 +222,7 @@ def test_parse_typed_string_column_supports_len_and_indexing(typed_csv):
 
 def test_parse_typed_reports_no_validity_bitmap_when_nothing_is_null(typed_csv):
     with open_workbook(typed_csv) as workbook:
-        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        table = workbook.sheets[0].parse([ColumnSpec(ColumnType.I64, name="qty")])
 
     assert table.validity == [None]
 
@@ -231,7 +232,7 @@ def test_parse_typed_builds_a_validity_bitmap_for_a_nullable_column(tmp_path):
     path.write_text("qty\n3\n\n9\n", encoding="utf-8")
 
     with open_workbook(path) as workbook:
-        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty", nullable=True)])
+        table = workbook.sheets[0].parse([ColumnSpec(ColumnType.I64, name="qty", nullable=True)])
 
     assert table.row_count == 3
     assert list(table.columns[0]) == [3, 0, 9]
@@ -243,24 +244,24 @@ def test_parse_typed_raises_when_a_non_nullable_column_fails_to_convert(tmp_path
     path.write_text("qty\n3\nnot-a-number\n", encoding="utf-8")
 
     with open_workbook(path) as workbook, pytest.raises(ExcelReaderError):
-        workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        workbook.sheets[0].parse([ColumnSpec(ColumnType.I64, name="qty")])
 
 
 def test_parse_typed_raises_for_an_unknown_column_name(typed_csv):
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
-        workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="nope")])
+        workbook.sheets[0].parse([ColumnSpec(ColumnType.I64, name="nope")])
 
 
 def test_parse_typed_rejects_an_empty_schema(typed_csv):
     with open_workbook(typed_csv) as workbook, pytest.raises(ValueError):
-        workbook.sheets[0].parse_typed([])
+        workbook.sheets[0].parse([])
 
 
 def test_parse_typed_reads_the_whole_sheet_regardless_of_the_row_cursor(typed_csv):
     with open_workbook(typed_csv) as workbook:
         rows = workbook.sheets[0].rows()
         next(rows)
-        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+        table = workbook.sheets[0].parse([ColumnSpec(ColumnType.I64, name="qty")])
         rest = list(rows)
 
     assert table.row_count == 2
@@ -420,12 +421,12 @@ def _batch_rows(table):
 
 
 @pytest.mark.parametrize("batch_size", [1, 7, 8, 9, 1000, 0])
-def test_iter_parse_typed_matches_parse_typed(batched_csv, batch_size):
+def test_parse_batches_matches_parse_typed(batched_csv, batch_size):
     with open_workbook(batched_csv) as workbook:
-        expected = _batch_rows(workbook.sheets[0].parse_typed(_BATCH_SCHEMA))
+        expected = _batch_rows(workbook.sheets[0].parse(_BATCH_SCHEMA))
 
     with open_workbook(batched_csv) as workbook:
-        batches = list(workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=batch_size))
+        batches = list(workbook.sheets[0].parse_batches(_BATCH_SCHEMA, batch_size=batch_size))
 
     assert [row for batch in batches for row in _batch_rows(batch)] == expected
 
@@ -436,17 +437,17 @@ def test_iter_parse_typed_matches_parse_typed(batched_csv, batch_size):
         assert all(batch.row_count <= batch_size for batch in batches)
 
 
-def test_iter_parse_typed_rejects_a_negative_batch_size(batched_csv):
+def test_parse_batches_rejects_a_negative_batch_size(batched_csv):
     with open_workbook(batched_csv) as workbook:
         with pytest.raises(ExcelReaderError):
-            next(workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=-1))
+            next(workbook.sheets[0].parse_batches(_BATCH_SCHEMA, batch_size=-1))
 
 
 def test_two_readers_on_one_sheet_each_read_every_row(batched_csv):
     with open_workbook(batched_csv) as workbook:
         sheet = workbook.sheets[0]
-        first = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        second = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        first = sheet.parse_batches(_BATCH_SCHEMA, batch_size=4)
+        second = sheet.parse_batches(_BATCH_SCHEMA, batch_size=4)
 
         assert next(first).row_count == 4
         assert next(second).row_count == 4
@@ -457,9 +458,9 @@ def test_two_readers_on_one_sheet_each_read_every_row(batched_csv):
 def test_a_whole_sheet_read_leaves_an_open_reader_alone(batched_csv):
     with open_workbook(batched_csv) as workbook:
         sheet = workbook.sheets[0]
-        batches = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        batches = sheet.parse_batches(_BATCH_SCHEMA, batch_size=4)
         next(batches)
-        assert sheet.parse_typed(_BATCH_SCHEMA).row_count == 50
+        assert sheet.parse(_BATCH_SCHEMA).row_count == 50
         assert sum(batch.row_count for batch in batches) == 46
 
 
@@ -473,7 +474,7 @@ def _spy_on_native_close(monkeypatch, lib, name):
 def test_abandoning_the_generator_closes_the_reader(batched_csv, monkeypatch):
     with open_workbook(batched_csv) as workbook:
         closed = _spy_on_native_close(monkeypatch, workbook._lib, "xl_typed_reader_close")
-        batches = workbook.sheets[0].iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        batches = workbook.sheets[0].parse_batches(_BATCH_SCHEMA, batch_size=4)
         next(batches)
         assert closed == []
 
@@ -611,7 +612,7 @@ def test_a_stream_and_a_reader_on_one_sheet_each_read_every_row(batched_csv):
     pa = pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
         sheet = workbook.sheets[0]
-        reader = sheet.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        reader = sheet.parse_batches(_BATCH_SCHEMA, batch_size=4)
         next(reader)
         stream = pa.RecordBatchReader.from_stream(sheet.to_arrow_stream(_BATCH_SCHEMA, batch_size=4))
 
@@ -625,7 +626,7 @@ def test_a_whole_sheet_read_leaves_an_open_stream_alone(batched_csv):
         sheet = workbook.sheets[0]
         reader = pa.RecordBatchReader.from_stream(sheet.to_arrow_stream(_BATCH_SCHEMA, batch_size=4))
         reader.read_next_batch()
-        assert sheet.parse_typed(_BATCH_SCHEMA).row_count == 50
+        assert sheet.parse(_BATCH_SCHEMA).row_count == 50
 
         assert sum(batch.num_rows for batch in reader) == 46
 
@@ -669,8 +670,8 @@ _FIXTURE_SCHEMA = [
 
 def test_parse_typed_in_parallel_matches_the_sequential_table():
     with open_workbook(_FIXTURE_CSV) as workbook:
-        sequential = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA)
-        parallel = workbook.sheets[0].parse_typed(_FIXTURE_SCHEMA, parallelism=0)
+        sequential = workbook.sheets[0].parse(_FIXTURE_SCHEMA)
+        parallel = workbook.sheets[0].parse(_FIXTURE_SCHEMA, parallelism=0)
 
     assert parallel.row_count == sequential.row_count == 65_535
     for expected, actual in zip(sequential.columns, parallel.columns):
@@ -699,13 +700,13 @@ def test_to_pandas_in_parallel_matches_the_streamed_frame():
 
 def test_parse_typed_rejects_a_negative_parallelism(typed_csv):
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
-        workbook.sheets[0].parse_typed(_TYPED_SCHEMA, parallelism=-1)
+        workbook.sheets[0].parse(_TYPED_SCHEMA, parallelism=-1)
 
 
 def test_infer_schema_parse_text_types_a_csv():
     with open_workbook(_FIXTURE_CSV) as workbook:
         schema = workbook.sheets[0].infer_schema(parse_text=True)
-        table = workbook.sheets[0].parse_typed(schema)
+        table = workbook.sheets[0].parse(schema)
 
     T = ColumnType
     assert [spec.type for spec in schema] == [T.STRING] * 5 + [T.DATE, T.I64, T.DATE, T.I64] + [T.F64] * 5
@@ -734,7 +735,27 @@ def test_infer_schema_without_parse_text_keeps_csv_columns_as_strings():
 def test_as_date_follows_excels_calendar(serial, date1904, expected):
     from datetime import date
 
-    assert Cell(0, CellType.DATE, serial).as_date(date1904) == date(*expected)
+    assert Cell(0, CellType.DATE, serial, date1904).as_date() == date(*expected)
+
+
+@pytest.mark.parametrize("date1904", [False, True])
+def test_a_cell_read_from_a_workbook_knows_its_date_system(date1904):
+    import datetime
+    import io
+
+    from excelreader import WriteOptions, open_writer
+
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx", WriteOptions(date1904=date1904)) as writer:
+        writer.start_sheet("Data")
+        writer.write_row([datetime.date(2023, 3, 15)])
+        writer.end_sheet()
+
+    with open_workbook(buffer) as workbook:
+        cell = next(workbook.sheets[0].rows())[0]
+
+    assert cell.date1904 is date1904
+    assert cell.as_date() == datetime.date(2023, 3, 15)
 
 
 @pytest.mark.parametrize("serial", ["-1", "2958466", "1e400", "nan"])
@@ -756,6 +777,6 @@ def test_parse_typed_timestamp_text_does_not_depend_on_the_local_time_zone(tmp_p
     path.write_text(f"at\n{text}\n", encoding="utf-8")
 
     with open_workbook(path) as workbook:
-        table = workbook.sheets[0].parse_typed([ColumnSpec(ColumnType.TIMESTAMP, name="at")])
+        table = workbook.sheets[0].parse([ColumnSpec(ColumnType.TIMESTAMP, name="at")])
 
     assert list(table.columns[0]) == [expected_micros]
