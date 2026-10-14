@@ -2,9 +2,10 @@
 //! crate's reader, so a layout mistake on either side shows up as a value mismatch rather than
 //! as a file only Excel could judge.
 
-use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
-use excelreader::writer::{Column, ColumnData, ExcelWriter, OwnedColumn, OwnedColumnData};
-use excelreader::{Date, Time, Timestamp, XL_FORMAT_CSV, XL_FORMAT_XLSX};
+use excelreader::{
+    write_columns, write_columns_to, write_sheet, write_sheet_to, Column, ColumnData, Date,
+    ErrorKind, ExcelMapper, Format, OpenOptions, Time, Timestamp, Workbook, WriteOptions,
+};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -20,6 +21,10 @@ fn temp_path(name: &str) -> PathBuf {
         COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     path
+}
+
+fn xlsx() -> WriteOptions {
+    WriteOptions::new().format(Format::Xlsx)
 }
 
 #[derive(Default, Debug, ExcelMapper)]
@@ -47,7 +52,7 @@ fn write_columns_round_trips_every_column_type() {
     let inteiros = [1i64, 2];
     let numeros = [0.5f64, 1.5];
     let ativos = [1u8, 0];
-    let datas = [20454i32, 20455]; 
+    let datas = [20454i32, 20455];
     let horas = [3_600_000_000i64, 7_200_000_000];
     let instantes = [1_767_225_600_000_000i64, 1_767_312_000_000_000];
 
@@ -93,13 +98,14 @@ fn write_columns_round_trips_every_column_type() {
     ];
 
     let path = temp_path("columns.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8");
-    excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &columns, None)
-        .expect("write_columns must succeed");
+    write_columns(&path, &columns, &WriteOptions::new()).expect("write_columns must succeed");
 
-    let workbook = Workbook::open(target).expect("the written file must open");
-    let table =
-        parse_sheet::<WrittenRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
+    let workbook = Workbook::open(&path).expect("the written file must open");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<WrittenRow>(1, 1)
+        .expect("the written file must parse back");
     assert_eq!(table.len(), 2);
 
     let first = table.get(0).expect("row 0 must exist");
@@ -120,7 +126,7 @@ fn write_columns_round_trips_every_column_type() {
 }
 
 #[test]
-fn write_columns_to_memory_round_trips_every_column_type() {
+fn write_columns_to_a_writer_round_trips() {
     let offsets = [0i32, 3, 6];
     let blob = b"umadoi";
     let inteiros = [1i64, 2];
@@ -141,12 +147,13 @@ fn write_columns_to_memory_round_trips_every_column_type() {
         },
     ];
 
-    let bytes = excelreader::writer::write_columns_to_memory(XL_FORMAT_XLSX, &columns, None)
-        .expect("write_columns_to_memory must succeed");
+    let mut bytes = Vec::new();
+    write_columns_to(&mut bytes, &columns, &xlsx()).expect("write_columns_to must succeed");
     assert!(!bytes.is_empty());
 
-    let workbook =
-        Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the returned bytes must open");
+    let workbook = OpenOptions::new()
+        .open_bytes(&bytes)
+        .expect("the written bytes must open");
     #[derive(Default, Debug, ExcelMapper)]
     struct TwoColumnRow {
         #[excel(name = "texto")]
@@ -154,40 +161,89 @@ fn write_columns_to_memory_round_trips_every_column_type() {
         #[excel(name = "inteiro")]
         inteiro: i64,
     }
-    let table = parse_sheet::<TwoColumnRow>(workbook.sheet(0).expect("sheet 0"), 1)
-        .expect("the returned bytes must parse back");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<TwoColumnRow>(1, 1)
+        .expect("the written bytes must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0").texto, "uma");
     assert_eq!(table.get(0).expect("row 0").inteiro, 1);
 }
 
 #[test]
-fn write_columns_writes_nulls_from_the_validity_bitmap() {
-    let valores = [10i64, 0, 30];
-    let validity = [0b0000_0101u8];
+fn writing_to_a_writer_needs_an_explicit_format() {
+    let values = [1i64];
     let columns = [Column {
-        name: Some("quantidade"),
-        data: ColumnData::I64(&valores),
-        validity: Some(&validity),
+        name: Some("a"),
+        data: ColumnData::I64(&values),
+        validity: None,
     }];
+    let error = write_columns_to(Vec::new(), &columns, &WriteOptions::new())
+        .expect_err("a writer has no extension to infer a format from");
+    assert_eq!(error.kind(), ErrorKind::InvalidArgument);
+}
+
+#[test]
+fn write_columns_writes_nulls_from_the_validity_bitmap() {
+    let nomes_offsets = [0i32, 3, 8, 8];
+    let nomes = b"AnaBruno";
+    let idades = [30i64, 41, 0];
+    let idades_validity = [0b0000_0011u8];
+    let pesos = [62.5f64, 0.0, 70.0];
+    let pesos_validity = [0b0000_0101u8];
+    let columns = [
+        Column {
+            name: Some("nome"),
+            data: ColumnData::Str {
+                offsets: &nomes_offsets,
+                data: nomes,
+            },
+            validity: None,
+        },
+        Column {
+            name: Some("idade"),
+            data: ColumnData::I64(&idades),
+            validity: Some(&idades_validity),
+        },
+        Column {
+            name: Some("peso"),
+            data: ColumnData::F64(&pesos),
+            validity: Some(&pesos_validity),
+        },
+    ];
 
     #[derive(Default, Debug, ExcelMapper)]
     struct NullableRow {
-        #[excel(name = "quantidade")]
-        quantidade: Option<i64>,
+        #[excel(name = "nome")]
+        nome: String,
+        #[excel(name = "idade")]
+        idade: Option<i64>,
+        #[excel(name = "peso")]
+        peso: Option<f64>,
     }
 
     let path = temp_path("nullable.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8");
-    excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &columns, None)
-        .expect("write_columns must succeed");
+    write_columns(&path, &columns, &WriteOptions::new()).expect("write_columns must succeed");
 
-    let workbook = Workbook::open(target).expect("the written file must open");
-    let table =
-        parse_sheet::<NullableRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
-    assert_eq!(table.get(0).unwrap().quantidade, Some(10));
-    assert_eq!(table.get(1).unwrap().quantidade, None);
-    assert_eq!(table.get(2).unwrap().quantidade, Some(30));
+    let workbook = Workbook::open(&path).expect("the written file must open");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<NullableRow>(1, 1)
+        .expect("the written file must parse back");
+    let rows: Vec<(String, Option<i64>, Option<f64>)> = table
+        .iter()
+        .map(|row| (row.nome, row.idade, row.peso))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("Ana".to_string(), Some(30), Some(62.5)),
+            ("Bruno".to_string(), Some(41), None),
+            (String::new(), None, Some(70.0)),
+        ]
+    );
 
     drop(table);
     std::fs::remove_file(&path).ok();
@@ -198,7 +254,7 @@ fn write_columns_rejects_inconsistent_input() {
     let two = [1i64, 2];
     let three = [1i64, 2, 3];
     let path = temp_path("rejected.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8");
+    let options = WriteOptions::new();
 
     let mismatched = [
         Column {
@@ -212,7 +268,7 @@ fn write_columns_rejects_inconsistent_input() {
             validity: None,
         },
     ];
-    assert!(excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &mismatched, None).is_err());
+    assert!(write_columns(&path, &mismatched, &options).is_err());
 
     let partial_header = [
         Column {
@@ -226,18 +282,14 @@ fn write_columns_rejects_inconsistent_input() {
             validity: None,
         },
     ];
-    assert!(
-        excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &partial_header, None).is_err()
-    );
+    assert!(write_columns(&path, &partial_header, &options).is_err());
 
     let short_bitmap = [Column {
         name: Some("a"),
         data: ColumnData::I64(&two),
         validity: Some(&[]),
     }];
-    assert!(
-        excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &short_bitmap, None).is_err()
-    );
+    assert!(write_columns(&path, &short_bitmap, &options).is_err());
 
     let fine = [Column {
         name: Some("a"),
@@ -245,16 +297,15 @@ fn write_columns_rejects_inconsistent_input() {
         validity: None,
     }];
     assert!(
-        excelreader::writer::write_columns(target, excelreader::XL_FORMAT_AUTO, &fine, None)
-            .is_err(),
-        "XL_FORMAT_AUTO must be rejected: a new file has no signature bytes to sniff"
+        write_columns(temp_path("unknown.txt"), &fine, &options).is_err(),
+        "an unrecognized extension with Format::Auto must be rejected"
     );
 
-    assert!(excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &[], None).is_err());
+    assert!(write_columns(&path, &[], &options).is_err());
 }
 
 #[test]
-fn write_columns_honors_the_sheet_name_and_csv_format() {
+fn write_columns_honors_the_sheet_name_and_infers_csv() {
     let valores = [1i64];
     let columns = [Column {
         name: Some("a"),
@@ -263,124 +314,22 @@ fn write_columns_honors_the_sheet_name_and_csv_format() {
     }];
 
     let path = temp_path("named.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8");
-    let options = excelreader::WriteOptions::new().sheet_name("Dados");
-    excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &columns, Some(&options))
-        .expect("write must succeed");
+    let options = WriteOptions::new().sheet_name("Dados");
+    write_columns(&path, &columns, &options).expect("write must succeed");
 
-    let workbook = Workbook::open(target).expect("the written file must open");
-    assert_eq!(workbook.sheet_name_at(0).expect("name must read back"), "Dados");
+    let workbook = Workbook::open(&path).expect("the written file must open");
+    assert_eq!(
+        workbook.sheet(0).expect("sheet 0").name().expect("name must read back"),
+        "Dados"
+    );
     drop(workbook);
     std::fs::remove_file(&path).ok();
 
     let csv = temp_path("out.csv");
-    let csv_target = csv.to_str().expect("temp path must be UTF-8");
-    assert_eq!(
-        excelreader::writer::format_from_path(csv_target),
-        XL_FORMAT_CSV
-    );
-    excelreader::writer::write_columns(csv_target, XL_FORMAT_CSV, &columns, None)
-        .expect("a CSV write must succeed");
+    write_columns(&csv, &columns, &WriteOptions::new()).expect("a CSV write must succeed");
+    let text = std::fs::read_to_string(&csv).expect("the .csv path must hold CSV text");
+    assert_eq!(text.lines().collect::<Vec<_>>(), ["a", "1"]);
     std::fs::remove_file(&csv).ok();
-}
-
-struct ManualRow {
-    nome: String,
-    idade: i64,
-    peso: Option<f64>,
-}
-
-impl ExcelWriter for ManualRow {
-    fn to_columns(rows: &[Self]) -> Result<Vec<OwnedColumn>, excelreader::Error> {
-        let n = rows.len();
-        let mut nome_offsets: Vec<i32> = Vec::with_capacity(n + 1);
-        nome_offsets.push(0);
-        let mut nome_data: Vec<u8> = Vec::new();
-        let mut idade: Vec<i64> = Vec::with_capacity(n);
-        let mut peso: Vec<f64> = Vec::with_capacity(n);
-        let mut peso_validity: Vec<u8> = vec![0; n.div_ceil(8)];
-
-        for (row, r) in rows.iter().enumerate() {
-            excelreader::writer::push_str(&mut nome_offsets, &mut nome_data, r.nome.as_str())?;
-            idade.push(r.idade);
-            match &r.peso {
-                Some(value) => {
-                    excelreader::writer::set_valid(&mut peso_validity, row);
-                    peso.push(*value);
-                }
-                None => peso.push(f64::default()),
-            }
-        }
-
-        Ok(vec![
-            OwnedColumn {
-                name: Some("nome"),
-                data: OwnedColumnData::Str {
-                    offsets: nome_offsets,
-                    data: nome_data,
-                },
-                validity: None,
-            },
-            OwnedColumn {
-                name: Some("idade"),
-                data: OwnedColumnData::I64(idade),
-                validity: None,
-            },
-            OwnedColumn {
-                name: Some("peso"),
-                data: OwnedColumnData::F64(peso),
-                validity: Some(peso_validity),
-            },
-        ])
-    }
-}
-
-#[derive(Default, Debug, ExcelMapper)]
-struct ManualRowRead {
-    #[excel(name = "nome")]
-    nome: String,
-    #[excel(name = "idade")]
-    idade: i64,
-    #[excel(name = "peso")]
-    peso: Option<f64>,
-}
-
-#[test]
-fn write_sheet_round_trips_a_hand_written_excel_writer() {
-    let rows = vec![
-        ManualRow {
-            nome: "Ana".to_string(),
-            idade: 30,
-            peso: Some(62.5),
-        },
-        ManualRow {
-            nome: "Bruno".to_string(),
-            idade: 41,
-            peso: None,
-        },
-    ];
-
-    let path = temp_path("manual.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8");
-    excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
-        .expect("write_sheet must succeed");
-
-    let workbook = Workbook::open(target).expect("the written file must open");
-    let table =
-        parse_sheet::<ManualRowRead>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
-    assert_eq!(table.len(), 2);
-
-    let first = table.get(0).expect("row 0 must exist");
-    assert_eq!(first.nome, "Ana");
-    assert_eq!(first.idade, 30);
-    assert_eq!(first.peso, Some(62.5));
-
-    let second = table.get(1).expect("row 1 must exist");
-    assert_eq!(second.nome, "Bruno");
-    assert_eq!(second.peso, None);
-
-    drop(table);
-    std::fs::remove_file(&path).ok();
 }
 
 #[derive(Default, Debug, PartialEq, ExcelMapper)]
@@ -403,9 +352,8 @@ struct DerivedRow {
     opcional: Option<i64>,
 }
 
-#[test]
-fn the_derive_round_trips_every_supported_field_type() {
-    let rows = vec![
+fn derived_rows() -> Vec<DerivedRow> {
+    vec![
         DerivedRow {
             texto: "uma".to_string(),
             inteiro: 1,
@@ -426,16 +374,21 @@ fn the_derive_round_trips_every_supported_field_type() {
             instante: Timestamp::new(1_767_312_000_000_000),
             opcional: None,
         },
-    ];
+    ]
+}
 
+#[test]
+fn the_derive_round_trips_every_supported_field_type() {
+    let rows = derived_rows();
     let path = temp_path("derived.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8");
-    excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
-        .expect("write_sheet must succeed");
+    write_sheet(&path, &rows, &WriteOptions::new()).expect("write_sheet must succeed");
 
-    let workbook = Workbook::open(target).expect("the written file must open");
-    let table =
-        parse_sheet::<DerivedRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
+    let workbook = Workbook::open(&path).expect("the written file must open");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<DerivedRow>(1, 1)
+        .expect("the written file must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0"), rows[0]);
     assert_eq!(table.get(1).expect("row 1"), rows[1]);
@@ -445,37 +398,19 @@ fn the_derive_round_trips_every_supported_field_type() {
 }
 
 #[test]
-fn write_sheet_to_memory_round_trips_the_derive() {
-    let rows = vec![
-        DerivedRow {
-            texto: "uma".to_string(),
-            inteiro: 1,
-            numero: 0.5,
-            ativo: true,
-            data: Date::new(20454),
-            hora: Time::new(3_600_000_000),
-            instante: Timestamp::new(1_767_225_600_000_000),
-            opcional: Some(7),
-        },
-        DerivedRow {
-            texto: "duas".to_string(),
-            inteiro: 2,
-            numero: 1.5,
-            ativo: false,
-            data: Date::new(20455),
-            hora: Time::new(7_200_000_000),
-            instante: Timestamp::new(1_767_312_000_000_000),
-            opcional: None,
-        },
-    ];
+fn write_sheet_to_a_writer_round_trips_the_derive() {
+    let rows = derived_rows();
+    let mut bytes = Vec::new();
+    write_sheet_to(&mut bytes, &rows, &xlsx()).expect("write_sheet_to must succeed");
 
-    let bytes = excelreader::writer::write_sheet_to_memory(XL_FORMAT_XLSX, &rows, None)
-        .expect("write_sheet_to_memory must succeed");
-
-    let workbook =
-        Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the returned bytes must open");
-    let table =
-        parse_sheet::<DerivedRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the returned bytes must parse back");
+    let workbook = OpenOptions::new()
+        .open_bytes(&bytes)
+        .expect("the written bytes must open");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<DerivedRow>(1, 1)
+        .expect("the written bytes must parse back");
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0"), rows[0]);
     assert_eq!(table.get(1).expect("row 1"), rows[1]);
@@ -494,12 +429,13 @@ fn the_derive_writes_only_the_primary_column_name() {
 
     let rows = vec![DerivedRow::default()];
     let path = temp_path("aliased.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8");
-    excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
-        .expect("write_sheet must succeed");
+    write_sheet(&path, &rows, &WriteOptions::new()).expect("write_sheet must succeed");
 
-    let workbook = Workbook::open(target).expect("the written file must open");
-    parse_sheet::<AliasedRead>(workbook.sheet(0).expect("sheet 0"), 1)
+    let workbook = Workbook::open(&path).expect("the written file must open");
+    workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<AliasedRead>(1, 1)
         .expect("the header must carry the primary name, not the alias");
 
     std::fs::remove_file(&path).ok();

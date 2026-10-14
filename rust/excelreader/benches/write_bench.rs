@@ -18,9 +18,9 @@
 //! Machine: state the CPU, OS and toolchain version alongside any number published from this file.
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
-use excelreader::writer::{write_columns, write_sheet, Column, OwnedColumn};
-use excelreader::{Date, XL_FORMAT_XLSX};
+use excelreader::{
+    write_columns, write_sheet, Column, ColumnData, Date, ExcelMapper, Workbook, WriteOptions,
+};
 use std::path::{Path, PathBuf};
 
 const FIXTURE: &str = "../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx";
@@ -53,7 +53,11 @@ fn load_rows() -> Vec<Row> {
          present in the repo"
     );
     let workbook = Workbook::open(FIXTURE).expect("the fixture must open");
-    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("the fixture must parse");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Row>(1, 1)
+        .expect("the fixture must parse");
     let rows: Vec<Row> = table.iter().collect();
     assert!(!rows.is_empty(), "the fixture parsed to zero rows");
     rows
@@ -65,20 +69,57 @@ fn output_path(name: &str) -> PathBuf {
     path
 }
 
+/// One string column's offsets and concatenated bytes.
+fn strings<'a>(values: impl Iterator<Item = &'a str>) -> (Vec<i32>, Vec<u8>) {
+    let mut offsets = vec![0];
+    let mut data = Vec::new();
+    for value in values {
+        data.extend_from_slice(value.as_bytes());
+        offsets.push(data.len() as i32);
+    }
+    (offsets, data)
+}
+
+fn str_column<'a>(name: &'a str, (offsets, data): &'a (Vec<i32>, Vec<u8>)) -> Column<'a> {
+    Column {
+        name: Some(name),
+        data: ColumnData::Str { offsets, data },
+        validity: None,
+    }
+}
+
 fn benchmark_write(criterion: &mut Criterion) {
     let rows = load_rows();
-    let owned: Vec<OwnedColumn> =
-        <Row as excelreader::writer::ExcelWriter>::to_columns(&rows).expect("transpose must succeed");
-    let borrowed: Vec<Column<'_>> = owned.iter().map(OwnedColumn::as_column).collect();
+    let region = strings(rows.iter().map(|r| r.region.as_str()));
+    let country = strings(rows.iter().map(|r| r.country.as_str()));
+    let item_type = strings(rows.iter().map(|r| r.item_type.as_str()));
+    let order_date: Vec<i32> = rows.iter().map(|r| r.order_date.days_since_epoch).collect();
+    let order_id: Vec<i64> = rows.iter().map(|r| r.order_id).collect();
+    let units_sold: Vec<i64> = rows.iter().map(|r| r.units_sold).collect();
+    let total_revenue: Vec<f64> = rows.iter().map(|r| r.total_revenue).collect();
+    let column = |name, data| Column {
+        name: Some(name),
+        data,
+        validity: None,
+    };
+    let borrowed = [
+        str_column("Region", &region),
+        str_column("Country", &country),
+        str_column("Item Type", &item_type),
+        column("Order Date", ColumnData::Date(&order_date)),
+        column("Order ID", ColumnData::I64(&order_id)),
+        column("Units Sold", ColumnData::I64(&units_sold)),
+        column("Total Revenue", ColumnData::F64(&total_revenue)),
+    ];
+    let options = WriteOptions::new();
 
     let mut group = criterion.benchmark_group("write_xlsx_65k");
     group.sample_size(20);
 
     group.bench_function("columns", |b| {
         let path = output_path("columns.xlsx");
-        let target = path.to_str().expect("temp path must be UTF-8");
         b.iter(|| {
-            write_columns(target, XL_FORMAT_XLSX, std::hint::black_box(&borrowed), None)
+            write_columns(&path, std::hint::black_box(&borrowed), &options)
                 .expect("write_columns must succeed");
         });
         std::fs::remove_file(&path).ok();
@@ -86,9 +127,8 @@ fn benchmark_write(criterion: &mut Criterion) {
 
     group.bench_function("sheet", |b| {
         let path = output_path("sheet.xlsx");
-        let target = path.to_str().expect("temp path must be UTF-8");
         b.iter(|| {
-            write_sheet(target, XL_FORMAT_XLSX, std::hint::black_box(&rows), None)
+            write_sheet(&path, std::hint::black_box(&rows), &options)
                 .expect("write_sheet must succeed");
         });
         std::fs::remove_file(&path).ok();

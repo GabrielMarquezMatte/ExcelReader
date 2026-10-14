@@ -2,19 +2,20 @@
 
 # excelreader (Rust)
 
-Read and write Excel/CSV workbooks via ExcelReader's native ABI: opening a workbook (from a path or
-memory, with the full open-options surface), sheet navigation, schema inference, schema-driven typed
-parse, schema-driven writing, row-by-row decoded reads, and Arrow export.
+Read and write Excel/CSV workbooks via ExcelReader's native ABI: opening a workbook (from a path,
+memory, your own random-access source or any `Read`), sheet navigation, schema inference,
+schema-driven typed parse, schema-driven writing, row-by-row reads, parallel CSV aggregation, and
+Arrow export. Every public item lives at the crate root.
 
 ## Usage
 
 ```toml
 [dependencies]
-excelreader = "2.1"
+excelreader = "7.0"
 ```
 
 ```rust,no_run
-use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
+use excelreader::{ExcelMapper, Workbook};
 
 #[derive(Default, ExcelMapper)]
 struct Row {
@@ -25,24 +26,27 @@ struct Row {
 }
 
 let workbook = Workbook::open("book.xlsx")?;
-let table = parse_sheet::<Row>(workbook.sheet(0)?, 1)?;
+let table = workbook.sheet(0)?.parse::<Row>(1, 1)?;
 for row in table.iter() { /* ... */ }
 # Ok::<(), excelreader::Error>(())
 ```
 
-`parse_sheet` takes a `Sheet`, which `Workbook::sheet` hands out (see below).
+`Sheet::parse(header_row, degree_of_parallelism)` converts on the native side and never formats a
+cell to text, so it is the fastest way to read a sheet whose columns you know. `header_row` is
+1-based (`0` = no header); `degree_of_parallelism` is `0` for every processor, `1` sequential, `n`
+up to `n` threads - XLSX, XLSB and CSV are split, and the table is the same whatever it is.
 
 ### Field types
 
 | Field type | Column |
 |---|---|
-| `String` | `XL_T_STRING` |
-| `i8`..`i64`, `isize`, `u8`..`u64`, `usize` | `XL_T_I64` |
-| `f32`, `f64` | `XL_T_F64` |
-| `bool` | `XL_T_BOOL` |
-| `Date` / `chrono::NaiveDate` | `XL_T_DATE` |
-| `Time` / `chrono::NaiveTime` | `XL_T_TIME` |
-| `Timestamp` / `chrono::NaiveDateTime` | `XL_T_TIMESTAMP` |
+| `String` | `ColumnType::String` |
+| `i8`..`i64`, `isize`, `u8`..`u64`, `usize` | `ColumnType::I64` |
+| `f32`, `f64` | `ColumnType::F64` |
+| `bool` | `ColumnType::Bool` |
+| `Date` / `chrono::NaiveDate` | `ColumnType::Date` |
+| `Time` / `chrono::NaiveTime` | `ColumnType::Time` |
+| `Timestamp` / `chrono::NaiveDateTime` | `ColumnType::Timestamp` |
 
 `Option<T>` of any of the above makes the field `None` when the cell is null; a non-`Option` field is
 left at its `Default` instead.
@@ -52,114 +56,108 @@ wrapping silently. `Date`/`Time`/`Timestamp` are dependency-free newtypes over t
 representation; enable the `chrono` feature to use `chrono`'s calendar types directly:
 
 ```toml
-excelreader = { version = "2.1", features = ["chrono"] }
+excelreader = { version = "7.0", features = ["chrono"] }
 ```
 
-### Sheets and schema inference
+### Opening
+
+`Workbook::open(path)` sniffs the format and uses every library default. Everything else goes
+through `OpenOptions`, in the style of `std::fs::OpenOptions`: set what you need, then call `open`,
+`open_bytes`, `open_source` or `open_reader`.
 
 ```rust,no_run
-# use excelreader::workbook::Workbook;
-let workbook = Workbook::open("book.xlsx")?;
-for (index, name) in workbook.sheet_names()?.iter().enumerate() {
-    println!("{index}: {name}");
-}
+use excelreader::{Format, OpenOptions};
 
-// Guess a schema from the header row plus a sample of the data, before committing to one.
-for column in workbook.sheet(1)?.infer_schema(1, 100)? {
-    println!("{:?} -> type {}", column.name, column.column_type);
-}
+let options = OpenOptions::new().format(Format::Csv).csv_delimiter(b';' as i32);
+let from_path = options.open("data.csv")?;
+let from_memory = options.open_bytes(b"a;b\n1;2\n")?;
 # Ok::<(), excelreader::Error>(())
 ```
 
-`infer_schema_parse_text(header_row, sample_size)` also types text cells (every CSV field, or
-numbers stored as text): integers, decimals, `true`/`false` and ISO dates. `parse_sheet_parallel`
-and `arrow::parse_arrow_parallel` take a `degree_of_parallelism` (`0` = every processor, `1` =
-sequential); XLSX, XLSB and CSV are split, and the result equals `parse_sheet`'s.
+Format sniffing (`Format::Auto`, the default) does not detect CSV - set `Format::Csv`. The
+resource limits (`max_total_decompressed_bytes`, `max_cell_bytes`, `max_shared_string_bytes`,
+`max_zip_entries`, `max_buffered_bytes`) protect against hostile files; lower them when opening
+untrusted input.
+
+### Sheets and schema inference
 
 A workbook hands out sheets. A `Sheet` is the workbook and an index: it holds no native
 resource, it is `Copy`, and every read on it opens its own cursor.
 
 ```rust,no_run
-# use excelreader::workbook::Workbook;
+# use excelreader::Workbook;
 let workbook = Workbook::open("report.xlsx")?;
 
 for sheet in workbook.sheets()? {
     println!("{} {:?}", sheet.name()?, sheet.visibility()?);
 }
 
+// Guess a schema from the header row plus a sample of the data, before committing to one.
 let sheet = workbook.sheet_by_name("Totals")?.expect("the workbook has a Totals sheet");
-let mut rows = sheet.rows()?;
-while let Some(row) = rows.next_row() {
-    let row = row?;
-    // ...
+for column in sheet.infer_schema(1, 100, false)? {
+    println!("{:?} -> {:?}", column.name, column.column_type);
 }
 # Ok::<(), excelreader::Error>(())
 ```
+
+`infer_schema`'s last argument, `parse_text`, also types text cells (every CSV field, or numbers
+stored as text): integers, decimals, `true`/`false` and ISO dates.
 
 `Workbook` is `Send + Sync`, so sheets can be read in parallel over one open workbook, which
 loads the shared-string table once:
 
 ```rust,no_run
-# use excelreader::workbook::Workbook;
+# use excelreader::Workbook;
 # let workbook = Workbook::open("report.xlsx")?;
 let tables = std::thread::scope(|scope| {
     let handles: Vec<_> = workbook
         .sheets()?
         .into_iter()
-        .map(|sheet| scope.spawn(move || sheet.read_all_blob()))
+        .map(|sheet| scope.spawn(move || sheet.read_all()))
         .collect();
     handles.into_iter().map(|handle| handle.join().expect("no panic")).collect::<Result<Vec<_>, _>>()
 })?;
 # Ok::<(), excelreader::Error>(())
 ```
 
-`Workbook::open_with` takes an explicit format and `OpenOptions`; `Workbook::open_memory` reads from
-a byte slice. Note that format sniffing does not detect CSV - pass `XL_FORMAT_CSV` explicitly.
-
 ### Encrypted workbooks
 
-`OpenOptions::password` unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm) through
-`Workbook::open_with`/`open_memory`:
+`OpenOptions::password` unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm):
 
 ```rust,no_run
-use excelreader::workbook::Workbook;
-use excelreader::{Error, OpenOptions, XL_FORMAT_AUTO};
+use excelreader::{ErrorKind, OpenOptions};
 
-let options = OpenOptions::new().password("hunter2");
-match Workbook::open_with("protected.xlsx", XL_FORMAT_AUTO, Some(&options)) {
+match OpenOptions::new().password("hunter2").open("protected.xlsx") {
     Ok(workbook) => { /* ... */ }
-    Err(Error::PasswordIncorrect { .. }) => { /* ask again */ }
-    Err(Error::PasswordRequired { .. }) => { /* no password was supplied */ }
-    Err(other) => { /* Error::Native - unsupported scheme or a corrupt file; not worth retrying */ }
+    Err(e) if e.kind() == ErrorKind::PasswordIncorrect => { /* ask again */ }
+    Err(e) if e.kind() == ErrorKind::PasswordRequired => { /* no password was supplied */ }
+    Err(other) => { /* unsupported scheme or a corrupt file; not worth retrying */ }
 }
 ```
 
-`Error::PasswordRequired`/`Error::PasswordIncorrect` are dedicated variants rather than the generic
-error carrying `XL_STATUS_PASSWORD_REQUIRED`/`XL_STATUS_PASSWORD_INCORRECT`, so callers can
-`match`/`matches!` on "needs a password" without hardcoding the status codes. Format sniffing does not
-see through the CFB wrapper an encrypted file is stored in - pass `XL_FORMAT_AUTO` explicitly (as
-above) rather than `XL_FORMAT_XLSX`, or the file is read as a plain ZIP and fails before the password
-is ever checked.
+Every `Error` carries an `ErrorKind` to branch on and the native detail in `message()`. Format
+sniffing does not see through the CFB wrapper an encrypted file is stored in, so keep the default
+`Format::Auto` rather than setting `Format::Xlsx`, or the file is read as a plain ZIP and fails
+before the password is ever checked.
 
 Writing an encrypted workbook is a second step: write the plaintext package with `write_columns`/
 `write_sheet`, then wrap it with `encrypt_package`, which produces an agile-encrypted (ECMA-376 4.4)
 CFB container - AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
 
 ```rust,no_run
-use excelreader::writer::{encrypt_package, write_columns};
-use excelreader::XL_FORMAT_XLSX;
-# use excelreader::writer::{Column, ColumnData};
+use excelreader::{encrypt_package, write_columns, WriteOptions};
+# use excelreader::{Column, ColumnData};
 # let ids = [1i64, 2, 3];
 # let columns = [Column { name: Some("id"), data: ColumnData::I64(&ids), validity: None }];
 
-write_columns("plain.xlsx", XL_FORMAT_XLSX, &columns, None)?;
+write_columns("plain.xlsx", &columns, &WriteOptions::new())?;
 encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")?;
 # Ok::<(), excelreader::Error>(())
 ```
 
 `package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
 Encryption parameters are fixed at Excel's own defaults - there are no options - and only XLSX/XLSB
-packages can be encrypted, matching what `Workbook::open_with`/`open_memory` can decrypt.
+packages can be encrypted, matching what `OpenOptions::password` can decrypt.
 
 ### Reading from your own bytes
 
@@ -185,15 +183,15 @@ impl excelreader::Source for HttpSource {
     }
 }
 
-let workbook = Workbook::open_source(source, XL_FORMAT_AUTO, None)?;
+let workbook = OpenOptions::new().open_source(source)?;
 ```
 
 Anything that implements `Read` works through `open_reader`. A CSV is read as it arrives; an XLSX,
 XLSB or XLS is read whole first.
 
 ```rust,no_run
-# use excelreader::{workbook::Workbook, XL_FORMAT_CSV};
-let workbook = Workbook::open_reader(std::io::stdin(), XL_FORMAT_CSV, None)?;
+# use excelreader::{Format, OpenOptions};
+let workbook = OpenOptions::new().format(Format::Csv).open_reader(std::io::stdin())?;
 # Ok::<(), excelreader::Error>(())
 ```
 
@@ -203,19 +201,18 @@ needed the bytes.
 ### Arrow export (`arrow` feature)
 
 ```toml
-excelreader = { version = "2.1", features = ["arrow"] }
+excelreader = { version = "7.0", features = ["arrow"] }
 ```
 
 ```rust,no_run
 # #[cfg(feature = "arrow")]
 # fn main() -> Result<(), excelreader::Error> {
-use excelreader::arrow::parse_arrow;
-use excelreader::workbook::Workbook;
-# #[derive(Default, excelreader::workbook::ExcelMapper)]
+use excelreader::Workbook;
+# #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
-let batch = parse_arrow::<Row>(workbook.sheet(0)?, 1)?;
+let batch = workbook.sheet(0)?.parse_arrow::<Row>(1, 1)?;
 println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
 # Ok(())
 # }
@@ -225,20 +222,19 @@ println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
 
 Off by default — arrow-rs is a large dependency and the typed-parse path needs none of it.
 
-Batched: `parse_arrow_stream` is `parse_arrow` delivered a batch at a time, returning
+Batched: `Sheet::parse_arrow_stream` is `parse_arrow` delivered a batch at a time, returning
 `ArrowChunks<'_>`, an `Iterator<Item = Result<RecordBatch, ArrowError>>` that also implements
 `RecordBatchReader`:
 
 ```rust,no_run
 # #[cfg(feature = "arrow")]
 # fn main() -> Result<(), excelreader::Error> {
-use excelreader::arrow::parse_arrow_stream;
-use excelreader::workbook::Workbook;
-# #[derive(Default, excelreader::workbook::ExcelMapper)]
+use excelreader::Workbook;
+# #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
-let mut chunks = parse_arrow_stream::<Row>(workbook.sheet(0)?, 1, 10_000)?;
+let mut chunks = workbook.sheet(0)?.parse_arrow_stream::<Row>(1, 10_000)?;
 while let Some(batch) = chunks.next() {
     let Ok(batch) = batch else { break }; // ArrowChunks does not fuse, unlike TypedChunks
     println!("{} rows", batch.num_rows());
@@ -259,13 +255,12 @@ first `Err` rather than continuing the loop.
 types in the table above apply unchanged:
 
 ```rust,no_run
-use excelreader::writer::write_sheet;
-use excelreader::XL_FORMAT_XLSX;
-# #[derive(Default, excelreader::workbook::ExcelMapper)]
+use excelreader::{write_sheet, WriteOptions};
+# #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 # let rows = vec![Row::default()];
 
-write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
+write_sheet("out.xlsx", &rows, &WriteOptions::new())?;
 # Ok::<(), excelreader::Error>(())
 ```
 
@@ -278,8 +273,7 @@ lifetimes on `Column<'a>` are what turn the ABI's borrow contract into something
 checks:
 
 ```rust,no_run
-use excelreader::writer::{write_columns, Column, ColumnData};
-use excelreader::XL_FORMAT_XLSX;
+use excelreader::{write_columns, Column, ColumnData, WriteOptions};
 
 let ids = [1i64, 2, 3];
 let columns = [Column {
@@ -287,7 +281,7 @@ let columns = [Column {
     data: ColumnData::I64(&ids),
     validity: None,
 }];
-write_columns("out.xlsx", XL_FORMAT_XLSX, &columns, None)?;
+write_columns("out.xlsx", &columns, &WriteOptions::new())?;
 # Ok::<(), excelreader::Error>(())
 ```
 
@@ -295,39 +289,53 @@ write_columns("out.xlsx", XL_FORMAT_XLSX, &columns, None)?;
 length and reads `(rows + 7) / 8` bytes on trust, so a short slice would be a buffer overrun rather
 than a wrong answer.
 
-`WriteOptions` sets the sheet name, the CSV dialect, and the XLS/XLSB and XLSX/XLSB toggles.
-`format_from_path` infers the format from an extension; it returns `XL_FORMAT_AUTO` for anything it
-does not recognize, which the write then rejects - a file being created has no signature bytes to
-sniff, so there is nothing to fall back on.
+`WriteOptions` sets the format, the sheet name, the CSV dialect, and the XLS/XLSB and XLSX/XLSB
+toggles. Its format defaults to `Format::Auto`, inferred from the path's extension; an extension it
+does not recognize is an error - a file being created has no signature bytes to sniff.
+
+Each write has a path form and an `io::Write` form: `write_columns_to`/`write_sheet_to` build the
+workbook in memory and write it to the writer in one `write_all`. A writer has no extension, so
+these need an explicit format:
+
+```rust,no_run
+use excelreader::{write_sheet_to, Format, WriteOptions};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
+# let rows = vec![Row::default()];
+
+let mut bytes = Vec::new();
+write_sheet_to(&mut bytes, &rows, &WriteOptions::new().format(Format::Xlsx))?;
+# Ok::<(), excelreader::Error>(())
+```
 
 `write_sheet` walks the slice once and appends each field to its own buffer, monomorphized per
 field. That transpose is the only copy it makes; `write_columns` pays nothing.
 
 ### Streaming writes
 
-`write_sheet`/`write_columns` build the whole table in memory first. `writer_handle::WriterHandle` is
-the row-by-row alternative, writing directly as each call arrives instead:
+`write_sheet`/`write_columns` build the whole table in memory first. `WriterHandle` is the
+row-by-row alternative, writing directly as each call arrives instead:
 
 ```rust,no_run
-use excelreader::writer_handle::WriterHandle;
+use excelreader::{WriteOptions, WriterHandle};
 
-let mut handle = WriterHandle::open("out.xlsx", None)?;
+let mut handle = WriterHandle::create("out.xlsx", &WriteOptions::new())?;
 handle.start_sheet("Summary")?;
 handle.start_row()?;
 handle.write_str(Some("Name"))?;
 handle.write_i64(Some(42))?;
 handle.end_row()?;
 handle.end_sheet()?;
+handle.finish()?;
 # Ok::<(), excelreader::Error>(())
 ```
 
-Call order mirrors the C ABI's `xl_writer_handle`: `open`/`open_with`/`open_memory`, then per sheet
-`start_sheet..end_sheet`, each containing `start_row..end_row` with one `write_*` call per cell
-(`None` writes a blank cell), left to right. A call out of order returns `Err` rather than
-corrupting output. `open_memory` backs the handle with an in-memory buffer instead of a file; read
-it out with `bytes()`. Dropping a `WriterHandle` closes and releases it, same as `Workbook` — call
-`bytes()` (memory-backed) or reopen the path (file-backed) to observe the result rather than relying
-on the drop for that.
+Call order mirrors the C ABI's `xl_writer_handle`: `create` (a path) or `new` (any `io::Write`),
+then per sheet `start_sheet..end_sheet`, each containing `start_row..end_row` with one `write_*`
+call per cell (`None` writes a blank cell), left to right, then `finish`. A call out of order
+returns `Err` rather than corrupting output. A handle from `new` writes the whole workbook to its
+writer once, in `finish`. Dropping a handle without finishing it closes it on a best-effort basis,
+discarding any error, and writes nothing to a writer.
 
 ## Reading rows one at a time
 
@@ -335,7 +343,7 @@ on the drop for that.
 reuses, so iterating a sheet allocates nothing per row:
 
 ```rust,no_run
-use excelreader::workbook::Workbook;
+use excelreader::Workbook;
 
 let workbook = Workbook::open("book.xlsx")?;
 let mut cursor = workbook.sheet(0)?.rows()?;
@@ -350,30 +358,27 @@ while let Some(row) = cursor.next_row() {
 ```
 
 Because each row borrows the cursor's buffer, only one row is alive at a time — the borrow checker
-enforces it. To hold every row at once, use `read_all_decoded`, which decodes the whole
-sheet in one native call and keeps it alive until dropped:
+enforces it. To hold every row at once, use `read_all`, which reads the whole sheet in one native
+call into one buffer and keeps it alive until dropped:
 
 ```rust,no_run
-# use excelreader::workbook::Workbook;
+# use excelreader::Workbook;
 let workbook = Workbook::open("book.xlsx")?;
-let rows = workbook.sheet(0)?.read_all_decoded()?;
+let rows = workbook.sheet(0)?.read_all()?;
 for row in rows.iter() {
     println!("{} cells", row.len());
 }
 # Ok::<(), excelreader::Error>(())
 ```
 
-`parse_sheet` remains the fastest way to read a sheet whose columns you know — it converts on the
-native side and never formats a cell to text.
-
 ### Chunked reads
 
-For a sheet too large to hold in memory at once, `Sheet::typed_chunks` is `parse_sheet` delivered
+For a sheet too large to hold in memory at once, `Sheet::typed_chunks` is `Sheet::parse` delivered
 a batch at a time:
 
 ```rust,no_run
-use excelreader::workbook::Workbook;
-# #[derive(Default, excelreader::workbook::ExcelMapper)]
+use excelreader::Workbook;
+# #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 
 let workbook = Workbook::open("book.xlsx")?;
@@ -387,32 +392,62 @@ for batch in chunks {
 
 `typed_chunks` returns `TypedChunks<'_, Row>`, an `Iterator<Item = Result<TableView<Row>, Error>>`
 that closes the native reader on drop. `batch_size` is rows per batch — `0` means one unbounded
-batch, identical to `parse_sheet`; negative is an error. Chunked reads, of either kind (typed or
+batch, identical to `parse`; negative is an error. Chunked reads, of either kind (typed or
 Arrow — see [Arrow export](#arrow-export-arrow-feature) above), are independent: several can be live
 on one workbook, and other reads do not disturb them. `TypedChunks` ends after yielding an `Err`, so
 a `for` loop stops there rather than spinning on it.
 
+## Parallel CSV aggregation
+
+`aggregate_csv` folds a CSV file or buffer into one accumulator across several threads, without
+building a table. The CSV dialect and cell limit come from `OpenOptions`:
+
+```rust,no_run
+use excelreader::{aggregate_csv, CsvAccumulator, OpenOptions, RowRef};
+
+struct Count(u64);
+impl CsvAccumulator for Count {
+    fn accumulate(&mut self, _row: RowRef<'_>) -> Result<(), i32> {
+        self.0 += 1;
+        Ok(())
+    }
+    fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
+        self.0 += other.0;
+        Ok(())
+    }
+}
+
+let options = OpenOptions::new().csv_delimiter(b';' as i32);
+let rows = aggregate_csv("big.csv", &options, 1, 0, || Count(0))?;
+# Ok::<(), excelreader::Error>(())
+```
+
+The input is a path (`&str`, `&Path`, `&PathBuf`) or bytes (`&[u8]`); then `header_row` and
+`degree_of_parallelism`, as in `Sheet::parse`. A nonzero code from a callback comes back as
+`ErrorKind::Callback(code)`; a panic in one is resumed on the calling thread.
+
 ## Bounds and panics
 
-`TableView::get` returns `Option<T>` and is `None` outside `0..len()`. The `column_*` accessors used
-by generated bindings panic on an out-of-range row, a column type that does not match the binding, or
-a string the native library returned as non-UTF-8 - each is a contract violation rather than
-recoverable input.
+`TableView::get` returns `Option<T>` and is `None` outside `0..len()`. The accessors the derive's
+generated code reads columns through panic on an out-of-range row, a column type that does not
+match the binding, or a string the native library returned as non-UTF-8 - each is a contract
+violation rather than recoverable input.
 
 ## Parallel aggregation on macOS
 
-`aggregate_csv_file`/`aggregate_csv_memory` over a source large enough to partition (256 KB and up)
-can crash the process on macOS arm64. The fault is inside the native runtime's signal handling, not
-in this crate: a .NET thread resumes at address 0 after a signal the runtime sent it, which ends the
-process with no message. It happens with any `degree_of_parallelism` above 1, and the same runtime
-built into a plain C host does not show it, so a Rust host appears to make it far more likely.
+`aggregate_csv` over a source large enough to partition (256 KB and up) can crash the process on
+macOS arm64. The fault is inside the native runtime's signal handling, not in this crate: a .NET
+thread resumes at address 0 after a signal the runtime sent it, which ends the process with no
+message. It happens with any `degree_of_parallelism` above 1, and the same runtime built into a
+plain C host does not show it, so a Rust host appears to make it far more likely.
 
-`parse_sheet_parallel` and `arrow::parse_arrow_parallel` now fan out on XLSX and XLSB too; this has not been tested
-on macOS, so treat them the same way.
+`Sheet::parse` and `Sheet::parse_arrow` with a `degree_of_parallelism` above 1 fan out on XLSX and
+XLSB too; this has not been tested on macOS, so treat them the same way.
 
-Until it is fixed upstream, pass `degree_of_parallelism: 1` on macOS for a sequential run, or keep
-sources under the 256 KB partitioning floor, where the library never fans out. Linux and Windows are
-unaffected. The crate's own partitioned aggregation tests are `#[ignore]`d on macOS for this reason.
+Until it is fixed upstream, pass a `degree_of_parallelism` of 1 on macOS for a sequential run, or
+keep sources under the 256 KB partitioning floor, where the library never fans out. Linux and
+Windows are unaffected. The crate's own partitioned aggregation tests are `#[ignore]`d on macOS for
+this reason.
 
 ## Build notes
 
@@ -421,9 +456,9 @@ matching GitHub Release. Set `EXCELREADER_NATIVE_LIB_DIR` to a directory contain
 copy instead (e.g. from `dotnet publish ../../src/ExcelReader.Native -r win-x64`) to skip that
 download - useful when building from source before a release exists yet.
 
-Every constructor first checks the loaded library's `xl_abi_version()` against the `XL_ABI_VERSION`
-this crate was compiled against, and fails with a explanatory error rather than reading native memory
-through a layout that may have changed.
+Every constructor first checks the loaded library's ABI revision against the one this crate was
+compiled against, and fails with an explanatory error rather than reading native memory through a
+layout that may have changed.
 
 ## Benchmarks
 
@@ -431,7 +466,7 @@ Criterion suite in `benches/`. Measured on Windows 10 (22H2), 16 logical CPUs @ 
 rustc 1.97.1 (Release), Criterion 0.8, 100 samples per benchmark (medians shown). `write_bench`
 takes 20 samples instead — each of its iterations writes a whole 65,535-row file.
 
-`benches/parse_bench.rs` - `open`/`parse_sheet`/`infer_schema`, same methodology as the C++ suite:
+`benches/parse_bench.rs` - `open`/`Sheet::parse`/`infer_schema`, same methodology as the C++ suite:
 
 | Benchmark | RealExcel.xlsb (100 rows) | 65K_Records_Data.xlsb (65,535 rows) |
 |---|---:|---:|
@@ -451,7 +486,7 @@ not the file's total row count.
 into an owned value (`String` for text) and fold it into one accumulator, so neither side gets a
 zero-copy advantage the other can't take:
 
-| Format | ExcelReader (`parse_sheet::<FullRow>`) | calamine (`worksheet_range` + `Data` match) |
+| Format | ExcelReader (`Sheet::parse::<FullRow>`) | calamine (`worksheet_range` + `Data` match) |
 |---|---:|---:|
 | XLSX | 79.1 ms | 279.7 ms |
 | XLSB | 46.9 ms | 87.5 ms |

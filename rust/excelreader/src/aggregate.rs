@@ -7,13 +7,13 @@
 //! can unwind into the library, and resumes that panic on the calling thread once the run has
 //! finished freeing every state.
 
-use crate::{
-    rows::RowRef, workbook, Error, XlCsvAggregation, XlCsvParallelOptions, XlRow, XL_OK,
-};
+use crate::ffi::{self, XlCsvAggregation, XlRow, XL_OK};
+use crate::workbook::{self, len_i32, path_str};
+use crate::{Error, ErrorKind, OpenOptions, RowRef};
 use std::any::Any;
 use std::ffi::c_void;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 /// The status a shim returns to signal "a callback panicked". The library treats it like any other
@@ -47,7 +47,8 @@ struct State<A> {
 /// library later re-reads the partition, the failure is discarded with it and the run continues;
 /// otherwise the run ends with that code. A nonzero code from `combine`, or a panic from the seed
 /// closure, always ends the run. However it ends, the code is returned to the caller verbatim as
-/// [`Error::code`]; use positive codes, since every code the library itself returns is `<= 0`.
+/// [`ErrorKind::Callback`]; use positive codes, since every code the library itself returns is
+/// `<= 0`.
 /// Sibling workers are never stopped, so both `accumulate` and `combine` must tolerate being called
 /// again after returning an error.
 pub trait CsvAccumulator: Send {
@@ -58,30 +59,41 @@ pub trait CsvAccumulator: Send {
     fn combine(&mut self, other: &mut Self) -> Result<(), i32>;
 }
 
-/// Mirrors `xl_csv_parallel_options`. Every zero field means "library default"; in particular
-/// `degree_of_parallelism` 0 is the processor count and 1 forces a sequential run, and `header_row`
-/// is 1-based with 0 meaning "no header".
-#[derive(Clone, Copy, Debug, Default)]
-pub struct CsvParallelOptions {
-    pub degree_of_parallelism: i32,
-    pub header_row: i32,
-    pub delimiter: i32,
-    pub quote: i32,
-    pub detect_bom: i32,
-    pub max_cell_bytes: i32,
+/// What [`aggregate_csv`] reads: a CSV file, or CSV bytes already in memory. A `&str` converts to a
+/// path, never to CSV text - pass `text.as_bytes()` for that.
+#[derive(Clone, Copy, Debug)]
+pub enum CsvInput<'a> {
+    Path(&'a Path),
+    Bytes(&'a [u8]),
 }
 
-impl CsvParallelOptions {
-    fn to_raw(self) -> XlCsvParallelOptions {
-        XlCsvParallelOptions {
-            struct_size: std::mem::size_of::<XlCsvParallelOptions>() as i32,
-            degree_of_parallelism: self.degree_of_parallelism,
-            header_row: self.header_row,
-            delimiter: self.delimiter,
-            quote: self.quote,
-            detect_bom: self.detect_bom,
-            max_cell_bytes: self.max_cell_bytes,
-        }
+impl<'a> From<&'a Path> for CsvInput<'a> {
+    fn from(path: &'a Path) -> Self {
+        CsvInput::Path(path)
+    }
+}
+
+impl<'a> From<&'a PathBuf> for CsvInput<'a> {
+    fn from(path: &'a PathBuf) -> Self {
+        CsvInput::Path(path)
+    }
+}
+
+impl<'a> From<&'a str> for CsvInput<'a> {
+    fn from(path: &'a str) -> Self {
+        CsvInput::Path(Path::new(path))
+    }
+}
+
+impl<'a> From<&'a [u8]> for CsvInput<'a> {
+    fn from(bytes: &'a [u8]) -> Self {
+        CsvInput::Bytes(bytes)
+    }
+}
+
+impl<'a, const N: usize> From<&'a [u8; N]> for CsvInput<'a> {
+    fn from(bytes: &'a [u8; N]) -> Self {
+        CsvInput::Bytes(bytes)
     }
 }
 
@@ -205,18 +217,12 @@ fn shared<A, F>(seed: &F) -> Shared<'_, A, F> {
     Shared { seed, panic: Mutex::new(None), _marker: std::marker::PhantomData }
 }
 
-/// The ABI takes every length as `int32`, so an oversized input is rejected rather than truncated
-/// into a silently partial - but successful - aggregation.
-fn length(len: usize, what: &str) -> Result<i32, Error> {
-    i32::try_from(len).map_err(|_| {
-        Error::from_status(
-            crate::XL_INVALID_ARGUMENT,
-            format!("{what} is {len} bytes, past the ABI's int32 length limit"),
-        )
-    })
-}
-
-/// Folds the CSV file at `path` into one `A` across several threads.
+/// Folds a CSV file or buffer into one `A` across several threads.
+///
+/// The CSV dialect (`csv_delimiter`, `csv_quote`, `csv_detect_bom`) and `max_cell_bytes` come from
+/// `options`; its other settings do not apply. `header_row` is 1-based, `0` meaning no header.
+/// `degree_of_parallelism` is `0` for every processor, `1` sequential, `n` up to `n` threads.
+/// A buffer is not copied; the borrow keeps it valid for the call.
 ///
 /// `seed` is called at least once per partition, on worker threads, and may be called again for a
 /// partition that has to be re-read - a seeded accumulator can therefore be dropped without ever
@@ -226,85 +232,54 @@ fn length(len: usize, what: &str) -> Result<i32, Error> {
 /// The call blocks until the run finishes, so `seed` may borrow locals freely: there is no `'static`
 /// bound and none is needed. A panic inside any callback aborts the run and is resumed here, on the
 /// calling thread, once the library has freed every state.
-pub fn aggregate_csv_file<A, F>(
-    path: &Path,
+pub fn aggregate_csv<'a, A, F>(
+    input: impl Into<CsvInput<'a>>,
+    options: &OpenOptions,
+    header_row: i32,
+    degree_of_parallelism: i32,
     seed: F,
-    options: &CsvParallelOptions,
 ) -> Result<A, Error>
 where
     A: CsvAccumulator,
     F: Fn() -> A + Sync,
 {
     workbook::check_abi_version()?;
-    let bytes = path
-        .to_str()
-        .ok_or_else(|| {
-            Error::from_status(
-                crate::XL_INVALID_ARGUMENT,
-                format!("path {} is not valid UTF-8", path.display()),
-            )
-        })?
-        .as_bytes();
-    let path_len = length(bytes.len(), "path")?;
-    let shared = shared::<A, F>(&seed);
-    let agg = raw_aggregation(&shared);
-    let raw_options = options.to_raw();
-    let mut state: *mut c_void = std::ptr::null_mut();
-
-    let status = unsafe {
-        crate::xl_csv_aggregate_file(
-            bytes.as_ptr(),
-            path_len,
-            &agg,
-            &raw_options,
-            &mut state,
-        )
-    };
-    finish(shared, status, state)
+    aggregate_unchecked(input.into(), options, header_row, degree_of_parallelism, seed)
 }
 
-/// Folds an in-memory CSV buffer into one `A`. The buffer is not copied and must stay valid for the
-/// duration of the call, which this signature guarantees. Otherwise identical to
-/// [`aggregate_csv_file`].
-pub fn aggregate_csv_memory<A, F>(
-    data: &[u8],
-    seed: F,
-    options: &CsvParallelOptions,
-) -> Result<A, Error>
-where
-    A: CsvAccumulator,
-    F: Fn() -> A + Sync,
-{
-    workbook::check_abi_version()?;
-    aggregate_csv_memory_unchecked(data, seed, options)
-}
-
-/// [`aggregate_csv_memory`] without the ABI check, for the warm-up run in
+/// [`aggregate_csv`] without the ABI check, for the warm-up run in
 /// [`workbook::check_abi_version`] itself - calling the public entry point from there would
 /// re-enter its `OnceLock` and deadlock.
-pub(crate) fn aggregate_csv_memory_unchecked<A, F>(
-    data: &[u8],
+pub(crate) fn aggregate_unchecked<A, F>(
+    input: CsvInput<'_>,
+    options: &OpenOptions,
+    header_row: i32,
+    degree_of_parallelism: i32,
     seed: F,
-    options: &CsvParallelOptions,
 ) -> Result<A, Error>
 where
     A: CsvAccumulator,
     F: Fn() -> A + Sync,
 {
-    let data_len = length(data.len(), "buffer")?;
+    let raw_options = options.to_csv_parallel_raw(header_row, degree_of_parallelism);
     let shared = shared::<A, F>(&seed);
     let agg = raw_aggregation(&shared);
-    let raw_options = options.to_raw();
     let mut state: *mut c_void = std::ptr::null_mut();
 
-    let status = unsafe {
-        crate::xl_csv_aggregate_memory(
-            data.as_ptr(),
-            data_len,
-            &agg,
-            &raw_options,
-            &mut state,
-        )
+    let status = match input {
+        CsvInput::Path(path) => {
+            let path = path_str(path)?;
+            let path_len = len_i32(path.len(), "path")?;
+            unsafe {
+                ffi::xl_csv_aggregate_file(path.as_ptr(), path_len, &agg, &raw_options, &mut state)
+            }
+        }
+        CsvInput::Bytes(data) => {
+            let data_len = len_i32(data.len(), "buffer")?;
+            unsafe {
+                ffi::xl_csv_aggregate_memory(data.as_ptr(), data_len, &agg, &raw_options, &mut state)
+            }
+        }
     };
     finish(shared, status, state)
 }
@@ -344,9 +319,9 @@ where
         return Err(status_error(status));
     }
     winner.map(|boxed| boxed.value).ok_or_else(|| {
-        Error::from_status(
-            crate::XL_ERROR,
-            "native reported success but wrote no aggregation state".to_string(),
+        Error::new(
+            ErrorKind::Other,
+            "native reported success but wrote no aggregation state",
         )
     })
 }
@@ -356,7 +331,10 @@ where
 /// message for.
 fn status_error(status: i32) -> Error {
     if status > 0 {
-        Error::from_status(status, format!("an aggregation callback returned status {status}"))
+        Error::new(
+            ErrorKind::Callback(status),
+            format!("an aggregation callback returned status {status}"),
+        )
     } else {
         workbook::last_error(status)
     }

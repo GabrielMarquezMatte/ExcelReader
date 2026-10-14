@@ -1,5 +1,5 @@
 //! `#[derive(ExcelMapper)]` for excelreader's `ExcelMapper` trait. Do not depend on this crate
-//! directly - `excelreader` re-exports the macro from `excelreader::workbook::ExcelMapper`
+//! directly - `excelreader` re-exports the macro as `excelreader::ExcelMapper`
 //! (same identifier as the trait; derive macros and traits occupy different namespaces, so
 //! there's no collision, same as `serde`/`serde_derive`).
 
@@ -41,17 +41,17 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     }
 
     Ok(quote! {
-        impl ::excelreader::workbook::ExcelMapper for #struct_name {
-            fn bindings() -> ::std::vec::Vec<::excelreader::workbook::ColumnBinding<Self>> {
+        impl ::excelreader::ExcelMapper for #struct_name {
+            fn bindings() -> ::std::vec::Vec<::excelreader::__private::ColumnBinding<Self>> {
                 ::std::vec![ #(#bindings),* ]
             }
         }
 
-        impl ::excelreader::writer::ExcelWriter for #struct_name {
+        impl ::excelreader::ExcelWriter for #struct_name {
             fn to_columns(
                 rows: &[Self],
             ) -> ::core::result::Result<
-                ::std::vec::Vec<::excelreader::writer::OwnedColumn>,
+                ::std::vec::Vec<::excelreader::__private::OwnedColumn>,
                 ::excelreader::Error,
             > {
                 let n = rows.len();
@@ -109,7 +109,7 @@ fn parse_field(field: &Field) -> syn::Result<ParsedField<'_>> {
 fn field_binding(parsed: &ParsedField<'_>) -> proc_macro2::TokenStream {
     let field_ident = parsed.ident;
     let name = &parsed.names;
-    let xl_type = parsed.kind.xl_type_tokens();
+    let column_type = parsed.kind.column_type_tokens();
     let value = parsed.kind.value_tokens();
     let assign_value = if parsed.is_option {
         quote! { ::std::option::Option::Some(#value) }
@@ -118,9 +118,9 @@ fn field_binding(parsed: &ParsedField<'_>) -> proc_macro2::TokenStream {
     };
 
     quote! {
-        ::excelreader::workbook::ColumnBinding {
+        ::excelreader::__private::ColumnBinding {
             names: &[#(#name),*],
-            xl_type: #xl_type,
+            column_type: #column_type,
             assign: |r, col, row| r.#field_ident = #assign_value,
         }
     }
@@ -262,7 +262,7 @@ impl WriteField {
         quote! {
             match &r.#ident {
                 ::core::option::Option::Some(value) => {
-                    ::excelreader::writer::set_valid(&mut #validity, row);
+                    ::excelreader::__private::set_valid(&mut #validity, row);
                     #append
                 }
                 ::core::option::Option::None => { #placeholder }
@@ -277,12 +277,11 @@ impl WriteField {
         let field = self.name.value();
         match self.kind {
             FieldKind::Str => quote! {
-                ::excelreader::writer::push_str(&mut #offsets, &mut #data, value.as_str())?;
+                ::excelreader::__private::push_str(&mut #offsets, &mut #data, value.as_str())?;
             },
             FieldKind::Int => quote! {
                 #values.push(
-                    i64::try_from(*value).map_err(|_| ::excelreader::Error::from_status(
-                        ::excelreader::XL_INVALID_ARGUMENT,
+                    i64::try_from(*value).map_err(|_| ::excelreader::__private::invalid_argument(
                         ::std::format!(
                             "field `{}` holds a value that does not fit an i64 column",
                             #field
@@ -315,7 +314,7 @@ impl WriteField {
     fn placeholder_tokens(&self) -> proc_macro2::TokenStream {
         let (values, offsets, data) = (&self.values, &self.offsets, &self.data);
         if matches!(self.kind, FieldKind::Str) {
-            return quote! { ::excelreader::writer::push_str(&mut #offsets, &mut #data, "")?; };
+            return quote! { ::excelreader::__private::push_str(&mut #offsets, &mut #data, "")?; };
         }
         quote! { #values.push(::core::default::Default::default()); }
     }
@@ -326,15 +325,15 @@ impl WriteField {
         let name = &self.name;
         let payload = match self.kind {
             FieldKind::Str => quote! {
-                ::excelreader::writer::OwnedColumnData::Str { offsets: #offsets, data: #data }
+                ::excelreader::__private::OwnedColumnData::Str { offsets: #offsets, data: #data }
             },
-            FieldKind::Int => quote! { ::excelreader::writer::OwnedColumnData::I64(#values) },
-            FieldKind::Float => quote! { ::excelreader::writer::OwnedColumnData::F64(#values) },
-            FieldKind::Bool => quote! { ::excelreader::writer::OwnedColumnData::Bool(#values) },
-            FieldKind::Date => quote! { ::excelreader::writer::OwnedColumnData::Date(#values) },
-            FieldKind::Time => quote! { ::excelreader::writer::OwnedColumnData::Time(#values) },
+            FieldKind::Int => quote! { ::excelreader::__private::OwnedColumnData::I64(#values) },
+            FieldKind::Float => quote! { ::excelreader::__private::OwnedColumnData::F64(#values) },
+            FieldKind::Bool => quote! { ::excelreader::__private::OwnedColumnData::Bool(#values) },
+            FieldKind::Date => quote! { ::excelreader::__private::OwnedColumnData::Date(#values) },
+            FieldKind::Time => quote! { ::excelreader::__private::OwnedColumnData::Time(#values) },
             FieldKind::Timestamp => {
-                quote! { ::excelreader::writer::OwnedColumnData::Timestamp(#values) }
+                quote! { ::excelreader::__private::OwnedColumnData::Timestamp(#values) }
             }
         };
         let validity_expr = if self.is_option {
@@ -343,7 +342,7 @@ impl WriteField {
             quote! { ::core::option::Option::None }
         };
         quote! {
-            ::excelreader::writer::OwnedColumn {
+            ::excelreader::__private::OwnedColumn {
                 name: ::core::option::Option::Some(#name),
                 data: #payload,
                 validity: #validity_expr,
@@ -387,35 +386,35 @@ impl FieldKind {
         }
     }
 
-    fn xl_type_tokens(&self) -> proc_macro2::TokenStream {
+    fn column_type_tokens(&self) -> proc_macro2::TokenStream {
         match self {
-            FieldKind::Str => quote! { ::excelreader::XL_T_STRING },
-            FieldKind::Int => quote! { ::excelreader::XL_T_I64 },
-            FieldKind::Float => quote! { ::excelreader::XL_T_F64 },
-            FieldKind::Bool => quote! { ::excelreader::XL_T_BOOL },
-            FieldKind::Date => quote! { ::excelreader::XL_T_DATE },
-            FieldKind::Time => quote! { ::excelreader::XL_T_TIME },
-            FieldKind::Timestamp => quote! { ::excelreader::XL_T_TIMESTAMP },
+            FieldKind::Str => quote! { ::excelreader::ColumnType::String },
+            FieldKind::Int => quote! { ::excelreader::ColumnType::I64 },
+            FieldKind::Float => quote! { ::excelreader::ColumnType::F64 },
+            FieldKind::Bool => quote! { ::excelreader::ColumnType::Bool },
+            FieldKind::Date => quote! { ::excelreader::ColumnType::Date },
+            FieldKind::Time => quote! { ::excelreader::ColumnType::Time },
+            FieldKind::Timestamp => quote! { ::excelreader::ColumnType::Timestamp },
         }
     }
 
     fn value_tokens(&self) -> proc_macro2::TokenStream {
         match self {
-            FieldKind::Str => quote! { ::excelreader::workbook::column_str(col, row).to_string() },
+            FieldKind::Str => quote! { ::excelreader::__private::column_str(col, row).to_string() },
             FieldKind::Int => quote! {
-                ::core::convert::TryFrom::try_from(::excelreader::workbook::column_i64(col, row))
+                ::core::convert::TryFrom::try_from(::excelreader::__private::column_i64(col, row))
                     .expect("value does not fit this field's integer type")
             },
-            FieldKind::Float => quote! { ::excelreader::workbook::column_f64(col, row) as _ },
-            FieldKind::Bool => quote! { ::excelreader::workbook::column_bool(col, row) },
+            FieldKind::Float => quote! { ::excelreader::__private::column_f64(col, row) as _ },
+            FieldKind::Bool => quote! { ::excelreader::__private::column_bool(col, row) },
             FieldKind::Date => {
-                quote! { ::core::convert::Into::into(::excelreader::workbook::column_date(col, row)) }
+                quote! { ::core::convert::Into::into(::excelreader::__private::column_date(col, row)) }
             }
             FieldKind::Time => {
-                quote! { ::core::convert::Into::into(::excelreader::workbook::column_time(col, row)) }
+                quote! { ::core::convert::Into::into(::excelreader::__private::column_time(col, row)) }
             }
             FieldKind::Timestamp => {
-                quote! { ::core::convert::Into::into(::excelreader::workbook::column_timestamp(col, row)) }
+                quote! { ::core::convert::Into::into(::excelreader::__private::column_timestamp(col, row)) }
             }
         }
     }
@@ -459,11 +458,11 @@ mod tests {
         )
         .expect("expand must succeed");
 
-        assert!(output.contains("impl :: excelreader :: workbook :: ExcelMapper for Row"));
-        assert!(output.contains("XL_T_STRING"));
-        assert!(output.contains("XL_T_I64"));
-        assert!(output.contains("XL_T_F64"));
-        assert!(output.contains("XL_T_BOOL"));
+        assert!(output.contains("impl :: excelreader :: ExcelMapper for Row"));
+        assert!(output.contains("ColumnType :: String"));
+        assert!(output.contains("ColumnType :: I64"));
+        assert!(output.contains("ColumnType :: F64"));
+        assert!(output.contains("ColumnType :: Bool"));
         assert!(output.contains("\"Nome\""));
         assert!(output.contains("\"Idade\""));
         assert!(output.contains("\"Peso\""));
@@ -483,7 +482,7 @@ mod tests {
         .expect("expand must succeed");
 
         assert!(output.contains("Option :: Some"));
-        assert!(output.contains("XL_T_BOOL"));
+        assert!(output.contains("ColumnType :: Bool"));
     }
 
     #[test]
@@ -525,7 +524,7 @@ mod tests {
             ))
             .unwrap_or_else(|e| panic!("{ty} must be supported: {e}"));
 
-            assert!(output.contains("XL_T_I64"), "{ty} must use XL_T_I64");
+            assert!(output.contains("ColumnType :: I64"), "{ty} must use an I64 column");
             assert!(output.contains("try_from"), "{ty} must convert via TryFrom");
         }
     }
@@ -537,19 +536,19 @@ mod tests {
                 r#"struct Row {{ #[excel(name = "V")] v: {ty}, }}"#
             ))
             .unwrap_or_else(|e| panic!("{ty} must be supported: {e}"));
-            assert!(output.contains("XL_T_F64"), "{ty} must use XL_T_F64");
+            assert!(output.contains("ColumnType :: F64"), "{ty} must use an F64 column");
         }
     }
 
     #[test]
     fn maps_temporal_types_onto_their_own_column_types() {
         for (ty, expected) in [
-            ("Date", "XL_T_DATE"),
-            ("NaiveDate", "XL_T_DATE"),
-            ("Time", "XL_T_TIME"),
-            ("NaiveTime", "XL_T_TIME"),
-            ("Timestamp", "XL_T_TIMESTAMP"),
-            ("NaiveDateTime", "XL_T_TIMESTAMP"),
+            ("Date", "ColumnType :: Date"),
+            ("NaiveDate", "ColumnType :: Date"),
+            ("Time", "ColumnType :: Time"),
+            ("NaiveTime", "ColumnType :: Time"),
+            ("Timestamp", "ColumnType :: Timestamp"),
+            ("NaiveDateTime", "ColumnType :: Timestamp"),
         ] {
             let output = expand_str(&format!(
                 r#"struct Row {{ #[excel(name = "D")] d: {ty}, }}"#
@@ -571,7 +570,7 @@ mod tests {
         )
         .expect("a qualified path must resolve by its last segment");
 
-        assert!(output.contains("XL_T_DATE"));
+        assert!(output.contains("ColumnType :: Date"));
     }
 
     #[test]
@@ -621,7 +620,7 @@ mod tests {
         )
         .expect("expand must succeed");
 
-        assert!(output.contains("impl :: excelreader :: writer :: ExcelWriter for Row"));
+        assert!(output.contains("impl :: excelreader :: ExcelWriter for Row"));
         assert!(
             output.contains("push_str"),
             "a String field must go through push_str"

@@ -1,6 +1,7 @@
-use excelreader::workbook::{ExcelMapper, Sheet, SheetVisibility, Workbook};
-use excelreader::writer_handle::WriterHandle;
-use excelreader::{RowCursor, XL_ERROR, XL_FORMAT_AUTO, XL_FORMAT_XLSX, XL_INVALID_ARGUMENT};
+use excelreader::{
+    AllRows, ErrorKind, ExcelMapper, Format, OpenOptions, RowCursor, Sheet, SheetVisibility, TableView,
+    TypedChunks, Workbook, WriteOptions, WriterHandle,
+};
 
 #[derive(Default, ExcelMapper)]
 struct R {
@@ -9,7 +10,8 @@ struct R {
 }
 
 fn two_sheets() -> Workbook {
-    let mut writer = WriterHandle::open_memory(XL_FORMAT_XLSX, None).expect("open writer");
+    let mut bytes = Vec::new();
+    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx)).expect("open writer");
     for (name, rows) in [("First", vec!["a1", "a2"]), ("Second", vec!["b1", "b2", "b3"])] {
         writer.start_sheet(name).expect("start sheet");
         for value in rows {
@@ -19,11 +21,11 @@ fn two_sheets() -> Workbook {
         }
         writer.end_sheet().expect("end sheet");
     }
-    let bytes = writer.bytes().expect("bytes");
-    Workbook::open_memory(&bytes, XL_FORMAT_AUTO, None).expect("open")
+    writer.finish().expect("finish");
+    OpenOptions::new().open_bytes(&bytes).expect("open")
 }
 
-fn first_column(cursor: &mut excelreader::RowCursor<'_>) -> Vec<String> {
+fn first_column(cursor: &mut RowCursor<'_>) -> Vec<String> {
     let mut values = Vec::new();
     while let Some(row) = cursor.next_row() {
         let row = row.expect("no error mid-sheet");
@@ -73,9 +75,9 @@ fn sheet_rejects_an_index_out_of_range_at_the_call() {
     let workbook = two_sheets();
 
     let past_end = workbook.sheet(2).expect_err("past the end");
-    assert_eq!(past_end.code(), XL_ERROR);
+    assert_eq!(past_end.kind(), ErrorKind::Other);
     assert!(!past_end.message().is_empty());
-    assert_eq!(workbook.sheet(-1).expect_err("negative").code(), XL_INVALID_ARGUMENT);
+    assert_eq!(workbook.sheet(-1).expect_err("negative").kind(), ErrorKind::InvalidArgument);
 }
 
 #[test]
@@ -103,16 +105,15 @@ fn read_all_reads_the_named_sheet() {
     let workbook = two_sheets();
     let sheet = workbook.sheet(1).expect("sheet 1");
 
-    assert_eq!(sheet.read_all_decoded().expect("decoded").len(), 3);
-    assert_eq!(sheet.read_all_blob().expect("blob").len(), 3);
-    assert_eq!(workbook.sheet(0).expect("sheet 0").read_all_blob().expect("blob").len(), 2);
+    assert_eq!(sheet.read_all().expect("read_all").len(), 3);
+    assert_eq!(workbook.sheet(0).expect("sheet 0").read_all().expect("read_all").len(), 2);
 }
 
 #[test]
 fn infer_schema_samples_the_named_sheet() {
     let workbook = two_sheets();
 
-    let columns = workbook.sheet(1).expect("sheet 1").infer_schema(0, 10).expect("schema");
+    let columns = workbook.sheet(1).expect("sheet 1").infer_schema(0, 10, false).expect("schema");
 
     assert_eq!(columns.len(), 1);
 }
@@ -121,7 +122,8 @@ const PARALLEL_SHEETS: usize = 6;
 const PARALLEL_ROWS: usize = 500;
 
 fn many_sheets() -> Workbook {
-    let mut writer = WriterHandle::open_memory(XL_FORMAT_XLSX, None).expect("open writer");
+    let mut bytes = Vec::new();
+    let mut writer = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx)).expect("open writer");
     for sheet in 0..PARALLEL_SHEETS {
         writer.start_sheet(&format!("sheet{sheet}")).expect("start sheet");
         for row in 0..PARALLEL_ROWS {
@@ -131,8 +133,8 @@ fn many_sheets() -> Workbook {
         }
         writer.end_sheet().expect("end sheet");
     }
-    let bytes = writer.bytes().expect("bytes");
-    Workbook::open_memory(&bytes, XL_FORMAT_AUTO, None).expect("open")
+    writer.finish().expect("finish");
+    OpenOptions::new().open_bytes(&bytes).expect("open")
 }
 
 fn read_sheet(sheet: Sheet<'_>) -> Vec<String> {
@@ -147,15 +149,15 @@ fn workbook_and_sheet_cross_threads_and_cursors_move_between_them() {
     assert_send_sync::<Workbook>();
     assert_send_sync::<Sheet<'static>>();
     assert_send::<RowCursor<'static>>();
-    assert_send_sync::<excelreader::DecodedRows>();
-    assert_send_sync::<excelreader::workbook::TableView<R>>();
-    assert_send::<excelreader::workbook::TypedChunks<'static, R>>();
+    assert_send_sync::<AllRows>();
+    assert_send_sync::<TableView<R>>();
+    assert_send::<TypedChunks<'static, R>>();
     #[cfg(feature = "arrow")]
-    assert_send::<excelreader::arrow::ArrowChunks<'static>>();
+    assert_send::<excelreader::ArrowChunks<'static>>();
 }
 
 #[test]
-fn decoded_rows_come_back_from_scoped_threads() {
+fn all_rows_come_back_from_scoped_threads() {
     let workbook = many_sheets();
     let sheets = workbook.sheets().expect("sheets");
     let counts: Vec<usize> = std::thread::scope(|scope| {
@@ -163,7 +165,7 @@ fn decoded_rows_come_back_from_scoped_threads() {
             .iter()
             .map(|sheet| {
                 let sheet = *sheet;
-                scope.spawn(move || sheet.read_all_decoded())
+                scope.spawn(move || sheet.read_all())
             })
             .collect();
         handles

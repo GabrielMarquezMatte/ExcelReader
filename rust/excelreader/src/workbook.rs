@@ -1,14 +1,15 @@
-use crate::{
-    Date, Error, OpenOptions, Time, Timestamp, XlColumn, XlColumnSpec, XlInferredSchema, XlTable,
-    XlWorkbook, XL_BUFFER_TOO_SMALL, XL_EOF, XL_ERROR, XL_FORMAT_AUTO, XL_OK, XL_T_BOOL, XL_T_DATE,
-    XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
+use crate::ffi::{
+    self, XlColumn, XlColumnSpec, XlInferredSchema, XlOpenOptions, XlTable, XlWorkbook,
+    XL_BUFFER_TOO_SMALL, XL_EOF, XL_OK,
 };
+use crate::{AllRows, Date, Error, ErrorKind, OpenOptions, RowCursor, Time, Timestamp};
 use std::marker::PhantomData;
+use std::path::Path;
 
 pub(crate) fn last_error(code: i32) -> Error {
     unsafe {
         let mut len: i32 = 0;
-        let ptr = crate::xl_last_error_ptr(&mut len);
+        let ptr = ffi::xl_last_error_ptr(&mut len);
         let message = if ptr.is_null() || len <= 0 {
             "unknown error".to_string()
         } else {
@@ -27,20 +28,37 @@ pub(crate) fn check(code: i32) -> Result<(), Error> {
     }
 }
 
+/// The ABI takes every path as UTF-8 bytes.
+pub(crate) fn path_str(path: &Path) -> Result<&str, Error> {
+    path.to_str().ok_or_else(|| {
+        Error::new(
+            ErrorKind::InvalidArgument,
+            format!("path {} is not valid UTF-8", path.display()),
+        )
+    })
+}
+
+/// The ABI takes every length as `int32`, so an oversized input is rejected rather than truncated.
+pub(crate) fn len_i32(len: usize, what: &str) -> Result<i32, Error> {
+    i32::try_from(len).map_err(|_| {
+        Error::new(
+            ErrorKind::InvalidArgument,
+            format!("{what} is {len} bytes, past the ABI's int32 length limit"),
+        )
+    })
+}
+
 /// Copies a native `XlBuffer` into an owned `Vec<u8>` and releases the native allocation via
-/// `xl_free_buffer` - shared by `writer::write_columns_to_memory`/`write_sheet_to_memory` and
-/// `writer_handle::WriterHandle::bytes`, the two places `xl_write_typed_to_memory`/
-/// `xl_write_handle_bytes` hand back an owned buffer. `buffer.data` may be null (an empty result),
-/// which `from_raw_parts` cannot take - `slice::from_raw_parts` requires a non-null, well-aligned
-/// pointer even for a zero-length slice.
-pub(crate) fn buffer_to_vec(mut buffer: crate::XlBuffer) -> Vec<u8> {
+/// `xl_free_buffer`. `buffer.data` may be null (an empty result), which `from_raw_parts` cannot
+/// take even for a zero-length slice.
+pub(crate) fn buffer_to_vec(mut buffer: ffi::XlBuffer) -> Vec<u8> {
     let bytes = if buffer.data.is_null() || buffer.len <= 0 {
         Vec::new()
     } else {
         unsafe { std::slice::from_raw_parts(buffer.data, buffer.len as usize).to_vec() }
     };
     unsafe {
-        crate::xl_free_buffer(&mut buffer);
+        ffi::xl_free_buffer(&mut buffer);
     }
     bytes
 }
@@ -53,25 +71,25 @@ pub(crate) fn buffer_to_vec(mut buffer: crate::XlBuffer) -> Vec<u8> {
 /// mismatch would mean reading native memory through the wrong layout, so every constructor calls
 /// this first.
 ///
-/// The result is cached: it cannot change for the lifetime of the process, and every
-/// `Workbook::open` would otherwise pay an FFI call for it.
+/// The result is cached: it cannot change for the lifetime of the process, and every open would
+/// otherwise pay an FFI call for it.
 pub(crate) fn check_abi_version() -> Result<(), Error> {
     use std::sync::OnceLock;
     static CHECKED: OnceLock<Result<(), Error>> = OnceLock::new();
 
     CHECKED
         .get_or_init(|| {
-            let loaded = unsafe { crate::xl_abi_version() };
-            if loaded == crate::XL_ABI_VERSION {
+            let loaded = unsafe { ffi::xl_abi_version() };
+            if loaded == ffi::XL_ABI_VERSION {
                 warm_up();
                 Ok(())
             } else {
-                Err(Error::from_status(
-                    XL_ERROR,
+                Err(Error::new(
+                    ErrorKind::Other,
                     format!(
                         "ExcelReader native library reports ABI version {loaded}, but this crate \
                          was built against {}. Update the crate and the native library together.",
-                        crate::XL_ABI_VERSION
+                        ffi::XL_ABI_VERSION
                     ),
                 ))
             }
@@ -97,16 +115,16 @@ fn warm_up() {
 
     let mut handle: *mut XlWorkbook = std::ptr::null_mut();
     let status = unsafe {
-        crate::xl_open_memory(
+        ffi::xl_open_memory(
             CSV.as_ptr(),
             CSV.len() as i32,
-            crate::XL_FORMAT_CSV,
+            ffi::XL_FORMAT_CSV,
             std::ptr::null(),
             &mut handle,
         )
     };
     if status == XL_OK && !handle.is_null() {
-        unsafe { crate::xl_close(handle) };
+        unsafe { ffi::xl_close(handle) };
     }
 
     struct CountRows(i64);
@@ -121,11 +139,13 @@ fn warm_up() {
         }
     }
 
-    let options = crate::CsvParallelOptions {
-        degree_of_parallelism: 2,
-        ..crate::CsvParallelOptions::default()
-    };
-    let _ = crate::aggregate::aggregate_csv_memory_unchecked(CSV, || CountRows(0), &options);
+    let _ = crate::aggregate::aggregate_unchecked(
+        crate::CsvInput::Bytes(CSV),
+        &OpenOptions::new(),
+        0,
+        2,
+        || CountRows(0),
+    );
 }
 
 /// An open workbook. Safe to share between threads: every read goes through a [`Sheet`] and opens
@@ -134,112 +154,36 @@ pub struct Workbook {
     handle: *mut XlWorkbook,
 }
 
-// SAFETY: ABI v6 documents the workbook handle as usable from several threads at once. The only
+// SAFETY: ABI v6 documents the workbook handle as usable from several threads at once.
 unsafe impl Send for Workbook {}
 unsafe impl Sync for Workbook {}
 
 impl Workbook {
-    pub(crate) fn from_handle(handle: *mut XlWorkbook) -> Workbook {
-        Workbook { handle }
-    }
-
-    /// Opens `path`, sniffing the format and using every library default.
-    ///
-    /// Sniffing does NOT detect CSV - open one with [`open_with`](Self::open_with) and
-    /// [`XL_FORMAT_CSV`](crate::XL_FORMAT_CSV).
-    pub fn open(path: &str) -> Result<Workbook, Error> {
-        Self::open_with(path, XL_FORMAT_AUTO, None)
-    }
-
-    /// Opens `path` with an explicit format and optional [`OpenOptions`].
-    pub fn open_with(
-        path: &str,
-        format: i32,
-        options: Option<&OpenOptions>,
-    ) -> Result<Workbook, Error> {
-        check_abi_version()?;
-        let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = raw
-            .as_ref()
-            .map_or(std::ptr::null(), crate::options::OpenOptionsRaw::as_ptr);
-        let mut handle: *mut XlWorkbook = std::ptr::null_mut();
-        let status = unsafe {
-            crate::xl_open_file(
-                path.as_ptr(),
-                path.len() as i32,
-                format,
-                raw_ptr,
-                &mut handle,
-            )
-        };
-        check(status)?;
-        Ok(Workbook { handle })
-    }
-
-    /// In-memory equivalent of [`open_with`](Self::open_with): `data` is copied by the native
-    /// library, so it need not outlive this call.
-    pub fn open_memory(
-        data: &[u8],
-        format: i32,
-        options: Option<&OpenOptions>,
-    ) -> Result<Workbook, Error> {
-        check_abi_version()?;
-        let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = raw
-            .as_ref()
-            .map_or(std::ptr::null(), crate::options::OpenOptionsRaw::as_ptr);
-        let mut handle: *mut XlWorkbook = std::ptr::null_mut();
-        let status = unsafe {
-            crate::xl_open_memory(
-                data.as_ptr(),
-                data.len() as i32,
-                format,
-                raw_ptr,
-                &mut handle,
-            )
-        };
-        check(status)?;
-        Ok(Workbook { handle })
-    }
-
-    /// Number of sheets in the workbook.
-    pub fn sheet_count(&self) -> Result<i32, Error> {
-        let mut count: i32 = 0;
-        check(unsafe { crate::xl_sheet_count(self.handle, &mut count) })?;
-        Ok(count)
-    }
-
-    /// Name of the sheet at `index`.
-    pub fn sheet_name_at(&self, index: i32) -> Result<String, Error> {
-        self.fill_string(|handle, buffer, capacity, out_len| unsafe {
-            crate::xl_sheet_name_at(handle, index, buffer, capacity, out_len)
-        })
-    }
-
-    /// Every sheet name, in workbook order.
-    pub fn sheet_names(&self) -> Result<Vec<String>, Error> {
-        (0..self.sheet_count()?)
-            .map(|index| self.sheet_name_at(index))
-            .collect()
+    /// Opens `path`, sniffing the format and using every library default. Sniffing does not detect
+    /// CSV: open one with [`OpenOptions::format`] set to [`Format::Csv`](crate::Format::Csv).
+    pub fn open(path: impl AsRef<Path>) -> Result<Workbook, Error> {
+        OpenOptions::new().open(path)
     }
 
     /// Whether the workbook uses the 1904 date system - needed to interpret raw Excel serial dates.
     pub fn is_date1904(&self) -> Result<bool, Error> {
         let mut flag: i32 = 0;
-        check(unsafe { crate::xl_is_date1904(self.handle, &mut flag) })?;
+        check(unsafe { ffi::xl_is_date1904(self.handle, &mut flag) })?;
         Ok(flag != 0)
     }
 
     /// The sheet at `index`. An index outside the workbook is an error here, not at the first read.
     pub fn sheet(&self, index: i32) -> Result<Sheet<'_>, Error> {
         let mut visibility: i32 = 0;
-        check(unsafe { crate::xl_sheet_visibility_at(self.handle, index, &mut visibility) })?;
+        check(unsafe { ffi::xl_sheet_visibility_at(self.handle, index, &mut visibility) })?;
         Ok(Sheet { workbook: self, index })
     }
 
     /// Every sheet, in workbook order. Opens nothing.
     pub fn sheets(&self) -> Result<Vec<Sheet<'_>>, Error> {
-        Ok((0..self.sheet_count()?)
+        let mut count: i32 = 0;
+        check(unsafe { ffi::xl_sheet_count(self.handle, &mut count) })?;
+        Ok((0..count)
             .map(|index| Sheet { workbook: self, index })
             .collect())
     }
@@ -248,7 +192,7 @@ impl Workbook {
     pub fn sheet_by_name(&self, name: &str) -> Result<Option<Sheet<'_>>, Error> {
         let mut index: i32 = -1;
         check(unsafe {
-            crate::xl_sheet_index(self.handle, name.as_ptr(), name.len() as i32, &mut index)
+            ffi::xl_sheet_index(self.handle, name.as_ptr(), name.len() as i32, &mut index)
         })?;
         Ok((index >= 0).then_some(Sheet { workbook: self, index }))
     }
@@ -272,12 +216,7 @@ impl Workbook {
             let buffer_slice = &buffer[..len.max(0) as usize];
             return str::from_utf8(buffer_slice)
                 .map(|s| s.to_string())
-                .map_err(|e| {
-                    Error::from_status(
-                        XL_ERROR,
-                        format!("native library returned a non-UTF-8 name: {e}"),
-                    )
-                });
+                .map_err(|e| non_utf8_name(&e));
         }
         let mut vec_buffer = vec![0u8; len.max(0) as usize];
         status = call(
@@ -288,12 +227,47 @@ impl Workbook {
         );
         check(status)?;
         vec_buffer.truncate(len.max(0) as usize);
-        String::from_utf8(vec_buffer).map_err(|e| {
-            Error::from_status(
-                XL_ERROR,
-                format!("native library returned a non-UTF-8 name: {e}"),
-            )
+        String::from_utf8(vec_buffer).map_err(|e| non_utf8_name(&e))
+    }
+}
+
+fn non_utf8_name(error: &dyn std::fmt::Display) -> Error {
+    Error::new(
+        ErrorKind::Other,
+        format!("native library returned a non-UTF-8 name: {error}"),
+    )
+}
+
+impl OpenOptions {
+    /// Opens the workbook at `path` with these options.
+    pub fn open(&self, path: impl AsRef<Path>) -> Result<Workbook, Error> {
+        let path = path_str(path.as_ref())?;
+        let path_len = len_i32(path.len(), "path")?;
+        self.open_raw(|format, options, handle| unsafe {
+            ffi::xl_open_file(path.as_ptr(), path_len, format, options, handle)
         })
+    }
+
+    /// Opens a workbook held in memory. The native library copies `data`, so it need not outlive
+    /// this call.
+    pub fn open_bytes(&self, data: &[u8]) -> Result<Workbook, Error> {
+        let data_len = len_i32(data.len(), "buffer")?;
+        self.open_raw(|format, options, handle| unsafe {
+            ffi::xl_open_memory(data.as_ptr(), data_len, format, options, handle)
+        })
+    }
+
+    /// The tail every open shares: the ABI check, lowering these options, and turning the status
+    /// and handle into a `Workbook`. `open` runs only after the ABI check passes.
+    pub(crate) fn open_raw(
+        &self,
+        open: impl FnOnce(i32, *const XlOpenOptions, *mut *mut XlWorkbook) -> i32,
+    ) -> Result<Workbook, Error> {
+        check_abi_version()?;
+        let raw = self.to_raw();
+        let mut handle: *mut XlWorkbook = std::ptr::null_mut();
+        check(open(self.format_raw(), raw.as_ptr(), &mut handle))?;
+        Ok(Workbook { handle })
     }
 }
 
@@ -322,7 +296,10 @@ impl<'w> Sheet<'w> {
 
     /// The sheet's name.
     pub fn name(&self) -> Result<String, Error> {
-        self.workbook.sheet_name_at(self.index)
+        self.workbook
+            .fill_string(|handle, buffer, capacity, out_len| unsafe {
+                ffi::xl_sheet_name_at(handle, self.index, buffer, capacity, out_len)
+            })
     }
 
     /// Whether the sheet is visible, hidden or very hidden. An error if the native side reports a
@@ -330,14 +307,14 @@ impl<'w> Sheet<'w> {
     pub fn visibility(&self) -> Result<SheetVisibility, Error> {
         let mut raw: i32 = 0;
         check(unsafe {
-            crate::xl_sheet_visibility_at(self.workbook.handle, self.index, &mut raw)
+            ffi::xl_sheet_visibility_at(self.workbook.handle, self.index, &mut raw)
         })?;
         match raw {
-            crate::XL_SHEET_VISIBLE => Ok(SheetVisibility::Visible),
-            crate::XL_SHEET_HIDDEN => Ok(SheetVisibility::Hidden),
-            crate::XL_SHEET_VERY_HIDDEN => Ok(SheetVisibility::VeryHidden),
-            other => Err(Error::from_status(
-                XL_ERROR,
+            ffi::XL_SHEET_VISIBLE => Ok(SheetVisibility::Visible),
+            ffi::XL_SHEET_HIDDEN => Ok(SheetVisibility::Hidden),
+            ffi::XL_SHEET_VERY_HIDDEN => Ok(SheetVisibility::VeryHidden),
+            other => Err(Error::new(
+                ErrorKind::Other,
                 format!("native library returned an unknown sheet visibility {other}"),
             )),
         }
@@ -345,37 +322,55 @@ impl<'w> Sheet<'w> {
 
     /// A row-at-a-time reader over this sheet, from its first row. Each call opens an independent
     /// cursor, so several may be alive at once, on this thread or on others.
-    pub fn rows(&self) -> Result<crate::rows::RowCursor<'w>, Error> {
-        crate::rows::RowCursor::open(self.workbook.handle, self.index)
+    pub fn rows(&self) -> Result<RowCursor<'w>, Error> {
+        RowCursor::open(self.workbook.handle, self.index)
     }
 
-    /// Every row of this sheet in one native call, avoiding a round-trip per row.
-    pub fn read_all_decoded(&self) -> Result<crate::rows::DecodedRows, Error> {
+    /// Every row of this sheet, read in one native call into a buffer the result owns outright.
+    pub fn read_all(&self) -> Result<AllRows, Error> {
         let cursor = self.rows()?;
-        let mut raw = crate::XlRowsDecoded { row_count: 0, rows: std::ptr::null_mut() };
-        check(unsafe { crate::xl_rows_read_all_decoded(cursor.raw(), &mut raw) })?;
-        Ok(crate::rows::DecodedRows::new(raw))
+        AllRows::read(cursor.raw())
     }
 
-    /// Every row of this sheet, read in one native call into a buffer this type owns outright.
-    /// Prefer this over [`read_all_decoded`](Self::read_all_decoded) unless something specifically
-    /// needs the decoded-array shape.
-    pub fn read_all_blob(&self) -> Result<crate::rows::AllRows, Error> {
-        let cursor = self.rows()?;
-        crate::rows::AllRows::read(cursor.raw())
+    /// Schema-driven columnar parse of this sheet into `T`s, matching C++'s `xl::parse_sheet<T>`.
+    /// The fastest way to read a sheet whose columns you know: it converts on the native side and
+    /// never formats a cell to text.
+    ///
+    /// `header_row` is 1-based, `0` meaning no header (columns are then bound by position).
+    /// `degree_of_parallelism` is `0` for every processor, `1` sequential, `n` up to `n` threads,
+    /// negative an error; the table is the same whatever it is.
+    pub fn parse<T: ExcelMapper>(
+        &self,
+        header_row: i32,
+        degree_of_parallelism: i32,
+    ) -> Result<TableView<T>, Error> {
+        let arena = build_specs::<T>();
+        let mut table = empty_table();
+        check(unsafe {
+            ffi::xl_parse_typed(
+                self.workbook.handle,
+                self.index,
+                arena.specs.as_ptr(),
+                arena.specs.len() as i32,
+                header_row,
+                degree_of_parallelism,
+                &mut table,
+            )
+        })?;
+        TableView::new(table, arena.bindings, "xl_parse_typed")
     }
 
-    /// [`parse_sheet`] delivered a batch at a time. `batch_size` is rows per batch: 0 unbounded,
-    /// negative an error. The header row is consumed once, here, not re-read per batch.
+    /// [`parse`](Self::parse) delivered a batch at a time. `batch_size` is rows per batch: 0
+    /// unbounded, negative an error. The header row is consumed once, here, not re-read per batch.
     pub fn typed_chunks<T: ExcelMapper>(
         &self,
         header_row: i32,
         batch_size: i64,
     ) -> Result<TypedChunks<'w, T>, Error> {
         let arena = build_specs::<T>();
-        let mut reader: *mut crate::XlTypedReader = std::ptr::null_mut();
+        let mut reader: *mut ffi::XlTypedReader = std::ptr::null_mut();
         check(unsafe {
-            crate::xl_typed_reader_open(
+            ffi::xl_typed_reader_open(
                 self.workbook.handle,
                 self.index,
                 arena.specs.as_ptr(),
@@ -393,42 +388,26 @@ impl<'w> Sheet<'w> {
         })
     }
 
-    /// Guesses a [`parse_sheet`] schema by sampling this sheet.
+    /// Guesses a [`parse`](Self::parse) schema by sampling this sheet.
     ///
-    /// `header_row` has the same meaning as in [`parse_sheet`] (0 = no header); `sample_size`
-    /// bounds how many rows after the header are inspected. This is a guess over a sample, not a
-    /// guarantee - always check it fits before trusting it against the full sheet.
+    /// `header_row` has the same meaning as in `parse`; `sample_size` bounds how many rows after
+    /// the header are inspected. With `parse_text`, cells that hold text are typed too - every CSV
+    /// field, or numbers stored as text: integers, decimals, `true`/`false` and ISO dates or
+    /// date-times, when the text has exactly that shape (leading-zero codes such as `00123` stay
+    /// text). This is a guess over a sample, not a guarantee.
     pub fn infer_schema(
         &self,
         header_row: i32,
         sample_size: i32,
+        parse_text: bool,
     ) -> Result<Vec<InferredColumn>, Error> {
-        self.infer_schema_flags(header_row, sample_size, 0)
-    }
-
-    /// [`infer_schema`](Self::infer_schema), also typing cells that hold text — every CSV field,
-    /// or numbers stored as text: integers, decimals, `true`/`false` and ISO dates or date-times,
-    /// when the text has exactly that shape. Leading-zero codes such as `00123` stay text.
-    pub fn infer_schema_parse_text(
-        &self,
-        header_row: i32,
-        sample_size: i32,
-    ) -> Result<Vec<InferredColumn>, Error> {
-        self.infer_schema_flags(header_row, sample_size, crate::XL_INFER_PARSE_TEXT)
-    }
-
-    fn infer_schema_flags(
-        &self,
-        header_row: i32,
-        sample_size: i32,
-        flags: i32,
-    ) -> Result<Vec<InferredColumn>, Error> {
+        let flags = if parse_text { ffi::XL_INFER_PARSE_TEXT } else { 0 };
         let mut schema = XlInferredSchema {
             columns: std::ptr::null_mut(),
             column_count: 0,
         };
         check(unsafe {
-            crate::xl_infer_schema(
+            ffi::xl_infer_schema(
                 self.workbook.handle,
                 self.index,
                 header_row,
@@ -439,10 +418,11 @@ impl<'w> Sheet<'w> {
         })?;
 
         let columns = unsafe { copy_inferred(&schema) };
-        unsafe { crate::xl_free_schema(&mut schema) };
-        Ok(columns)
+        unsafe { ffi::xl_free_schema(&mut schema) };
+        columns
     }
 
+    #[cfg(feature = "arrow")]
     pub(crate) fn handle(&self) -> *mut XlWorkbook {
         self.workbook.handle
     }
@@ -455,20 +435,71 @@ impl std::fmt::Debug for Sheet<'_> {
     }
 }
 
+/// A column's value type, shared by reading ([`InferredColumn`]) and writing ([`ColumnData`]).
+///
+/// [`ColumnData`]: crate::ColumnData
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ColumnType {
+    String,
+    I64,
+    F64,
+    Bool,
+    /// Days since 1970-01-01.
+    Date,
+    /// Microseconds since midnight.
+    Time,
+    /// Microseconds since 1970-01-01T00:00:00Z.
+    Timestamp,
+}
+
+impl ColumnType {
+    pub(crate) fn raw(self) -> i32 {
+        match self {
+            ColumnType::String => ffi::XL_T_STRING,
+            ColumnType::I64 => ffi::XL_T_I64,
+            ColumnType::F64 => ffi::XL_T_F64,
+            ColumnType::Bool => ffi::XL_T_BOOL,
+            ColumnType::Date => ffi::XL_T_DATE,
+            ColumnType::Time => ffi::XL_T_TIME,
+            ColumnType::Timestamp => ffi::XL_T_TIMESTAMP,
+        }
+    }
+
+    fn from_raw(value: i32) -> Option<ColumnType> {
+        match value {
+            ffi::XL_T_STRING => Some(ColumnType::String),
+            ffi::XL_T_I64 => Some(ColumnType::I64),
+            ffi::XL_T_F64 => Some(ColumnType::F64),
+            ffi::XL_T_BOOL => Some(ColumnType::Bool),
+            ffi::XL_T_DATE => Some(ColumnType::Date),
+            ffi::XL_T_TIME => Some(ColumnType::Time),
+            ffi::XL_T_TIMESTAMP => Some(ColumnType::Timestamp),
+            _ => None,
+        }
+    }
+}
+
 /// Deep-copies a native-owned inferred schema into owned Rust values, so the caller can free the
 /// native allocation immediately.
 ///
 /// # Safety
 /// `schema` must be one `xl_infer_schema` returned `XL_OK` for, not yet passed to `xl_free_schema`.
-unsafe fn copy_inferred(schema: &XlInferredSchema) -> Vec<InferredColumn> {
+unsafe fn copy_inferred(schema: &XlInferredSchema) -> Result<Vec<InferredColumn>, Error> {
     if schema.columns.is_null() || schema.column_count <= 0 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let specs = std::slice::from_raw_parts(schema.columns, schema.column_count as usize);
     specs
         .iter()
-        .map(|spec| InferredColumn {
-            name: if spec.name_count <= 0 || spec.names.is_null() || spec.name_lens.is_null() {
+        .map(|spec| {
+            let column_type = ColumnType::from_raw(spec.r#type).ok_or_else(|| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("native library inferred an unknown column type {}", spec.r#type),
+                )
+            })?;
+            let name = if spec.name_count <= 0 || spec.names.is_null() || spec.name_lens.is_null() {
                 None
             } else {
                 let name_ptr = *spec.names;
@@ -479,10 +510,13 @@ unsafe fn copy_inferred(schema: &XlInferredSchema) -> Vec<InferredColumn> {
                     let bytes = std::slice::from_raw_parts(name_ptr, name_len as usize);
                     Some(String::from_utf8_lossy(bytes).into_owned())
                 }
-            },
-            index: spec.index,
-            column_type: spec.r#type,
-            nullable: spec.nullable != 0,
+            };
+            Ok(InferredColumn {
+                name,
+                index: spec.index,
+                column_type,
+                nullable: spec.nullable != 0,
+            })
         })
         .collect()
 }
@@ -493,8 +527,7 @@ pub struct InferredColumn {
     /// Header text, or `None` when the column must be resolved by [`index`](Self::index) instead.
     pub name: Option<String>,
     pub index: i32,
-    /// One of the `XL_T_*` constants.
-    pub column_type: i32,
+    pub column_type: ColumnType,
     pub nullable: bool,
 }
 
@@ -502,7 +535,7 @@ impl Drop for Workbook {
     fn drop(&mut self) {
         if !self.handle.is_null() {
             unsafe {
-                crate::xl_close(self.handle);
+                ffi::xl_close(self.handle);
             }
             self.handle = std::ptr::null_mut();
         }
@@ -519,11 +552,11 @@ impl std::fmt::Debug for Workbook {
     }
 }
 
-/// One field <-> column binding for `T`. Construct via `ExcelMapper::bindings()`.
+/// One field <-> column binding for `T`, produced by `#[derive(ExcelMapper)]`.
 pub struct ColumnBinding<T> {
     /// Candidate header names, in priority order — the first one present in the header row wins.
     pub names: &'static [&'static str],
-    pub xl_type: i32,
+    pub column_type: ColumnType,
     pub assign: fn(&mut T, &XlColumn, i64),
 }
 
@@ -536,10 +569,10 @@ impl<T> Clone for ColumnBinding<T> {
 
 impl<T> Copy for ColumnBinding<T> {}
 
-/// Implemented by any struct `parse_sheet` can populate from a `parse_typed` result. Implement
-/// `bindings()` by hand (mirroring `xl::ExcelMapper<T>` on the C++ side), or derive it with
-/// `#[derive(ExcelMapper)]` (see `excelreader_derive`).
+/// Implemented by any struct [`Sheet::parse`] can populate. Derive it with
+/// `#[derive(ExcelMapper)]`, which also implements [`ExcelWriter`](crate::ExcelWriter).
 pub trait ExcelMapper: Sized {
+    #[doc(hidden)]
     fn bindings() -> Vec<ColumnBinding<Self>>;
 }
 
@@ -559,8 +592,8 @@ fn is_valid(col: &XlColumn, row: i64) -> bool {
 ///
 /// These are safe `pub` functions that index into raw native buffers, so this check is what makes
 /// them sound: without it a `row` past the column returns whatever sits after the allocation. The
-/// type half catches the other class of mistake - reading an `XL_T_F64` buffer as `i64` is an
-/// `ExcelMapper::bindings()` bug, not recoverable input.
+/// type half catches the other class of mistake - reading an `XL_T_F64` buffer as `i64` is a
+/// bindings bug, not recoverable input.
 #[inline]
 fn check_access(col: &XlColumn, row: i64, expected_type: i32, accessor: &str) {
     assert_eq!(
@@ -580,13 +613,12 @@ fn check_access(col: &XlColumn, row: i64, expected_type: i32, accessor: &str) {
 /// The ABI documents every string it returns as UTF-8, but this validates rather than trusting it:
 /// the bytes cross an FFI boundary from a binary resolved at build time, and `from_utf8_unchecked`
 /// on a value that turns out not to be UTF-8 is undefined behavior, not merely a wrong answer.
-/// Validation is a linear scan over bytes already in cache.
 ///
 /// # Panics
-/// If `col` is not an `XL_T_STRING` column, if `row` is out of bounds, or if the native library
-/// returned bytes that are not valid UTF-8 (an ABI contract violation).
+/// If `col` is not a string column, if `row` is out of bounds, or if the native library returned
+/// bytes that are not valid UTF-8 (an ABI contract violation).
 pub fn column_str(col: &XlColumn, row: i64) -> &str {
-    check_access(col, row, XL_T_STRING, "column_str");
+    check_access(col, row, ffi::XL_T_STRING, "column_str");
     unsafe {
         let offsets = col.values as *const i32;
         let start = *offsets.offset(row as isize);
@@ -599,50 +631,58 @@ pub fn column_str(col: &XlColumn, row: i64) -> &str {
 }
 
 /// # Panics
-/// If `col` is not an `XL_T_I64` column, or `row` is out of bounds.
+/// If `col` is not an `i64` column, or `row` is out of bounds.
 pub fn column_i64(col: &XlColumn, row: i64) -> i64 {
-    check_access(col, row, XL_T_I64, "column_i64");
+    check_access(col, row, ffi::XL_T_I64, "column_i64");
     unsafe { *(col.values as *const i64).offset(row as isize) }
 }
 
 /// # Panics
-/// If `col` is not an `XL_T_F64` column, or `row` is out of bounds.
+/// If `col` is not an `f64` column, or `row` is out of bounds.
 pub fn column_f64(col: &XlColumn, row: i64) -> f64 {
-    check_access(col, row, XL_T_F64, "column_f64");
+    check_access(col, row, ffi::XL_T_F64, "column_f64");
     unsafe { *(col.values as *const f64).offset(row as isize) }
 }
 
 /// # Panics
-/// If `col` is not an `XL_T_BOOL` column, or `row` is out of bounds.
+/// If `col` is not a bool column, or `row` is out of bounds.
 pub fn column_bool(col: &XlColumn, row: i64) -> bool {
-    check_access(col, row, XL_T_BOOL, "column_bool");
+    check_access(col, row, ffi::XL_T_BOOL, "column_bool");
     unsafe { *(col.values as *const u8).offset(row as isize) != 0 }
 }
 
 /// # Panics
-/// If `col` is not an `XL_T_DATE` column, or `row` is out of bounds.
+/// If `col` is not a date column, or `row` is out of bounds.
 pub fn column_date(col: &XlColumn, row: i64) -> Date {
-    check_access(col, row, XL_T_DATE, "column_date");
+    check_access(col, row, ffi::XL_T_DATE, "column_date");
     Date::new(unsafe { *(col.values as *const i32).offset(row as isize) })
 }
 
 /// # Panics
-/// If `col` is not an `XL_T_TIME` column, or `row` is out of bounds.
+/// If `col` is not a time column, or `row` is out of bounds.
 pub fn column_time(col: &XlColumn, row: i64) -> Time {
-    check_access(col, row, XL_T_TIME, "column_time");
+    check_access(col, row, ffi::XL_T_TIME, "column_time");
     Time::new(unsafe { *(col.values as *const i64).offset(row as isize) })
 }
 
 /// # Panics
-/// If `col` is not an `XL_T_TIMESTAMP` column, or `row` is out of bounds.
+/// If `col` is not a timestamp column, or `row` is out of bounds.
 pub fn column_timestamp(col: &XlColumn, row: i64) -> Timestamp {
-    check_access(col, row, XL_T_TIMESTAMP, "column_timestamp");
+    check_access(col, row, ffi::XL_T_TIMESTAMP, "column_timestamp");
     Timestamp::new(unsafe { *(col.values as *const i64).offset(row as isize) })
 }
 
-/// Owns a `parse_typed` result. Frees the native table on `Drop`. `iter()` builds one `T` per call
-/// to `next()` from the columnar buffers - no upfront `Vec<T>` allocation beyond what
-/// `xl_parse_typed` itself already made.
+fn empty_table() -> XlTable {
+    XlTable {
+        column_count: 0,
+        row_count: 0,
+        columns: std::ptr::null_mut(),
+    }
+}
+
+/// Owns a typed parse result. Frees the native table on `Drop`. `iter()` builds one `T` per call
+/// to `next()` from the columnar buffers - no upfront `Vec<T>` allocation beyond what the native
+/// parse itself already made.
 pub struct TableView<T: ExcelMapper> {
     table: XlTable,
     bindings: Vec<ColumnBinding<T>>,
@@ -650,6 +690,31 @@ pub struct TableView<T: ExcelMapper> {
 }
 
 impl<T: ExcelMapper> TableView<T> {
+    /// Takes ownership of `table`, freeing it and failing if its column count disagrees with the
+    /// bindings it will be read through.
+    fn new(
+        mut table: XlTable,
+        bindings: Vec<ColumnBinding<T>>,
+        source: &str,
+    ) -> Result<Self, Error> {
+        if table.column_count as usize != bindings.len() {
+            let column_count = table.column_count;
+            unsafe { ffi::xl_free_table(&mut table) };
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!(
+                    "{source} returned {column_count} columns for {} specs",
+                    bindings.len()
+                ),
+            ));
+        }
+        Ok(TableView {
+            table,
+            bindings,
+            _marker: PhantomData,
+        })
+    }
+
     pub fn len(&self) -> i64 {
         self.table.row_count
     }
@@ -692,12 +757,13 @@ impl<T: ExcelMapper> TableView<T> {
 impl<T: ExcelMapper> Drop for TableView<T> {
     fn drop(&mut self) {
         unsafe {
-            crate::xl_free_table(&mut self.table);
+            ffi::xl_free_table(&mut self.table);
         }
     }
 }
 
 // SAFETY: plain native allocations, read only through &self, released by xl_free_table, which any
+// thread may call.
 unsafe impl<T: ExcelMapper> Send for TableView<T> {}
 unsafe impl<T: ExcelMapper> Sync for TableView<T> {}
 
@@ -714,13 +780,14 @@ impl<T: ExcelMapper> std::fmt::Debug for TableView<T> {
 
 /// Iterator over the batches of one chunked typed read. Closes the native reader on `Drop`.
 pub struct TypedChunks<'a, T: ExcelMapper> {
-    reader: *mut crate::XlTypedReader,
+    reader: *mut ffi::XlTypedReader,
     bindings: Vec<ColumnBinding<T>>,
     done: bool,
     _workbook: PhantomData<&'a Workbook>,
 }
 
 // SAFETY: a typed reader owns its native enumerator; ABI v6 lets it be used from any one thread
+// at a time.
 unsafe impl<T: ExcelMapper> Send for TypedChunks<'_, T> {}
 
 impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
@@ -731,12 +798,8 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
             return None;
         }
 
-        let mut table = XlTable {
-            column_count: 0,
-            row_count: 0,
-            columns: std::ptr::null_mut(),
-        };
-        let status = unsafe { crate::xl_typed_reader_next(self.reader, &mut table) };
+        let mut table = empty_table();
+        let status = unsafe { ffi::xl_typed_reader_next(self.reader, &mut table) };
         if status == XL_EOF {
             self.done = true;
             return None;
@@ -746,31 +809,16 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
             return Some(Err(last_error(status)));
         }
 
-        if table.column_count as usize != self.bindings.len() {
-            let column_count = table.column_count;
-            unsafe { crate::xl_free_table(&mut table) };
-            self.done = true;
-            return Some(Err(Error::from_status(
-                XL_ERROR,
-                format!(
-                    "xl_typed_reader_next returned {column_count} columns for {} specs",
-                    self.bindings.len()
-                ),
-            )));
-        }
-
-        // ponytail: one small Vec of function pointers cloned per batch, not per row. Give
-        Some(Ok(TableView {
-            table,
-            bindings: self.bindings.clone(),
-            _marker: PhantomData,
-        }))
+        // ponytail: one small Vec of function pointers cloned per batch, not per row.
+        let view = TableView::new(table, self.bindings.clone(), "xl_typed_reader_next");
+        self.done = view.is_err();
+        Some(view)
     }
 }
 
 impl<T: ExcelMapper> Drop for TypedChunks<'_, T> {
     fn drop(&mut self) {
-        unsafe { crate::xl_typed_reader_close(self.reader) };
+        unsafe { ffi::xl_typed_reader_close(self.reader) };
     }
 }
 
@@ -840,7 +888,7 @@ pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena<T> {
             name_lens: name_lens[i].as_ptr(),
             name_count: b.names.len() as i32,
             index: 0,
-            r#type: b.xl_type,
+            r#type: b.column_type.raw(),
             nullable: 1,
         })
         .collect();
@@ -850,61 +898,4 @@ pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena<T> {
         _name_ptrs: name_ptrs,
         _name_lens: name_lens,
     }
-}
-
-/// Schema-driven columnar parse of one sheet, matching C++'s `xl::parse_sheet<T>`.
-pub fn parse_sheet<T: ExcelMapper>(
-    sheet: Sheet<'_>,
-    header_row: i32,
-) -> Result<TableView<T>, Error> {
-    parse_sheet_parallel(sheet, header_row, 1)
-}
-
-/// [`parse_sheet`] with a degree of parallelism: `0` uses every processor, `1` is sequential, `n`
-/// up to `n` threads, negative is an error. Only CSV is split; other formats read sequentially.
-/// The table equals `parse_sheet`'s.
-pub fn parse_sheet_parallel<T: ExcelMapper>(
-    sheet: Sheet<'_>,
-    header_row: i32,
-    degree_of_parallelism: i32,
-) -> Result<TableView<T>, Error> {
-    let arena = build_specs::<T>();
-    let bindings = arena.bindings;
-    let mut table = XlTable {
-        column_count: 0,
-        row_count: 0,
-        columns: std::ptr::null_mut(),
-    };
-    unsafe {
-        let status = crate::xl_parse_typed(
-            sheet.handle(),
-            sheet.index(),
-            arena.specs.as_ptr(),
-            arena.specs.len() as i32,
-            header_row,
-            degree_of_parallelism,
-            &mut table,
-        );
-        if status != XL_OK {
-            return Err(last_error(status));
-        }
-    }
-
-    if table.column_count as usize != bindings.len() {
-        let column_count = table.column_count;
-        unsafe { crate::xl_free_table(&mut table) };
-        return Err(Error::from_status(
-            XL_ERROR,
-            format!(
-                "xl_parse_typed returned {column_count} columns for {} specs",
-                bindings.len()
-            ),
-        ));
-    }
-
-    Ok(TableView {
-        table,
-        bindings,
-        _marker: PhantomData,
-    })
 }
