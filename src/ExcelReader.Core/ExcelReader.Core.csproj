@@ -11,7 +11,7 @@
   <!-- Pack fails on any binary break against the baseline; move it to each new release. -->
   <PropertyGroup>
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>7.0.0-rc.2</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>7.0.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- NuGet package metadata -->
