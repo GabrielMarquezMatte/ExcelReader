@@ -100,6 +100,11 @@ namespace ExcelReader.Core.Reader
                     result = Unsafe.As<double, T>(ref fast);
                     return true;
                 }
+                if (typeof(T) == typeof(decimal) && UsesDotDecimalSeparator(provider) && FastDecimal.TryParse(Value, out decimal fastDecimal))
+                {
+                    result = Unsafe.As<decimal, T>(ref fastDecimal);
+                    return true;
+                }
                 if (TryParseAsciiDigits(Value, provider, out result))
                 {
                     return true;
