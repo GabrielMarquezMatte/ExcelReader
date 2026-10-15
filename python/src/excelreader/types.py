@@ -36,10 +36,13 @@ class SheetVisibility(IntEnum):
 _MAX_SERIAL = 2_958_466
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class Cell:
     """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers;
-    `date1904` is the date system of the workbook it came from."""
+    `date1904` is the date system of the workbook it came from.
+
+    Unlike the other value types it is not frozen: `rows()` builds one per cell, and a frozen
+    dataclass's `__init__` costs twice as much."""
 
     column: int
     type: CellType
