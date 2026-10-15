@@ -87,7 +87,7 @@
         <article data-uid="">
 <h1 id="struct-writeoptions">Struct WriteOptions</h1>
 
-<p>Settings for every writer.</p>
+<p>Format and settings for every writer.</p>
 <p>A field left at 0 or <code>XL_OPT_DEFAULT</code> keeps the library default.</p>
 <pre><code class="lang-cpp">struct xl::WriteOptions
 </code></pre>
@@ -102,6 +102,12 @@
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>format</code></td>
+<td>int32_t</td>
+<td><code>XL_FORMAT_AUTO</code></td>
+<td>An <code>XL_FORMAT_*</code> constant. <code>XL_FORMAT_AUTO</code> takes it from a path's extension (.xlsx, .xlsb, .xls or .csv, in any case) and fails for any other extension or when writing to memory.</td>
+</tr>
 <tr>
 <td><code>sheet_name</code></td>
 <td>std::string_view</td>
@@ -134,12 +140,6 @@
 </tr>
 </tbody>
 </table>
-<h2 id="methods">Methods</h2>
-<h3 id="to_c">to_c</h3>
-<pre><code class="lang-cpp">xl_write_options to_c() const noexcept
-</code></pre>
-<p>These options as the C ABI's <code>xl_write_options</code>.</p>
-<p><strong>Returns</strong> xl_write_options: A struct pointing into this object, valid while it lives unchanged.</p>
 
 </article>
 

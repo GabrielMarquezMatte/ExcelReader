@@ -74,8 +74,8 @@
 
 <p><img src="https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png" alt="ExcelReader logo"></p>
 <h1 id="excelreader-c">excelreader (C++)</h1>
-<p>Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path or
-memory, with the full open-options surface), sheet navigation, schema inference, schema-driven
+<p>Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path,
+memory, a random-access <code>xl::Source</code> or an <code>xl::InputStream</code>, with the full open-options surface), sheet navigation, schema inference, schema-driven
 typed table parsing, schema-driven writing, row-by-row decoded reads, and Arrow export.</p>
 <h2 id="requirements">Requirements</h2>
 <ul>
@@ -89,7 +89,7 @@ a plain text file containing the target path, and the build fails with &quot;exc
 <pre><code class="lang-cmake">include(FetchContent)
 FetchContent_Declare(excelreader
     GIT_REPOSITORY https://github.com/GabrielMarquezMatte/ExcelReader.git
-    GIT_TAG v4.0.1
+    GIT_TAG v7.0.0
     SOURCE_SUBDIR cpp)
 FetchContent_MakeAvailable(excelreader)
 
@@ -108,13 +108,13 @@ downstream projects find it without re-downloading anything:</p>
 <pre><code class="lang-bash">cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
 cmake --install build/cpp --config Release --prefix /your/prefix
 </code></pre>
-<pre><code class="lang-cmake">find_package(excelreader 3.0 REQUIRED)
+<pre><code class="lang-cmake">find_package(excelreader 7.0 REQUIRED)
 target_link_libraries(your_app PRIVATE xl::excelreader)
 </code></pre>
 <p>Point <code>CMAKE_PREFIX_PATH</code> at the prefix you installed into. The native binary is resolved once, at
 install time — <code>find_package</code> never touches the network. The package version comes from
 <code>EXCELREADER_VERSION</code>, so a checkout that isn't on a tag installs as <code>0.0.0</code> and any versioned
-<code>find_package</code> request against it fails; pass <code>-DEXCELREADER_VERSION=v3.0.2</code> to install under a real
+<code>find_package</code> request against it fails; pass <code>-DEXCELREADER_VERSION=v7.0.0</code> to install under a real
 version. On Windows the generated import library is installed next to the DLL, and the package ships
 <code>excelreader_copy_native_library</code> as well, so a <code>find_package</code> consumer copies the DLL next to its
 executable the same way a <code>FetchContent</code> one does.</p>
@@ -148,11 +148,11 @@ template&lt;&gt; struct xl::ExcelMapper&lt;Row&gt; {
 };
 
 auto workbook = xl::Workbook::open(&quot;book.xlsx&quot;);
-auto table = xl::parse_sheet&lt;Row&gt;(workbook-&gt;sheet(0));
+auto table = xl::parse&lt;Row&gt;(workbook-&gt;sheet(0));
 for (const auto&amp; row : *table) { /* ... */ }
 </code></pre>
 <h3 id="sheets-and-schema-inference">Sheets and schema inference</h3>
-<pre><code class="lang-cpp">for (const auto&amp; name : *workbook-&gt;sheet_names()) { /* ... */ }
+<pre><code class="lang-cpp">for (xl::Sheet sheet : *workbook-&gt;sheets()) { std::println(&quot;{}&quot;, sheet.name().value()); }
 
 // Guess a schema from the header row plus a sample of the data, before committing to one.
 for (const auto&amp; column : *workbook-&gt;sheet(1).infer_schema(1, 100)) {
@@ -185,7 +185,7 @@ if (auto totals = workbook-&gt;sheet_by_name(&quot;Totals&quot;).value())
 <pre><code class="lang-cpp">std::vector&lt;std::thread&gt; threads;
 for (xl::Sheet sheet : sheets)
 {
-    threads.emplace_back([sheet] { auto table = xl::parse_sheet&lt;Row&gt;(sheet); /* ... */ });
+    threads.emplace_back([sheet] { auto table = xl::parse&lt;Row&gt;(sheet); /* ... */ });
 }
 for (std::thread &amp;thread : threads)
 {
@@ -210,39 +210,37 @@ while (auto row = cursor.next_row())
 }
 </code></pre>
 <p>Each row is invalidated by the next <code>next_row()</code>. To hold every row at once, use
-<code>read_all_decoded()</code>, which decodes the whole sheet in one native call and owns it until
-destroyed (<code>RowCursor::read_all_decoded()</code> does the same for the rows a cursor has left):</p>
-<pre><code class="lang-cpp">auto rows = workbook.sheet(0).read_all_decoded().value();
+<code>Sheet::read_all()</code>, which decodes the whole sheet in one native call and owns it until
+destroyed:</p>
+<pre><code class="lang-cpp">auto rows = workbook.sheet(0).read_all().value();
 for (auto row : rows)
 {
     std::println(&quot;{} cells&quot;, row.size());
 }
 </code></pre>
-<p><code>xl::parse_sheet&lt;T&gt;</code> remains the fastest way to read a sheet whose columns you know.</p>
+<p><code>xl::parse&lt;T&gt;</code> remains the fastest way to read a sheet whose columns you know.</p>
 <h3 id="chunked-reads">Chunked reads</h3>
-<p>For a sheet too large to hold in memory at once, <code>xl::typed_reader&lt;T&gt;</code> is <code>xl::parse_sheet&lt;T&gt;</code>
+<p>For a sheet too large to hold in memory at once, <code>xl::parse_batches&lt;T&gt;</code> is <code>xl::parse&lt;T&gt;</code>
 delivered a batch at a time:</p>
 <pre><code class="lang-cpp">auto workbook = xl::Workbook::open(&quot;book.xlsx&quot;).value();
-auto reader = xl::typed_reader&lt;Row&gt;(workbook.sheet(0), 1, 10'000).value();
+auto reader = xl::parse_batches&lt;Row&gt;(workbook.sheet(0), {.batch_size = 10'000}).value();
 for (auto &amp;batch : reader)
 {
     if (!batch) { break; }
     for (const auto &amp;row : *batch) { /* ... */ }
 }
 </code></pre>
-<p><code>typed_reader</code> returns <code>std::expected&lt;xl::TypedReader&lt;T&gt;, xl::Error&gt;</code>; <code>next()</code> returns
+<p><code>parse_batches</code> returns <code>std::expected&lt;xl::TypedReader&lt;T&gt;, xl::Error&gt;</code>; <code>next()</code> returns
 <code>std::expected&lt;std::optional&lt;TableView&lt;T&gt;&gt;, Error&gt;</code>, an empty optional at end of sheet, and
 <code>TypedReader</code> is also an input range, so the range-<code>for</code> above works directly. <code>batch_size</code> is rows
-per batch — <code>0</code> means one unbounded batch, identical to <code>parse_sheet</code>; negative is an error. Each
-batch is independent and outlives the reader.</p>
+per batch and must be positive (<code>0</code> or negative is <code>XL_INVALID_ARGUMENT</code>; read a whole sheet with
+<code>parse</code>). Each batch is independent and outlives the reader.</p>
 <p>Several typed readers and Arrow streams may be open on one workbook at once; each read is
 independent.</p>
 <h3 id="encrypted-workbooks">Encrypted workbooks</h3>
-<p><code>OpenOptions::password(std::string_view)</code> unlocks a password-protected OOXML workbook
-(.xlsx/.xlsb/.xlsm) through <code>Workbook::open</code>/<code>open_memory</code>:</p>
-<pre><code class="lang-cpp">xl::OpenOptions options{};
-options.password(&quot;hunter2&quot;);
-auto workbook = xl::Workbook::open(&quot;protected.xlsx&quot;, XL_FORMAT_AUTO, &amp;options);
+<p><code>OpenOptions::password</code> unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm) through
+any <code>Workbook::open</code> overload:</p>
+<pre><code class="lang-cpp">auto workbook = xl::Workbook::open(&quot;protected.xlsx&quot;, {.password = &quot;hunter2&quot;});
 if (!workbook) {
     if (workbook.error().code == XL_STATUS_PASSWORD_REQUIRED) { /* no password was supplied */ }
     else if (workbook.error().code == XL_STATUS_PASSWORD_INCORRECT) { /* ask again */ }
@@ -251,21 +249,18 @@ if (!workbook) {
 </code></pre>
 <p>Unlike the Rust/Python bindings, this header never throws — <code>XL_STATUS_PASSWORD_REQUIRED</code> and
 <code>XL_STATUS_PASSWORD_INCORRECT</code> (from <code>excelreader.h</code>) are reported as ordinary <code>xl::Error::code</code>
-values on the <code>std::unexpected</code> returned from <code>open</code>/<code>open_memory</code>, distinguishable from any other
-failure without parsing <code>error().message</code>.</p>
-<p>The <code>password_</code> string this builds into <code>xl_open_options::password</code> must outlive the open call;
-keeping it in the <code>OpenOptions</code> object (which owns its own copy) is what makes
-<code>options.password(&quot;hunter2&quot;)</code> safe to call with a temporary, as above.</p>
+values on the <code>std::unexpected</code> returned from <code>open</code>, distinguishable from any other failure without
+parsing <code>error().message</code>.</p>
 <p>Writing an encrypted workbook is a second step: write the plaintext package with <code>write_columns</code>/
 <code>write_sheet</code>, then wrap it with <code>xl::encrypt_package</code>, which produces an agile-encrypted (ECMA-376
 4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a <code>dataIntegrity</code> HMAC:</p>
-<pre><code class="lang-cpp">auto written = xl::write_columns(&quot;plain.xlsx&quot;, XL_FORMAT_XLSX, columns);
+<pre><code class="lang-cpp">auto written = xl::write_columns(&quot;plain.xlsx&quot;, columns);
 auto encrypted = xl::encrypt_package(&quot;plain.xlsx&quot;, &quot;secret.xlsx&quot;, &quot;hunter2&quot;);
 if (!encrypted) { /* encrypted.error().message */ }
 </code></pre>
 <p><code>package_path</code> is read twice (it is not disposed or removed), so it must already be a finished file.
 Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
-packages can be encrypted, matching what <code>Workbook::open</code>/<code>open_memory</code> can decrypt.</p>
+packages can be encrypted, matching what <code>Workbook::open</code> can decrypt.</p>
 <h3 id="reading-from-your-own-bytes">Reading from your own bytes</h3>
 <p>Derive from <code>xl::Source</code> to read from anything you can read at an offset; <code>read_at</code> is called from
 several threads, in cached 4 MiB blocks. Derive from <code>xl::InputStream</code> for a stream that cannot
@@ -284,7 +279,7 @@ public:
     }
 };
 
-auto workbook = xl::Workbook::open_stream(std::make_unique&lt;StdinStream&gt;(), XL_FORMAT_CSV);
+auto workbook = xl::Workbook::open(std::make_unique&lt;StdinStream&gt;(), {.format = XL_FORMAT_CSV});
 </code></pre>
 <p>The workbook owns the object you pass and deletes it once nothing needs it. A returned error
 string or a thrown exception becomes the <code>xl::Error</code> of the call that needed the bytes.</p>
@@ -296,13 +291,13 @@ Arrow implementation you already link.</p>
 <pre><code class="lang-cpp">#include &lt;xl/excelreader_arrow.hpp&gt;
 
 auto workbook = xl::Workbook::open(&quot;book.xlsx&quot;);
-auto table = xl::parse_arrow&lt;Row&gt;(workbook-&gt;sheet(0));
+auto table = xl::to_arrow&lt;Row&gt;(workbook-&gt;sheet(0));
 // table-&gt;array / table-&gt;schema are a top-level struct array; both release in ~ArrowTable.
 </code></pre>
-<p>Batched: <code>xl::arrow_stream&lt;T&gt;</code> is <code>xl::parse_arrow&lt;T&gt;</code> delivered a batch at a time. <code>schema()</code> and
-<code>next()</code> return RAII guards (<code>ArrowSchemaGuard</code>, <code>ArrowArrayGuard</code>) that release exactly once, and
-each batch outlives the stream that produced it:</p>
-<pre><code class="lang-cpp">auto stream = xl::arrow_stream&lt;Row&gt;(workbook-&gt;sheet(0), 1, 10'000);
+<p>Batched: <code>xl::to_arrow_stream&lt;T&gt;</code> is <code>xl::to_arrow&lt;T&gt;</code> delivered a batch at a time. <code>next()</code> returns
+an <code>xl::ArrowTable</code> holding the batch and its own copy of the schema (<code>schema()</code> returns one whose
+<code>array</code> is empty); each releases exactly once and outlives the stream that produced it:</p>
+<pre><code class="lang-cpp">auto stream = xl::to_arrow_stream&lt;Row&gt;(workbook-&gt;sheet(0), {.batch_size = 10'000});
 while (true)
 {
     auto batch = stream-&gt;next();
@@ -310,10 +305,10 @@ while (true)
     // (*batch)-&gt;array is this one batch
 }
 </code></pre>
-<p>Same <code>header_row</code>/<code>batch_size</code> meaning as <code>xl::typed_reader</code> above.</p>
+<p>Same <code>header_row</code>/<code>batch_size</code> meaning as <code>xl::parse_batches</code> above.</p>
 <h2 id="writing">Writing</h2>
 <p>Two layers, mirroring the two on the reading side.</p>
-<p><code>xl::write_sheet&lt;T&gt;</code> uses the same <code>xl::ExcelMapper&lt;T&gt;</code> specialization <code>xl::parse_sheet&lt;T&gt;</code> reads
+<p><code>xl::write_sheet&lt;T&gt;</code> uses the same <code>xl::ExcelMapper&lt;T&gt;</code> specialization <code>xl::parse&lt;T&gt;</code> reads
 with, so a round trip needs one mapping, not two:</p>
 <pre><code class="lang-cpp">std::vector&lt;Row&gt; rows = /* ... */;
 auto written = xl::write_sheet(&quot;out.xlsx&quot;, rows);   // format inferred from the extension
@@ -329,7 +324,12 @@ std::array&lt;xl::ColumnRef, 2&gt; columns{
     xl::i64_column(&quot;id&quot;, ids),
     xl::f64_column(&quot;value&quot;, values)};
 
-auto written = xl::write_columns(&quot;out.xlsx&quot;, XL_FORMAT_XLSX, columns);
+auto written = xl::write_columns(&quot;out.xlsx&quot;, columns);
+</code></pre>
+<p>Both functions also write into memory: pass a <code>std::vector&lt;std::uint8_t&gt;&amp;</code> instead of a path and it
+is replaced with the file's bytes. There is no extension to infer the format from, so name it:</p>
+<pre><code class="lang-cpp">std::vector&lt;std::uint8_t&gt; bytes;
+auto written = xl::write_sheet(bytes, rows, {.format = XL_FORMAT_XLSX});
 </code></pre>
 <p>One constructor per column type: <code>i64_column</code>, <code>f64_column</code>, <code>bool_column</code>, <code>date_column</code>,
 <code>time_column</code>, <code>timestamp_column</code>, and <code>string_column</code> (which takes an <code>int32</code> offsets span of
@@ -339,20 +339,51 @@ valid — passed as the last argument to any of those constructors. <code>write_
 is long enough for the row count before calling: the ABI takes it without a length and reads
 <code>(rows + 7) / 8</code> bytes on trust, so a short one would be a buffer overrun. On the struct side,
 declare the field <code>std::optional&lt;T&gt;</code> and <code>write_sheet</code> builds the bitmap for you.</p>
-<p><code>xl::WriteOptions</code> sets the sheet name, the CSV dialect, and the XLS/XLSB and XLSX/XLSB toggles.
-<code>XL_FORMAT_AUTO</code> is rejected — a file being created has no signature bytes to sniff — so
-<code>xl::format_from_path</code> returning <code>XL_FORMAT_AUTO</code> for an unrecognized extension surfaces as a failed
-write rather than a silently chosen format.</p>
+<p><code>xl::WriteOptions</code> sets the format, the sheet name, the CSV dialect, and the XLS/XLSB and XLSX/XLSB
+toggles. Its <code>format</code> defaults to <code>XL_FORMAT_AUTO</code>, which takes the format from the path's
+extension (.xlsx, .xlsb, .xls or .csv, in any case); an unrecognized extension, or AUTO with a vector
+destination, fails the write rather than silently choosing a format.</p>
 <p><code>write_sheet</code> walks the range once and appends each field to its own column buffer, with the
 per-field dispatch resolved at compile time. That transpose is the only copy it makes, and it is
 what the ABI's columnar shape costs a row-shaped caller; <code>write_columns</code> pays nothing.</p>
+<h3 id="writing-cell-by-cell">Writing cell by cell</h3>
+<p><code>xl::WriterHandle</code> writes a workbook as calls arrive, sheet by sheet, without holding it in memory
+first. Call <code>finish()</code> at the end: destruction finishes too, but cannot report a failure. Opened over
+a <code>std::vector&lt;std::uint8_t&gt;&amp;</code>, the handle fills the vector when it finishes.</p>
+<pre><code class="lang-cpp">auto writer = xl::WriterHandle::open(&quot;out.xlsx&quot;).value();
+writer.start_sheet(&quot;Totals&quot;);
+writer.start_row();
+writer.write(std::string_view(&quot;widgets&quot;));
+writer.write(int64_t{7});
+writer.write(std::optional&lt;double&gt;{}); // a blank cell
+writer.end_row();
+writer.end_sheet();
+if (auto done = writer.finish(); !done) { /* done.error().message */ }
+</code></pre>
+<p>Every call returns <code>std::expected&lt;void, xl::Error&gt;</code>; one out of order fails instead of corrupting the
+file.</p>
+<h2 id="aggregating-a-csv-in-parallel">Aggregating a CSV in parallel</h2>
+<p><code>xl::aggregate_csv&lt;Acc&gt;</code> folds a CSV file or buffer across worker threads. Each partition starts from
+a copy of the seed, <code>accumulate</code> sees each record, and <code>combine</code> merges partitions:</p>
+<pre><code class="lang-cpp">struct RowCount
+{
+    int64_t rows = 0;
+    int32_t accumulate(xl::RowView) noexcept { ++rows; return XL_OK; }
+    int32_t combine(RowCount &amp;next) noexcept { rows += next.rows; return XL_OK; }
+};
+
+auto counted = xl::aggregate_csv(&quot;big.csv&quot;, RowCount{}, {.csv_delimiter = ';'}, /*header_row*/ 1);
+</code></pre>
+<p>The dialect (<code>csv_delimiter</code>, <code>csv_quote</code>, <code>csv_detect_bom</code>) and <code>max_cell_bytes</code> come from
+<code>xl::OpenOptions</code>; the header row and the degree of parallelism (0 = every processor) follow it.</p>
 <h2 id="bounds-and-abi">Bounds and ABI</h2>
 <p><code>TableView::operator[]</code> is unchecked, like <code>std::vector</code>'s. Use <code>TableView::at(row)</code>, which returns
 <code>std::optional&lt;T&gt;</code> and is <code>nullopt</code> outside <code>[0, size())</code>.</p>
-<p><code>xl::Workbook::open</code>/<code>open_memory</code> first check the loaded library's <code>xl_abi_version()</code> against the
-<code>XL_ABI_VERSION</code> this header was compiled against, and fail with an explanatory <code>xl::Error</code> rather
-than reading native memory through a layout that may have changed. <code>xl::abi_version()</code> exposes the
-loaded revision directly.</p>
+<p>Every entry point that starts native work (<code>xl::Workbook::open</code>, <code>write_columns</code>, <code>write_sheet</code>,
+<code>WriterHandle::open</code>, <code>encrypt_package</code> and <code>aggregate_csv</code>) first checks the loaded library's
+<code>xl_abi_version()</code> against the <code>XL_ABI_VERSION</code> this header was compiled against, and fails with an
+explanatory <code>xl::Error</code> rather than reading native memory through a layout that may have changed.
+<code>xl::abi_version()</code> exposes the loaded revision directly.</p>
 <h2 id="benchmarks">Benchmarks</h2>
 <p>Google Benchmark suite in <code>benchmarks/</code>, opt-in via <code>-DEXCELREADER_BUILD_BENCHMARKS=ON</code>. Measured
 on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz, MSVC 19.51 (Release), Google Benchmark v1.9.1,
@@ -367,17 +398,17 @@ on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz, MSVC 19.51 (Release), Google B
 </thead>
 <tbody>
 <tr>
-<td><code>open</code> (<code>open_memory</code>)</td>
+<td><code>open</code> (from memory)</td>
 <td style="text-align: right;">24.0 µs</td>
 <td style="text-align: right;">1.17 ms</td>
 </tr>
 <tr>
-<td><code>parse_sheet</code> (4 or 6 bound columns)</td>
+<td><code>parse</code> (4 or 6 bound columns)</td>
 <td style="text-align: right;">47.8 µs</td>
 <td style="text-align: right;">24.7 ms</td>
 </tr>
 <tr>
-<td><code>typed_reader</code>, batches of 1,000 / 10,000 rows</td>
+<td><code>parse_batches</code>, batches of 1,000 / 10,000 rows</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">23.8 ms / 23.8 ms</td>
 </tr>
@@ -388,11 +419,11 @@ on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz, MSVC 19.51 (Release), Google B
 </tr>
 </tbody>
 </table>
-<p><code>open</code> here is <code>open_memory</code>, which copies the caller's buffer before returning (the caller may free
+<p><code>open</code> here is the byte-span overload, which copies the caller's buffer before returning (the caller may free
 it afterwards), so it scales with file size: 1.17 ms is mostly copying the 3.7 MB fixture. Opening by
 path reads only the package directory and stays nearly flat — see the Rust suite below.
-<code>parse_sheet</code> scales linearly with rows × columns, at roughly 380 ns/row here. Draining the same
-sheet through the batched typed reader costs the same as one whole-sheet <code>parse_sheet</code> while holding
+<code>parse</code> scales linearly with rows × columns, at roughly 380 ns/row here. Draining the same
+sheet through the batched typed reader costs the same as one whole-sheet <code>parse</code> while holding
 only one batch in memory at a time. <code>infer_schema</code> scales with its sample size, not the file's total
 row count.</p>
 <p>A separate opt-in suite (<code>-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON</code>, gated separately because it
@@ -411,7 +442,7 @@ sides decode every cell into an owned value (<code>std::string</code> for text, 
 </thead>
 <tbody>
 <tr>
-<td>ExcelReader (<code>parse_sheet&lt;FullRow&gt;</code>)</td>
+<td>ExcelReader (<code>parse&lt;FullRow&gt;</code>)</td>
 <td style="text-align: right;">62.9 ms</td>
 </tr>
 <tr>
@@ -449,7 +480,7 @@ extensions MSVC cannot compile, so this target needs GCC or Clang, and it is its
 because the DuckDB comparison above only links under MSVC.</p>
 <p>Two workloads:</p>
 <ul>
-<li><strong>Typed:</strong> <code>parse_sheet&lt;FullRow&gt;</code> against zsv plus the same conversions done by hand (<code>std::string</code>
+<li><strong>Typed:</strong> <code>parse&lt;FullRow&gt;</code> against zsv plus the same conversions done by hand (<code>std::string</code>
 for text, ISO dates, <code>std::from_chars</code> for the integers and doubles), one owned <code>FullRow</code> per row.
 All three produce the same checksum.</li>
 <li><strong>Cells:</strong> every cell's bytes counted. ExcelReader goes through <code>RowCursor</code> (<code>xl_rows_next_view</code>), zsv

@@ -87,7 +87,7 @@
         <article data-uid="">
 <h1 id="enum-columntype">Enum ColumnType</h1>
 
-<p>A column's requested type in a <code>Sheet.parse_typed()</code>/<code>to_arrow()</code> schema.</p>
+<p>A column's requested type in a <code>Sheet.parse()</code>/<code>to_arrow()</code> schema.</p>
 <p>Mirrors XL_T_* in src/ExcelReader.Native/include/excelreader.h — the values are ABI, do not
 renumber them. The buffer layout each one produces is documented on <code>TypedTable.columns</code>.</p>
 <pre><code class="lang-python">class ColumnType(IntEnum)

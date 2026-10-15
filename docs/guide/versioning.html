@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Versioning and compatibility | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Versioning and compatibility | ExcelReader ">
+      
+      
+      <link rel="icon" href="../../favicon.ico">
+      <link rel="stylesheet" href="../../public/docfx.min.css">
+      <link rel="stylesheet" href="../../public/main.css">
+      <meta name="docfx:navrel" content="../../toc.html">
+      <meta name="docfx:tocrel" content="../../toc.html">
+      
+      <meta name="docfx:rel" content="../../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/versioning.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../../index.html">
+            <img id="logo" class="svg" src="../../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="versioning-and-compatibility">Versioning and compatibility</h1>
+
+<p>What a new version can change, and how to write code that keeps compiling and running across minor
+versions. The .NET packages follow <a href="https://semver.org/">Semantic Versioning</a>: a major version (7.0,
+8.0) may break your code, while a minor (7.1) or a patch (7.0.1) does not.</p>
+<h2 id="what-a-minor-version-may-add">What a minor version may add</h2>
+<ul>
+<li>New types, new members on existing types, and new overloads.</li>
+<li>New properties on the options objects, such as
+<a class="xref" href="../../api/ExcelReader.Core.Reader.ExcelReaderOptions.html"><code>ExcelReaderOptions</code></a>. A new option always defaults
+to the previous behavior.</li>
+<li>New members on the interfaces that only this library implements (below).</li>
+<li>New values in the enums (below).</li>
+<li>Bug fixes. A file that used to read wrong, or a written file that Excel refused or altered, can come
+out differently after a fix. Other changes in what an existing call returns or throws wait for a
+major version and are listed in its migration guide.</li>
+</ul>
+<p>A minor version does not remove or rename anything, change an existing signature, or add a
+parameter to an existing method.</p>
+<h2 id="interfaces-you-implement">Interfaces you implement</h2>
+<p>These are the extension points. A minor version never adds a member to them that you would have to
+implement:</p>
+<ul>
+<li><a class="xref" href="../../api/ExcelReader.Core.Parser.IExcelCellConverter-1.html"><code>IExcelCellConverter&lt;T&gt;</code></a> and
+<a class="xref" href="../../api/ExcelReader.Core.Writer.IExcelCellWriter-1.html"><code>IExcelCellWriter&lt;T&gt;</code></a></li>
+<li><a class="xref" href="../../api/ExcelReader.Core.Parser.IExcelRowMap-1.html"><code>IExcelRowMap&lt;T&gt;</code></a> and
+<a class="xref" href="../../api/ExcelReader.Core.Writer.IExcelRecordMap-1.html"><code>IExcelRecordMap&lt;T&gt;</code></a></li>
+<li><a class="xref" href="../../api/ExcelReader.Core.Reader.IRowRecord-1.html"><code>IRowRecord&lt;TSelf&gt;</code></a> and
+<a class="xref" href="../../api/ExcelReader.Core.Reader.IRowAccumulator-2.html"><code>IRowAccumulator&lt;TSelf, TModel&gt;</code></a></li>
+</ul>
+<p>New information reaches them through the types they already receive. For example, a converter gets
+it as a new member of <a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelRowContext.html"><code>ExcelRowContext</code></a>, not as a
+new parameter.</p>
+<h2 id="interfaces-only-the-library-implements">Interfaces only the library implements</h2>
+<p>The reading and writing interfaces describe what every format's workbook, sheet and row writer can
+do. Program against them, but do not implement them:</p>
+<ul>
+<li><a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelWorkbook.html"><code>IExcelWorkbook</code></a>,
+<a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet.html"><code>IExcelSheet</code></a> and
+<a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelSheet-1.html"><code>IExcelSheet&lt;TEnumerator&gt;</code></a></li>
+<li><a class="xref" href="../../api/ExcelReader.Core.Reader.IExcelRowEnumerator.html"><code>IExcelRowEnumerator</code></a></li>
+<li><a class="xref" href="../../api/ExcelReader.Core.Writer.IWorkbookWriter-1.html"><code>IWorkbookWriter&lt;TSheet&gt;</code></a>,
+<a class="xref" href="../../api/ExcelReader.Core.Writer.ISheetWriter-1.html"><code>ISheetWriter&lt;TRow&gt;</code></a>,
+<a class="xref" href="../../api/ExcelReader.Core.Writer.ITableSheetWriter-1.html"><code>ITableSheetWriter&lt;TRow&gt;</code></a> and
+<a class="xref" href="../../api/ExcelReader.Core.Writer.IRowWriter.html"><code>IRowWriter</code></a></li>
+</ul>
+<p>A minor version can add members to them. Each new member comes with a default implementation, so an
+existing implementation still compiles and loads, but it throws <code>NotSupportedException</code> or falls back
+to a slower path for the new member. A feature that only some formats support appears first on the
+concrete types (<code>XlsxSheetWriter</code>, <code>XlsbWorkbook</code>), or as a separate interface the way
+<a class="xref" href="../../api/ExcelReader.Core.Writer.ITableSheetWriter-1.html"><code>ITableSheetWriter&lt;TRow&gt;</code></a> sits beside
+<a class="xref" href="../../api/ExcelReader.Core.Writer.ISheetWriter-1.html"><code>ISheetWriter&lt;TRow&gt;</code></a>.</p>
+<h2 id="enums-that-grow">Enums that grow</h2>
+<p><a class="xref" href="../../api/ExcelReader.Core.Reader.CellType.html"><code>CellType</code></a> and
+<a class="xref" href="../../api/ExcelReader.Core.Reader.Schema.ExcelColumnType.html"><code>ExcelColumnType</code></a> can gain values in a minor
+version, as can their native counterparts <code>XL_CELL_*</code> and <code>XL_T_*</code>. An existing value never changes
+its number or meaning. A <code>switch</code> over them should have a default branch:</p>
+<!-- snippet: versioning-enum-switch -->
+<pre><code class="lang-csharp">string text = cell.Type switch
+{
+    CellType.Empty =&gt; &quot;&quot;,
+    CellType.Number when cell.TryGetDouble(out double number) =&gt; number.ToString(CultureInfo.InvariantCulture),
+    _ =&gt; cell.GetString(),
+};
+</code></pre>
+<h2 id="the-native-library-and-the-bindings">The native library and the bindings</h2>
+<p>The C ABI is versioned on its own by <code>XL_ABI_VERSION</code>, which <code>xl_abi_version()</code> reports. It changes
+only when a signature or a struct layout does: 7.0 kept version 6. Every options struct starts with
+<code>struct_size</code>, so a field added in a later version does not break a caller compiled against an
+earlier header. The Rust, Python and C++ bindings check the ABI version when they load the library.</p>
+<h2 id="how-it-is-enforced">How it is enforced</h2>
+<p>Every pull request packs <code>ExcelReader.NET</code> and <code>ExcelReader.Arrow</code> and compares them with the last
+release through .NET package validation. A removed or changed member fails the build.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/docs/guide/versioning.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

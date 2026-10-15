@@ -87,60 +87,18 @@
         <article data-uid="">
 <h1 id="class-cell">Class Cell</h1>
 
-<p>One cell. <code>value</code> is the raw text as stored, so DATE cells are Excel serial numbers.</p>
-<pre><code class="lang-python">class Cell(NamedTuple)
+<p>One cell. <code>value</code> is the raw text as stored, so DATE cells are Excel serial numbers;
+<code>date1904</code> is the date system of the workbook it came from.</p>
+<p>Unlike the other value types it is not frozen: <code>rows()</code> builds one per cell, and a frozen
+dataclass's <code>__init__</code> costs twice as much.</p>
+<pre><code class="lang-python">class Cell
 </code></pre>
-<h2 id="fields">Fields</h2>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>column</code></td>
-<td>int</td>
-<td></td>
-</tr>
-<tr>
-<td><code>type</code></td>
-<td><a href="CellType.html">CellType</a></td>
-<td></td>
-</tr>
-<tr>
-<td><code>value</code></td>
-<td>str</td>
-<td></td>
-</tr>
-</tbody>
-</table>
 <h2 id="methods">Methods</h2>
 <h3 id="as_date">as_date</h3>
-<pre><code class="lang-python">def as_date(date1904: bool = False) -&gt; datetime.date | None
+<pre><code class="lang-python">def as_date() -&gt; datetime.date | None
 </code></pre>
 <p>Converts a DATE cell's serial value to a date. Returns None for any other cell type.</p>
-<p><code>date1904</code> should come from <code>Workbook.is_date1904</code> for the workbook this cell came from.
-Raises <code>ValueError</code> for a serial outside what Excel can show as a date.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>date1904</code></td>
-<td>bool</td>
-<td><code>False</code></td>
-</tr>
-</tbody>
-</table>
+<p>Raises <code>ValueError</code> for a serial outside what Excel can show as a date.</p>
 <p><strong>Returns</strong> datetime.date | None</p>
 
 </article>

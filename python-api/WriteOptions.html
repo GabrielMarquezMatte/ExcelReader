@@ -95,45 +95,8 @@ xlsx/xlsb only, where it shrinks files with many repeated strings at the cost of
 <p>Validation happens on the native side; an out-of-range value or an invalid sheet name raises
 <code>ExcelReaderError</code>. Fields mirror xl_write_options in
 src/ExcelReader.Native/include/excelreader.h.</p>
-<pre><code class="lang-python">class WriteOptions(NamedTuple)
+<pre><code class="lang-python">class WriteOptions
 </code></pre>
-<h2 id="fields">Fields</h2>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>sheet_name</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>csv_delimiter</code></td>
-<td>int | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>csv_quote</code></td>
-<td>int | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>date1904</code></td>
-<td>bool | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>use_shared_strings</code></td>
-<td>bool | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
 
 </article>
 

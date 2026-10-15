@@ -87,31 +87,10 @@
         <article data-uid="">
 <h1 id="class-decodedrows">Class DecodedRows</h1>
 
-<p>Every row of a sheet, or every row a cursor had left, decoded in one native call.</p>
+<p>Every row of a sheet, decoded in one native call.</p>
 <p>Owns that memory until destruction; the RowView it hands out borrow from it.</p>
 <pre><code class="lang-cpp">class xl::DecodedRows
 </code></pre>
-<h2 id="constructors">Constructors</h2>
-<h3 id="decodedrows">DecodedRows</h3>
-<pre><code class="lang-cpp">DecodedRows(xl_rows_decoded raw)
-</code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>raw</code></td>
-<td>xl_rows_decoded</td>
-<td></td>
-</tr>
-</tbody>
-</table>
 <h2 id="methods">Methods</h2>
 <h3 id="size">size</h3>
 <pre><code class="lang-cpp">size_t size() const

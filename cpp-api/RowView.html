@@ -94,36 +94,7 @@
 <h2 id="constructors">Constructors</h2>
 <h3 id="rowview">RowView</h3>
 <pre><code class="lang-cpp">RowView()=default
-RowView(std::span&lt;const uint8_t&gt; payload, size_t count)
-RowView(const xl_row_cell *cells, size_t count)
 </code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>payload</code></td>
-<td>std::span&lt;const uint8_t&gt;</td>
-<td></td>
-</tr>
-<tr>
-<td><code>count</code></td>
-<td>size_t</td>
-<td></td>
-</tr>
-<tr>
-<td><code>cells</code></td>
-<td>const xl_row_cell *</td>
-<td></td>
-</tr>
-</tbody>
-</table>
 <h2 id="methods">Methods</h2>
 <h3 id="size">size</h3>
 <pre><code class="lang-cpp">size_t size() const

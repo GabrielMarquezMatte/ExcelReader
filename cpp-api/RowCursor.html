@@ -91,46 +91,12 @@
 <p>Owns a native cursor and closes it on destruction. Use one cursor from one thread at a time; any number may be open on one workbook.</p>
 <pre><code class="lang-cpp">class xl::RowCursor
 </code></pre>
-<h2 id="constructors">Constructors</h2>
-<h3 id="rowcursor">RowCursor</h3>
-<pre><code class="lang-cpp">RowCursor(xl_rows *rows) noexcept
-</code></pre>
-<p>Takes ownership of a cursor opened through the C ABI.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>rows</code></td>
-<td>xl_rows *</td>
-<td></td>
-<td>Cursor from <code>xl_rows_open</code>, closed by this object.</td>
-</tr>
-</tbody>
-</table>
 <h2 id="methods">Methods</h2>
 <h3 id="next_row">next_row</h3>
 <pre><code class="lang-cpp">std::expected&lt;RowView, Error&gt; next_row()
 </code></pre>
 <p>Reads the next row.</p>
 <p><strong>Returns</strong> std::expected&lt;<a href="RowView.html">RowView</a>, <a href="Error.html">Error</a>&gt;: A view into memory the cursor owns, valid until the next next_row() or the cursor's destruction. The end of the sheet arrives as an error whose code is <code>XL_EOF</code>.</p>
-<h3 id="read_all_decoded">read_all_decoded</h3>
-<pre><code class="lang-cpp">std::expected&lt;DecodedRows, Error&gt; read_all_decoded()
-</code></pre>
-<p>Every row this cursor has not yet returned, decoded in one native call.</p>
-<p><strong>Returns</strong> std::expected&lt;<a href="DecodedRows.html">DecodedRows</a>, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="handle">handle</h3>
-<pre><code class="lang-cpp">xl_rows * handle() const noexcept
-</code></pre>
-<p>The native cursor, for calling the C ABI directly.</p>
-<p><strong>Returns</strong> xl_rows *: The cursor, still owned by this object.</p>
 
 </article>
 

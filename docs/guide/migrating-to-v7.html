@@ -271,6 +271,366 @@ public bool TryConvert(in Cell cell, in ExcelRowContext context, out decimal val
 <p><code>XL_CELL_FORMULA</code> (5) is no longer produced; formula cells come back with their result's cell type. The constant stays defined in the header and in the bindings.</p>
 <p><code>xl_write_options.date1904</code> now applies to XLSX as well as XLSB and XLS; v6 ignored it for XLSX.</p>
 <p><code>xl_csv_aggregate</code> keeps its signature. Inside, it opens a <a class="xref" href="../../api/ExcelReader.Core.Reader.Csv.CsvReader.html"><code>CsvReader</code></a> with the dialect from the native struct and calls <code>SheetParallel</code>.</p>
+<h3 id="python-one-way-to-open-a-workbook">Python: one way to open a workbook</h3>
+<p><code>open_bytes()</code> is removed. <code>open_workbook()</code> takes the bytes instead, and also accepts a <code>bytearray</code>, a <code>memoryview</code> or an <code>io.BytesIO</code>. It also takes a <code>Source</code> or a readable stream, the inputs that 7.0's release candidates opened with <code>open_source()</code> and <code>open_stream()</code>, which are gone as well. Arguments and keywords are unchanged.</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>open_bytes(data, &quot;xlsx&quot;, password=p)</code></td>
+<td><code>open_workbook(data, &quot;xlsx&quot;, password=p)</code></td>
+</tr>
+<tr>
+<td><code>open_bytes(buffer.getvalue())</code></td>
+<td><code>open_workbook(buffer)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="python-one-way-to-write-a-workbook">Python: one way to write a workbook</h3>
+<p><code>write_workbook_to_bytes()</code>, <code>write_arrow_to_bytes()</code>, <code>write_pandas_to_bytes()</code> and <code>write_polars_to_bytes()</code> are removed. <code>write_workbook()</code>, <code>write_arrow()</code>, <code>write_pandas()</code> and <code>write_polars()</code> take the destination first, a path or a binary object with <code>write()</code>, such as <code>io.BytesIO</code>. A destination without a path needs <code>format</code>. The frame writers now take <code>format</code> and <code>options</code> as keywords instead of passing <code>**kwargs</code> through.</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>payload = write_workbook_to_bytes(table, types, format=&quot;xlsx&quot;)</code></td>
+<td><code>buffer = io.BytesIO()</code><br><code>write_workbook(buffer, table, types, format=&quot;xlsx&quot;)</code><br><code>payload = buffer.getvalue()</code></td>
+</tr>
+<tr>
+<td><code>write_pandas_to_bytes(df, format=&quot;xlsx&quot;)</code></td>
+<td><code>write_pandas(buffer, df, format=&quot;xlsx&quot;)</code></td>
+</tr>
+</tbody>
+</table>
+<p>The streaming writer and the encryption helper follow the same pattern. <code>open_writer_to_memory()</code> and <code>SheetWriter.bytes()</code> are removed: <code>open_writer()</code> takes a binary object with <code>write()</code> and hands it the finished workbook when the writer closes. <code>encrypt_package_bytes()</code> is removed: <code>encrypt_package()</code> takes the package as a path, <code>bytes</code> or <code>io.BytesIO</code>, and the destination as a path or an object with <code>write()</code>.</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>with open_writer_to_memory(&quot;xlsx&quot;) as w:</code><br><code>    ...</code><br><code>    payload = w.bytes()</code></td>
+<td><code>buffer = io.BytesIO()</code><br><code>with open_writer(buffer, &quot;xlsx&quot;) as w:</code><br><code>    ...</code><br><code>payload = buffer.getvalue()</code></td>
+</tr>
+<tr>
+<td><code>secret = encrypt_package_bytes(payload, password)</code></td>
+<td><code>encrypt_package(payload, out, password)</code> with <code>out = io.BytesIO()</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="python-one-shape-per-read">Python: one shape per read</h3>
+<p>A sheet reads as rows (<code>rows()</code>), a typed table (<code>parse_typed()</code>, or <code>iter_parse_typed()</code> in batches), Arrow (<code>to_arrow()</code>, or <code>to_arrow_stream()</code> in batches) or a DataFrame (<code>to_pandas()</code>, <code>to_polars()</code>). <code>write_workbook()</code> takes a <code>TypedTable</code> or any Arrow-compatible table, including pandas and polars DataFrames. <code>SheetWriter</code> writes whole rows only.</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>workbook.sheet_count</code></td>
+<td><code>len(workbook.sheets)</code></td>
+</tr>
+<tr>
+<td><code>workbook.sheet_names</code></td>
+<td><code>[s.name for s in workbook.sheets]</code></td>
+</tr>
+<tr>
+<td><code>workbook.sheet_name_at(i)</code></td>
+<td><code>workbook.sheets[i].name</code></td>
+</tr>
+<tr>
+<td><code>sheet.read_all()</code></td>
+<td><code>list(sheet.rows())</code>, or <code>parse_typed()</code> for speed</td>
+</tr>
+<tr>
+<td><code>sheet.read_all_columnar()</code>, <code>ColumnarSheet</code>, <code>decode_cell()</code></td>
+<td><code>sheet.parse_typed(sheet.infer_schema())</code></td>
+</tr>
+<tr>
+<td><code>sheet.to_arrow()</code> returning a <code>StructArray</code></td>
+<td><code>sheet.to_arrow()</code> returns a <code>pyarrow.RecordBatch</code></td>
+</tr>
+<tr>
+<td><code>sheet.to_record_batch(...)</code></td>
+<td><code>sheet.to_arrow(...)</code></td>
+</tr>
+<tr>
+<td><code>sheet.to_record_batch_reader(...)</code></td>
+<td><code>pyarrow.RecordBatchReader.from_stream(sheet.to_arrow_stream(...))</code></td>
+</tr>
+<tr>
+<td><code>sheet.iter_pandas(...)</code>, <code>sheet.iter_polars(...)</code></td>
+<td>iterate the reader above and convert each batch</td>
+</tr>
+<tr>
+<td><code>write_arrow(dest, batch)</code>, <code>write_pandas(dest, df)</code>, <code>write_polars(dest, df)</code></td>
+<td><code>write_workbook(dest, batch_or_df)</code></td>
+</tr>
+<tr>
+<td><code>writer.start_row()</code>, <code>write_str(v)</code> … <code>write_timestamp(v)</code>, <code>end_row()</code></td>
+<td><code>writer.write_row([...])</code></td>
+</tr>
+<tr>
+<td><code>writer.write_null(ColumnType.X)</code></td>
+<td><code>(None, ColumnType.X)</code> as a value in <code>write_row</code></td>
+</tr>
+<tr>
+<td><code>OpenOptions(csv_max_cell_bytes=n)</code>, <code>OpenOptions(csv_intern_strings=b)</code></td>
+<td><code>OpenOptions(max_cell_bytes=n)</code>, <code>OpenOptions(intern_strings=b)</code>, which now apply to CSV too</td>
+</tr>
+<tr>
+<td><code>from excelreader import ArrowStream</code></td>
+<td><code>from excelreader.arrow_stream import ArrowStream</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="python-value-types-are-not-tuples">Python: value types are not tuples</h3>
+<p><code>Cell</code>, <code>ColumnSpec</code>, <code>OpenOptions</code>, <code>WriteOptions</code> and <code>TypedTable</code> are frozen dataclasses instead of named tuples, so a field added in a later version breaks no caller. They cannot be unpacked or indexed, and fields are passed by name; <code>ColumnSpec</code> keeps <code>type</code> as its one positional argument. <code>open_writer()</code> takes <code>options</code> as a keyword. Python 3.10 or later is required.</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>column, type_, value = cell</code></td>
+<td><code>cell.column</code>, <code>cell.type</code>, <code>cell.value</code></td>
+</tr>
+<tr>
+<td><code>ColumnSpec(ColumnType.I64, &quot;qty&quot;)</code></td>
+<td><code>ColumnSpec(ColumnType.I64, name=&quot;qty&quot;)</code></td>
+</tr>
+<tr>
+<td><code>open_writer(dest, &quot;xlsx&quot;, opts)</code></td>
+<td><code>open_writer(dest, &quot;xlsx&quot;, options=opts)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="c-one-overload-set-per-operation">C++: one overload set per operation</h3>
+<p><code>Workbook::open</code> takes a path, a byte span, a <code>Source</code> or an <code>InputStream</code>. <code>write_columns</code>, <code>write_sheet</code> and <code>WriterHandle::open</code> take a path or a <code>std::vector&lt;std::uint8_t&gt;&amp;</code>. Options are passed as <code>const Options&amp; = {}</code>, and the format moved into <code>OpenOptions::format</code> and <code>WriteOptions::format</code> (<code>XL_FORMAT_AUTO</code> infers it from a path's extension).</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Workbook::open(path, format, &amp;opts)</code></td>
+<td><code>Workbook::open(path, {.format = format, ...})</code></td>
+</tr>
+<tr>
+<td><code>Workbook::open_memory(span, ...)</code>, <code>open_source(...)</code>, <code>open_stream(...)</code></td>
+<td><code>Workbook::open(span | source | stream, opts)</code></td>
+</tr>
+<tr>
+<td><code>sheet_count()</code>, <code>sheet_name_at(i)</code>, <code>sheet_names()</code></td>
+<td><code>sheets()</code>, <code>sheet(i).name()</code></td>
+</tr>
+<tr>
+<td><code>Sheet::read_all_decoded()</code>, <code>RowCursor::read_all_decoded()</code></td>
+<td><code>Sheet::read_all()</code></td>
+</tr>
+<tr>
+<td><code>typed_reader</code> / <code>arrow_stream</code> with <code>batch_size = 0</code></td>
+<td><code>parse_sheet</code> / <code>parse_arrow</code></td>
+</tr>
+<tr>
+<td><code>TableView::to_vector()</code></td>
+<td><code>std::vector(t.begin(), t.end())</code></td>
+</tr>
+<tr>
+<td><code>handle()</code>, <code>from_raw</code>, constructors from C handles, <code>to_c()</code></td>
+<td>removed or private</td>
+</tr>
+<tr>
+<td><code>XlType&lt;T&gt;</code>, <code>FieldBinding</code></td>
+<td><code>xl::detail</code></td>
+</tr>
+<tr>
+<td><code>OpenOptions::password(sv)</code></td>
+<td><code>OpenOptions::password</code> field</td>
+</tr>
+<tr>
+<td><code>OpenOptions::csv_max_cell_bytes</code>, <code>csv_intern_strings</code></td>
+<td><code>max_cell_bytes</code>, <code>intern_strings</code>, which now apply to CSV too</td>
+</tr>
+<tr>
+<td><code>write_columns_to_memory(format, cols, &amp;opts)</code></td>
+<td><code>write_columns(out_vector, cols, {.format = format})</code></td>
+</tr>
+<tr>
+<td><code>write_sheet_to_memory(format, rows, &amp;opts)</code></td>
+<td><code>write_sheet(out_vector, rows, {.format = format})</code></td>
+</tr>
+<tr>
+<td><code>format_from_path(path)</code></td>
+<td>internal</td>
+</tr>
+<tr>
+<td><code>WriterHandle::open_memory(format, &amp;opts)</code> + <code>bytes()</code></td>
+<td><code>WriterHandle::open(out_vector, {.format = format})</code> + <code>finish()</code></td>
+</tr>
+<tr>
+<td><code>aggregate_csv_file</code> / <code>aggregate_csv_memory</code> with <code>CsvParallelOptions</code></td>
+<td><code>aggregate_csv(path | span, seed, opts, header_row, dop)</code></td>
+</tr>
+<tr>
+<td><code>ArrowSchemaGuard</code>, <code>ArrowArrayGuard</code></td>
+<td><code>ArrowTable</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="rust-one-path-per-item-no-raw-ffi">Rust: one path per item, no raw FFI</h3>
+<p>Every public item lives at the crate root. The raw C interface (<code>Xl*</code>, <code>xl_*</code>, <code>XL_*</code>) is private, and integer codes became the enums <code>Format</code>, <code>ColumnType</code> and <code>ErrorKind</code>. <code>OpenOptions</code> and <code>WriteOptions</code> are builder-only and carry the format.</p>
+<table>
+<thead>
+<tr>
+<th>v6</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>excelreader::workbook::*</code>, <code>writer::*</code>, <code>rows::*</code>, …</td>
+<td><code>excelreader::*</code></td>
+</tr>
+<tr>
+<td><code>XL_FORMAT_*</code>, <code>XL_T_*</code>, <code>Error::code()</code></td>
+<td><code>Format</code>, <code>ColumnType</code>, <code>Error::kind()</code></td>
+</tr>
+<tr>
+<td><code>Workbook::open_with(path, fmt, Some(&amp;o))</code></td>
+<td><code>o.format(fmt).open(path)</code></td>
+</tr>
+<tr>
+<td><code>Workbook::open_memory</code> / <code>open_source</code> / <code>open_reader</code></td>
+<td><code>OpenOptions::open_bytes</code> / <code>open_source</code> / <code>open_reader</code></td>
+</tr>
+<tr>
+<td><code>sheet_count</code> / <code>sheet_names</code> / <code>sheet_name_at</code></td>
+<td><code>sheets()</code>, <code>Sheet::name()</code></td>
+</tr>
+<tr>
+<td><code>parse_sheet</code> / <code>parse_sheet_parallel</code></td>
+<td><code>sheet.parse::&lt;T&gt;(header_row, parallelism)</code></td>
+</tr>
+<tr>
+<td><code>parse_arrow</code> / <code>parse_arrow_parallel</code> / <code>parse_arrow_stream</code></td>
+<td><code>sheet.parse_arrow::&lt;T&gt;(…)</code> / <code>sheet.parse_arrow_stream::&lt;T&gt;(…)</code></td>
+</tr>
+<tr>
+<td><code>read_all_decoded</code> / <code>read_all_blob</code></td>
+<td><code>read_all()</code></td>
+</tr>
+<tr>
+<td><code>infer_schema_parse_text(h, n)</code></td>
+<td><code>infer_schema(h, n, true)</code></td>
+</tr>
+<tr>
+<td><code>write_columns(path, fmt, cols, opts)</code></td>
+<td><code>write_columns(path, cols, &amp;opts)</code>, format in <code>WriteOptions</code></td>
+</tr>
+<tr>
+<td><code>write_columns_to_memory</code> / <code>write_sheet_to_memory</code></td>
+<td><code>write_columns_to(writer, …)</code> / <code>write_sheet_to(writer, …)</code></td>
+</tr>
+<tr>
+<td><code>WriterHandle::open</code> / <code>open_with</code></td>
+<td><code>WriterHandle::create(path, &amp;opts)</code></td>
+</tr>
+<tr>
+<td><code>WriterHandle::open_memory</code> + <code>bytes()</code></td>
+<td><code>WriterHandle::new(writer, &amp;opts)</code> + <code>finish()</code></td>
+</tr>
+<tr>
+<td><code>WriterHandle::write_null(t)</code></td>
+<td><code>write_*(None)</code></td>
+</tr>
+<tr>
+<td><code>aggregate_csv_file</code> / <code>aggregate_csv_memory</code>, <code>CsvParallelOptions</code></td>
+<td><code>aggregate_csv(input, &amp;opts, header_row, parallelism, seed)</code></td>
+</tr>
+<tr>
+<td><code>OpenOptions::csv_max_cell_bytes</code> / <code>csv_intern_strings</code></td>
+<td><code>max_cell_bytes</code> / <code>intern_strings</code>, which now apply to CSV too</td>
+</tr>
+<tr>
+<td><code>Column { name, data, validity: None }</code></td>
+<td><code>Column::new(name, data)</code></td>
+</tr>
+<tr>
+<td><code>Column { name, data, validity: Some(bitmap) }</code></td>
+<td><code>Column::new(name, data).validity(bitmap)</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>CellType</code>, <code>ColumnData</code>, <code>CsvInput</code>, <code>SheetVisibility</code>, <code>Column</code> and <code>InferredColumn</code> are <code>#[non_exhaustive]</code>, so a later version can add a variant or a field without a major release. A <code>match</code> on one of the enums needs a <code>_</code> arm, and a <code>Column</code> is built with <code>Column::new</code>.</p>
+<h3 id="one-vocabulary-across-the-bindings">One vocabulary across the bindings</h3>
+<p>Python, C++ and Rust read a sheet with the same four names: <code>parse</code> (typed, whole sheet), <code>parse_batches</code> (typed, in batches), <code>to_arrow</code> (Arrow, whole sheet) and <code>to_arrow_stream</code> (Arrow, in batches). The header row, parallelism and batch size travel together: as keywords in Python, a <code>ReadOptions</code> aggregate in C++ and a <code>ReadOptions</code> builder in Rust.</p>
+<table>
+<thead>
+<tr>
+<th>Binding</th>
+<th>v7 release candidates</th>
+<th>v7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td><code>sheet.parse_typed(schema, 1, 0)</code>, <code>sheet.iter_parse_typed(schema, 1, 500)</code></td>
+<td><code>sheet.parse(schema, parallelism=0)</code>, <code>sheet.parse_batches(schema, batch_size=500)</code>; every read option is keyword-only</td>
+</tr>
+<tr>
+<td>Python</td>
+<td><code>cell.as_date(workbook.is_date1904)</code></td>
+<td><code>cell.as_date()</code>; the cell carries <code>date1904</code></td>
+</tr>
+<tr>
+<td>C++</td>
+<td><code>parse_sheet&lt;T&gt;(s, h, n)</code>, <code>typed_reader&lt;T&gt;(s, h, b)</code></td>
+<td><code>parse&lt;T&gt;(s, {.header_row = h, .parallelism = n})</code>, <code>parse_batches&lt;T&gt;(s, {.batch_size = b})</code></td>
+</tr>
+<tr>
+<td>C++</td>
+<td><code>parse_arrow&lt;T&gt;(...)</code>, <code>arrow_stream&lt;T&gt;(...)</code></td>
+<td><code>to_arrow&lt;T&gt;(s, opts)</code>, <code>to_arrow_stream&lt;T&gt;(s, opts)</code></td>
+</tr>
+<tr>
+<td>Rust</td>
+<td><code>sheet.parse::&lt;T&gt;(h, n)</code>, <code>sheet.typed_chunks::&lt;T&gt;(h, b)</code></td>
+<td><code>sheet.parse::&lt;T&gt;(&amp;ReadOptions::new().header_row(h).parallelism(n))</code>, <code>sheet.parse_batches::&lt;T&gt;(&amp;opts)</code></td>
+</tr>
+<tr>
+<td>Rust</td>
+<td><code>sheet.parse_arrow::&lt;T&gt;(...)</code>, <code>sheet.parse_arrow_stream::&lt;T&gt;(...)</code>, <code>TypedChunks</code>, <code>ArrowChunks</code></td>
+<td><code>sheet.to_arrow::&lt;T&gt;(&amp;opts)</code>, <code>sheet.to_arrow_stream::&lt;T&gt;(&amp;opts)</code>, <code>TypedBatches</code>, <code>ArrowBatches</code></td>
+</tr>
+<tr>
+<td>Rust</td>
+<td><code>Date::new(d)</code>, <code>Time::new(t)</code>, <code>Timestamp::new(ts)</code></td>
+<td><code>Date { days_since_epoch: d }</code>, <code>Time { micros_since_midnight: t }</code>, <code>Timestamp { micros_since_epoch: ts }</code></td>
+</tr>
+</tbody>
+</table>
 
 </article>
 

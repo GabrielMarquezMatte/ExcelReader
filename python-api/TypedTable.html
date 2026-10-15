@@ -87,7 +87,7 @@
         <article data-uid="">
 <h1 id="class-typedtable">Class TypedTable</h1>
 
-<p>The result of <code>Sheet.parse_typed()</code>: one flat buffer per column, already type-converted.</p>
+<p>The result of <code>Sheet.parse()</code>: one flat buffer per column, already type-converted.</p>
 <ul>
 <li><code>names[i]</code> is column <code>i</code>'s name as requested, or its index as a string when the spec resolved
 by index.</li>
@@ -99,40 +99,8 @@ for F64, <code>'i'</code>/int32 for DATE (days since 1970-01-01), <code>'b'</cod
 where bit <code>r</code> (least-significant-bit first) is set when row <code>r</code> holds a real value. Only a
 column whose spec set <code>nullable=True</code> can ever have one.</li>
 </ul>
-<pre><code class="lang-python">class TypedTable(NamedTuple)
+<pre><code class="lang-python">class TypedTable
 </code></pre>
-<h2 id="fields">Fields</h2>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>row_count</code></td>
-<td>int</td>
-<td></td>
-</tr>
-<tr>
-<td><code>names</code></td>
-<td>list[str]</td>
-<td></td>
-</tr>
-<tr>
-<td><code>columns</code></td>
-<td>list[Any]</td>
-<td></td>
-</tr>
-<tr>
-<td><code>validity</code></td>
-<td>list[bytes | None]</td>
-<td></td>
-</tr>
-</tbody>
-</table>
 
 </article>
 
