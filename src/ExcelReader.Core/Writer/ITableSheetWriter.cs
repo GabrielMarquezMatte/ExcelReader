@@ -7,6 +7,7 @@ namespace ExcelReader.Core.Writer
     /// XLSX and XLSB sheet writers.
     /// </summary>
     /// <typeparam name="TRow">The concrete row writer type.</typeparam>
+    /// <remarks>Only ExcelReader implements this interface, and a minor version can add members to it. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</remarks>
     public interface ITableSheetWriter<TRow> : ISheetWriter<TRow>
     {
         /// <summary>

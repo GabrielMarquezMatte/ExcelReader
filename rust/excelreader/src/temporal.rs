@@ -24,29 +24,6 @@ pub struct Timestamp {
     pub micros_since_epoch: i64,
 }
 
-impl Date {
-    #[must_use]
-    pub fn new(days_since_epoch: i32) -> Self {
-        Self { days_since_epoch }
-    }
-}
-
-impl Time {
-    #[must_use]
-    pub fn new(micros_since_midnight: i64) -> Self {
-        Self {
-            micros_since_midnight,
-        }
-    }
-}
-
-impl Timestamp {
-    #[must_use]
-    pub fn new(micros_since_epoch: i64) -> Self {
-        Self { micros_since_epoch }
-    }
-}
-
 /// `chrono` interop. Each conversion is total over every value a real workbook can produce, and
 /// panics only on a value outside `chrono`'s own representable range - which the native converters
 /// cannot emit, since Excel's serial dates are bounded far inside it.
@@ -72,7 +49,9 @@ mod chrono_interop {
 
     impl From<NaiveDate> for Date {
         fn from(value: NaiveDate) -> Self {
-            Date::new(value.num_days_from_ce() - DAYS_CE_TO_UNIX_EPOCH)
+            Date {
+                days_since_epoch: value.num_days_from_ce() - DAYS_CE_TO_UNIX_EPOCH,
+            }
         }
     }
 
@@ -93,7 +72,9 @@ mod chrono_interop {
         fn from(value: NaiveTime) -> Self {
             let secs = i64::from(value.num_seconds_from_midnight());
             let micros = i64::from(value.nanosecond() / NANOS_PER_MICRO);
-            Time::new(secs * MICROS_PER_SEC + micros)
+            Time {
+                micros_since_midnight: secs * MICROS_PER_SEC + micros,
+            }
         }
     }
 
@@ -109,7 +90,9 @@ mod chrono_interop {
 
     impl From<NaiveDateTime> for Timestamp {
         fn from(value: NaiveDateTime) -> Self {
-            Timestamp::new(value.and_utc().timestamp_micros())
+            Timestamp {
+                micros_since_epoch: value.and_utc().timestamp_micros(),
+            }
         }
     }
 }
@@ -120,9 +103,27 @@ mod tests {
 
     #[test]
     fn newtypes_carry_the_wire_value_verbatim() {
-        assert_eq!(Date::new(-1).days_since_epoch, -1);
-        assert_eq!(Time::new(0).micros_since_midnight, 0);
-        assert_eq!(Timestamp::new(i64::MIN).micros_since_epoch, i64::MIN);
+        assert_eq!(
+            Date {
+                days_since_epoch: -1
+            }
+            .days_since_epoch,
+            -1
+        );
+        assert_eq!(
+            Time {
+                micros_since_midnight: 0
+            }
+            .micros_since_midnight,
+            0
+        );
+        assert_eq!(
+            Timestamp {
+                micros_since_epoch: i64::MIN
+            }
+            .micros_since_epoch,
+            i64::MIN
+        );
     }
 
     #[cfg(feature = "chrono")]
@@ -132,35 +133,57 @@ mod tests {
 
         #[test]
         fn date_zero_is_the_unix_epoch() {
-            let date: NaiveDate = Date::new(0).into();
+            let date: NaiveDate = Date {
+                days_since_epoch: 0,
+            }
+            .into();
             assert_eq!(date, NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
         }
 
         #[test]
         fn date_round_trips_through_chrono_in_both_directions() {
             for days in [-25_567, -1, 0, 1, 19_000, 2_958_465 - 25_569] {
-                let date: NaiveDate = Date::new(days).into();
-                assert_eq!(Date::from(date), Date::new(days), "days = {days}");
+                let date: NaiveDate = Date {
+                    days_since_epoch: days,
+                }
+                .into();
+                assert_eq!(
+                    Date::from(date),
+                    Date {
+                        days_since_epoch: days
+                    },
+                    "days = {days}"
+                );
             }
         }
 
         #[test]
         fn time_keeps_microsecond_precision() {
-            let time: NaiveTime = Time::new(13 * 3_600_000_000 + 45 * 60_000_000 + 1).into();
+            let time: NaiveTime = Time {
+                micros_since_midnight: 13 * 3_600_000_000 + 45 * 60_000_000 + 1,
+            }
+            .into();
             assert_eq!(time, NaiveTime::from_hms_micro_opt(13, 45, 0, 1).unwrap());
             assert_eq!(
                 Time::from(time),
-                Time::new(13 * 3_600_000_000 + 45 * 60_000_000 + 1)
+                Time {
+                    micros_since_midnight: 13 * 3_600_000_000 + 45 * 60_000_000 + 1
+                }
             );
         }
 
         #[test]
         fn timestamp_round_trips_across_the_epoch() {
             for micros in [-1_000_000, -1, 0, 1, 1_700_000_000_000_000] {
-                let stamp: NaiveDateTime = Timestamp::new(micros).into();
+                let stamp: NaiveDateTime = Timestamp {
+                    micros_since_epoch: micros,
+                }
+                .into();
                 assert_eq!(
                     Timestamp::from(stamp),
-                    Timestamp::new(micros),
+                    Timestamp {
+                        micros_since_epoch: micros
+                    },
                     "micros = {micros}"
                 );
             }

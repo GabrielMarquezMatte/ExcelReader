@@ -160,3 +160,123 @@ The C ABI is unchanged: no signature moved, and `XL_ABI_VERSION` stays 6. Behavi
 `xl_write_options.date1904` now applies to XLSX as well as XLSB and XLS; v6 ignored it for XLSX.
 
 `xl_csv_aggregate` keeps its signature. Inside, it opens a [`CsvReader`](xref:ExcelReader.Core.Reader.Csv.CsvReader) with the dialect from the native struct and calls `SheetParallel`.
+
+### Python: one way to open a workbook
+
+`open_bytes()` is removed. `open_workbook()` takes the bytes instead, and also accepts a `bytearray`, a `memoryview` or an `io.BytesIO`. It also takes a `Source` or a readable stream, the inputs that 7.0's release candidates opened with `open_source()` and `open_stream()`, which are gone as well. Arguments and keywords are unchanged.
+
+| v6 | v7 |
+|---|---|
+| `open_bytes(data, "xlsx", password=p)` | `open_workbook(data, "xlsx", password=p)` |
+| `open_bytes(buffer.getvalue())` | `open_workbook(buffer)` |
+
+### Python: one way to write a workbook
+
+`write_workbook_to_bytes()`, `write_arrow_to_bytes()`, `write_pandas_to_bytes()` and `write_polars_to_bytes()` are removed. `write_workbook()`, `write_arrow()`, `write_pandas()` and `write_polars()` take the destination first, a path or a binary object with `write()`, such as `io.BytesIO`. A destination without a path needs `format`. The frame writers now take `format` and `options` as keywords instead of passing `**kwargs` through.
+
+| v6 | v7 |
+|---|---|
+| `payload = write_workbook_to_bytes(table, types, format="xlsx")` | `buffer = io.BytesIO()`<br>`write_workbook(buffer, table, types, format="xlsx")`<br>`payload = buffer.getvalue()` |
+| `write_pandas_to_bytes(df, format="xlsx")` | `write_pandas(buffer, df, format="xlsx")` |
+
+The streaming writer and the encryption helper follow the same pattern. `open_writer_to_memory()` and `SheetWriter.bytes()` are removed: `open_writer()` takes a binary object with `write()` and hands it the finished workbook when the writer closes. `encrypt_package_bytes()` is removed: `encrypt_package()` takes the package as a path, `bytes` or `io.BytesIO`, and the destination as a path or an object with `write()`.
+
+| v6 | v7 |
+|---|---|
+| `with open_writer_to_memory("xlsx") as w:`<br>`    ...`<br>`    payload = w.bytes()` | `buffer = io.BytesIO()`<br>`with open_writer(buffer, "xlsx") as w:`<br>`    ...`<br>`payload = buffer.getvalue()` |
+| `secret = encrypt_package_bytes(payload, password)` | `encrypt_package(payload, out, password)` with `out = io.BytesIO()` |
+
+### Python: one shape per read
+
+A sheet reads as rows (`rows()`), a typed table (`parse_typed()`, or `iter_parse_typed()` in batches), Arrow (`to_arrow()`, or `to_arrow_stream()` in batches) or a DataFrame (`to_pandas()`, `to_polars()`). `write_workbook()` takes a `TypedTable` or any Arrow-compatible table, including pandas and polars DataFrames. `SheetWriter` writes whole rows only.
+
+| v6 | v7 |
+|---|---|
+| `workbook.sheet_count` | `len(workbook.sheets)` |
+| `workbook.sheet_names` | `[s.name for s in workbook.sheets]` |
+| `workbook.sheet_name_at(i)` | `workbook.sheets[i].name` |
+| `sheet.read_all()` | `list(sheet.rows())`, or `parse_typed()` for speed |
+| `sheet.read_all_columnar()`, `ColumnarSheet`, `decode_cell()` | `sheet.parse_typed(sheet.infer_schema())` |
+| `sheet.to_arrow()` returning a `StructArray` | `sheet.to_arrow()` returns a `pyarrow.RecordBatch` |
+| `sheet.to_record_batch(...)` | `sheet.to_arrow(...)` |
+| `sheet.to_record_batch_reader(...)` | `pyarrow.RecordBatchReader.from_stream(sheet.to_arrow_stream(...))` |
+| `sheet.iter_pandas(...)`, `sheet.iter_polars(...)` | iterate the reader above and convert each batch |
+| `write_arrow(dest, batch)`, `write_pandas(dest, df)`, `write_polars(dest, df)` | `write_workbook(dest, batch_or_df)` |
+| `writer.start_row()`, `write_str(v)` … `write_timestamp(v)`, `end_row()` | `writer.write_row([...])` |
+| `writer.write_null(ColumnType.X)` | `(None, ColumnType.X)` as a value in `write_row` |
+| `OpenOptions(csv_max_cell_bytes=n)`, `OpenOptions(csv_intern_strings=b)` | `OpenOptions(max_cell_bytes=n)`, `OpenOptions(intern_strings=b)`, which now apply to CSV too |
+| `from excelreader import ArrowStream` | `from excelreader.arrow_stream import ArrowStream` |
+
+### Python: value types are not tuples
+
+`Cell`, `ColumnSpec`, `OpenOptions`, `WriteOptions` and `TypedTable` are frozen dataclasses instead of named tuples, so a field added in a later version breaks no caller. They cannot be unpacked or indexed, and fields are passed by name; `ColumnSpec` keeps `type` as its one positional argument. `open_writer()` takes `options` as a keyword. Python 3.10 or later is required.
+
+| v6 | v7 |
+|---|---|
+| `column, type_, value = cell` | `cell.column`, `cell.type`, `cell.value` |
+| `ColumnSpec(ColumnType.I64, "qty")` | `ColumnSpec(ColumnType.I64, name="qty")` |
+| `open_writer(dest, "xlsx", opts)` | `open_writer(dest, "xlsx", options=opts)` |
+
+### C++: one overload set per operation
+
+`Workbook::open` takes a path, a byte span, a `Source` or an `InputStream`. `write_columns`, `write_sheet` and `WriterHandle::open` take a path or a `std::vector<std::uint8_t>&`. Options are passed as `const Options& = {}`, and the format moved into `OpenOptions::format` and `WriteOptions::format` (`XL_FORMAT_AUTO` infers it from a path's extension).
+
+| v6 | v7 |
+|---|---|
+| `Workbook::open(path, format, &opts)` | `Workbook::open(path, {.format = format, ...})` |
+| `Workbook::open_memory(span, ...)`, `open_source(...)`, `open_stream(...)` | `Workbook::open(span | source | stream, opts)` |
+| `sheet_count()`, `sheet_name_at(i)`, `sheet_names()` | `sheets()`, `sheet(i).name()` |
+| `Sheet::read_all_decoded()`, `RowCursor::read_all_decoded()` | `Sheet::read_all()` |
+| `typed_reader` / `arrow_stream` with `batch_size = 0` | `parse_sheet` / `parse_arrow` |
+| `TableView::to_vector()` | `std::vector(t.begin(), t.end())` |
+| `handle()`, `from_raw`, constructors from C handles, `to_c()` | removed or private |
+| `XlType<T>`, `FieldBinding` | `xl::detail` |
+| `OpenOptions::password(sv)` | `OpenOptions::password` field |
+| `OpenOptions::csv_max_cell_bytes`, `csv_intern_strings` | `max_cell_bytes`, `intern_strings`, which now apply to CSV too |
+| `write_columns_to_memory(format, cols, &opts)` | `write_columns(out_vector, cols, {.format = format})` |
+| `write_sheet_to_memory(format, rows, &opts)` | `write_sheet(out_vector, rows, {.format = format})` |
+| `format_from_path(path)` | internal |
+| `WriterHandle::open_memory(format, &opts)` + `bytes()` | `WriterHandle::open(out_vector, {.format = format})` + `finish()` |
+| `aggregate_csv_file` / `aggregate_csv_memory` with `CsvParallelOptions` | `aggregate_csv(path | span, seed, opts, header_row, dop)` |
+| `ArrowSchemaGuard`, `ArrowArrayGuard` | `ArrowTable` |
+
+### Rust: one path per item, no raw FFI
+
+Every public item lives at the crate root. The raw C interface (`Xl*`, `xl_*`, `XL_*`) is private, and integer codes became the enums `Format`, `ColumnType` and `ErrorKind`. `OpenOptions` and `WriteOptions` are builder-only and carry the format.
+
+| v6 | v7 |
+|---|---|
+| `excelreader::workbook::*`, `writer::*`, `rows::*`, … | `excelreader::*` |
+| `XL_FORMAT_*`, `XL_T_*`, `Error::code()` | `Format`, `ColumnType`, `Error::kind()` |
+| `Workbook::open_with(path, fmt, Some(&o))` | `o.format(fmt).open(path)` |
+| `Workbook::open_memory` / `open_source` / `open_reader` | `OpenOptions::open_bytes` / `open_source` / `open_reader` |
+| `sheet_count` / `sheet_names` / `sheet_name_at` | `sheets()`, `Sheet::name()` |
+| `parse_sheet` / `parse_sheet_parallel` | `sheet.parse::<T>(header_row, parallelism)` |
+| `parse_arrow` / `parse_arrow_parallel` / `parse_arrow_stream` | `sheet.parse_arrow::<T>(…)` / `sheet.parse_arrow_stream::<T>(…)` |
+| `read_all_decoded` / `read_all_blob` | `read_all()` |
+| `infer_schema_parse_text(h, n)` | `infer_schema(h, n, true)` |
+| `write_columns(path, fmt, cols, opts)` | `write_columns(path, cols, &opts)`, format in `WriteOptions` |
+| `write_columns_to_memory` / `write_sheet_to_memory` | `write_columns_to(writer, …)` / `write_sheet_to(writer, …)` |
+| `WriterHandle::open` / `open_with` | `WriterHandle::create(path, &opts)` |
+| `WriterHandle::open_memory` + `bytes()` | `WriterHandle::new(writer, &opts)` + `finish()` |
+| `WriterHandle::write_null(t)` | `write_*(None)` |
+| `aggregate_csv_file` / `aggregate_csv_memory`, `CsvParallelOptions` | `aggregate_csv(input, &opts, header_row, parallelism, seed)` |
+| `OpenOptions::csv_max_cell_bytes` / `csv_intern_strings` | `max_cell_bytes` / `intern_strings`, which now apply to CSV too |
+| `Column { name, data, validity: None }` | `Column::new(name, data)` |
+| `Column { name, data, validity: Some(bitmap) }` | `Column::new(name, data).validity(bitmap)` |
+
+`CellType`, `ColumnData`, `CsvInput`, `SheetVisibility`, `Column` and `InferredColumn` are `#[non_exhaustive]`, so a later version can add a variant or a field without a major release. A `match` on one of the enums needs a `_` arm, and a `Column` is built with `Column::new`.
+
+### One vocabulary across the bindings
+
+Python, C++ and Rust read a sheet with the same four names: `parse` (typed, whole sheet), `parse_batches` (typed, in batches), `to_arrow` (Arrow, whole sheet) and `to_arrow_stream` (Arrow, in batches). The header row, parallelism and batch size travel together: as keywords in Python, a `ReadOptions` aggregate in C++ and a `ReadOptions` builder in Rust.
+
+| Binding | v7 release candidates | v7 |
+|---|---|---|
+| Python | `sheet.parse_typed(schema, 1, 0)`, `sheet.iter_parse_typed(schema, 1, 500)` | `sheet.parse(schema, parallelism=0)`, `sheet.parse_batches(schema, batch_size=500)`; every read option is keyword-only |
+| Python | `cell.as_date(workbook.is_date1904)` | `cell.as_date()`; the cell carries `date1904` |
+| C++ | `parse_sheet<T>(s, h, n)`, `typed_reader<T>(s, h, b)` | `parse<T>(s, {.header_row = h, .parallelism = n})`, `parse_batches<T>(s, {.batch_size = b})` |
+| C++ | `parse_arrow<T>(...)`, `arrow_stream<T>(...)` | `to_arrow<T>(s, opts)`, `to_arrow_stream<T>(s, opts)` |
+| Rust | `sheet.parse::<T>(h, n)`, `sheet.typed_chunks::<T>(h, b)` | `sheet.parse::<T>(&ReadOptions::new().header_row(h).parallelism(n))`, `sheet.parse_batches::<T>(&opts)` |
+| Rust | `sheet.parse_arrow::<T>(...)`, `sheet.parse_arrow_stream::<T>(...)`, `TypedChunks`, `ArrowChunks` | `sheet.to_arrow::<T>(&opts)`, `sheet.to_arrow_stream::<T>(&opts)`, `TypedBatches`, `ArrowBatches` |
+| Rust | `Date::new(d)`, `Time::new(t)`, `Timestamp::new(ts)` | `Date { days_since_epoch: d }`, `Time { micros_since_midnight: t }`, `Timestamp { micros_since_epoch: ts }` |

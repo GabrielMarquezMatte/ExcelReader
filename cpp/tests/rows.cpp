@@ -86,7 +86,7 @@ int main()
             out << "a\n" << std::string(200000, 'x') << "\n";
         }
 
-        auto workbook = xl::Workbook::open(path.string(), XL_FORMAT_CSV);
+        auto workbook = xl::Workbook::open(path.string(), {.format = XL_FORMAT_CSV});
         check(workbook.has_value(), "open the oversized CSV");
         if (workbook.has_value())
         {
@@ -107,17 +107,25 @@ int main()
                 check((*big)[0].type == xl::CellType::String, "the oversized cell is a string");
             }
         }
+
+        auto limited = xl::Workbook::open(path.string(), {.format = XL_FORMAT_CSV, .max_cell_bytes = 1000});
+        check(limited.has_value(), "open the oversized CSV under a cell limit");
+        if (limited.has_value())
+        {
+            auto all = limited->sheet(0).read_all();
+            check(!all.has_value(), "max_cell_bytes bounds a CSV cell too");
+        }
         std::error_code ignored;
         std::filesystem::remove(path, ignored);
     }
 
     {
         auto workbook = xl::Workbook::open(fixture());
-        check(workbook.has_value(), "open for read_all_decoded");
+        check(workbook.has_value(), "open for read_all");
         if (workbook.has_value())
         {
-            auto decoded = workbook->sheet(0).read_all_decoded();
-            check(decoded.has_value(), "read_all_decoded succeeds");
+            auto decoded = workbook->sheet(0).read_all();
+            check(decoded.has_value(), "read_all succeeds");
             if (decoded.has_value())
             {
                 check(decoded->size() == rows.size(), "same row count as the cursor");
@@ -148,7 +156,7 @@ int main()
             while (cursor.has_value() && cursor->next_row().has_value())
             {
             }
-            auto decoded = workbook->sheet(0).read_all_decoded();
+            auto decoded = workbook->sheet(0).read_all();
             check(decoded.has_value(), "a read after another cursor drained is not an error");
             check(decoded.has_value() && decoded->size() == rows.size(), "and it still reads every row, from the start");
         }
@@ -158,7 +166,7 @@ int main()
         auto workbook = xl::Workbook::open(fixture());
         if (workbook.has_value())
         {
-            auto decoded = workbook->sheet(0).read_all_decoded();
+            auto decoded = workbook->sheet(0).read_all();
             check(decoded.has_value(), "open a set to move");
             if (decoded.has_value())
             {

@@ -19,6 +19,7 @@ namespace ExcelReader.Core.Reader
     /// Disposing the workbook closes it to new sheets and enumerators. Its file, stream and pooled
     /// buffers are released when the last enumerator obtained from it is disposed.
     /// </para>
+    /// <para>Only ExcelReader implements this interface, and a minor version can add members to it. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</para>
     /// </remarks>
     public interface IExcelWorkbook : IDisposable, IAsyncDisposable
     {
@@ -66,6 +67,7 @@ namespace ExcelReader.Core.Reader
     /// <see cref="IExcelRowEnumerator"/>.
     /// </summary>
     /// <typeparam name="TEnumerator">The concrete row enumerator type this sheet produces.</typeparam>
+    /// <remarks>Only ExcelReader implements this interface, and a minor version can add members to it. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</remarks>
     public interface IExcelSheet<TEnumerator>
         where TEnumerator : IExcelRowEnumerator
     {
@@ -86,7 +88,10 @@ namespace ExcelReader.Core.Reader
     }
 
     /// <summary>A sheet of an <see cref="IExcelWorkbook"/>: its position, name and visibility, and its rows.</summary>
-    /// <remarks>A sheet holds no resources. Every call to <see cref="IExcelSheet{TEnumerator}.GetEnumerator"/> starts an independent read.</remarks>
+    /// <remarks>
+    /// A sheet holds no resources. Every call to <see cref="IExcelSheet{TEnumerator}.GetEnumerator"/> starts an independent read.
+    /// <para>Only ExcelReader implements this interface, and a minor version can add members to it. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</para>
+    /// </remarks>
     public interface IExcelSheet : IExcelSheet<IExcelRowEnumerator>
     {
         /// <summary>Gets the sheet's zero-based position in its workbook.</summary>

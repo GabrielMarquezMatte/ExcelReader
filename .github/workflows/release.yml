@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest, macos-15-intel]
 
     steps:
       - name: Checkout
@@ -92,7 +92,7 @@ jobs:
             macOS)   src=ExcelReader.Native.dylib; os=osx;  ext=dylib ;;
             *)       src=ExcelReader.Native.so;   os=linux; ext=so ;;
           esac
-          arch=$([ "$(uname -m 2>/dev/null || echo x64)" = "arm64" ] && echo arm64 || echo x64)
+          case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; *) arch=x64 ;; esac
           mkdir -p release-assets
           cp "python/src/excelreader/_lib/${src}" "release-assets/excelreader-native-${os}-${arch}.${ext}"
 
@@ -116,7 +116,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest, macos-15-intel]
 
     steps:
       - name: Checkout
@@ -133,7 +133,7 @@ jobs:
         id: rid
         shell: bash
         run: |
-          arch=$([ "$(uname -m 2>/dev/null || echo x64)" = "arm64" ] && echo arm64 || echo x64)
+          case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; *) arch=x64 ;; esac
           case "${{ runner.os }}" in
             Windows) os=win ;;
             macOS)   os=osx ;;
@@ -175,7 +175,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest, macos-15-intel]
 
     steps:
       - name: Checkout
@@ -209,6 +209,9 @@ jobs:
           pip install build
           python -m build --wheel python/ --outdir dist/
 
+      - name: Check the wheel installs here
+        run: python python/scripts/check_wheel_tag.py dist
+
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v7
         with:
@@ -216,9 +219,48 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
+  musl:
+    name: Build musl library and wheel (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - { arch: x64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set package version
+        run: sed -i "s/^version = \".*\"/version = \"${{ needs.build.outputs.version }}\"/" python/pyproject.toml
+
+      - name: Build, test and wheel in Alpine
+        run: sh python/scripts/build_musl_wheel.sh
+
+      - name: Rename asset for this platform
+        run: |
+          mkdir -p release-assets
+          cp python/src/excelreader/_lib/ExcelReader.Native.so "release-assets/excelreader-native-linux-musl-${{ matrix.arch }}.so"
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-native-musl-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel-musl-${{ matrix.arch }}
+          path: dist/*.whl
+          if-no-files-found: error
+
   publish:
     name: Publish to NuGet & GitHub Release
-    needs: [build, native, cli, python]
+    needs: [build, native, cli, python, musl]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -4,7 +4,7 @@
 
 int main()
 {
-    auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSX, nullptr);
+    auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, {.format = XL_FORMAT_XLSX});
     if (!workbook.has_value())
     {
         std::fprintf(stderr, "FAIL: the installed package could not open %s\n", EXCELREADER_FIXTURE_PATH);
