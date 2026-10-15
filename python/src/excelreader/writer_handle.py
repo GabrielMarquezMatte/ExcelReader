@@ -160,6 +160,7 @@ class SheetWriter:
 def open_writer(
     destination: Union[str, os.PathLike, IO[bytes]],
     format: str | None = None,
+    *,
     options: WriteOptions | None = None,
 ) -> SheetWriter:
     """Opens a streaming writer for `destination`: a path, truncating any existing file, or a binary

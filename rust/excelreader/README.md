@@ -148,7 +148,7 @@ CFB container - AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataInteg
 use excelreader::{encrypt_package, write_columns, WriteOptions};
 # use excelreader::{Column, ColumnData};
 # let ids = [1i64, 2, 3];
-# let columns = [Column { name: Some("id"), data: ColumnData::I64(&ids), validity: None }];
+# let columns = [Column::new(Some("id"), ColumnData::I64(&ids))];
 
 write_columns("plain.xlsx", &columns, &WriteOptions::new())?;
 encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")?;
@@ -276,11 +276,7 @@ checks:
 use excelreader::{write_columns, Column, ColumnData, WriteOptions};
 
 let ids = [1i64, 2, 3];
-let columns = [Column {
-    name: Some("id"),
-    data: ColumnData::I64(&ids),
-    validity: None,
-}];
+let columns = [Column::new(Some("id"), ColumnData::I64(&ids))];
 write_columns("out.xlsx", &columns, &WriteOptions::new())?;
 # Ok::<(), excelreader::Error>(())
 ```

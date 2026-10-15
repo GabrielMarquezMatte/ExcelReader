@@ -62,6 +62,7 @@ pub trait CsvAccumulator: Send {
 /// What [`aggregate_csv`] reads: a CSV file, or CSV bytes already in memory. A `&str` converts to a
 /// path, never to CSV text - pass `text.as_bytes()` for that.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub enum CsvInput<'a> {
     Path(&'a Path),
     Bytes(&'a [u8]),

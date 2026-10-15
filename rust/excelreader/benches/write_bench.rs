@@ -82,11 +82,7 @@ fn strings<'a>(values: impl Iterator<Item = &'a str>) -> (Vec<i32>, Vec<u8>) {
 }
 
 fn str_column<'a>(name: &'a str, (offsets, data): &'a (Vec<i32>, Vec<u8>)) -> Column<'a> {
-    Column {
-        name: Some(name),
-        data: ColumnData::Str { offsets, data },
-        validity: None,
-    }
+    Column::new(Some(name), ColumnData::Str { offsets, data })
 }
 
 fn benchmark_write(criterion: &mut Criterion) {
@@ -98,11 +94,7 @@ fn benchmark_write(criterion: &mut Criterion) {
     let order_id: Vec<i64> = rows.iter().map(|r| r.order_id).collect();
     let units_sold: Vec<i64> = rows.iter().map(|r| r.units_sold).collect();
     let total_revenue: Vec<f64> = rows.iter().map(|r| r.total_revenue).collect();
-    let column = |name, data| Column {
-        name: Some(name),
-        data,
-        validity: None,
-    };
+    let column = |name, data| Column::new(Some(name), data);
     let borrowed = [
         str_column("Region", &region),
         str_column("Country", &country),

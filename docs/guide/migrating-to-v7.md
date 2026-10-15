@@ -207,6 +207,16 @@ A sheet reads as rows (`rows()`), a typed table (`parse_typed()`, or `iter_parse
 | `OpenOptions(csv_max_cell_bytes=n)`, `OpenOptions(csv_intern_strings=b)` | `OpenOptions(max_cell_bytes=n)`, `OpenOptions(intern_strings=b)`, which now apply to CSV too |
 | `from excelreader import ArrowStream` | `from excelreader.arrow_stream import ArrowStream` |
 
+### Python: value types are not tuples
+
+`Cell`, `ColumnSpec`, `OpenOptions`, `WriteOptions` and `TypedTable` are frozen dataclasses instead of named tuples, so a field added in a later version breaks no caller. They cannot be unpacked or indexed, and fields are passed by name; `ColumnSpec` keeps `type` as its one positional argument. `open_writer()` takes `options` as a keyword. Python 3.10 or later is required.
+
+| v6 | v7 |
+|---|---|
+| `column, type_, value = cell` | `cell.column`, `cell.type`, `cell.value` |
+| `ColumnSpec(ColumnType.I64, "qty")` | `ColumnSpec(ColumnType.I64, name="qty")` |
+| `open_writer(dest, "xlsx", opts)` | `open_writer(dest, "xlsx", options=opts)` |
+
 ### C++: one overload set per operation
 
 `Workbook::open` takes a path, a byte span, a `Source` or an `InputStream`. `write_columns`, `write_sheet` and `WriterHandle::open` take a path or a `std::vector<std::uint8_t>&`. Options are passed as `const Options& = {}`, and the format moved into `OpenOptions::format` and `WriteOptions::format` (`XL_FORMAT_AUTO` infers it from a path's extension).
@@ -252,6 +262,10 @@ Every public item lives at the crate root. The raw C interface (`Xl*`, `xl_*`, `
 | `WriterHandle::write_null(t)` | `write_*(None)` |
 | `aggregate_csv_file` / `aggregate_csv_memory`, `CsvParallelOptions` | `aggregate_csv(input, &opts, header_row, parallelism, seed)` |
 | `OpenOptions::csv_max_cell_bytes` / `csv_intern_strings` | `max_cell_bytes` / `intern_strings`, which now apply to CSV too |
+| `Column { name, data, validity: None }` | `Column::new(name, data)` |
+| `Column { name, data, validity: Some(bitmap) }` | `Column::new(name, data).validity(bitmap)` |
+
+`CellType`, `ColumnData`, `CsvInput`, `SheetVisibility`, `Column` and `InferredColumn` are `#[non_exhaustive]`, so a later version can add a variant or a field without a major release. A `match` on one of the enums needs a `_` arm, and a `Column` is built with `Column::new`.
 
 ### One vocabulary across the bindings
 

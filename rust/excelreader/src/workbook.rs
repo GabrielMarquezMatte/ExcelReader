@@ -284,6 +284,7 @@ impl OpenOptions {
 
 /// How a sheet is shown in the application's tab bar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SheetVisibility {
     Visible,
     Hidden,
@@ -532,6 +533,7 @@ unsafe fn copy_inferred(schema: &XlInferredSchema) -> Result<Vec<InferredColumn>
 
 /// One column guessed by [`Sheet::infer_schema`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct InferredColumn {
     /// Header text, or `None` when the column must be resolved by [`index`](Self::index) instead.
     pub name: Option<String>,

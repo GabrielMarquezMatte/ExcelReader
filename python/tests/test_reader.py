@@ -735,7 +735,7 @@ def test_infer_schema_without_parse_text_keeps_csv_columns_as_strings():
 def test_as_date_follows_excels_calendar(serial, date1904, expected):
     from datetime import date
 
-    assert Cell(0, CellType.DATE, serial, date1904).as_date() == date(*expected)
+    assert Cell(column=0, type=CellType.DATE, value=serial, date1904=date1904).as_date() == date(*expected)
 
 
 @pytest.mark.parametrize("date1904", [False, True])
@@ -746,7 +746,7 @@ def test_a_cell_read_from_a_workbook_knows_its_date_system(date1904):
     from excelreader import WriteOptions, open_writer
 
     buffer = io.BytesIO()
-    with open_writer(buffer, "xlsx", WriteOptions(date1904=date1904)) as writer:
+    with open_writer(buffer, "xlsx", options=WriteOptions(date1904=date1904)) as writer:
         writer.start_sheet("Data")
         writer.write_row([datetime.date(2023, 3, 15)])
         writer.end_sheet()
@@ -761,7 +761,7 @@ def test_a_cell_read_from_a_workbook_knows_its_date_system(date1904):
 @pytest.mark.parametrize("serial", ["-1", "2958466", "1e400", "nan"])
 def test_as_date_rejects_a_serial_excel_cannot_show(serial):
     with pytest.raises(ValueError, match="not an Excel date serial"):
-        Cell(0, CellType.DATE, serial).as_date()
+        Cell(column=0, type=CellType.DATE, value=serial).as_date()
 
 
 @pytest.mark.parametrize(
@@ -780,3 +780,22 @@ def test_parse_typed_timestamp_text_does_not_depend_on_the_local_time_zone(tmp_p
         table = workbook.sheets[0].parse([ColumnSpec(ColumnType.TIMESTAMP, name="at")])
 
     assert list(table.columns[0]) == [expected_micros]
+
+
+def test_value_types_take_keywords_so_a_new_field_never_shifts_a_caller():
+    import io
+
+    from excelreader import WriteOptions, open_writer
+
+    with pytest.raises(TypeError):
+        OpenOptions(True)
+    with pytest.raises(TypeError):
+        WriteOptions("Sheet")
+    with pytest.raises(TypeError):
+        ColumnSpec(ColumnType.I64, "qty")
+    with pytest.raises(TypeError):
+        Cell(0, CellType.EMPTY, "")
+    with pytest.raises(TypeError):
+        tuple(Cell(column=0, type=CellType.EMPTY, value=""))
+    with pytest.raises(TypeError):
+        open_writer(io.BytesIO(), "xlsx", WriteOptions())

@@ -38,11 +38,7 @@ fn opens_encrypted_workbook_with_password() {
 #[test]
 fn encrypt_package_produces_a_file_openable_with_the_same_password() {
     let inteiros = [1i64, 2];
-    let columns = [Column {
-        name: Some("inteiro"),
-        data: ColumnData::I64(&inteiros),
-        validity: None,
-    }];
+    let columns = [Column::new(Some("inteiro"), ColumnData::I64(&inteiros))];
 
     let plain_path = temp_path("encrypt-plain.xlsx");
     let encrypted_path = temp_path("encrypt-cipher.xlsx");
@@ -66,11 +62,7 @@ fn encrypt_package_produces_a_file_openable_with_the_same_password() {
 #[test]
 fn encrypt_package_rejects_an_empty_password() {
     let inteiros = [1i64];
-    let columns = [Column {
-        name: Some("inteiro"),
-        data: ColumnData::I64(&inteiros),
-        validity: None,
-    }];
+    let columns = [Column::new(Some("inteiro"), ColumnData::I64(&inteiros))];
 
     let plain_path = temp_path("encrypt-empty-pw.xlsx");
     write_columns(&plain_path, &columns, &WriteOptions::new()).expect("write_columns must succeed");
