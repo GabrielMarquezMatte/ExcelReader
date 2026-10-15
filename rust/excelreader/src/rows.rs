@@ -9,6 +9,7 @@ use crate::{Error, ErrorKind};
 /// The kind of a cell, mirroring `XL_CELL_*` in the C ABI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
+#[non_exhaustive]
 pub enum CellType {
     Empty = XL_CELL_EMPTY,
     String = XL_CELL_STRING,

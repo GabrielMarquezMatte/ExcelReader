@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import KW_ONLY, dataclass
 from enum import IntEnum
-from typing import Any, NamedTuple
+from typing import Any
 
 from excelreader import _native
 
@@ -35,7 +36,8 @@ class SheetVisibility(IntEnum):
 _MAX_SERIAL = 2_958_466
 
 
-class Cell(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Cell:
     """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers;
     `date1904` is the date system of the workbook it came from."""
 
@@ -80,7 +82,8 @@ class ColumnType(IntEnum):
     TIMESTAMP = 6
 
 
-class ColumnSpec(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class ColumnSpec:
     """One column to read, and the type to convert it to.
 
     Leave `name` as None to resolve the column by `index` instead. `nullable` decides what a failed
@@ -89,12 +92,14 @@ class ColumnSpec(NamedTuple):
     """
 
     type: ColumnType
+    _: KW_ONLY
     name: str | None = None
     index: int = 0
     nullable: bool = False
 
 
-class OpenOptions(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class OpenOptions:
     """Reader limits and dialect settings for `open_workbook()`.
 
     Every field is None for "use the library default", so you only set what you actually want to
@@ -138,7 +143,8 @@ class OpenOptions(NamedTuple):
     verify_zip_checksums: bool | None = None
 
 
-class WriteOptions(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WriteOptions:
     """Sheet name and dialect settings for `write_workbook()`.
 
     Every field is None for "use the library default", the same convention `OpenOptions` uses.
@@ -200,7 +206,8 @@ class StringColumn:
         return f"StringColumn({len(self)} rows, {len(self._data)} bytes)"
 
 
-class TypedTable(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TypedTable:
     """The result of `Sheet.parse()`: one flat buffer per column, already type-converted.
 
     - `names[i]` is column `i`'s name as requested, or its index as a string when the spec resolved

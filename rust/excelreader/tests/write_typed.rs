@@ -58,44 +58,19 @@ fn write_columns_round_trips_every_column_type() {
     let instantes = [1_767_225_600_000_000i64, 1_767_312_000_000_000];
 
     let columns = [
-        Column {
-            name: Some("texto"),
-            data: ColumnData::Str {
+        Column::new(
+            Some("texto"),
+            ColumnData::Str {
                 offsets: &offsets,
                 data: blob,
             },
-            validity: None,
-        },
-        Column {
-            name: Some("inteiro"),
-            data: ColumnData::I64(&inteiros),
-            validity: None,
-        },
-        Column {
-            name: Some("numero"),
-            data: ColumnData::F64(&numeros),
-            validity: None,
-        },
-        Column {
-            name: Some("ativo"),
-            data: ColumnData::Bool(&ativos),
-            validity: None,
-        },
-        Column {
-            name: Some("data"),
-            data: ColumnData::Date(&datas),
-            validity: None,
-        },
-        Column {
-            name: Some("hora"),
-            data: ColumnData::Time(&horas),
-            validity: None,
-        },
-        Column {
-            name: Some("instante"),
-            data: ColumnData::Timestamp(&instantes),
-            validity: None,
-        },
+        ),
+        Column::new(Some("inteiro"), ColumnData::I64(&inteiros)),
+        Column::new(Some("numero"), ColumnData::F64(&numeros)),
+        Column::new(Some("ativo"), ColumnData::Bool(&ativos)),
+        Column::new(Some("data"), ColumnData::Date(&datas)),
+        Column::new(Some("hora"), ColumnData::Time(&horas)),
+        Column::new(Some("instante"), ColumnData::Timestamp(&instantes)),
     ];
 
     let path = temp_path("columns.xlsx");
@@ -148,19 +123,14 @@ fn write_columns_to_a_writer_round_trips() {
     let inteiros = [1i64, 2];
 
     let columns = [
-        Column {
-            name: Some("texto"),
-            data: ColumnData::Str {
+        Column::new(
+            Some("texto"),
+            ColumnData::Str {
                 offsets: &offsets,
                 data: blob,
             },
-            validity: None,
-        },
-        Column {
-            name: Some("inteiro"),
-            data: ColumnData::I64(&inteiros),
-            validity: None,
-        },
+        ),
+        Column::new(Some("inteiro"), ColumnData::I64(&inteiros)),
     ];
 
     let mut bytes = Vec::new();
@@ -190,11 +160,7 @@ fn write_columns_to_a_writer_round_trips() {
 #[test]
 fn writing_to_a_writer_needs_an_explicit_format() {
     let values = [1i64];
-    let columns = [Column {
-        name: Some("a"),
-        data: ColumnData::I64(&values),
-        validity: None,
-    }];
+    let columns = [Column::new(Some("a"), ColumnData::I64(&values))];
     let error = write_columns_to(Vec::new(), &columns, &WriteOptions::new())
         .expect_err("a writer has no extension to infer a format from");
     assert_eq!(error.kind(), ErrorKind::InvalidArgument);
@@ -209,24 +175,15 @@ fn write_columns_writes_nulls_from_the_validity_bitmap() {
     let pesos = [62.5f64, 0.0, 70.0];
     let pesos_validity = [0b0000_0101u8];
     let columns = [
-        Column {
-            name: Some("nome"),
-            data: ColumnData::Str {
+        Column::new(
+            Some("nome"),
+            ColumnData::Str {
                 offsets: &nomes_offsets,
                 data: nomes,
             },
-            validity: None,
-        },
-        Column {
-            name: Some("idade"),
-            data: ColumnData::I64(&idades),
-            validity: Some(&idades_validity),
-        },
-        Column {
-            name: Some("peso"),
-            data: ColumnData::F64(&pesos),
-            validity: Some(&pesos_validity),
-        },
+        ),
+        Column::new(Some("idade"), ColumnData::I64(&idades)).validity(&idades_validity),
+        Column::new(Some("peso"), ColumnData::F64(&pesos)).validity(&pesos_validity),
     ];
 
     #[derive(Default, Debug, ExcelMapper)]
@@ -273,45 +230,21 @@ fn write_columns_rejects_inconsistent_input() {
     let options = WriteOptions::new();
 
     let mismatched = [
-        Column {
-            name: Some("a"),
-            data: ColumnData::I64(&two),
-            validity: None,
-        },
-        Column {
-            name: Some("b"),
-            data: ColumnData::I64(&three),
-            validity: None,
-        },
+        Column::new(Some("a"), ColumnData::I64(&two)),
+        Column::new(Some("b"), ColumnData::I64(&three)),
     ];
     assert!(write_columns(&path, &mismatched, &options).is_err());
 
     let partial_header = [
-        Column {
-            name: Some("a"),
-            data: ColumnData::I64(&two),
-            validity: None,
-        },
-        Column {
-            name: None,
-            data: ColumnData::I64(&two),
-            validity: None,
-        },
+        Column::new(Some("a"), ColumnData::I64(&two)),
+        Column::new(None, ColumnData::I64(&two)),
     ];
     assert!(write_columns(&path, &partial_header, &options).is_err());
 
-    let short_bitmap = [Column {
-        name: Some("a"),
-        data: ColumnData::I64(&two),
-        validity: Some(&[]),
-    }];
+    let short_bitmap = [Column::new(Some("a"), ColumnData::I64(&two)).validity(&[])];
     assert!(write_columns(&path, &short_bitmap, &options).is_err());
 
-    let fine = [Column {
-        name: Some("a"),
-        data: ColumnData::I64(&two),
-        validity: None,
-    }];
+    let fine = [Column::new(Some("a"), ColumnData::I64(&two))];
     assert!(
         write_columns(temp_path("unknown.txt"), &fine, &options).is_err(),
         "an unrecognized extension with Format::Auto must be rejected"
@@ -323,11 +256,7 @@ fn write_columns_rejects_inconsistent_input() {
 #[test]
 fn write_columns_honors_the_sheet_name_and_infers_csv() {
     let valores = [1i64];
-    let columns = [Column {
-        name: Some("a"),
-        data: ColumnData::I64(&valores),
-        validity: None,
-    }];
+    let columns = [Column::new(Some("a"), ColumnData::I64(&valores))];
 
     let path = temp_path("named.xlsx");
     let options = WriteOptions::new().sheet_name("Dados");

@@ -15,6 +15,7 @@ use std::path::Path;
 
 /// One column's buffers, borrowed from the caller. Each variant's slice is that column type's
 /// exact wire layout (see `excelreader.h`), so nothing is converted on the way out.
+#[non_exhaustive]
 pub enum ColumnData<'a> {
     /// `offsets` has `rows + 1` entries into `data`, which is every row's UTF-8 bytes
     /// concatenated. Unlike a table returned by the reader, `data` need not be interior to
@@ -86,6 +87,7 @@ impl ColumnData<'_> {
 }
 
 /// One input column: a name, its buffers, and an optional validity bitmap.
+#[non_exhaustive]
 pub struct Column<'a> {
     /// The header text. `None` in EVERY column means no header row is written; mixing `Some` and
     /// `None` across the set is an error, not a partial header.
@@ -95,7 +97,24 @@ pub struct Column<'a> {
     pub validity: Option<&'a [u8]>,
 }
 
-impl Column<'_> {
+impl<'a> Column<'a> {
+    /// A column with no nulls. `name` is the header text; see [`name`](Self::name).
+    #[must_use]
+    pub fn new(name: Option<&'a str>, data: ColumnData<'a>) -> Self {
+        Column {
+            name,
+            data,
+            validity: None,
+        }
+    }
+
+    /// Sets the LSB-first validity bitmap: bit `r` set = row `r` is valid.
+    #[must_use]
+    pub fn validity(mut self, bitmap: &'a [u8]) -> Self {
+        self.validity = Some(bitmap);
+        self
+    }
+
     fn to_raw(&self) -> XlColumn {
         let (values, data, data_len) = self.data.pointers();
         XlColumn {
