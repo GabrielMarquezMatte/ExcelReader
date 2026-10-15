@@ -13,63 +13,89 @@ use arrow::ffi::{from_ffi, FFI_ArrowArray, FFI_ArrowSchema};
 use arrow::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
 use arrow::record_batch::RecordBatchReader;
 
-use crate::workbook::{build_specs, check, ExcelMapper, Sheet, Workbook};
-use crate::{Error, XL_ERROR};
+use crate::ffi;
+use crate::workbook::{build_specs, check};
+use crate::{Error, ErrorKind, ExcelMapper, ReadOptions, Sheet, Workbook};
 
-/// Schema-driven parse of one sheet into an Arrow [`RecordBatch`], using the same
-/// `#[derive(ExcelMapper)]` mapping as [`crate::workbook::parse_sheet`].
-///
-/// `header_row` has the same meaning as in `parse_sheet` (0 = no header).
-pub fn parse_arrow<T: ExcelMapper>(sheet: Sheet<'_>, header_row: i32) -> Result<RecordBatch, Error> {
-    parse_arrow_parallel::<T>(sheet, header_row, 1)
+impl<'w> Sheet<'w> {
+    /// [`parse`](Self::parse) into one Arrow [`RecordBatch`], with the same `#[derive(ExcelMapper)]`
+    /// mapping and [`ReadOptions`].
+    pub fn to_arrow<T: ExcelMapper>(&self, options: &ReadOptions) -> Result<RecordBatch, Error> {
+        let arena = build_specs::<T>();
+
+        let mut array = FFI_ArrowArray::empty();
+        let mut schema = FFI_ArrowSchema::empty();
+
+        check(unsafe {
+            ffi::xl_parse_arrow(
+                self.handle(),
+                self.index(),
+                arena.specs.as_ptr(),
+                arena.specs.len() as i32,
+                options.header_row,
+                options.parallelism,
+                &mut array as *mut FFI_ArrowArray as *mut c_void,
+                &mut schema as *mut FFI_ArrowSchema as *mut c_void,
+            )
+        })?;
+
+        let data = unsafe { from_ffi(array, &schema) }.map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("importing the native Arrow array failed: {e}"),
+            )
+        })?;
+
+        Ok(RecordBatch::from(StructArray::from(data)))
+    }
+
+    /// [`to_arrow`](Self::to_arrow) delivered [`ReadOptions`]'s batch size rows at a time; a
+    /// negative batch size is an error. Any number of streams may be open on one workbook.
+    pub fn to_arrow_stream<T: ExcelMapper>(
+        &self,
+        options: &ReadOptions,
+    ) -> Result<ArrowBatches<'w>, Error> {
+        let arena = build_specs::<T>();
+
+        let mut stream = FFI_ArrowArrayStream::empty();
+
+        check(unsafe {
+            ffi::xl_parse_arrow_stream(
+                self.handle(),
+                self.index(),
+                arena.specs.as_ptr(),
+                arena.specs.len() as i32,
+                options.header_row,
+                options.batch_size,
+                &mut stream as *mut FFI_ArrowArrayStream as *mut c_void,
+            )
+        })?;
+
+        let inner = ArrowArrayStreamReader::try_new(stream).map_err(|e| {
+            Error::new(
+                ErrorKind::Other,
+                format!("importing the native Arrow stream failed: {e}"),
+            )
+        })?;
+
+        Ok(ArrowBatches {
+            inner,
+            _workbook: PhantomData,
+        })
+    }
 }
 
-/// [`parse_arrow`] with a degree of parallelism: `0` uses every processor, `1` is sequential, `n`
-/// up to `n` threads, negative is an error. Only CSV is split; the batch equals `parse_arrow`'s.
-pub fn parse_arrow_parallel<T: ExcelMapper>(
-    sheet: Sheet<'_>,
-    header_row: i32,
-    degree_of_parallelism: i32,
-) -> Result<RecordBatch, Error> {
-    let arena = build_specs::<T>();
-
-    let mut array = FFI_ArrowArray::empty();
-    let mut schema = FFI_ArrowSchema::empty();
-
-    check(unsafe {
-        crate::xl_parse_arrow(
-            sheet.handle(),
-            sheet.index(),
-            arena.specs.as_ptr(),
-            arena.specs.len() as i32,
-            header_row,
-            degree_of_parallelism,
-            &mut array as *mut FFI_ArrowArray as *mut c_void,
-            &mut schema as *mut FFI_ArrowSchema as *mut c_void,
-        )
-    })?;
-
-    let data = unsafe { from_ffi(array, &schema) }.map_err(|e| {
-        Error::from_status(
-            XL_ERROR,
-            format!("importing the native Arrow array failed: {e}"),
-        )
-    })?;
-
-    Ok(RecordBatch::from(StructArray::from(data)))
-}
-
-/// Batched counterpart to [`parse_arrow`], one [`RecordBatch`] at a time.
+/// Batches of [`Sheet::to_arrow_stream`], one [`RecordBatch`] at a time.
 ///
-/// Wraps arrow-rs's `'static` reader only to carry the `'a` borrow, which keeps the
-/// workbook alive for at least as long as the stream. Unlike [`crate::workbook::TypedChunks`] it does
-/// not fuse after an error, so break on the first `Err` rather than spinning on the latched one.
-pub struct ArrowChunks<'a> {
+/// Wraps arrow-rs's `'static` reader only to carry the `'a` borrow, which keeps the workbook alive
+/// for at least as long as the stream. Unlike [`TypedBatches`](crate::TypedBatches) it does not fuse
+/// after an error, so break on the first `Err` rather than spinning on the latched one.
+pub struct ArrowBatches<'a> {
     inner: ArrowArrayStreamReader,
     _workbook: PhantomData<&'a Workbook>,
 }
 
-impl Iterator for ArrowChunks<'_> {
+impl Iterator for ArrowBatches<'_> {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -77,44 +103,8 @@ impl Iterator for ArrowChunks<'_> {
     }
 }
 
-impl RecordBatchReader for ArrowChunks<'_> {
+impl RecordBatchReader for ArrowBatches<'_> {
     fn schema(&self) -> SchemaRef {
         self.inner.schema()
     }
-}
-
-/// `parse_arrow` delivered a batch at a time. `batch_size` is rows per batch, 0 unbounded,
-/// negative an error. Any number of streams may be open on one workbook.
-pub fn parse_arrow_stream<T: ExcelMapper>(
-    sheet: Sheet<'_>,
-    header_row: i32,
-    batch_size: i64,
-) -> Result<ArrowChunks<'_>, Error> {
-    let arena = build_specs::<T>();
-
-    let mut stream = FFI_ArrowArrayStream::empty();
-
-    check(unsafe {
-        crate::xl_parse_arrow_stream(
-            sheet.handle(),
-            sheet.index(),
-            arena.specs.as_ptr(),
-            arena.specs.len() as i32,
-            header_row,
-            batch_size,
-            &mut stream as *mut FFI_ArrowArrayStream as *mut c_void,
-        )
-    })?;
-
-    let inner = ArrowArrayStreamReader::try_new(stream).map_err(|e| {
-        Error::from_status(
-            XL_ERROR,
-            format!("importing the native Arrow stream failed: {e}"),
-        )
-    })?;
-
-    Ok(ArrowChunks {
-        inner,
-        _workbook: PhantomData,
-    })
 }

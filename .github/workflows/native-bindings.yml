@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest, macos-15-intel]
 
     steps:
       - name: Checkout
@@ -172,7 +172,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest, macos-15-intel]
 
     steps:
       - name: Checkout
@@ -202,6 +202,12 @@ jobs:
       - name: Run the Python tests
         run: pytest python/tests -v
 
+      - name: Build the wheel and check it installs here
+        run: |
+          pip install build
+          python -m build --wheel python/ --outdir dist/
+          python python/scripts/check_wheel_tag.py dist
+
       - name: Build the C smoke test
         run: |
           cmake -S tests/ExcelReader.NativeSmoke -B build/nativesmoke -DCMAKE_BUILD_TYPE=Release
@@ -214,6 +220,23 @@ jobs:
         run: |
           python python/benchmarks/bench_read.py --n 1
           python python/benchmarks/bench_write.py --n 1
+
+  test-musl:
+    name: musl library + Python (${{ matrix.runner }})
+    needs: changes
+    if: needs.changes.outputs.native == 'true' || needs.changes.outputs.python == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build, test and wheel in Alpine
+        run: sh python/scripts/build_musl_wheel.sh
 
   test-cpp:
     name: C++ package + smoke test (${{ matrix.os }})

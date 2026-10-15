@@ -1,9 +1,11 @@
-//! Round-trips through `WriterHandle`, the streaming counterpart to `xl_write_typed`: everything
+//! Round-trips through `WriterHandle`, the streaming counterpart to `write_columns`: everything
 //! written here is read back with the same crate's reader, same reasoning as `write_typed.rs`.
 
-use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
-use excelreader::writer_handle::WriterHandle;
-use excelreader::{Date, Time, Timestamp, XL_FORMAT_XLSX, XL_T_F64, XL_T_STRING};
+use excelreader::ReadOptions;
+use excelreader::{
+    Date, ErrorKind, ExcelMapper, Format, OpenOptions, Time, Timestamp, Workbook, WriteOptions,
+    WriterHandle,
+};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -39,50 +41,63 @@ struct FullRow {
     opcional: Option<i64>,
 }
 
-/// Writes one header row and one data row through every `write_*` method, then a second row using
-/// `None`/`write_null` for the blank-cell path.
-fn write_full_rows(handle: &mut WriterHandle) {
-    handle.start_sheet("Planilha1").expect("start_sheet must succeed");
+/// Writes one header row and one data row through every `write_*` method, then a row of blank
+/// cells through every `write_*(None)`.
+fn write_full_rows(handle: &mut WriterHandle<'_>) {
+    handle
+        .start_sheet("Planilha1")
+        .expect("start_sheet must succeed");
 
-    handle.start_row().expect("start_row must succeed for the header row");
+    handle
+        .start_row()
+        .expect("start_row must succeed for the header row");
     for header in [
-        "texto",
-        "inteiro",
-        "numero",
-        "ativo",
-        "data",
-        "hora",
-        "instante",
-        "opcional",
+        "texto", "inteiro", "numero", "ativo", "data", "hora", "instante", "opcional",
     ] {
         handle
             .write_str(Some(header))
             .expect("writing a header cell must succeed");
     }
-    handle.end_row().expect("end_row must succeed for the header row");
+    handle
+        .end_row()
+        .expect("end_row must succeed for the header row");
 
-    handle.start_row().expect("start_row must succeed for the data row");
-    handle.write_str(Some("uma")).expect("write_str must succeed");
+    handle
+        .start_row()
+        .expect("start_row must succeed for the data row");
+    handle
+        .write_str(Some("uma"))
+        .expect("write_str must succeed");
     handle.write_i64(Some(1)).expect("write_i64 must succeed");
     handle.write_f64(Some(0.5)).expect("write_f64 must succeed");
-    handle.write_bool(Some(true)).expect("write_bool must succeed");
     handle
-        .write_date(Some(Date::new(20454)))
+        .write_bool(Some(true))
+        .expect("write_bool must succeed");
+    handle
+        .write_date(Some(Date {
+            days_since_epoch: 20454,
+        }))
         .expect("write_date must succeed");
     handle
-        .write_time(Some(Time::new(3_600_000_000)))
+        .write_time(Some(Time {
+            micros_since_midnight: 3_600_000_000,
+        }))
         .expect("write_time must succeed");
     handle
-        .write_timestamp(Some(Timestamp::new(1_767_225_600_000_000)))
+        .write_timestamp(Some(Timestamp {
+            micros_since_epoch: 1_767_225_600_000_000,
+        }))
         .expect("write_timestamp must succeed");
     handle
         .write_i64(Some(7))
         .expect("write_i64(Some) must succeed for the optional column");
-    handle.end_row().expect("end_row must succeed for the data row");
+    handle
+        .end_row()
+        .expect("end_row must succeed for the data row");
 
     handle
         .start_row()
-        .expect("start_row must succeed for the null-cell row");
+        .expect("start_row must succeed for the blank row");
     handle
         .write_str(None)
         .expect("write_str(None) must write a blank cell");
@@ -90,30 +105,36 @@ fn write_full_rows(handle: &mut WriterHandle) {
         .write_i64(None)
         .expect("write_i64(None) must write a blank cell");
     handle
-        .write_null(XL_T_F64)
-        .expect("write_null must write a blank cell directly");
-    for _ in 0..5 {
-        handle
-            .write_null(XL_T_STRING)
-            .expect("padding the null-cell row out must succeed");
-    }
-    handle.end_row().expect("end_row must succeed for the null-cell row");
+        .write_f64(None)
+        .expect("write_f64(None) must write a blank cell");
+    handle
+        .write_bool(None)
+        .expect("write_bool(None) must write a blank cell");
+    handle
+        .write_date(None)
+        .expect("write_date(None) must write a blank cell");
+    handle
+        .write_time(None)
+        .expect("write_time(None) must write a blank cell");
+    handle
+        .write_timestamp(None)
+        .expect("write_timestamp(None) must write a blank cell");
+    handle
+        .write_i64(None)
+        .expect("write_i64(None) must write a blank cell");
+    handle
+        .end_row()
+        .expect("end_row must succeed for the blank row");
 
     handle.end_sheet().expect("end_sheet must succeed");
 }
 
-#[test]
-fn writer_handle_round_trips_through_open_file() {
-    let path = temp_path("full.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8").to_string();
-    {
-        let mut handle = WriterHandle::open_with(&target, XL_FORMAT_XLSX, None)
-            .expect("WriterHandle::open_with must succeed");
-        write_full_rows(&mut handle);
-    }
-
-    let workbook = Workbook::open(&target).expect("the file WriterHandle produced must open");
-    let table = parse_sheet::<FullRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the written file must parse back");
+fn assert_full_rows(workbook: &Workbook) {
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    assert_eq!(sheet.name().expect("name must read back"), "Planilha1");
+    let table = sheet
+        .parse::<FullRow>(&ReadOptions::new())
+        .expect("the written workbook must parse back");
     assert_eq!(table.len(), 2);
 
     let first = table.get(0).expect("row 0 must exist");
@@ -121,65 +142,78 @@ fn writer_handle_round_trips_through_open_file() {
     assert_eq!(first.inteiro, 1);
     assert_eq!(first.numero, 0.5);
     assert!(first.ativo);
-    assert_eq!(first.data, Date::new(20454));
-    assert_eq!(first.hora, Time::new(3_600_000_000));
+    assert_eq!(
+        first.data,
+        Date {
+            days_since_epoch: 20454
+        }
+    );
+    assert_eq!(
+        first.hora,
+        Time {
+            micros_since_midnight: 3_600_000_000
+        }
+    );
     assert_eq!(first.opcional, Some(7));
 
     let second = table.get(1).expect("row 1 must exist");
     assert_eq!(second.texto, "");
     assert_eq!(second.opcional, None);
+}
 
-    drop(table);
+#[test]
+fn create_round_trips_through_a_file() {
+    let path = temp_path("full.xlsx");
+    let mut handle =
+        WriterHandle::create(&path, &WriteOptions::new()).expect("create must succeed");
+    write_full_rows(&mut handle);
+    handle.finish().expect("finish must succeed");
+
+    let workbook = Workbook::open(&path).expect("the file WriterHandle produced must open");
+    assert_full_rows(&workbook);
+    drop(workbook);
     std::fs::remove_file(&path).ok();
 }
 
 #[test]
-fn writer_handle_to_memory_round_trips() {
-    let mut handle =
-        WriterHandle::open_memory(XL_FORMAT_XLSX, None).expect("WriterHandle::open_memory must succeed");
+fn new_writes_the_workbook_to_its_writer_on_finish() {
+    let mut bytes = Vec::new();
+    let options = WriteOptions::new().format(Format::Xlsx);
+    let mut handle = WriterHandle::new(&mut bytes, &options).expect("new must succeed");
     write_full_rows(&mut handle);
-
-    let bytes = handle.bytes().expect("bytes must succeed");
+    handle.finish().expect("finish must succeed");
     assert!(!bytes.is_empty());
 
-    let workbook =
-        Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the bytes bytes() returned must open");
-    assert_eq!(
-        workbook.sheet_name_at(0).expect("name must read back"),
-        "Planilha1"
-    );
-    let table = parse_sheet::<FullRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("the returned bytes must parse back");
-    assert_eq!(table.len(), 2);
-    assert_eq!(table.get(0).expect("row 0").texto, "uma");
-
-    let bytes_again = handle.bytes().expect("a second bytes() call must still succeed");
-    assert_eq!(bytes_again, bytes);
+    let workbook = OpenOptions::new()
+        .open_bytes(&bytes)
+        .expect("the bytes finish wrote must open");
+    assert_full_rows(&workbook);
 }
 
 #[test]
-fn writer_handle_bytes_rejects_a_file_backed_handle() {
-    let path = temp_path("file_backed.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8").to_string();
-    {
-        let mut handle = WriterHandle::open_with(&target, XL_FORMAT_XLSX, None)
-            .expect("WriterHandle::open_with must succeed");
-        handle.start_sheet("S").expect("start_sheet must succeed");
+fn new_needs_an_explicit_format() {
+    let error = WriterHandle::new(Vec::new(), &WriteOptions::new())
+        .expect_err("a writer has no extension to infer a format from");
+    assert_eq!(error.kind(), ErrorKind::InvalidArgument);
+}
 
-        let error = handle
-            .bytes()
-            .expect_err("bytes() on a file-backed handle must fail");
-        assert_eq!(error.code(), excelreader::XL_INVALID_ARGUMENT);
+#[test]
+fn dropping_an_unfinished_handle_writes_nothing() {
+    let mut bytes = Vec::new();
+    {
+        let options = WriteOptions::new().format(Format::Xlsx);
+        let mut handle = WriterHandle::new(&mut bytes, &options).expect("new must succeed");
+        handle.start_sheet("S").expect("start_sheet must succeed");
     }
-    std::fs::remove_file(&path).ok();
+    assert!(bytes.is_empty());
 }
 
 #[test]
 fn writer_handle_rejects_out_of_order_calls() {
     let path = temp_path("order.xlsx");
-    let target = path.to_str().expect("temp path must be UTF-8").to_string();
     {
-        let mut handle = WriterHandle::open_with(&target, XL_FORMAT_XLSX, None)
-            .expect("WriterHandle::open_with must succeed");
+        let mut handle =
+            WriterHandle::create(&path, &WriteOptions::new()).expect("create must succeed");
 
         assert!(
             handle.start_row().is_err(),
@@ -189,7 +223,10 @@ fn writer_handle_rejects_out_of_order_calls() {
             handle.write_i64(Some(1)).is_err(),
             "a cell write before start_row must fail"
         );
-        assert!(handle.end_row().is_err(), "end_row without an open row must fail");
+        assert!(
+            handle.end_row().is_err(),
+            "end_row without an open row must fail"
+        );
         assert!(
             handle.end_sheet().is_err(),
             "end_sheet without an open sheet must fail"

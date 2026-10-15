@@ -15,6 +15,7 @@ namespace ExcelReader.Core.Writer
     /// <see cref="IRowWriter"/> instances it hands out. All of them carry mutable state (current
     /// sheet/row, buffered output) with no synchronization. Use one workbook writer per thread; do not
     /// call into a writer, its current sheet, or its current row from more than one thread at a time.
+    /// <para>Only ExcelReader implements this interface, and a minor version can add members to it. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</para>
     /// </remarks>
     public interface IWorkbookWriter<out TSheet> : IDisposable, IAsyncDisposable
     {
@@ -90,6 +91,7 @@ namespace ExcelReader.Core.Writer
     /// <see cref="EndAsync"/> for a sheet with no rows.
     /// </summary>
     /// <typeparam name="TRow">The concrete <see cref="IRowWriter"/> this sheet produces.</typeparam>
+    /// <remarks>Only ExcelReader implements this interface, and a minor version can add members to it. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</remarks>
     public interface ISheetWriter<TRow> : IDisposable, IAsyncDisposable
     {
         /// <summary>
@@ -176,6 +178,7 @@ namespace ExcelReader.Core.Writer
     /// generic overload) still advances the column position by one, but whether it emits an explicit
     /// blank cell or omits a cell record entirely for that column is implementation-defined — either
     /// way, reading the cell back yields an empty/blank value.
+    /// <para>Only ExcelReader implements this interface, and a minor version can add members to it. See <see href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</see>.</para>
     /// </remarks>
     public interface IRowWriter : IDisposable, IAsyncDisposable
     {

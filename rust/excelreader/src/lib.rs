@@ -1,515 +1,55 @@
-// Raw FFI bindings to ExcelReader's C ABI (`excelreader.h`). The `extern "C"` block below is
-// declared directly in this crate root (not a submodule), so `crate::xl_open_file` etc. resolve
-// from anywhere in the crate. See the `workbook` module for the safe wrapper built on top of this.
 #![doc = include_str!("../README.md")]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png",
     html_favicon_url = "https://raw.githubusercontent.com/GabrielMarquezMatte/ExcelReader/master/assets/icon.png"
 )]
 
-pub mod aggregate;
+mod aggregate;
 mod error;
+pub(crate) mod ffi;
 mod options;
+mod rows;
+mod source;
 mod temporal;
-pub mod workbook;
-pub mod writer;
-pub mod writer_handle;
-pub mod rows;
-pub mod source;
+mod workbook;
+mod writer;
+mod writer_handle;
 
 #[cfg(feature = "arrow")]
-pub mod arrow;
+mod arrow;
 
-pub use aggregate::{aggregate_csv_file, aggregate_csv_memory, CsvAccumulator, CsvParallelOptions};
-pub use error::Error;
-pub use rows::{AllRows, CellIter, CellRef, CellType, DecodedRows, RowCursor, RowRef};
+pub use aggregate::{aggregate_csv, CsvAccumulator, CsvInput};
+pub use error::{Error, ErrorKind};
+pub use options::{Format, OpenOptions, ReadOptions, WriteOptions};
+pub use rows::{AllRows, CellIter, CellRef, CellType, RowCursor, RowRef};
 pub use source::Source;
-pub use options::{OpenOptions, OpenOptionsRaw, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
+pub use workbook::{
+    ColumnType, ExcelMapper, InferredColumn, Sheet, SheetVisibility, TableView, TableViewIter,
+    TypedBatches, Workbook,
+};
+pub use writer::{
+    encrypt_package, write_columns, write_columns_to, write_sheet, write_sheet_to, Column,
+    ColumnData, ExcelWriter,
+};
+pub use writer_handle::WriterHandle;
 
-use std::os::raw::{c_int, c_void};
+#[cfg(feature = "arrow")]
+pub use self::arrow::ArrowBatches;
 
-pub const XL_OK: i32 = 0;
-pub const XL_EOF: i32 = -1;
-pub const XL_BUFFER_TOO_SMALL: i32 = -2;
-pub const XL_INVALID_HANDLE: i32 = -3;
-pub const XL_INVALID_ARGUMENT: i32 = -4;
-pub const XL_ERROR: i32 = -5;
-/// The workbook is encrypted and no password was supplied.
-pub const XL_STATUS_PASSWORD_REQUIRED: i32 = -6;
-/// The supplied password did not match the workbook's verifier.
-pub const XL_STATUS_PASSWORD_INCORRECT: i32 = -7;
+/// Support for `#[derive(ExcelMapper)]`'s generated code. Not part of the public API: nothing here
+/// follows semver.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::ffi::XlColumn;
+    pub use crate::workbook::{
+        column_bool, column_date, column_f64, column_i64, column_str, column_time,
+        column_timestamp, ColumnBinding,
+    };
+    pub use crate::writer::{push_str, set_valid, OwnedColumn, OwnedColumnData};
 
-pub const XL_CELL_EMPTY: i32 = 0;
-pub const XL_CELL_STRING: i32 = 1;
-pub const XL_CELL_NUMBER: i32 = 2;
-pub const XL_CELL_DATE: i32 = 3;
-pub const XL_CELL_BOOL: i32 = 4;
-pub const XL_CELL_FORMULA: i32 = 5;
-pub const XL_CELL_ERROR: i32 = 6;
-
-/// ABI revision this crate is compiled against. `Workbook::open` refuses to proceed when the loaded
-/// library's `xl_abi_version()` disagrees - see `workbook::check_abi_version`.
-pub const XL_ABI_VERSION: i32 = 6;
-
-pub const XL_T_STRING: i32 = 0;
-pub const XL_T_I64: i32 = 1;
-pub const XL_T_F64: i32 = 2;
-pub const XL_T_BOOL: i32 = 3;
-/// Days since 1970-01-01, stored as `i32`.
-pub const XL_T_DATE: i32 = 4;
-/// Microseconds since midnight, stored as `i64`.
-pub const XL_T_TIME: i32 = 5;
-/// Microseconds since 1970-01-01T00:00:00Z, stored as `i64`.
-pub const XL_T_TIMESTAMP: i32 = 6;
-
-/// `xl_infer_schema` flag: also type cells that hold text (integers, decimals, booleans, ISO dates).
-pub const XL_INFER_PARSE_TEXT: i32 = 1;
-
-pub const XL_SHEET_VISIBLE: i32 = 0;
-pub const XL_SHEET_HIDDEN: i32 = 1;
-pub const XL_SHEET_VERY_HIDDEN: i32 = 2;
-
-pub const XL_FORMAT_AUTO: i32 = 0;
-pub const XL_FORMAT_XLS: i32 = 1;
-pub const XL_FORMAT_XLSX: i32 = 2;
-pub const XL_FORMAT_XLSB: i32 = 3;
-pub const XL_FORMAT_CSV: i32 = 4;
-
-/// Every boolean-shaped `xl_open_options` field uses one of these three states, never a plain 0/1 -
-/// several of them default to true, so a bare 0 would be ambiguous between "off" and "use the
-/// library default".
-pub const XL_OPT_DEFAULT: i32 = 0;
-pub const XL_OPT_FALSE: i32 = 1;
-pub const XL_OPT_TRUE: i32 = 2;
-
-/// Opaque handle - never dereferenced by Rust, only passed back to `xl_*` functions.
-#[repr(C)]
-pub struct XlWorkbook {
-    _private: [u8; 0],
-}
-
-/// Opaque row cursor (`xl_rows`) - never dereferenced by Rust, only passed back to `xl_rows_*`.
-#[repr(C)]
-pub struct XlRows {
-    _private: [u8; 0],
-}
-
-#[repr(C)]
-pub struct XlTypedReader {
-    _private: [u8; 0],
-}
-
-/// Mirrors `xl_open_options`. `struct_size` must be set to `size_of::<XlOpenOptions>()`; build one
-/// through [`OpenOptions`] rather than by hand.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct XlOpenOptions {
-    pub struct_size: i32,
-    pub csv_sniff_dialect: i32,
-    pub csv_delimiter: i32,
-    pub csv_quote: i32,
-    pub csv_detect_bom: i32,
-    pub csv_max_cell_bytes: i32,
-    pub csv_intern_strings: i32,
-    pub max_total_decompressed_bytes: i64,
-    pub max_cell_bytes: i32,
-    pub max_shared_string_bytes: i64,
-    pub max_zip_entries: i32,
-    pub prefetch_decompression: i32,
-    pub intern_strings: i32,
-
-    /// Password for an encrypted OOXML workbook, as UTF-8 bytes. NULL (with `password_len` 0) means
-    /// "not encrypted, or fail with `XL_STATUS_PASSWORD_REQUIRED`". Not NUL-terminated -
-    /// `password_len` is authoritative, since a password may contain any byte. The pointer need only
-    /// remain valid for the duration of the call - see [`crate::options::OpenOptionsRaw`].
-    pub password: *const u8,
-    pub password_len: i32,
-    pub source_cache_bytes: i64,
-    pub max_buffered_bytes: i64,
-    pub source_block_size: i32,
-    pub verify_zip_checksums: i32,
-}
-
-#[repr(C)]
-pub struct XlSource {
-    pub struct_size: i32,
-    pub user_data: *mut c_void,
-    pub length: i64,
-    pub read_at: Option<unsafe extern "C" fn(*mut c_void, i64, *mut u8, i64) -> i64>,
-    pub release: Option<unsafe extern "C" fn(*mut c_void)>,
-}
-
-#[repr(C)]
-pub struct XlStream {
-    pub struct_size: i32,
-    pub user_data: *mut c_void,
-    pub read: Option<unsafe extern "C" fn(*mut c_void, *mut u8, i64) -> i64>,
-    pub release: Option<unsafe extern "C" fn(*mut c_void)>,
-}
-
-/// Mirrors `xl_write_options`. Field ORDER is the C struct's, not a tidied-up version of it: with
-/// `repr(C)` the 4 bytes of padding after `sheet_name_len` land exactly where a C compiler puts
-/// them, giving the 32-byte x64 layout `tests/ExcelReader.NativeSmoke/smoke.c` static-asserts.
-/// Build one through [`WriteOptions`] rather than by hand.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct XlWriteOptions {
-    pub struct_size: i32,
-    pub sheet_name_len: i32,
-    pub sheet_name: *const u8,
-    pub csv_delimiter: i32,
-    pub csv_quote: i32,
-    pub date1904: i32,
-    pub use_shared_strings: i32,
-}
-
-#[repr(C)]
-pub struct XlColumnSpec {
-    pub names: *const *const u8,
-    pub name_lens: *const i32,
-    pub name_count: i32,
-    pub index: i32,
-    pub r#type: i32,
-    pub nullable: i32,
-}
-
-#[repr(C)]
-pub struct XlColumn {
-    pub r#type: i32,
-    pub length: i64,
-    pub values: *const c_void,
-    pub validity: *const u8,
-    pub data: *const u8,
-    pub data_len: i64,
-}
-
-#[repr(C)]
-pub struct XlTable {
-    pub column_count: i32,
-    pub row_count: i64,
-    pub columns: *mut XlColumn,
-}
-
-/// Mirrors `xl_inferred_schema`. Owned by the native library until `xl_free_schema`.
-#[repr(C)]
-pub struct XlInferredSchema {
-    pub columns: *mut XlColumnSpec,
-    pub column_count: i32,
-}
-
-/// Mirrors `xl_buffer`: an owned block of native memory returned by `xl_write_typed_to_memory` or
-/// `xl_write_handle_bytes`. Released with `xl_free_buffer` - see `writer::buffer_to_vec`, the one
-/// place this crate touches the raw struct directly.
-#[repr(C)]
-pub struct XlBuffer {
-    pub data: *mut u8,
-    pub len: i64,
-}
-
-/// Opaque streaming writer handle - never dereferenced by Rust, only passed back to `xl_*`
-/// functions. See [`writer_handle::WriterHandle`] for the safe wrapper.
-#[repr(C)]
-pub struct XlWriterHandle {
-    _private: [u8; 0],
-}
-
-/// Mirrors `xl_row_cell`. Named `cell_type` because `type` is a Rust keyword.
-#[repr(C)]
-#[derive(Debug)]
-pub struct XlRowCell {
-    pub column: i32,
-    pub cell_type: i32,
-    pub value_len: i32,
-    pub value: *const u8,
-}
-
-/// Mirrors `xl_row`.
-#[repr(C)]
-pub struct XlRow {
-    pub cell_count: i32,
-    pub cells: *mut XlRowCell,
-}
-
-/// Mirrors `xl_rows_decoded`.
-#[repr(C)]
-pub struct XlRowsDecoded {
-    pub row_count: i32,
-    pub rows: *mut XlRow,
-}
-
-/// Mirrors `xl_csv_aggregation`. Every callback runs on a library worker thread except
-/// `free_state`, which runs on the calling thread after the run has finished; none may let a
-/// panic escape into the library - build one through [`aggregate`] rather than by hand.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct XlCsvAggregation {
-    pub struct_size: i32,
-    pub seed: Option<unsafe extern "C" fn(*mut *mut c_void, *mut c_void) -> i32>,
-    pub accumulate: Option<unsafe extern "C" fn(*mut c_void, *const XlRow, *mut c_void) -> i32>,
-    pub combine: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32>,
-    pub free_state: Option<unsafe extern "C" fn(*mut c_void, *mut c_void)>,
-    pub user_data: *mut c_void,
-}
-
-/// Mirrors `xl_csv_parallel_options`. `struct_size` must be set to
-/// `size_of::<XlCsvParallelOptions>()`; build one through [`CsvParallelOptions`] rather than by hand.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct XlCsvParallelOptions {
-    pub struct_size: i32,
-    pub degree_of_parallelism: i32,
-    pub header_row: i32,
-    pub delimiter: i32,
-    pub quote: i32,
-    pub detect_bom: i32,
-    pub max_cell_bytes: i32,
-}
-
-extern "C" {
-    pub fn xl_abi_version() -> c_int;
-
-    pub fn xl_open_file(
-        path: *const u8,
-        path_len: i32,
-        format: i32,
-        options: *const XlOpenOptions,
-        out_handle: *mut *mut XlWorkbook,
-    ) -> c_int;
-
-    pub fn xl_open_memory(
-        data: *const u8,
-        data_len: i32,
-        format: i32,
-        options: *const XlOpenOptions,
-        out_handle: *mut *mut XlWorkbook,
-    ) -> c_int;
-
-    pub fn xl_open_source(
-        source: *const XlSource,
-        format: i32,
-        options: *const XlOpenOptions,
-        out_handle: *mut *mut XlWorkbook,
-    ) -> c_int;
-
-    pub fn xl_open_stream(
-        stream: *const XlStream,
-        format: i32,
-        options: *const XlOpenOptions,
-        out_handle: *mut *mut XlWorkbook,
-    ) -> c_int;
-
-    pub fn xl_set_source_error(message: *const u8, len: i32);
-
-    pub fn xl_close(handle: *mut XlWorkbook) -> c_int;
-
-    pub fn xl_sheet_count(handle: *mut XlWorkbook, out_count: *mut i32) -> c_int;
-
-    pub fn xl_sheet_name_at(
-        handle: *mut XlWorkbook,
-        index: i32,
-        buffer: *mut u8,
-        capacity: i32,
-        out_len: *mut i32,
-    ) -> c_int;
-
-    pub fn xl_sheet_visibility_at(
-        handle: *mut XlWorkbook,
-        index: i32,
-        out_visibility: *mut i32,
-    ) -> c_int;
-
-    /// A name that matches no sheet is `XL_OK` with `-1`.
-    pub fn xl_sheet_index(
-        handle: *mut XlWorkbook,
-        name: *const u8,
-        name_len: i32,
-        out_index: *mut i32,
-    ) -> c_int;
-
-    pub fn xl_is_date1904(handle: *mut XlWorkbook, out_flag: *mut i32) -> c_int;
-
-    pub fn xl_parse_typed(
-        handle: *mut XlWorkbook,
-        sheet: i32,
-        specs: *const XlColumnSpec,
-        spec_count: i32,
-        header_row: i32,
-        degree_of_parallelism: i32,
-        out_table: *mut XlTable,
-    ) -> c_int;
-
-    /// Same schema-driven parse as `xl_parse_typed`, exported as one top-level Arrow struct
-    /// array/schema. `out_array`/`out_schema` are `struct ArrowArray*`/`struct ArrowSchema*` from
-    /// the Arrow C Data Interface, typed here as `c_void` because arrow-rs's own `#[repr(C)]`
-    /// `FFI_ArrowArray`/`FFI_ArrowSchema` are ABI-identical to them - redeclaring the spec structs
-    /// would be a second source of truth for a fixed, versioned ABI.
-    ///
-    /// On `XL_OK` the caller owns both and releases each through its OWN `release` callback, never
-    /// through `xl_free_table`. On any other status both outputs are left untouched.
-    pub fn xl_parse_arrow(
-        handle: *mut XlWorkbook,
-        sheet: i32,
-        specs: *const XlColumnSpec,
-        spec_count: i32,
-        header_row: i32,
-        degree_of_parallelism: i32,
-        out_array: *mut c_void,
-        out_schema: *mut c_void,
-    ) -> c_int;
-
-    /// `out_stream` is a `struct ArrowArrayStream*`, typed as `c_void` for the same reason
-    /// `xl_parse_arrow`'s outputs are. Its `release` is what closes the underlying read.
-    pub fn xl_parse_arrow_stream(
-        handle: *mut XlWorkbook,
-        sheet: i32,
-        specs: *const XlColumnSpec,
-        spec_count: i32,
-        header_row: i32,
-        max_rows: i64,
-        out_stream: *mut c_void,
-    ) -> c_int;
-
-    pub fn xl_free_table(table: *mut XlTable);
-
-    /// `max_rows` is rows per batch, 0 meaning one unbounded batch.
-    pub fn xl_typed_reader_open(
-        handle: *mut XlWorkbook,
-        sheet: i32,
-        specs: *const XlColumnSpec,
-        spec_count: i32,
-        header_row: i32,
-        max_rows: i64,
-        out_reader: *mut *mut XlTypedReader,
-    ) -> c_int;
-
-    /// `XL_OK` with a batch, or `XL_EOF` at end of sheet. A failure latches: every later call
-    /// repeats it.
-    pub fn xl_typed_reader_next(reader: *mut XlTypedReader, out_table: *mut XlTable) -> c_int;
-
-    pub fn xl_typed_reader_close(reader: *mut XlTypedReader);
-
-    pub fn xl_infer_schema(
-        handle: *mut XlWorkbook,
-        sheet: i32,
-        header_row: i32,
-        sample_size: i32,
-        flags: i32,
-        out_schema: *mut XlInferredSchema,
-    ) -> c_int;
-
-    pub fn xl_free_schema(schema: *mut XlInferredSchema);
-    pub fn xl_write_typed(
-        path: *const u8,
-        path_len: i32,
-        format: i32,
-        specs: *const XlColumnSpec,
-        table: *const XlTable,
-        options: *const XlWriteOptions,
-    ) -> c_int;
-
-    /// Same as `xl_write_typed`, except the result is returned as `out_buffer` instead of being
-    /// written to a path. Only read `*out_buffer` when the call returns `XL_OK`; on failure it is
-    /// zeroed, and `xl_free_buffer` on a zeroed buffer is a no-op.
-    pub fn xl_write_typed_to_memory(
-        format: i32,
-        specs: *const XlColumnSpec,
-        table: *const XlTable,
-        options: *const XlWriteOptions,
-        out_buffer: *mut XlBuffer,
-    ) -> c_int;
-
-    /// Releases a buffer returned by `xl_write_typed_to_memory` or `xl_write_handle_bytes` and
-    /// resets it to zero. Safe on a zeroed value.
-    pub fn xl_free_buffer(buffer: *mut XlBuffer);
-
-    /// Reads the plaintext XLSX/XLSB package at `package_path` and writes its agile-encrypted
-    /// (ECMA-376 4.4) counterpart to `destination_path`, overwriting an existing file. The result
-    /// opens with the same password via `xl_open_file`'s `xl_open_options::password`.
-    pub fn xl_encrypt_package(
-        package_path: *const u8,
-        package_path_len: i32,
-        destination_path: *const u8,
-        destination_path_len: i32,
-        password: *const u8,
-        password_len: i32,
-    ) -> c_int;
-
-
-    pub fn xl_open_write_handle(
-        path: *const u8,
-        path_len: i32,
-        format: i32,
-        options: *const XlWriteOptions,
-        out_handle: *mut *mut XlWriterHandle,
-    ) -> c_int;
-
-    pub fn xl_open_write_handle_to_memory(
-        format: i32,
-        options: *const XlWriteOptions,
-        out_handle: *mut *mut XlWriterHandle,
-    ) -> c_int;
-
-    pub fn xl_start_sheet(handle: *mut XlWriterHandle, name: *const u8, name_len: i32) -> c_int;
-    pub fn xl_start_row(handle: *mut XlWriterHandle) -> c_int;
-
-    pub fn xl_write_string(handle: *mut XlWriterHandle, value: *const u8, value_len: i32) -> c_int;
-    pub fn xl_write_int64(handle: *mut XlWriterHandle, value: i64) -> c_int;
-    pub fn xl_write_float64(handle: *mut XlWriterHandle, value: f64) -> c_int;
-    pub fn xl_write_bool(handle: *mut XlWriterHandle, value: i32) -> c_int;
-    pub fn xl_write_date(handle: *mut XlWriterHandle, days_since_epoch: i32) -> c_int;
-    pub fn xl_write_time(handle: *mut XlWriterHandle, micros_since_midnight: i64) -> c_int;
-    pub fn xl_write_timestamp(handle: *mut XlWriterHandle, micros_since_epoch: i64) -> c_int;
-    pub fn xl_write_null(handle: *mut XlWriterHandle, r#type: i32) -> c_int;
-
-    pub fn xl_end_row(handle: *mut XlWriterHandle) -> c_int;
-    pub fn xl_end_sheet(handle: *mut XlWriterHandle) -> c_int;
-    pub fn xl_close_write_handle(handle: *mut XlWriterHandle) -> c_int;
-
-    /// Reads back everything written so far to a handle opened by `xl_open_write_handle_to_memory`.
-    /// `XL_INVALID_ARGUMENT` for one from `xl_open_write_handle`. Only read `*out_buffer` when the
-    /// call returns `XL_OK`; on failure it is zeroed, and `xl_free_buffer` on a zeroed buffer is a
-    /// no-op.
-    pub fn xl_write_handle_bytes(handle: *mut XlWriterHandle, out_buffer: *mut XlBuffer) -> c_int;
-
-    pub fn xl_rows_open(handle: *mut XlWorkbook, sheet: i32, out_rows: *mut *mut XlRows) -> c_int;
-    pub fn xl_rows_close(rows: *mut XlRows) -> c_int;
-    pub fn xl_rows_next(
-        rows: *mut XlRows,
-        buffer: *mut u8,
-        capacity: i32,
-        out_written: *mut i32,
-    ) -> c_int;
-    pub fn xl_rows_read_all_blob(
-        rows: *mut XlRows,
-        buffer: *mut u8,
-        capacity: i32,
-        out_written: *mut i32,
-    ) -> c_int;
-    pub fn xl_rows_read_all_decoded(rows: *mut XlRows, out_rows: *mut XlRowsDecoded) -> c_int;
-    pub fn xl_free_rows(rows: *mut XlRowsDecoded);
-
-    /// Folds a CSV file into one caller-owned accumulator across several threads. Blocks until the
-    /// run finishes; the surviving state is written to `out_state` only on `XL_OK` and becomes the
-    /// caller's to free. See the contract above `xl_csv_aggregation` in `excelreader.h`, and
-    /// [`aggregate::aggregate_csv_file`] for the safe wrapper.
-    pub fn xl_csv_aggregate_file(
-        path: *const u8,
-        path_len: i32,
-        agg: *const XlCsvAggregation,
-        options: *const XlCsvParallelOptions,
-        out_state: *mut *mut c_void,
-    ) -> c_int;
-
-    /// Same as `xl_csv_aggregate_file` over an in-memory buffer, which must stay valid and
-    /// unmodified until the call returns - the library does not copy it.
-    pub fn xl_csv_aggregate_memory(
-        data: *const u8,
-        data_len: i32,
-        agg: *const XlCsvAggregation,
-        options: *const XlCsvParallelOptions,
-        out_state: *mut *mut c_void,
-    ) -> c_int;
-
-    pub fn xl_last_error_ptr(out_len: *mut i32) -> *const u8;
+    #[must_use]
+    pub fn invalid_argument(message: String) -> crate::Error {
+        crate::Error::new(crate::ErrorKind::InvalidArgument, message)
+    }
 }

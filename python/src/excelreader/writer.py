@@ -1,4 +1,4 @@
-"""Writing a columnar table to a workbook file. Read cursors live in reader.py; this module has none.
+"""Writing a columnar table to a workbook file or a binary stream. Read cursors live in reader.py; this module has none.
 
 Everything here funnels into the single `xl_write_typed` export. Each column's buffer is copied once
 into a ctypes block that this module owns for the duration of the call: `xl_write_typed` borrows
@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import ctypes
 import datetime
+import io
+import os
+import sys
 from array import array
 from pathlib import Path
-from typing import Any
+from typing import IO, Any, Union
 
 from excelreader import _native
 from excelreader.reader import _check
@@ -121,31 +124,65 @@ def _marshal(
     return specs, native_table, raw_options, keepalive
 
 
+Destination = Union[str, os.PathLike, IO[bytes]]
+
+
 def write_workbook(
-    path: str | Path,
-    table: TypedTable,
-    types: list[ColumnType],
+    destination: Destination,
+    data: Any,
+    types: list[ColumnType] | None = None,
     *,
     format: str | None = None,
     options: WriteOptions | None = None,
 ) -> None:
-    """Writes `table` to `path` as a single sheet.
+    """Writes `data` as a single sheet to `destination`: a path, or a binary object with `write()`
+    such as `io.BytesIO` or an open file.
 
-    `table` is what `Sheet.parse_typed()` returns, so reading a sheet and writing it back out is a
-    round-trip through the same buffers. `types` gives each column's `ColumnType` and is required
-    positionally: a `TypedTable` carries raw buffers (an `array`/`StringColumn`/NumPy array), and
-    nothing about a raw buffer's element size alone distinguishes, say, I64 from TIME — both are
-    8-byte-per-row arrays. The type tag has to travel with the call, not be guessed from the data.
-    `format` is one of xlsx/xlsb/xls/csv; None infers it from the path's extension.
+    `data` is one of:
 
-    `table.names` becomes the header row. `options` sets the sheet name and CSV dialect; see
+    - a `TypedTable`, what `Sheet.parse()` returns, so reading a sheet and writing it back out
+      is a round-trip through the same buffers. `types` then gives each column's `ColumnType` and is
+      required: a `TypedTable` carries raw buffers, and nothing about a raw buffer's element size
+      alone distinguishes, say, I64 from TIME — both are 8-byte-per-row arrays.
+    - a `pyarrow.RecordBatch` or `pyarrow.Table`, a `pandas.DataFrame` (its index is not written),
+      or any other table exposing `__arrow_c_stream__`, such as a `polars.DataFrame`. Each column's
+      type comes from its Arrow type, so `types` must be None. Requires pyarrow.
+
+    `format` is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
+    with `write()` has no extension, so it needs `format`. The whole workbook is built in memory and
+    handed to `write()` in one call, at the object's current position; the object is not closed.
+
+    The column names become the header row. `options` sets the sheet name and CSV dialect; see
     `WriteOptions`.
     """
-    resolved = Path(path)
-    format_id = _resolve_write_format(format, resolved)
-    specs, native_table, raw_options, keepalive = _marshal(table, types, options)
+    if isinstance(data, TypedTable):
+        if types is None:
+            raise TypeError("types is required when data is a TypedTable: one ColumnType per column")
+        table = data
+    else:
+        if types is not None:
+            raise TypeError("types must be None unless data is a TypedTable; Arrow data carries its own types")
+        table, types = _table_from_arrow(_arrow_table(data))
+    if isinstance(destination, (str, os.PathLike)):
+        _write_file(Path(destination), table, types, format, options)
+        return
+    if not hasattr(destination, "write"):
+        raise TypeError(
+            f"destination must be a path or an object with write(); got {type(destination).__name__}"
+        )
+    if format is None:
+        raise ValueError(
+            f"format= is required when writing to an object with write(); one of {sorted(_FORMAT_NAMES)}"
+        )
+    destination.write(_write_memory(table, types, format, options))
 
-    encoded = str(resolved).encode("utf-8")
+
+def _write_file(
+    path: Path, table: TypedTable, types: list[ColumnType], format: str | None, options: WriteOptions | None
+) -> None:
+    format_id = _resolve_write_format(format, path)
+    specs, native_table, raw_options, keepalive = _marshal(table, types, options)
+    encoded = str(path).encode("utf-8")
     lib = _native.load_library()
     _check(
         lib.xl_write_typed(
@@ -155,32 +192,19 @@ def write_workbook(
     del keepalive
 
 
-def write_workbook_to_bytes(
-    table: TypedTable,
-    types: list[ColumnType],
-    *,
-    format: str,
-    options: WriteOptions | None = None,
+def _write_memory(
+    table: TypedTable, types: list[ColumnType], format: str, options: WriteOptions | None
 ) -> bytes:
-    """The in-memory twin of `write_workbook()`.
-
-    `format` is required and is one of xlsx/xlsb/xls/csv — unlike `write_workbook`, there is no path
-    to infer it from.
-    """
-    if format not in _native.WRITE_FORMATS:
-        raise ValueError(f"format must be one of {sorted(_native.WRITE_FORMATS)}; got {format!r}")
-
+    try:
+        format_id = _FORMAT_NAMES[format.lower()]
+    except KeyError:
+        raise ValueError(f"unknown format {format!r}; expected one of {sorted(_FORMAT_NAMES)}") from None
     specs, native_table, raw_options, keepalive = _marshal(table, types, options)
-
     buffer = _native.NativeBuffer()
     lib = _native.load_library()
     _check(
         lib.xl_write_typed_to_memory(
-            _native.WRITE_FORMATS[format],
-            specs,
-            ctypes.byref(native_table),
-            ctypes.byref(raw_options),
-            ctypes.byref(buffer),
+            format_id, specs, ctypes.byref(native_table), ctypes.byref(raw_options), ctypes.byref(buffer)
         )
     )
     try:
@@ -195,6 +219,7 @@ def write_workbook_to_bytes(
 _ARROW_TYPES = {
     "string": ColumnType.STRING,
     "large_string": ColumnType.STRING,
+    "string_view": ColumnType.STRING,
     "int64": ColumnType.I64,
     "int32": ColumnType.I64,
     "double": ColumnType.F64,
@@ -314,77 +339,79 @@ def _table_from_arrow(batch: Any) -> tuple[TypedTable, list[ColumnType]]:
     return table, types
 
 
-def _arrow_from_pandas(df: Any) -> Any:
-    import pyarrow
+def _arrow_table(data: Any) -> Any:
+    try:
+        import pyarrow
+    except ImportError:
+        raise ImportError(
+            "write_workbook() requires pyarrow to write Arrow or DataFrame data — install it with "
+            "`pip install pyarrow`, or pass a TypedTable and its types."
+        ) from None
 
-    return pyarrow.Table.from_pandas(df, preserve_index=False)
-
-
-def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -> None:
-    """Writes a `pyarrow.RecordBatch` (or `Table`) to `path`. Requires pyarrow."""
-    table, types = _table_from_arrow(batch)
-    write_workbook(path, table, types, **kwargs)
-
-
-def write_arrow_to_bytes(batch: Any, *, format: str, options: WriteOptions | None = None) -> bytes:
-    """The in-memory twin of `write_arrow()`. `format` is required, as in `write_workbook_to_bytes()`."""
-    table, types = _table_from_arrow(batch)
-    return write_workbook_to_bytes(table, types, format=format, options=options)
-
-
-def write_pandas(path: str | Path, df: Any, **kwargs: Any) -> None:
-    """Writes a `pandas.DataFrame` to `path`. Requires pyarrow and pandas."""
-    write_arrow(path, _arrow_from_pandas(df), **kwargs)
-
-
-def write_pandas_to_bytes(df: Any, *, format: str, options: WriteOptions | None = None) -> bytes:
-    """The in-memory twin of `write_pandas()`. Requires pyarrow and pandas."""
-    return write_arrow_to_bytes(_arrow_from_pandas(df), format=format, options=options)
-
-
-def write_polars(path: str | Path, df: Any, **kwargs: Any) -> None:
-    """Writes a `polars.DataFrame` to `path`. Requires pyarrow and polars."""
-    write_arrow(path, df.to_arrow(), **kwargs)
-
-
-def write_polars_to_bytes(df: Any, *, format: str, options: WriteOptions | None = None) -> bytes:
-    """The in-memory twin of `write_polars()`. Requires pyarrow and polars."""
-    return write_arrow_to_bytes(df.to_arrow(), format=format, options=options)
-
-
-def encrypt_package(package_path: str | Path, destination_path: str | Path, password: str) -> None:
-    """Wraps a finished plaintext XLSX/XLSB package in an agile-encrypted (ECMA-376 4.4) CFB
-    container — the inverse of passing `password=` to `open_workbook`/`open_bytes`. `package_path`
-    is read twice, so it must already be a complete file (write it with `write_workbook` first).
-    Encryption parameters are fixed at Excel's own defaults; there are no options.
-    """
-    package_encoded = str(Path(package_path)).encode("utf-8")
-    destination_encoded = str(Path(destination_path)).encode("utf-8")
-    password_encoded = password.encode("utf-8")
-    lib = _native.load_library()
-    _check(
-        lib.xl_encrypt_package(
-            package_encoded, len(package_encoded),
-            destination_encoded, len(destination_encoded),
-            password_encoded, len(password_encoded),
-        )
+    if isinstance(data, (pyarrow.RecordBatch, pyarrow.Table)):
+        return data
+    pandas = sys.modules.get("pandas")
+    if pandas is not None and isinstance(data, pandas.DataFrame):
+        return pyarrow.Table.from_pandas(data, preserve_index=False)
+    if hasattr(data, "__arrow_c_stream__"):
+        return pyarrow.RecordBatchReader._import_from_c_capsule(data.__arrow_c_stream__()).read_all()
+    raise TypeError(
+        "data must be a TypedTable, a pyarrow RecordBatch or Table, a pandas DataFrame, or an object "
+        f"with __arrow_c_stream__; got {type(data).__name__}"
     )
 
 
-def encrypt_package_bytes(package: bytes, password: str) -> bytes:
-    """The in-memory twin of `encrypt_package()`: takes a finished XLSX/XLSB package's bytes (from
-    `write_workbook_to_bytes()` or a `*_to_bytes` writer) and returns the encrypted workbook's bytes,
-    so the plaintext never has to be written to disk.
+def encrypt_package(
+    package: Union[str, os.PathLike, bytes, bytearray, memoryview, io.BytesIO],
+    destination: Destination,
+    password: str,
+) -> None:
+    """Wraps a finished plaintext XLSX/XLSB package in an agile-encrypted (ECMA-376 4.4) CFB
+    container, the inverse of passing `password=` to `open_workbook`.
+
+    `package` is a path to a complete file, or its bytes (`bytes`, `bytearray`, `memoryview`, or an
+    `io.BytesIO` read whole). `destination` is a path, or a binary object with `write()` that
+    receives the encrypted workbook in one call and is not closed. Encryption parameters are fixed
+    at Excel's own defaults; there are no options.
     """
     password_encoded = password.encode("utf-8")
-    buffer = _native.NativeBuffer()
     lib = _native.load_library()
+    if isinstance(package, (str, os.PathLike)) and isinstance(destination, (str, os.PathLike)):
+        package_encoded = str(Path(package)).encode("utf-8")
+        destination_encoded = str(Path(destination)).encode("utf-8")
+        _check(
+            lib.xl_encrypt_package(
+                package_encoded, len(package_encoded),
+                destination_encoded, len(destination_encoded),
+                password_encoded, len(password_encoded),
+            )
+        )
+        return
+
+    if not isinstance(destination, (str, os.PathLike)) and not hasattr(destination, "write"):
+        raise TypeError(
+            f"destination must be a path or an object with write(); got {type(destination).__name__}"
+        )
+    if isinstance(package, (str, os.PathLike)):
+        data = Path(package).read_bytes()
+    elif isinstance(package, io.BytesIO):
+        data = package.getvalue()
+    elif isinstance(package, (bytes, bytearray, memoryview)):
+        data = bytes(package)
+    else:
+        raise TypeError(f"package must be a path or bytes; got {type(package).__name__}")
+
+    buffer = _native.NativeBuffer()
     _check(
         lib.xl_encrypt_package_to_memory(
-            package, len(package), password_encoded, len(password_encoded), ctypes.byref(buffer)
+            data, len(data), password_encoded, len(password_encoded), ctypes.byref(buffer)
         )
     )
     try:
-        return ctypes.string_at(buffer.data, buffer.len)
+        encrypted = ctypes.string_at(buffer.data, buffer.len)
     finally:
         lib.xl_free_buffer(ctypes.byref(buffer))
+    if isinstance(destination, (str, os.PathLike)):
+        Path(destination).write_bytes(encrypted)
+    else:
+        destination.write(encrypted)

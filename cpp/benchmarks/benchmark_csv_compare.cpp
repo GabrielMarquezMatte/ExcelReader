@@ -202,13 +202,13 @@ static void BM_ExcelReader_Csv_Full(benchmark::State &state)
     const std::vector<std::uint8_t> buffer = read_fixture();
     for (auto _ : state)
     {
-        auto workbook = xl::Workbook::open_memory(buffer, XL_FORMAT_CSV);
+        auto workbook = xl::Workbook::open(buffer, {.format = XL_FORMAT_CSV});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message);
             return;
         }
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         if (!table.has_value())
         {
             state.SkipWithError(table.error().message);
@@ -253,7 +253,7 @@ static void BM_ExcelReader_Csv_Cells(benchmark::State &state)
     const std::vector<std::uint8_t> buffer = read_fixture();
     for (auto _ : state)
     {
-        auto workbook = xl::Workbook::open_memory(buffer, XL_FORMAT_CSV);
+        auto workbook = xl::Workbook::open(buffer, {.format = XL_FORMAT_CSV});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message);

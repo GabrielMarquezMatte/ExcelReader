@@ -60,22 +60,6 @@ XL_T_TIME = 5
 XL_T_TIMESTAMP = 6
 
 
-class NativeRowCell(ctypes.Structure):
-    _fields_ = [
-        ("column", ctypes.c_int32),
-        ("type", ctypes.c_int32),
-        ("value_len", ctypes.c_int32),
-        ("value", ctypes.POINTER(ctypes.c_uint8)),
-    ]
-
-
-class NativeRow(ctypes.Structure):
-    _fields_ = [
-        ("cell_count", ctypes.c_int32),
-        ("cells", ctypes.POINTER(NativeRowCell)),
-    ]
-
-
 class NativeColumnSpec(ctypes.Structure):
     """Mirrors xl_column_spec. `names`/`name_lens`/`name_count` may be left NULL/NULL/0 to resolve by
     `index` instead. Build one with `column_spec_by_name`/`column_spec_by_names`, never directly —
@@ -225,15 +209,6 @@ ArrowArrayStream._fields_ = [
 ]
 
 
-class NativeRows(ctypes.Structure):
-    """Mirrors xl_rows_decoded."""
-
-    _fields_ = [
-        ("row_count", ctypes.c_int32),
-        ("rows", ctypes.POINTER(NativeRow)),
-    ]
-
-
 class NativeBuffer(ctypes.Structure):
     """Mirrors xl_buffer."""
 
@@ -332,13 +307,14 @@ def to_native_open_options(options: OpenOptions) -> NativeOpenOptions:
     raw = default_open_options()
     raw.csv_sniff_dialect = _opt_state(options.csv_sniff_dialect)
     raw.csv_detect_bom = _opt_state(options.csv_detect_bom)
-    raw.csv_intern_strings = _opt_state(options.csv_intern_strings)
     raw.prefetch_decompression = _opt_state(options.prefetch_decompression)
     raw.intern_strings = _opt_state(options.intern_strings)
     raw.verify_zip_checksums = _opt_state(options.verify_zip_checksums)
     raw.csv_delimiter = _opt_number(options.csv_delimiter)
     raw.csv_quote = _opt_number(options.csv_quote)
-    raw.csv_max_cell_bytes = _opt_number(options.csv_max_cell_bytes)
+    # The ABI's csv_* copies win over these for a CSV even when unset, so send the same value to both.
+    raw.csv_max_cell_bytes = _opt_number(options.max_cell_bytes)
+    raw.csv_intern_strings = raw.intern_strings
     raw.max_total_decompressed_bytes = _opt_number(options.max_total_decompressed_bytes)
     raw.max_cell_bytes = _opt_number(options.max_cell_bytes)
     raw.max_shared_string_bytes = _opt_number(options.max_shared_string_bytes)
@@ -495,12 +471,6 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_rows_close.restype = c_int
     lib.xl_rows_next.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_rows_next.restype = c_int
-    lib.xl_rows_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
-    lib.xl_rows_read_all_blob.restype = c_int
-    lib.xl_rows_read_all_decoded.argtypes = [p_void, ctypes.POINTER(NativeRows)]
-    lib.xl_rows_read_all_decoded.restype = c_int
-    lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
-    lib.xl_free_rows.restype = None
     lib.xl_parse_typed.argtypes = [p_void, c_int, p_specs, c_int, c_int, c_int, ctypes.POINTER(NativeTable)]
     lib.xl_parse_typed.restype = c_int
     lib.xl_typed_reader_open.argtypes = [p_void, c_int, p_specs, c_int, c_int, ctypes.c_int64, pp_void]

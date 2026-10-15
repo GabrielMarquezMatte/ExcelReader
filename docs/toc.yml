@@ -14,6 +14,8 @@
       href: guide/errors.md
     - name: Reading untrusted files
       href: guide/untrusted-input.md
+    - name: Versioning and compatibility
+      href: guide/versioning.md
 - name: API
   href: api/
 - name: Bindings

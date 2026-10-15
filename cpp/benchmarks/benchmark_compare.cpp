@@ -103,13 +103,13 @@ static void BM_ExcelReader_Xlsx_Full(benchmark::State &state)
     }
     for (auto _ : state)
     {
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSX);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSX});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message);
             return;
         }
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         if (!table.has_value())
         {
             state.SkipWithError(table.error().message);
@@ -135,13 +135,13 @@ static void BM_ExcelReader_Xlsx_ParseOnly(benchmark::State &state)
     }
     for (auto _ : state)
     {
-        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSX);
+        auto workbook = xl::Workbook::open(buffer_result.value(), {.format = XL_FORMAT_XLSX});
         if (!workbook.has_value())
         {
             state.SkipWithError(workbook.error().message);
             return;
         }
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         if (!table.has_value())
         {
             state.SkipWithError(table.error().message);

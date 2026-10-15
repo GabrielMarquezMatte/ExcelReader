@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <utility>
 
 #define CHECK(cond, msg)                                                         \
     do                                                                           \
@@ -69,12 +70,12 @@ static int test_write_columns_round_trip()
         xl::timestamp_column("instante", instantes)};
 
     const std::filesystem::path path = temp_path("columns.xlsx");
-    auto written = xl::write_columns(path.string(), XL_FORMAT_XLSX, columns);
+    auto written = xl::write_columns(path.string(), columns);
     CHECK(written.has_value(), "write_columns must succeed");
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+        auto table = xl::parse<WrittenRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 2, "two rows were written");
 
@@ -114,18 +115,16 @@ static int test_encrypt_package_round_trip()
 
     const std::filesystem::path plain_path = temp_path("encrypt-plain.xlsx");
     const std::filesystem::path encrypted_path = temp_path("encrypt-cipher.xlsx");
-    auto written = xl::write_columns(plain_path.string(), XL_FORMAT_XLSX, columns);
+    auto written = xl::write_columns(plain_path.string(), columns);
     CHECK(written.has_value(), "write_columns must succeed");
 
     auto encrypted = xl::encrypt_package(plain_path.string(), encrypted_path.string(), "hunter2");
     CHECK(encrypted.has_value(), "encrypt_package must succeed");
 
     {
-        xl::OpenOptions options;
-        options.password("hunter2");
-        auto workbook = xl::Workbook::open(encrypted_path.string(), XL_FORMAT_AUTO, &options);
+        auto workbook = xl::Workbook::open(encrypted_path.string(), {.password = "hunter2"});
         CHECK(workbook.has_value(), "the encrypted file must open with the right password");
-        auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+        auto table = xl::parse<WrittenRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the decrypted file must parse back");
         CHECK(table->size() == 2, "two rows were written");
         WrittenRow first = *table->begin();
@@ -147,7 +146,7 @@ static int test_encrypt_package_rejects_an_empty_password()
 {
     const std::filesystem::path plain_path = temp_path("encrypt-empty-pw.xlsx");
     const std::array<xl::ColumnRef, 1> columns{xl::i64_column("inteiro", std::vector<int64_t>{1})};
-    auto written = xl::write_columns(plain_path.string(), XL_FORMAT_XLSX, columns);
+    auto written = xl::write_columns(plain_path.string(), columns);
     CHECK(written.has_value(), "write_columns must succeed");
 
     auto encrypted = xl::encrypt_package(plain_path.string(), temp_path("encrypt-empty-pw-out.xlsx").string(), "");
@@ -175,13 +174,14 @@ static int test_write_columns_to_memory_round_trip()
         xl::time_column("hora", horas),
         xl::timestamp_column("instante", instantes)};
 
-    auto bytes = xl::write_columns_to_memory(XL_FORMAT_XLSX, columns);
-    CHECK(bytes.has_value(), "write_columns_to_memory must succeed");
-    CHECK(!bytes->empty(), "write_columns_to_memory must return non-empty bytes");
+    std::vector<uint8_t> bytes;
+    CHECK(xl::write_columns(bytes, columns, {.format = XL_FORMAT_XLSX}).has_value(),
+          "write_columns into a vector must succeed");
+    CHECK(!bytes.empty(), "write_columns must fill the vector");
 
-    auto workbook = xl::Workbook::open_memory(*bytes, XL_FORMAT_XLSX);
+    auto workbook = xl::Workbook::open(bytes, {.format = XL_FORMAT_XLSX});
     CHECK(workbook.has_value(), "the returned bytes must open");
-    auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+    auto table = xl::parse<WrittenRow>(workbook->sheet(0));
     CHECK(table.has_value(), "the returned bytes must parse back");
     CHECK(table->size() == 2, "two rows were written");
 
@@ -199,25 +199,29 @@ static int test_write_columns_rejects_bad_input()
     const std::filesystem::path path = temp_path("rejected.xlsx");
 
     std::array<xl::ColumnRef, 2> mismatched{xl::i64_column("a", two), xl::i64_column("b", three)};
-    CHECK(!xl::write_columns(path.string(), XL_FORMAT_XLSX, mismatched).has_value(),
+    CHECK(!xl::write_columns(path.string(), mismatched).has_value(),
           "columns of different lengths must be rejected");
 
     std::array<xl::ColumnRef, 2> partial_header{xl::i64_column("a", two), xl::i64_column("", two)};
-    CHECK(!xl::write_columns(path.string(), XL_FORMAT_XLSX, partial_header).has_value(),
+    CHECK(!xl::write_columns(path.string(), partial_header).has_value(),
           "a partial header row must be rejected");
 
     std::array<xl::ColumnRef, 1> short_bitmap{xl::i64_column("a", two)};
     short_bitmap[0].validity = reinterpret_cast<const uint8_t *>(two.data());
     short_bitmap[0].validity_len = 0;
-    CHECK(!xl::write_columns(path.string(), XL_FORMAT_XLSX, short_bitmap).has_value(),
+    CHECK(!xl::write_columns(path.string(), short_bitmap).has_value(),
           "a validity bitmap shorter than the row count must be rejected");
 
     std::array<xl::ColumnRef, 1> fine{xl::i64_column("a", two)};
-    CHECK(!xl::write_columns(path.string(), XL_FORMAT_AUTO, fine).has_value(),
-          "XL_FORMAT_AUTO must be rejected: a new file has no signature bytes to sniff");
+    CHECK(!xl::write_columns(temp_path("rejected.txt").string(), fine).has_value(),
+          "XL_FORMAT_AUTO with an unknown extension must be rejected");
+    std::vector<uint8_t> untouched{42};
+    CHECK(!xl::write_columns(untouched, fine).has_value(),
+          "XL_FORMAT_AUTO must be rejected for memory: there is no extension to infer it from");
+    CHECK(untouched.size() == 1 && untouched[0] == 42, "a failed write leaves the vector untouched");
 
     std::span<const xl::ColumnRef> none{};
-    CHECK(!xl::write_columns(path.string(), XL_FORMAT_XLSX, none).has_value(),
+    CHECK(!xl::write_columns(path.string(), none).has_value(),
           "an empty column set must be rejected");
 
     std::filesystem::remove(path);
@@ -226,35 +230,39 @@ static int test_write_columns_rejects_bad_input()
 
 static int test_write_options()
 {
-    xl::WriteOptions defaults{};
-    xl_write_options raw = defaults.to_c();
-    CHECK(raw.struct_size == static_cast<int32_t>(sizeof(xl_write_options)), "to_c must fill struct_size");
-    CHECK(raw.sheet_name == nullptr, "an empty sheet_name must lower to NULL, meaning Sheet1");
-    CHECK(raw.sheet_name_len == 0, "an empty sheet_name must lower to length 0");
-    CHECK(raw.csv_delimiter == 0, "an unset csv_delimiter must lower to 0");
-    CHECK(raw.date1904 == XL_OPT_DEFAULT, "an unset tri-state must lower to XL_OPT_DEFAULT");
+    const std::vector<int64_t> values{1, 2};
+    const std::array<xl::ColumnRef, 2> columns{xl::i64_column("a", values), xl::i64_column("b", values)};
 
-    xl::WriteOptions configured{};
-    configured.sheet_name = "Dados";
-    configured.csv_delimiter = ';';
-    configured.use_shared_strings = XL_OPT_TRUE;
-    xl_write_options set = configured.to_c();
-    CHECK(set.sheet_name_len == 5, "sheet_name_len must be the byte length");
-    CHECK(set.sheet_name != nullptr, "a non-empty sheet_name must lower to a pointer");
-    CHECK(set.csv_delimiter == ';', "csv_delimiter must pass through unchanged");
-    CHECK(set.use_shared_strings == XL_OPT_TRUE, "use_shared_strings must pass through unchanged");
+    std::vector<uint8_t> bytes;
+    CHECK(xl::write_columns(bytes, columns, {.format = XL_FORMAT_CSV, .csv_delimiter = ';'}).has_value(),
+          "writing a CSV into a vector must succeed");
+    const std::string_view text(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    CHECK(text.find("a;b") != std::string_view::npos, "WriteOptions::csv_delimiter must reach the output");
     return 0;
 }
 
-static int test_format_from_path()
+static int test_format_from_extension()
 {
-    CHECK(xl::format_from_path("out.xlsx") == XL_FORMAT_XLSX, ".xlsx must resolve to XL_FORMAT_XLSX");
-    CHECK(xl::format_from_path("out.XLSB") == XL_FORMAT_XLSB, "the extension match must be case-insensitive");
-    CHECK(xl::format_from_path("out.xls") == XL_FORMAT_XLS, ".xls must resolve to XL_FORMAT_XLS");
-    CHECK(xl::format_from_path("out.csv") == XL_FORMAT_CSV, ".csv must resolve to XL_FORMAT_CSV");
-    CHECK(xl::format_from_path("out.txt") == XL_FORMAT_AUTO, "an unknown extension must resolve to AUTO");
-    CHECK(xl::format_from_path("out") == XL_FORMAT_AUTO, "no extension at all must resolve to AUTO");
-    CHECK(xl::format_from_path("v1.2/report") == XL_FORMAT_AUTO, "a dot before the last separator is not an extension");
+    const std::vector<int64_t> values{1, 2};
+    const std::array<xl::ColumnRef, 1> columns{xl::i64_column("a", values)};
+    const std::array<std::pair<std::string_view, int32_t>, 4> cases{{{"ext.xlsx", XL_FORMAT_XLSX},
+                                                                     {"ext.XLSB", XL_FORMAT_XLSB},
+                                                                     {"ext.xls", XL_FORMAT_XLS},
+                                                                     {"ext.csv", XL_FORMAT_CSV}}};
+    for (const auto &[name, format] : cases)
+    {
+        const std::filesystem::path path = temp_path(name);
+        CHECK(xl::write_columns(path.string(), columns).has_value(), "a known extension must pick the format");
+        {
+            auto workbook = xl::Workbook::open(path.string(), {.format = format});
+            CHECK(workbook.has_value(), "the file must open as the format its extension names");
+            auto rows = workbook->sheet(0).read_all();
+            CHECK(rows.has_value() && rows->size() == 3, "the header and both rows must read back");
+        }
+        std::filesystem::remove(path);
+    }
+    CHECK(!xl::write_columns(temp_path("no-extension").string(), columns).has_value(),
+          "a path without an extension must be rejected");
     return 0;
 }
 
@@ -278,12 +286,12 @@ static int test_bool_round_trip()
     const std::array<xl::ColumnRef, 1> columns{xl::bool_column("ativo", flags)};
 
     const std::filesystem::path path = temp_path("bools.xlsx");
-    CHECK(xl::write_columns(path.string(), XL_FORMAT_XLSX, columns).has_value(),
+    CHECK(xl::write_columns(path.string(), columns).has_value(),
           "writing a bool column must succeed");
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<FlagRow>(workbook->sheet(0));
+        auto table = xl::parse<FlagRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 3, "three rows were written");
 
@@ -316,12 +324,12 @@ static int test_optional_round_trip()
     const std::array<xl::ColumnRef, 1> columns{xl::i64_column("quantidade", valores, validity)};
 
     const std::filesystem::path path = temp_path("nullable.xlsx");
-    CHECK(xl::write_columns(path.string(), XL_FORMAT_XLSX, columns).has_value(),
+    CHECK(xl::write_columns(path.string(), columns).has_value(),
           "writing a nullable column must succeed");
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<NullableRow>(workbook->sheet(0));
+        auto table = xl::parse<NullableRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 3, "three rows were written");
 
@@ -381,7 +389,7 @@ static int test_write_sheet_round_trip()
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 2, "two rows were written");
 
@@ -420,12 +428,13 @@ static int test_write_sheet_to_memory_round_trip()
                 std::chrono::system_clock::time_point{std::chrono::microseconds{1767312000000000}},
                 std::nullopt}};
 
-    auto bytes = xl::write_sheet_to_memory(XL_FORMAT_XLSX, rows);
-    CHECK(bytes.has_value(), "write_sheet_to_memory must succeed");
+    std::vector<uint8_t> bytes;
+    CHECK(xl::write_sheet(bytes, rows, {.format = XL_FORMAT_XLSX}).has_value(),
+          "write_sheet into a vector must succeed");
 
-    auto workbook = xl::Workbook::open_memory(*bytes, XL_FORMAT_XLSX);
+    auto workbook = xl::Workbook::open(bytes);
     CHECK(workbook.has_value(), "the returned bytes must open");
-    auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+    auto table = xl::parse<FullRow>(workbook->sheet(0));
     CHECK(table.has_value(), "the returned bytes must parse back");
     CHECK(table->size() == 2, "two rows were written");
 
@@ -444,14 +453,12 @@ static int test_write_sheet_options_and_csv()
     const std::vector<FullRow> rows{};
 
     const std::filesystem::path path = temp_path("named.xlsx");
-    xl::WriteOptions options{};
-    options.sheet_name = "Dados";
-    CHECK(xl::write_sheet(path.string(), XL_FORMAT_XLSX, rows, &options).has_value(),
+    CHECK(xl::write_sheet(path.string(), rows, {.format = XL_FORMAT_XLSX, .sheet_name = "Dados"}).has_value(),
           "writing an empty sheet with a custom name must succeed");
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the written file must open");
-        auto name = workbook->sheet_name_at(0);
+        auto name = workbook->sheet(0).name();
         CHECK(name.has_value(), "the sheet name must be readable");
         CHECK(*name == "Dados", "WriteOptions::sheet_name must reach the file");
     }
@@ -509,9 +516,9 @@ static int test_writer_handle()
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the file xl_close_write_handle produced must open");
-        auto name = workbook->sheet_name_at(0);
+        auto name = workbook->sheet(0).name();
         CHECK(name.has_value() && *name == "Planilha1", "xl_start_sheet's name must reach the file");
-        auto table = xl::parse_sheet<WrittenRow>(workbook->sheet(0));
+        auto table = xl::parse<WrittenRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 1, "exactly one data row was written");
         WrittenRow first = *table->begin();
@@ -567,7 +574,7 @@ static int test_writer_handle_class_round_trip()
 {
     const std::filesystem::path path = temp_path("writer_handle_class.xlsx");
     {
-        auto handle = xl::WriterHandle::open(path.string(), XL_FORMAT_XLSX);
+        auto handle = xl::WriterHandle::open(path.string());
         CHECK(handle.has_value(), "WriterHandle::open must succeed");
 
         CHECK(handle->start_sheet("Planilha1").has_value(), "start_sheet must succeed");
@@ -605,11 +612,13 @@ static int test_writer_handle_class_round_trip()
         CHECK(handle->end_row().has_value(), "end_row must succeed for the null-cell row");
 
         CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
+        CHECK(handle->finish().has_value(), "finish must succeed");
+        CHECK(!handle->start_row().has_value(), "a finished handle accepts no more writes");
     }
     {
         auto workbook = xl::Workbook::open(path.string());
         CHECK(workbook.has_value(), "the file WriterHandle produced must open");
-        auto table = xl::parse_sheet<FullRow>(workbook->sheet(0));
+        auto table = xl::parse<FullRow>(workbook->sheet(0));
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 2, "two data rows were written");
 
@@ -632,44 +641,34 @@ static int test_writer_handle_class_round_trip()
 
 static int test_writer_handle_class_to_memory_round_trip()
 {
-    auto handle = xl::WriterHandle::open_memory(XL_FORMAT_XLSX);
-    CHECK(handle.has_value(), "WriterHandle::open_memory must succeed");
+    std::vector<uint8_t> bytes;
+    auto handle = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
+    CHECK(handle.has_value(), "WriterHandle::open over a vector must succeed");
 
     CHECK(handle->start_sheet("Dados").has_value(), "start_sheet must succeed");
     CHECK(handle->start_row().has_value(), "start_row must succeed");
     CHECK(handle->write(std::string_view("uma")).has_value(), "write(string_view) must succeed");
     CHECK(handle->write(int64_t{3}).has_value(), "write(int64_t) must succeed");
     CHECK(handle->end_row().has_value(), "end_row must succeed");
+    CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
+    CHECK(bytes.empty(), "the vector is filled only when the handle finishes");
 
-    auto bytes = handle->bytes();
-    CHECK(bytes.has_value(), "bytes() must succeed");
-    CHECK(!bytes->empty(), "bytes() must return non-empty bytes");
+    CHECK(handle->finish().has_value(), "finish must succeed");
+    CHECK(!bytes.empty(), "finish must fill the vector");
+    CHECK(handle->finish().has_value(), "a second finish does nothing");
 
-    auto workbook = xl::Workbook::open_memory(*bytes, XL_FORMAT_XLSX);
-    CHECK(workbook.has_value(), "the bytes bytes() returned must open");
-    auto sheet_name = workbook->sheet_name_at(0);
+    auto workbook = xl::Workbook::open(bytes, {.format = XL_FORMAT_XLSX});
+    CHECK(workbook.has_value(), "the bytes finish wrote must open");
+    auto sheet_name = workbook->sheet(0).name();
     CHECK(sheet_name.has_value() && *sheet_name == "Dados", "start_sheet's name must reach the bytes");
-
-    auto bytes_again = handle->bytes();
-    CHECK(bytes_again.has_value(), "a second bytes() call must still succeed");
-    CHECK(*bytes_again == *bytes, "a second bytes() call must return the same content");
     return 0;
 }
 
-static int test_writer_handle_class_bytes_rejects_a_file_backed_handle()
+static int test_writer_handle_class_rejects_auto_for_memory()
 {
-    const std::filesystem::path path = temp_path("writer_handle_class_file.xlsx");
-    {
-        auto handle = xl::WriterHandle::open(path.string(), XL_FORMAT_XLSX);
-        CHECK(handle.has_value(), "WriterHandle::open must succeed");
-        CHECK(handle->start_sheet("S").has_value(), "start_sheet must succeed");
-
-        auto bytes = handle->bytes();
-        CHECK(!bytes.has_value(), "bytes() on a file-backed handle must fail");
-        CHECK(bytes.error().code == XL_INVALID_ARGUMENT,
-              "bytes() on a file-backed handle must be XL_INVALID_ARGUMENT");
-    }
-    std::filesystem::remove(path);
+    std::vector<uint8_t> bytes;
+    auto handle = xl::WriterHandle::open(bytes);
+    CHECK(!handle.has_value(), "WriterHandle::open over a vector must reject XL_FORMAT_AUTO");
     return 0;
 }
 
@@ -679,7 +678,7 @@ int main()
     {
         return 1;
     }
-    if (test_format_from_path() != 0)
+    if (test_format_from_extension() != 0)
     {
         return 1;
     }
@@ -743,7 +742,7 @@ int main()
     {
         return 1;
     }
-    if (test_writer_handle_class_bytes_rejects_a_file_backed_handle() != 0)
+    if (test_writer_handle_class_rejects_auto_for_memory() != 0)
     {
         return 1;
     }

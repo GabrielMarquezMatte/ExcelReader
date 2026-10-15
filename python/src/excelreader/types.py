@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import KW_ONLY, dataclass
 from enum import IntEnum
-from typing import Any, NamedTuple
+from typing import Any
 
 from excelreader import _native
 
@@ -35,17 +36,22 @@ class SheetVisibility(IntEnum):
 _MAX_SERIAL = 2_958_466
 
 
-class Cell(NamedTuple):
-    """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers."""
+@dataclass(slots=True, kw_only=True)
+class Cell:
+    """One cell. `value` is the raw text as stored, so DATE cells are Excel serial numbers;
+    `date1904` is the date system of the workbook it came from.
+
+    Unlike the other value types it is not frozen: `rows()` builds one per cell, and a frozen
+    dataclass's `__init__` costs twice as much."""
 
     column: int
     type: CellType
     value: str
+    date1904: bool = False
 
-    def as_date(self, date1904: bool = False) -> datetime.date | None:
+    def as_date(self) -> datetime.date | None:
         """Converts a DATE cell's serial value to a date. Returns None for any other cell type.
 
-        `date1904` should come from `Workbook.is_date1904` for the workbook this cell came from.
         Raises `ValueError` for a serial outside what Excel can show as a date.
         """
         if self.type is not CellType.DATE:
@@ -54,7 +60,7 @@ class Cell(NamedTuple):
         if not 0 <= serial < _MAX_SERIAL:
             raise ValueError(f"{self.value} is not an Excel date serial")
         days = int(serial)
-        if date1904:
+        if self.date1904:
             return datetime.date(1904, 1, 1) + datetime.timedelta(days=days)
         # Excel counts a 29 February 1900 that never existed, so serials before it sit one day later
         # against this epoch than those after. Serial 60, that day itself, reads as 28 February.
@@ -63,33 +69,8 @@ class Cell(NamedTuple):
         return datetime.date(1899, 12, 30) + datetime.timedelta(days=days)
 
 
-class ColumnarSheet(NamedTuple):
-    """Every cell of a sheet as parallel flat arrays, produced by `Sheet.read_all_columnar()`.
-
-    The fast path for large sheets: unlike `Sheet.read_all()`, decoding never constructs one
-    `Cell`/`str` object per cell — only `int` values fill the index arrays below, and `values` holds
-    every cell's raw UTF-8 bytes concatenated. Use `decode_cell()` to materialize a single `Cell` on
-    demand, or slice `values` directly for bulk work.
-
-    Each array is `array.array('i')` normally, or a NumPy `int32` `ndarray` when NumPy is installed
-    (see `reader.py`) — both support the same `len()`/indexing/slicing used here.
-
-    - `row_offsets[i] : row_offsets[i + 1]` are the cell indices belonging to row `i`, indexing into
-      `columns`/`types`/`value_offsets`. Length `row_count + 1`.
-    - `columns[j]` / `types[j]` are cell `j`'s column index and `CellType` value. Length `cell_count`.
-    - `value_offsets[j] : value_offsets[j + 1]` is cell `j`'s byte slice into `values`. Length
-      `cell_count + 1`.
-    """
-
-    row_offsets: Any
-    columns: Any
-    types: Any
-    value_offsets: Any
-    values: bytes
-
-
 class ColumnType(IntEnum):
-    """A column's requested type in a `Sheet.parse_typed()`/`to_arrow()` schema.
+    """A column's requested type in a `Sheet.parse()`/`to_arrow()` schema.
 
     Mirrors XL_T_* in src/ExcelReader.Native/include/excelreader.h — the values are ABI, do not
     renumber them. The buffer layout each one produces is documented on `TypedTable.columns`.
@@ -104,7 +85,8 @@ class ColumnType(IntEnum):
     TIMESTAMP = 6
 
 
-class ColumnSpec(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class ColumnSpec:
     """One column to read, and the type to convert it to.
 
     Leave `name` as None to resolve the column by `index` instead. `nullable` decides what a failed
@@ -113,13 +95,15 @@ class ColumnSpec(NamedTuple):
     """
 
     type: ColumnType
+    _: KW_ONLY
     name: str | None = None
     index: int = 0
     nullable: bool = False
 
 
-class OpenOptions(NamedTuple):
-    """Reader limits and dialect settings for `open_workbook()`/`open_bytes()`.
+@dataclass(frozen=True, slots=True, kw_only=True)
+class OpenOptions:
+    """Reader limits and dialect settings for `open_workbook()`.
 
     Every field is None for "use the library default", so you only set what you actually want to
     override. That single convention replaces two the C ABI uses internally: numeric fields there
@@ -127,13 +111,15 @@ class OpenOptions(NamedTuple):
     because several of them default to true. Neither leaks up here.
 
     The `max_*` fields are resource limits, not tuning knobs — they bound what a malformed or hostile
-    file can make the reader allocate. Lower them when parsing untrusted uploads.
+    file can make the reader allocate. Lower them when parsing untrusted uploads. `max_cell_bytes`
+    and `intern_strings` apply to every format, a CSV included.
 
     `csv_delimiter` and `csv_quote` are byte values, not strings: pass `ord(';')`, not `';'`.
 
-    `source_block_size` and `source_cache_bytes` tune the block cache of `open_source()` (4 MiB blocks
-    in 64 MiB by default; a negative block size turns the cache off). `max_buffered_bytes` caps how
-    much `open_stream()` reads before an XLSX, XLSB or XLS opens.
+    `source_block_size` and `source_cache_bytes` tune the block cache of a `Source` passed to
+    `open_workbook()` (4 MiB blocks in 64 MiB by default; a negative block size turns the cache off).
+    `max_buffered_bytes` caps how much `open_workbook()` reads from a stream before an XLSX, XLSB or
+    XLS opens.
 
     `verify_zip_checksums` (on by default) checks each ZIP entry of an XLSX or XLSB against its
     CRC-32, so a damaged file raises instead of returning wrong cells. Set it to `False` to read a
@@ -148,8 +134,6 @@ class OpenOptions(NamedTuple):
     csv_delimiter: int | None = None
     csv_quote: int | None = None
     csv_detect_bom: bool | None = None
-    csv_max_cell_bytes: int | None = None
-    csv_intern_strings: bool | None = None
     max_total_decompressed_bytes: int | None = None
     max_cell_bytes: int | None = None
     max_shared_string_bytes: int | None = None
@@ -162,7 +146,8 @@ class OpenOptions(NamedTuple):
     verify_zip_checksums: bool | None = None
 
 
-class WriteOptions(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WriteOptions:
     """Sheet name and dialect settings for `write_workbook()`.
 
     Every field is None for "use the library default", the same convention `OpenOptions` uses.
@@ -187,7 +172,7 @@ class StringColumn:
     """A `ColumnType.STRING` column, held as UTF-8 bytes plus offsets rather than one `str` per row.
 
     Decoding is deferred to `column[i]`, so reading a million-row string column costs no Python
-    objects until something actually asks for a value — the same trade `ColumnarSheet` makes.
+    objects until something actually asks for a value.
     """
 
     __slots__ = ("_data", "_offsets")
@@ -224,8 +209,9 @@ class StringColumn:
         return f"StringColumn({len(self)} rows, {len(self._data)} bytes)"
 
 
-class TypedTable(NamedTuple):
-    """The result of `Sheet.parse_typed()`: one flat buffer per column, already type-converted.
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TypedTable:
+    """The result of `Sheet.parse()`: one flat buffer per column, already type-converted.
 
     - `names[i]` is column `i`'s name as requested, or its index as a string when the spec resolved
       by index.
@@ -249,10 +235,10 @@ class ExcelReaderError(Exception):
 
 
 class PasswordRequiredError(ExcelReaderError):
-    """Raised by `open_workbook()`/`open_bytes()` when the workbook is encrypted and no `password`
+    """Raised by `open_workbook()` when the workbook is encrypted and no `password`
     was supplied. Maps XL_STATUS_PASSWORD_REQUIRED from the native ABI."""
 
 
 class PasswordIncorrectError(ExcelReaderError):
-    """Raised by `open_workbook()`/`open_bytes()` when the supplied `password` did not match the
+    """Raised by `open_workbook()` when the supplied `password` did not match the
     workbook's verifier. Maps XL_STATUS_PASSWORD_INCORRECT from the native ABI."""

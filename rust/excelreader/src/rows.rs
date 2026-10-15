@@ -1,13 +1,15 @@
 //! Row-at-a-time and whole-sheet decoded reads over the C ABI's row APIs.
 
-use crate::{
-    Error, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY, XL_CELL_ERROR, XL_CELL_FORMULA,
-    XL_CELL_NUMBER, XL_CELL_STRING, XL_ERROR,
+use crate::ffi::{
+    self, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY, XL_CELL_ERROR, XL_CELL_FORMULA,
+    XL_CELL_NUMBER, XL_CELL_STRING,
 };
+use crate::{Error, ErrorKind};
 
 /// The kind of a cell, mirroring `XL_CELL_*` in the C ABI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
+#[non_exhaustive]
 pub enum CellType {
     Empty = XL_CELL_EMPTY,
     String = XL_CELL_STRING,
@@ -21,8 +23,7 @@ pub enum CellType {
 impl CellType {
     /// Maps a raw `XL_CELL_*` value. `None` for a value this crate does not know, which can only
     /// happen against a newer native library than the one this crate was built against.
-    #[must_use]
-    pub fn from_raw(value: i32) -> Option<CellType> {
+    pub(crate) fn from_raw(value: i32) -> Option<CellType> {
         match value {
             XL_CELL_EMPTY => Some(CellType::Empty),
             XL_CELL_STRING => Some(CellType::String),
@@ -54,13 +55,17 @@ impl<'a> CellRef<'a> {
     /// The value as a string. Fails when the bytes are not valid UTF-8, which a well-formed
     /// workbook never produces.
     pub fn as_str(&self) -> Result<&'a str, Error> {
-        std::str::from_utf8(self.value)
-            .map_err(|err| Error::from_status(XL_ERROR, format!("cell value is not valid UTF-8: {err}")))
+        std::str::from_utf8(self.value).map_err(|err| {
+            Error::new(
+                ErrorKind::Other,
+                format!("cell value is not valid UTF-8: {err}"),
+            )
+        })
     }
 }
 
-/// Where a `RowRef`'s cells live. Blob rows come from `xl_rows_next`, decoded rows from
-/// `xl_rows_read_all_decoded`.
+/// Where a `RowRef`'s cells live. Blob rows come from `xl_rows_next`/`xl_rows_read_all_blob`,
+/// decoded rows from a CSV aggregation callback.
 #[derive(Debug, Clone, Copy)]
 enum RowBacking<'a> {
     /// The bytes AFTER the leading `int32 cell_count`.
@@ -93,7 +98,7 @@ impl<'a> RowRef<'a> {
     ///
     /// # Safety
     /// `cells` must point to `count` initialized `XlRowCell` values whose `value` pointers stay
-    /// valid for `'a` — that is, until `xl_free_rows` releases the enclosing `XlRowsDecoded`.
+    /// valid for `'a`.
     pub(crate) unsafe fn from_decoded(cells: *const XlRowCell, count: i32) -> RowRef<'a> {
         let len = if count > 0 { count as usize } else { 0 };
         let slice = if len == 0 || cells.is_null() {
@@ -101,7 +106,10 @@ impl<'a> RowRef<'a> {
         } else {
             unsafe { std::slice::from_raw_parts(cells, len) }
         };
-        RowRef { backing: RowBacking::Decoded(slice), len }
+        RowRef {
+            backing: RowBacking::Decoded(slice),
+            len,
+        }
     }
 
     #[must_use]
@@ -114,9 +122,8 @@ impl<'a> RowRef<'a> {
         self.len == 0
     }
 
-    /// The cell at `index`. For a row from `RowCursor` this walks the blob from the start, so it is
-    /// O(index); prefer `iter()` when reading a whole row. A row from `DecodedRows` indexes
-    /// directly.
+    /// The cell at `index`. For a row read from a sheet this walks the row from the start, so it is
+    /// O(index); prefer `iter()` when reading a whole row.
     #[must_use]
     pub fn get(&self, index: usize) -> Option<CellRef<'a>> {
         if index >= self.len {
@@ -130,7 +137,12 @@ impl<'a> RowRef<'a> {
 
     #[must_use]
     pub fn iter(&self) -> CellIter<'a> {
-        CellIter { backing: self.backing, len: self.len, index: 0, offset: 0 }
+        CellIter {
+            backing: self.backing,
+            len: self.len,
+            index: 0,
+            offset: 0,
+        }
     }
 }
 
@@ -200,7 +212,14 @@ fn cell_from_blob(blob: &[u8], offset: usize) -> Option<(CellRef<'_>, usize)> {
     let end = start.checked_add(value_len as usize)?;
     let value = blob.get(start..end)?;
     let cell_type = CellType::from_raw(raw_type)?;
-    Some((CellRef { column, cell_type, value }, end))
+    Some((
+        CellRef {
+            column,
+            cell_type,
+            value,
+        },
+        end,
+    ))
 }
 
 fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
@@ -210,7 +229,11 @@ fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
     } else {
         unsafe { std::slice::from_raw_parts(raw.value, raw.value_len as usize) }
     };
-    Some(CellRef { column: raw.column, cell_type, value })
+    Some(CellRef {
+        column: raw.column,
+        cell_type,
+        value,
+    })
 }
 
 /// Rows are usually well under this; it only sets how often the first oversized row costs a retry.
@@ -222,19 +245,19 @@ const INITIAL_ROW_BUFFER: usize = 64 * 1024;
 /// Not an `Iterator`: each row borrows the buffer that the next call overwrites, which
 /// `Iterator::next` cannot express. One row is alive at a time, enforced by the borrow checker.
 pub struct RowCursor<'w> {
-    rows: *mut crate::XlRows,
+    rows: *mut ffi::XlRows,
     buffer: Vec<u8>,
     written: usize,
-    workbook: std::marker::PhantomData<&'w crate::workbook::Workbook>,
+    workbook: std::marker::PhantomData<&'w crate::Workbook>,
 }
 
 // SAFETY: the cursor owns its native enumerator and ABI v6 lets one thread at a time use it;
 unsafe impl Send for RowCursor<'_> {}
 
 impl<'w> RowCursor<'w> {
-    pub(crate) fn open(handle: *mut crate::XlWorkbook, sheet: i32) -> Result<RowCursor<'w>, Error> {
-        let mut rows: *mut crate::XlRows = std::ptr::null_mut();
-        crate::workbook::check(unsafe { crate::xl_rows_open(handle, sheet, &mut rows) })?;
+    pub(crate) fn open(handle: *mut ffi::XlWorkbook, sheet: i32) -> Result<RowCursor<'w>, Error> {
+        let mut rows: *mut ffi::XlRows = std::ptr::null_mut();
+        crate::workbook::check(unsafe { ffi::xl_rows_open(handle, sheet, &mut rows) })?;
         Ok(RowCursor {
             rows,
             buffer: vec![0; INITIAL_ROW_BUFFER],
@@ -243,7 +266,7 @@ impl<'w> RowCursor<'w> {
         })
     }
 
-    pub(crate) fn raw(&self) -> *mut crate::XlRows {
+    pub(crate) fn raw(&self) -> *mut ffi::XlRows {
         self.rows
     }
 
@@ -256,26 +279,28 @@ impl<'w> RowCursor<'w> {
             let mut written: i32 = 0;
             let capacity = i32::try_from(self.buffer.len()).unwrap_or(i32::MAX);
             let status = unsafe {
-                crate::xl_rows_next(self.rows, self.buffer.as_mut_ptr(), capacity, &mut written)
+                ffi::xl_rows_next(self.rows, self.buffer.as_mut_ptr(), capacity, &mut written)
             };
 
             match status {
-                crate::XL_OK => {
+                ffi::XL_OK => {
                     self.written = if written > 0 { written as usize } else { 0 };
                     let blob = &self.buffer[..self.written];
-                    return Some(
-                        RowRef::from_blob(blob).ok_or_else(|| {
-                            Error::from_status(XL_ERROR, "native returned a malformed row blob".to_string())
-                        }),
-                    );
+                    return Some(RowRef::from_blob(blob).ok_or_else(|| {
+                        Error::new(ErrorKind::Other, "native returned a malformed row blob")
+                    }));
                 }
-                crate::XL_EOF => return None,
-                crate::XL_BUFFER_TOO_SMALL => {
-                    let needed = if written > 0 { written as usize } else { self.buffer.len() * 2 };
+                ffi::XL_EOF => return None,
+                ffi::XL_BUFFER_TOO_SMALL => {
+                    let needed = if written > 0 {
+                        written as usize
+                    } else {
+                        self.buffer.len() * 2
+                    };
                     if needed <= self.buffer.len() {
-                        return Some(Err(Error::from_status(
-                            XL_ERROR,
-                            "native asked for a buffer no larger than the current one".to_string(),
+                        return Some(Err(Error::new(
+                            ErrorKind::Other,
+                            "native asked for a buffer no larger than the current one",
                         )));
                     }
                     self.buffer.resize(needed, 0);
@@ -288,74 +313,19 @@ impl<'w> RowCursor<'w> {
 
 impl Drop for RowCursor<'_> {
     fn drop(&mut self) {
-        unsafe { crate::xl_rows_close(self.rows) };
-    }
-}
-
-/// Every row of a sheet, decoded natively in one call.
-///
-/// Owns the native allocation and releases it on drop. Rows and cells borrow from it, so they
-/// cannot outlive it.
-pub struct DecodedRows {
-    raw: crate::XlRowsDecoded,
-}
-
-impl DecodedRows {
-    pub(crate) fn new(raw: crate::XlRowsDecoded) -> DecodedRows {
-        DecodedRows { raw }
-    }
-
-    #[must_use]
-    pub fn len(&self) -> usize {
-        if self.raw.row_count > 0 { self.raw.row_count as usize } else { 0 }
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    #[must_use]
-    pub fn get(&self, index: usize) -> Option<RowRef<'_>> {
-        if index >= self.len() || self.raw.rows.is_null() {
-            return None;
-        }
-        let row = unsafe { &*self.raw.rows.add(index) };
-        Some(unsafe { RowRef::from_decoded(row.cells, row.cell_count) })
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = RowRef<'_>> + '_ {
-        (0..self.len()).filter_map(move |index| self.get(index))
-    }
-}
-
-impl Drop for DecodedRows {
-    fn drop(&mut self) {
-        unsafe { crate::xl_free_rows(&mut self.raw) };
-    }
-}
-
-// SAFETY: plain native allocations, read only through &self, released by xl_free_rows, which any
-unsafe impl Send for DecodedRows {}
-unsafe impl Sync for DecodedRows {}
-
-impl std::fmt::Debug for DecodedRows {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DecodedRows").field("len", &self.len()).finish()
+        unsafe { ffi::xl_rows_close(self.rows) };
     }
 }
 
 /// Rows are usually well under this; it only sets how often an oversized sheet costs a retry.
 const INITIAL_ALL_ROWS_BUFFER: usize = 1024 * 1024;
 
-/// Every row of a sheet, read into one flat buffer by a single `xl_rows_read_all_blob` call.
+/// Every row of a sheet, from [`Sheet::read_all`](crate::Sheet::read_all): one native call into
+/// one flat buffer this type owns as a plain `Vec<u8>`.
 ///
-/// Unlike [`DecodedRows`], the native side allocates nothing per row/cell here - `xl_rows_read_all_blob`
-/// writes the same wire format `RowCursor::next_row` decodes, one row after another with a length
-/// prefix, into a buffer this type owns as a plain `Vec<u8>`. That means no `xl_free_*` call on
-/// drop (there is nothing native to release) and one native allocation total instead of one per
-/// row - prefer this over [`Sheet::read_all_decoded`](crate::workbook::Sheet::read_all_decoded)
-/// unless something specifically needs the decoded-array shape.
+/// The native side allocates nothing per row or cell - `xl_rows_read_all_blob` writes the same wire
+/// format `RowCursor::next_row` decodes, one row after another with a length prefix - so there is
+/// nothing native to release on drop. Rows and cells borrow from it, so they cannot outlive it.
 pub struct AllRows {
     buffer: Vec<u8>,
     /// Each row's byte range within `buffer`, already excluding the row's own length prefix - so
@@ -364,27 +334,31 @@ pub struct AllRows {
 }
 
 impl AllRows {
-    pub(crate) fn read(rows: *mut crate::XlRows) -> Result<AllRows, Error> {
+    pub(crate) fn read(rows: *mut ffi::XlRows) -> Result<AllRows, Error> {
         let mut buffer = vec![0u8; INITIAL_ALL_ROWS_BUFFER];
         loop {
             let mut written: i32 = 0;
             let capacity = i32::try_from(buffer.len()).unwrap_or(i32::MAX);
             let status = unsafe {
-                crate::xl_rows_read_all_blob(rows, buffer.as_mut_ptr(), capacity, &mut written)
+                ffi::xl_rows_read_all_blob(rows, buffer.as_mut_ptr(), capacity, &mut written)
             };
 
             match status {
-                crate::XL_OK => {
+                ffi::XL_OK => {
                     buffer.truncate(if written > 0 { written as usize } else { 0 });
                     let row_ranges = parse_row_ranges(&buffer)?;
                     return Ok(AllRows { buffer, row_ranges });
                 }
-                crate::XL_BUFFER_TOO_SMALL => {
-                    let needed = if written > 0 { written as usize } else { buffer.len() * 2 };
+                ffi::XL_BUFFER_TOO_SMALL => {
+                    let needed = if written > 0 {
+                        written as usize
+                    } else {
+                        buffer.len() * 2
+                    };
                     if needed <= buffer.len() {
-                        return Err(Error::from_status(
-                            XL_ERROR,
-                            "native asked for a buffer no larger than the current one".to_string(),
+                        return Err(Error::new(
+                            ErrorKind::Other,
+                            "native asked for a buffer no larger than the current one",
                         ));
                     }
                     buffer.resize(needed, 0);
@@ -438,7 +412,9 @@ fn parse_row_ranges(buffer: &[u8]) -> Result<Vec<(usize, usize)>, Error> {
             return Err(malformed_all_rows_blob());
         }
         let start = offset.checked_add(4).ok_or_else(malformed_all_rows_blob)?;
-        let end = start.checked_add(row_length as usize).ok_or_else(malformed_all_rows_blob)?;
+        let end = start
+            .checked_add(row_length as usize)
+            .ok_or_else(malformed_all_rows_blob)?;
         if end > buffer.len() {
             return Err(malformed_all_rows_blob());
         }
@@ -453,7 +429,10 @@ fn parse_row_ranges(buffer: &[u8]) -> Result<Vec<(usize, usize)>, Error> {
 }
 
 fn malformed_all_rows_blob() -> Error {
-    Error::from_status(XL_ERROR, "native returned a malformed all-rows blob".to_string())
+    Error::new(
+        ErrorKind::Other,
+        "native returned a malformed all-rows blob",
+    )
 }
 
 #[cfg(test)]
@@ -497,7 +476,11 @@ mod tests {
 
     #[test]
     fn iterates_in_order() {
-        let bytes = blob(&[(0, XL_CELL_STRING, "a"), (1, XL_CELL_STRING, "b"), (2, XL_CELL_STRING, "c")]);
+        let bytes = blob(&[
+            (0, XL_CELL_STRING, "a"),
+            (1, XL_CELL_STRING, "b"),
+            (2, XL_CELL_STRING, "c"),
+        ]);
         let row = RowRef::from_blob(&bytes).expect("well-formed blob");
         let values: Vec<&str> = row.iter().map(|cell| cell.as_str().unwrap()).collect();
         assert_eq!(values, ["a", "b", "c"]);
@@ -549,8 +532,10 @@ mod tests {
         let ranges = parse_row_ranges(&bytes).expect("well-formed buffer");
         assert_eq!(ranges.len(), 3);
 
-        let rows: Vec<RowRef<'_>> =
-            ranges.iter().map(|&(start, end)| RowRef::from_blob(&bytes[start..end]).unwrap()).collect();
+        let rows: Vec<RowRef<'_>> = ranges
+            .iter()
+            .map(|&(start, end)| RowRef::from_blob(&bytes[start..end]).unwrap())
+            .collect();
         assert_eq!(rows[0].len(), 1);
         assert_eq!(rows[0].get(0).unwrap().as_str().unwrap(), "a");
         assert!(rows[1].is_empty());

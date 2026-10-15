@@ -5,9 +5,15 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- Pack fails on any binary break against the baseline; move it to each new release. -->
+  <PropertyGroup>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>7.0.0-rc.2</PackageValidationBaselineVersion>
+  </PropertyGroup>
+
   <PropertyGroup>
     <PackageId>ExcelReader.Arrow</PackageId>
-    <Version>1.0.0</Version>
+    <Version>$(PackageValidationBaselineVersion)-dev</Version>
     <Authors>Gabriel Matte</Authors>
     <Title>ExcelReader.Arrow</Title>
     <Description>Apache Arrow RecordBatch conversion for ExcelReader.NET.</Description>

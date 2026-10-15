@@ -1,4 +1,4 @@
-use excelreader::workbook::ExcelMapper;
+use excelreader::ExcelMapper;
 
 #[derive(Default, ExcelMapper)]
 struct Row {

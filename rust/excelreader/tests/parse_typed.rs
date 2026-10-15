@@ -1,5 +1,5 @@
-use excelreader::workbook::{parse_sheet, parse_sheet_parallel, ExcelMapper, Workbook};
-use excelreader::{Date, OpenOptions, XL_FORMAT_CSV, XL_FORMAT_XLSB, XL_T_DATE, XL_T_I64, XL_T_STRING};
+use excelreader::ReadOptions;
+use excelreader::{ColumnType, Date, ExcelMapper, Format, OpenOptions, Workbook};
 
 #[derive(Default, ExcelMapper)]
 struct Row {
@@ -34,13 +34,17 @@ fn fixture_path() -> String {
 }
 
 fn open_fixture() -> Workbook {
-    Workbook::open(&fixture_path()).expect("open must succeed")
+    Workbook::open(fixture_path()).expect("open must succeed")
 }
 
 #[test]
 fn parses_real_excel_fixture() {
     let workbook = open_fixture();
-    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Row>(&ReadOptions::new())
+        .expect("parse must succeed");
     assert_eq!(table.len(), 100);
 
     let first = table.get(0).expect("row 0 is in bounds");
@@ -54,7 +58,11 @@ fn parses_real_excel_fixture() {
 #[test]
 fn get_returns_none_outside_the_row_range() {
     let workbook = open_fixture();
-    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Row>(&ReadOptions::new())
+        .expect("parse must succeed");
 
     assert!(
         table.get(table.len() - 1).is_some(),
@@ -68,7 +76,11 @@ fn get_returns_none_outside_the_row_range() {
 #[test]
 fn iter_yields_exactly_len_rows_and_reports_it_up_front() {
     let workbook = open_fixture();
-    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Row>(&ReadOptions::new())
+        .expect("parse must succeed");
 
     let iter = table.iter();
     assert_eq!(iter.len(), 100, "ExactSizeIterator must agree with len()");
@@ -78,19 +90,32 @@ fn iter_yields_exactly_len_rows_and_reports_it_up_front() {
 #[test]
 fn parses_integer_widths_floats_and_dates() {
     let workbook = open_fixture();
-    let table = parse_sheet::<WideRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<WideRow>(&ReadOptions::new())
+        .expect("parse must succeed");
 
     let first = table.get(0).expect("row 0 is in bounds");
     assert_eq!(first.coluna1, "Valor1");
     assert_eq!(first.coluna3, 1u16);
     assert!((first.coluna16 - 0.1f32).abs() < f32::EPSILON);
-    assert_eq!(first.coluna2, Date::new(20_454));
+    assert_eq!(
+        first.coluna2,
+        Date {
+            days_since_epoch: 20_454
+        }
+    );
 }
 
 #[test]
 fn resolves_the_first_alias_present_in_the_header_row() {
     let workbook = open_fixture();
-    let table = parse_sheet::<AliasRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed via alias");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<AliasRow>(&ReadOptions::new())
+        .expect("parse must succeed via alias");
     assert_eq!(table.len(), 100);
     let first = table.get(0).expect("row 0 is in bounds");
     assert_eq!(first.coluna1, "Valor1");
@@ -108,7 +133,11 @@ fn parses_dates_straight_into_chrono() {
     }
 
     let workbook = open_fixture();
-    let table = parse_sheet::<ChronoRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<ChronoRow>(&ReadOptions::new())
+        .expect("parse must succeed");
     let first = table.get(0).expect("row 0 is in bounds");
     assert_eq!(first.coluna2, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
 }
@@ -117,11 +146,9 @@ fn parses_dates_straight_into_chrono() {
 fn exposes_sheet_navigation() {
     let workbook = open_fixture();
 
-    let count = workbook.sheet_count().expect("sheet_count must succeed");
-    assert!(count >= 1, "the fixture has at least one sheet");
-
-    let names = workbook.sheet_names().expect("sheet_names must succeed");
-    assert_eq!(names.len(), count as usize);
+    let sheets = workbook.sheets().expect("sheets must succeed");
+    assert!(!sheets.is_empty(), "the fixture has at least one sheet");
+    sheets[0].name().expect("name must succeed");
 
     workbook.is_date1904().expect("is_date1904 must succeed");
 }
@@ -129,48 +156,69 @@ fn exposes_sheet_navigation() {
 #[test]
 fn infers_a_schema_from_the_header_row() {
     let workbook = open_fixture();
-    let schema = workbook.sheet(0).expect("sheet 0").infer_schema(1, 100)
+    let schema = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .infer_schema(1, 100, false)
         .expect("infer_schema must succeed");
 
     assert!(!schema.is_empty(), "the fixture has columns to infer");
     let first = &schema[0];
     assert_eq!(first.name.as_deref(), Some("Coluna1"));
-    assert_eq!(first.column_type, XL_T_STRING);
+    assert_eq!(first.column_type, ColumnType::String);
 
     let coluna3 = schema
         .iter()
         .find(|c| c.name.as_deref() == Some("Coluna3"))
         .expect("Coluna3 must be inferred");
-    assert_eq!(coluna3.column_type, XL_T_I64);
+    assert_eq!(coluna3.column_type, ColumnType::I64);
 }
 
 #[test]
 fn infer_schema_leaves_the_sheet_readable() {
     let workbook = open_fixture();
-    workbook.sheet(0).expect("sheet 0").infer_schema(1, 100)
+    workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .infer_schema(1, 100, false)
         .expect("infer_schema must succeed");
 
-    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Row>(&ReadOptions::new())
+        .expect("parse must succeed");
     assert_eq!(table.len(), 100);
 }
 
 #[test]
-fn open_with_accepts_an_explicit_format_and_options() {
-    let options = OpenOptions::new().prefetch_decompression(true);
-    let workbook = Workbook::open_with(&fixture_path(), XL_FORMAT_XLSB, Some(&options))
-        .expect("open_with must succeed");
+fn open_options_accept_an_explicit_format_and_settings() {
+    let workbook = OpenOptions::new()
+        .format(Format::Xlsb)
+        .prefetch_decompression(true)
+        .open(fixture_path())
+        .expect("open must succeed");
 
-    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Row>(&ReadOptions::new())
+        .expect("parse must succeed");
     assert_eq!(table.len(), 100);
 }
 
 #[test]
-fn open_memory_reads_the_same_bytes() {
+fn open_bytes_reads_the_same_bytes() {
     let bytes = std::fs::read(fixture_path()).expect("fixture must be readable");
-    let workbook =
-        Workbook::open_memory(&bytes, XL_FORMAT_XLSB, None).expect("open_memory must succeed");
+    let workbook = OpenOptions::new()
+        .open_bytes(&bytes)
+        .expect("open_bytes must succeed");
 
-    let table = parse_sheet::<Row>(workbook.sheet(0).expect("sheet 0"), 1).expect("parse_sheet must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Row>(&ReadOptions::new())
+        .expect("parse must succeed");
     assert_eq!(table.len(), 100);
     assert_eq!(table.get(0).unwrap().coluna1, "Valor1");
 }
@@ -185,7 +233,7 @@ fn open_reports_the_native_error_for_a_missing_file() {
 }
 
 #[test]
-fn parse_sheet_reports_the_native_error_for_an_unknown_column() {
+fn parse_reports_the_native_error_for_an_unknown_column() {
     #[derive(Default, ExcelMapper)]
     struct Missing {
         #[excel(name = "ThisColumnDoesNotExist")]
@@ -193,7 +241,11 @@ fn parse_sheet_reports_the_native_error_for_an_unknown_column() {
     }
 
     let workbook = open_fixture();
-    let error = parse_sheet::<Missing>(workbook.sheet(0).expect("sheet 0"), 1).expect_err("an unknown column must fail");
+    let error = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<Missing>(&ReadOptions::new())
+        .expect_err("an unknown column must fail");
     assert!(
         !error.message().is_empty(),
         "the failure must carry the native detail, got: {error}"
@@ -201,12 +253,19 @@ fn parse_sheet_reports_the_native_error_for_an_unknown_column() {
 }
 
 #[test]
-fn abi_version_matches_the_loaded_library() {
-    assert_eq!(
-        unsafe { excelreader::xl_abi_version() },
-        excelreader::XL_ABI_VERSION,
-        "the linked native library speaks a different ABI revision than this crate"
-    );
+fn a_non_utf8_path_is_an_invalid_argument() {
+    #[cfg(windows)]
+    let path = {
+        use std::os::windows::ffi::OsStringExt;
+        std::path::PathBuf::from(std::ffi::OsString::from_wide(&[0xD800]))
+    };
+    #[cfg(unix)]
+    let path = {
+        use std::os::unix::ffi::OsStrExt;
+        std::path::PathBuf::from(std::ffi::OsStr::from_bytes(b"\xFF.xlsx"))
+    };
+    let error = Workbook::open(path).expect_err("a non-UTF-8 path must fail");
+    assert_eq!(error.kind(), excelreader::ErrorKind::InvalidArgument);
 }
 
 fn write_csv(tag: &str, text: &str) -> std::path::PathBuf {
@@ -217,19 +276,29 @@ fn write_csv(tag: &str, text: &str) -> std::path::PathBuf {
 
 #[test]
 fn infer_schema_parse_text_types_csv_text_fields() {
-    let path = write_csv("infer", "id,day
+    let path = write_csv(
+        "infer",
+        "id,day
 1,2024-01-02
 2,2024-03-04
-");
-    let workbook = Workbook::open_with(path.to_str().unwrap(), XL_FORMAT_CSV, None).expect("open must succeed");
+",
+    );
+    let workbook = OpenOptions::new()
+        .format(Format::Csv)
+        .open(&path)
+        .expect("open must succeed");
     let sheet = workbook.sheet(0).expect("sheet 0");
 
-    let plain = sheet.infer_schema(1, 100).expect("infer_schema must succeed");
-    assert!(plain.iter().all(|c| c.column_type == XL_T_STRING));
+    let plain = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+    assert!(plain.iter().all(|c| c.column_type == ColumnType::String));
 
-    let typed = sheet.infer_schema_parse_text(1, 100).expect("infer_schema_parse_text must succeed");
-    assert_eq!(typed[0].column_type, XL_T_I64);
-    assert_eq!(typed[1].column_type, XL_T_DATE);
+    let typed = sheet
+        .infer_schema(1, 100, true)
+        .expect("infer_schema with parse_text must succeed");
+    assert_eq!(typed[0].column_type, ColumnType::I64);
+    assert_eq!(typed[1].column_type, ColumnType::Date);
     drop(workbook);
     let _ = std::fs::remove_file(path);
 }
@@ -243,27 +312,46 @@ struct CsvRow {
 }
 
 #[test]
-fn parse_sheet_parallel_matches_the_sequential_parse() {
+fn parallel_parse_matches_the_sequential_parse() {
     const ROWS: i64 = 200_000;
-    let mut text = String::from("id,name
-");
+    let mut text = String::from(
+        "id,name
+",
+    );
     for i in 0..ROWS {
-        text.push_str(&format!("{i},name-{i}
-"));
+        text.push_str(&format!(
+            "{i},name-{i}
+"
+        ));
     }
     let path = write_csv("parallel", &text);
-    let workbook = Workbook::open_with(path.to_str().unwrap(), XL_FORMAT_CSV, None).expect("open must succeed");
+    let workbook = OpenOptions::new()
+        .format(Format::Csv)
+        .open(&path)
+        .expect("open must succeed");
 
-    let sequential = parse_sheet::<CsvRow>(workbook.sheet(0).expect("sheet 0"), 1).expect("sequential parse");
-    let parallel = parse_sheet_parallel::<CsvRow>(workbook.sheet(0).expect("sheet 0"), 1, 0).expect("parallel parse");
+    let sequential = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<CsvRow>(&ReadOptions::new())
+        .expect("sequential parse");
+    let parallel = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<CsvRow>(&ReadOptions::new().parallelism(0))
+        .expect("parallel parse");
     assert_eq!(parallel.len(), sequential.len());
-    assert_eq!(parallel.len() as i64, ROWS);
+    assert_eq!(parallel.len(), ROWS);
     for index in [0, parallel.len() - 1] {
         let (a, b) = (parallel.get(index).unwrap(), sequential.get(index).unwrap());
         assert_eq!((a.id, a.name), (b.id, b.name));
     }
 
-    assert!(parse_sheet_parallel::<CsvRow>(workbook.sheet(0).expect("sheet 0"), 1, -1).is_err());
+    assert!(workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<CsvRow>(&ReadOptions::new().parallelism(-1))
+        .is_err());
     drop(workbook);
     let _ = std::fs::remove_file(path);
 }
