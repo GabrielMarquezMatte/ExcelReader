@@ -87,10 +87,11 @@
         <article data-uid="">
 <h1 id="class-sheetwriter">Class SheetWriter</h1>
 
-<p>A streaming workbook writer. Use as a context manager; closing finalizes the file.</p>
-<p>The required call order is <code>start_sheet</code> -&gt; <code>start_row</code> -&gt; one write per cell -&gt; <code>end_row</code> -&gt;
-<code>end_sheet</code>. Calling out of order raises <code>ExcelReaderError</code>, and the writer stays usable: fix
-the order and continue, or close to discard.</p>
+<p>A streaming workbook writer. Use as a context manager; closing finalizes the workbook, and for
+a destination with <code>write()</code> hands it the finished bytes.</p>
+<p>The required call order is <code>start_sheet</code> -&gt; <code>write_row</code> per row -&gt; <code>end_sheet</code>. Calling out of
+order raises <code>ExcelReaderError</code>, and the writer stays usable: fix the order and continue, or
+close to discard.</p>
 <pre><code class="lang-python">class SheetWriter
 </code></pre>
 <p>Supports <code>with</code>.</p>
@@ -115,184 +116,16 @@ the order and continue, or close to discard.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="start_row">start_row</h3>
-<pre><code class="lang-python">def start_row() -&gt; None
-</code></pre>
-<h3 id="end_row">end_row</h3>
-<pre><code class="lang-python">def end_row() -&gt; None
-</code></pre>
 <h3 id="end_sheet">end_sheet</h3>
 <pre><code class="lang-python">def end_sheet() -&gt; None
 </code></pre>
-<h3 id="write_str">write_str</h3>
-<pre><code class="lang-python">def write_str(value: str | None) -&gt; None
-</code></pre>
-<p>Writes the next cell as text, or a blank cell for None.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>value</code></td>
-<td>str | None</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="write_i64">write_i64</h3>
-<pre><code class="lang-python">def write_i64(value: int | None) -&gt; None
-</code></pre>
-<p>Writes the next cell as a whole number. Raises <code>OverflowError</code> outside the signed 64-bit range.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>value</code></td>
-<td>int | None</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="write_f64">write_f64</h3>
-<pre><code class="lang-python">def write_f64(value: float | None) -&gt; None
-</code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>value</code></td>
-<td>float | None</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="write_bool">write_bool</h3>
-<pre><code class="lang-python">def write_bool(value: bool | None) -&gt; None
-</code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>value</code></td>
-<td>bool | None</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="write_date">write_date</h3>
-<pre><code class="lang-python">def write_date(value: datetime.date | None) -&gt; None
-</code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>value</code></td>
-<td>datetime.date | None</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="write_time">write_time</h3>
-<pre><code class="lang-python">def write_time(value: datetime.time | None) -&gt; None
-</code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>value</code></td>
-<td>datetime.time | None</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="write_timestamp">write_timestamp</h3>
-<pre><code class="lang-python">def write_timestamp(value: datetime.datetime | None) -&gt; None
-</code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>value</code></td>
-<td>datetime.datetime | None</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="write_null">write_null</h3>
-<pre><code class="lang-python">def write_null(column_type: ColumnType) -&gt; None
-</code></pre>
-<p>Writes a blank cell typed as <code>column_type</code>.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>column_type</code></td>
-<td><a href="ColumnType.html">ColumnType</a></td>
-<td></td>
-</tr>
-</tbody>
-</table>
 <h3 id="write_row">write_row</h3>
 <pre><code class="lang-python">def write_row(values: Sequence[Any]) -&gt; None
 </code></pre>
-<p><code>start_row()</code>, one inferred write per value, <code>end_row()</code>.</p>
-<p>The type of each value picks the write method. <code>None</code> becomes a blank <em>string</em> cell — it is
-the one case inference cannot resolve; use <code>write_null(ColumnType.X)</code> for a typed blank.</p>
+<p>Writes one row, one cell per value, its type inferred from the value.</p>
+<p><code>str</code> is text, <code>bool</code> a boolean, <code>int</code> a 64-bit integer, <code>float</code> a number, <code>datetime</code> a
+timestamp (an aware one converted to UTC), <code>date</code> a date and <code>time</code> a time of day. <code>None</code> is a
+blank text cell; the tuple <code>(None, ColumnType.X)</code> is a blank cell typed as X.</p>
 <p>Raises, before writing anything, <code>TypeError</code> for a value whose type has no mapping and
 <code>OverflowError</code> for an <code>int</code> outside the signed 64-bit range.</p>
 <p><strong>Parameters</strong></p>
@@ -312,18 +145,12 @@ the one case inference cannot resolve; use <code>write_null(ColumnType.X)</code>
 </tr>
 </tbody>
 </table>
-<h3 id="bytes">bytes</h3>
-<pre><code class="lang-python">def bytes() -&gt; bytes
-</code></pre>
-<p>The workbook written so far, for an in-memory writer.</p>
-<p>Implicitly finishes the workbook's trailing structure, so it is safe whether or not every
-sheet and row was explicitly ended. Unlike <code>close()</code>, it does not release the writer — call
-<code>close()</code> afterward either way. Raises <code>ExcelReaderError</code> for a file-backed writer.</p>
-<p><strong>Returns</strong> bytes</p>
 <h3 id="close">close</h3>
 <pre><code class="lang-python">def close() -&gt; None
 </code></pre>
 <p>Finalizes and releases the writer. Safe to call more than once.</p>
+<p>For a destination with <code>write()</code>, the finished workbook is written to it in one call, even
+when sheets or rows were left open.</p>
 
 </article>
 

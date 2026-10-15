@@ -88,7 +88,7 @@
 <h1 id="class-writerhandle">Class WriterHandle</h1>
 
 <p>Writes a workbook as calls arrive instead of building it in memory first.</p>
-<p>Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and end_row; then end_sheet. A call out of order returns an error rather than corrupting the output. Closed on destruction.</p>
+<p>Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and end_row; then end_sheet. A call out of order returns an error rather than corrupting the output. Finish with finish(); destruction finishes too, but cannot report a failure.</p>
 <pre><code class="lang-cpp">class xl::WriterHandle
 </code></pre>
 <h2 id="methods">Methods</h2>
@@ -151,7 +151,7 @@ std::expected&lt;void, Error&gt; write(const T &amp;value)
 <td><code>value</code></td>
 <td>const T &amp;</td>
 <td></td>
-<td>Any type XlType covers; an empty std::optional writes a blank cell.</td>
+<td>A string, integer, floating-point, bool or std::chrono date or time value, as a field of an ExcelMapper row may hold; an empty std::optional writes a blank cell.</td>
 </tr>
 </tbody>
 </table>
@@ -180,24 +180,22 @@ std::expected&lt;void, Error&gt; write(const T &amp;value)
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="bytes">bytes</h3>
-<pre><code class="lang-cpp">std::expected&lt;std::vector&lt;uint8_t&gt;, Error&gt; bytes()
+<h3 id="finish">finish</h3>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; finish()
 </code></pre>
-<p>Everything written so far, for a handle from open_memory.</p>
-<p>Finishes the workbook's trailing structure but leaves the handle open.</p>
-<p><strong>Returns</strong> std::expected&lt;std::vector&lt;uint8_t&gt;, <a href="Error.html">Error</a>&gt;: The file's bytes.</p>
-<h3 id="handle">handle</h3>
-<pre><code class="lang-cpp">xl_writer_handle * handle() const noexcept
-</code></pre>
-<p>The native handle, for calling the C ABI directly.</p>
-<p><strong>Returns</strong> xl_writer_handle *: The handle, still owned by this object.</p>
+<p>Completes the workbook and closes the handle; a handle opened over a vector fills it.</p>
+<p>Every call after the first does nothing.</p>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
 <h3 id="open">open</h3>
 <pre><code class="lang-cpp">static std::expected&lt;WriterHandle, Error&gt; open(
     std::string_view path,
-    int32_t format,
-    const WriteOptions * options = nullptr)
+    const WriteOptions &amp; options = {})
+static std::expected&lt;WriterHandle, Error&gt; open(
+    std::vector&lt;uint8_t&gt; &amp; out,
+    const WriteOptions &amp; options = {})
 </code></pre>
 <p>Creates a file to write into.</p>
+<p>Writes into memory instead of a file.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -216,48 +214,16 @@ std::expected&lt;void, Error&gt; write(const T &amp;value)
 <td>File to create.</td>
 </tr>
 <tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td></td>
-<td>An <code>XL_FORMAT_*</code> constant other than <code>XL_FORMAT_AUTO</code>.</td>
-</tr>
-<tr>
 <td><code>options</code></td>
-<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>As for write_columns.</td>
 </tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;<a href="WriterHandle.html">WriterHandle</a>, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="open_memory">open_memory</h3>
-<pre><code class="lang-cpp">static std::expected&lt;WriterHandle, Error&gt; open_memory(
-    int32_t format,
-    const WriteOptions * options = nullptr)
-</code></pre>
-<p>Writes into memory instead of a file; read the result with bytes().</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
 <tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>format</code></td>
-<td>int32_t</td>
+<td><code>out</code></td>
+<td>std::vector&lt;uint8_t&gt; &amp;</td>
 <td></td>
-<td>An <code>XL_FORMAT_*</code> constant other than <code>XL_FORMAT_AUTO</code>.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+<td>Replaced with the file's bytes when the handle finishes. Must outlive the handle.</td>
 </tr>
 </tbody>
 </table>

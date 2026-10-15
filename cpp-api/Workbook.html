@@ -92,40 +92,6 @@
 <pre><code class="lang-cpp">class xl::Workbook
 </code></pre>
 <h2 id="methods">Methods</h2>
-<h3 id="sheet_count">sheet_count</h3>
-<pre><code class="lang-cpp">std::expected&lt;int32_t, Error&gt; sheet_count() const
-</code></pre>
-<p>Number of sheets.</p>
-<p><strong>Returns</strong> std::expected&lt;int32_t, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="sheet_name_at">sheet_name_at</h3>
-<pre><code class="lang-cpp">std::expected&lt;std::string, Error&gt; sheet_name_at(int32_t index) const
-</code></pre>
-<p>Name of the sheet at <code>index</code>.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>index</code></td>
-<td>int32_t</td>
-<td></td>
-<td>0-based sheet position.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;std::string, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="sheet_names">sheet_names</h3>
-<pre><code class="lang-cpp">std::expected&lt;std::vector&lt;std::string&gt;, Error&gt; sheet_names() const
-</code></pre>
-<p>Every sheet's name, in workbook order.</p>
-<p><strong>Returns</strong> std::expected&lt;std::vector&lt;std::string&gt;, <a href="Error.html">Error</a>&gt;</p>
 <h3 id="sheet">sheet</h3>
 <pre><code class="lang-cpp">Sheet sheet(int32_t index) const noexcept
 </code></pre>
@@ -186,18 +152,23 @@
 <p>Whether dates count from 1904 instead of 1900.</p>
 <p>A date cell's serial number depends on it.</p>
 <p><strong>Returns</strong> std::expected&lt;bool, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="handle">handle</h3>
-<pre><code class="lang-cpp">xl_workbook * handle() const noexcept
-</code></pre>
-<p>The native handle, for calling the C ABI directly.</p>
-<p><strong>Returns</strong> xl_workbook *: The handle, still owned by this object.</p>
 <h3 id="open">open</h3>
-<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open(
-    std::string_view path,
-    int32_t format = XL_FORMAT_AUTO,
-    const OpenOptions * options = nullptr)
+<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open(std::string_view path, const OpenOptions &amp;options={})
+static std::expected&lt;Workbook, Error&gt; open(
+    std::span&lt;const uint8_t&gt; data,
+    const OpenOptions &amp; options = {})
+static std::expected&lt;Workbook, Error&gt; open(
+    std::unique_ptr&lt;Source&gt; source,
+    const OpenOptions &amp; options = {})
+static std::expected&lt;Workbook, Error&gt; open(
+    std::unique_ptr&lt;InputStream&gt; stream,
+    const OpenOptions &amp; options = {})
 </code></pre>
 <p>Opens the workbook at a path.</p>
+<p>Opens a workbook from bytes in memory.</p>
+<p>Opens a workbook over random-access bytes.</p>
+<p>Opens a workbook over a stream that cannot seek.</p>
+<p>A CSV is read as it arrives, and again from the start until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole first.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -216,38 +187,11 @@
 <td>File to open.</td>
 </tr>
 <tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td><code>XL_FORMAT_AUTO</code></td>
-<td>An <code>XL_FORMAT_*</code> constant. <code>XL_FORMAT_AUTO</code> detects XLSX, XLSB and XLS from the file's signature; CSV has none and needs <code>XL_FORMAT_CSV</code>.</td>
-</tr>
-<tr>
 <td><code>options</code></td>
-<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Reader limits and CSV dialect, or null for the defaults.</td>
+<td>const <a href="OpenOptions.html">OpenOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Format, reader limits and CSV dialect.</td>
 </tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;: The workbook. Fails if the native library's ABI does not match this header.</p>
-<h3 id="open_memory">open_memory</h3>
-<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open_memory(
-    std::span&lt;const uint8_t&gt; data,
-    int32_t format = XL_FORMAT_AUTO,
-    const OpenOptions * options = nullptr)
-</code></pre>
-<p>Opens a workbook from bytes in memory.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
 <tr>
 <td><code>data</code></td>
 <td>std::span&lt;const uint8_t&gt;</td>
@@ -255,99 +199,20 @@
 <td>The file's bytes. The native library copies them, so they need not outlive the call.</td>
 </tr>
 <tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td><code>XL_FORMAT_AUTO</code></td>
-<td>As for Workbook::open.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>As for Workbook::open.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="open_source">open_source</h3>
-<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open_source(
-    std::unique_ptr&lt;Source&gt; source,
-    int32_t format = XL_FORMAT_AUTO,
-    const OpenOptions * options = nullptr)
-</code></pre>
-<p>Opens a workbook over random-access bytes.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
 <td><code>source</code></td>
 <td>std::unique_ptr&lt;<a href="Source.html">Source</a>&gt;</td>
 <td></td>
 <td>Owned by the library from here on. Read from several threads, so every sheet can still be read in parallel.</td>
 </tr>
 <tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td><code>XL_FORMAT_AUTO</code></td>
-<td>As for Workbook::open.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>As for Workbook::open; <code>source_block_size</code> and <code>source_cache_bytes</code> tune the block cache.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;</p>
-<h3 id="open_stream">open_stream</h3>
-<pre><code class="lang-cpp">static std::expected&lt;Workbook, Error&gt; open_stream(
-    std::unique_ptr&lt;InputStream&gt; stream,
-    int32_t format = XL_FORMAT_AUTO,
-    const OpenOptions * options = nullptr)
-</code></pre>
-<p>Opens a workbook over a stream that cannot seek.</p>
-<p>A CSV is read as it arrives, and again from the start until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole first.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
 <td><code>stream</code></td>
 <td>std::unique_ptr&lt;<a href="InputStream.html">InputStream</a>&gt;</td>
 <td></td>
 <td>Owned by the library from here on.</td>
 </tr>
-<tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td><code>XL_FORMAT_AUTO</code></td>
-<td>As for Workbook::open.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="OpenOptions.html">OpenOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>As for Workbook::open; <code>max_buffered_bytes</code> caps what an XLSX, XLSB or XLS may buffer.</td>
-</tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;</p>
+<p><strong>Returns</strong> std::expected&lt;<a href="Workbook.html">Workbook</a>, <a href="Error.html">Error</a>&gt;: The workbook. Every overload fails if the native library's ABI does not match this header.</p>
 
 </article>
 

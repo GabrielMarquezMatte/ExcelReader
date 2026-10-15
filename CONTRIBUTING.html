@@ -90,6 +90,23 @@ unrecorded public member. If you add, change, or remove anything public, update
 <code>src/ExcelReader.Core/PublicAPI/PublicAPI.Unshipped.txt</code>. A bot promotes <code>Unshipped</code> →
 <code>Shipped</code> automatically after each release — don't edit <code>Shipped.txt</code> by hand.</p>
 </li>
+<li><p><strong>Minor versions don't break callers.</strong> <a href="docs/guide/versioning.html">docs/guide/versioning.md</a> is the
+policy; in practice:</p>
+<ul>
+<li>A new member on a library-implemented interface (<code>IExcelWorkbook</code>, <code>IExcelSheet</code>,
+<code>IExcelRowEnumerator</code>, <code>IWorkbookWriter</code>, <code>ISheetWriter</code>, <code>ITableSheetWriter</code>, <code>IRowWriter</code>)
+gets a default implementation. A user-implemented one (<code>IExcelCellConverter</code>, <code>IExcelCellWriter</code>,
+<code>IExcelRowMap</code>, <code>IExcelRecordMap</code>, <code>IRowRecord</code>, <code>IRowAccumulator</code>) gets no new member a user
+would have to implement.</li>
+<li>A feature only some formats support goes on the concrete types first, or on its own interface
+the way <code>ITableSheetWriter</code> sits beside <code>ISheetWriter</code>.</li>
+<li>New inputs go on the options object or a new overload, never as a new optional parameter on an
+existing method.</li>
+<li><code>dotnet pack</code> runs package validation against <code>PackageValidationBaselineVersion</code> in the
+<code>ExcelReader.Core</code> and <code>ExcelReader.Arrow</code> projects, and CI runs it on every pull request.
+After each release, move the baseline to the version just published.</li>
+</ul>
+</li>
 <li><p><strong>Tests are required for behavior changes.</strong> Run the suite before opening a PR:</p>
 <pre><code class="lang-bash">dotnet test tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release
 </code></pre>

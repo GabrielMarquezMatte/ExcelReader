@@ -91,40 +91,8 @@
 <p>Leave <code>name</code> as None to resolve the column by <code>index</code> instead. <code>nullable</code> decides what a failed
 conversion means: False makes it an error that aborts the whole read, True records a null in the
 column's validity bitmap and keeps going.</p>
-<pre><code class="lang-python">class ColumnSpec(NamedTuple)
+<pre><code class="lang-python">class ColumnSpec
 </code></pre>
-<h2 id="fields">Fields</h2>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>type</code></td>
-<td><a href="ColumnType.html">ColumnType</a></td>
-<td></td>
-</tr>
-<tr>
-<td><code>name</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>index</code></td>
-<td>int</td>
-<td><code>0</code></td>
-</tr>
-<tr>
-<td><code>nullable</code></td>
-<td>bool</td>
-<td><code>False</code></td>
-</tr>
-</tbody>
-</table>
 
 </article>
 

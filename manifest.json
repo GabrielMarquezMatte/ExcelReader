@@ -1754,26 +1754,6 @@
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "docs/cpp-api/ArrowArrayGuard.md",
-      "output": {
-        ".html": {
-          "relative_path": "cpp-api/ArrowArrayGuard.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
-      "source_relative_path": "docs/cpp-api/ArrowSchemaGuard.md",
-      "output": {
-        ".html": {
-          "relative_path": "cpp-api/ArrowSchemaGuard.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
       "source_relative_path": "docs/cpp-api/ArrowStream.md",
       "output": {
         ".html": {
@@ -1834,16 +1814,6 @@
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "docs/cpp-api/CsvParallelOptions.md",
-      "output": {
-        ".html": {
-          "relative_path": "cpp-api/CsvParallelOptions.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
       "source_relative_path": "docs/cpp-api/DecodedRows.md",
       "output": {
         ".html": {
@@ -1874,16 +1844,6 @@
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "docs/cpp-api/FieldBinding.md",
-      "output": {
-        ".html": {
-          "relative_path": "cpp-api/FieldBinding.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
       "source_relative_path": "docs/cpp-api/InferredColumn.md",
       "output": {
         ".html": {
@@ -1908,6 +1868,16 @@
       "output": {
         ".html": {
           "relative_path": "cpp-api/OpenOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/ReadOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/ReadOptions.html"
         }
       },
       "version": ""
@@ -2008,16 +1978,6 @@
       "output": {
         ".html": {
           "relative_path": "cpp-api/WriterHandle.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
-      "source_relative_path": "docs/cpp-api/XlType.md",
-      "output": {
-        ".html": {
-          "relative_path": "cpp-api/XlType.html"
         }
       },
       "version": ""
@@ -2127,6 +2087,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/guide/versioning.md",
+      "output": {
+        ".html": {
+          "relative_path": "docs/guide/versioning.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/guide/writing.md",
       "output": {
         ".html": {
@@ -2167,16 +2137,6 @@
     },
     {
       "type": "Conceptual",
-      "source_relative_path": "docs/python-api/ArrowStream.md",
-      "output": {
-        ".html": {
-          "relative_path": "python-api/ArrowStream.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
       "source_relative_path": "docs/python-api/Cell.md",
       "output": {
         ".html": {
@@ -2211,16 +2171,6 @@
       "output": {
         ".html": {
           "relative_path": "python-api/ColumnType.html"
-        }
-      },
-      "version": ""
-    },
-    {
-      "type": "Conceptual",
-      "source_relative_path": "docs/python-api/ColumnarSheet.md",
-      "output": {
-        ".html": {
-          "relative_path": "python-api/ColumnarSheet.html"
         }
       },
       "version": ""

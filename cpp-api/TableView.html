@@ -148,35 +148,6 @@ class xl::TableView
 </tbody>
 </table>
 <p><strong>Returns</strong> std::optional&lt;T&gt;: The row, or empty outside <code>[0, size())</code>.</p>
-<h3 id="to_vector">to_vector</h3>
-<pre><code class="lang-cpp">std::vector&lt;T&gt; to_vector() const
-</code></pre>
-<p>Every row converted to <code>T</code>.</p>
-<p><strong>Returns</strong> std::vector&lt;T&gt;</p>
-<h3 id="from_raw">from_raw</h3>
-<pre><code class="lang-cpp">static TableView from_raw(xl_table table)
-</code></pre>
-<p>Takes ownership of a table produced by the C ABI.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>table</code></td>
-<td>xl_table</td>
-<td></td>
-<td>Table from <code>xl_parse_typed</code> or <code>xl_typed_reader_next</code>, freed by this object.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="TableView.html">TableView</a></p>
 <h2 id="operators">Operators</h2>
 <h3 id="operator">operator[]</h3>
 <pre><code class="lang-cpp">T operator[](int64_t row) const

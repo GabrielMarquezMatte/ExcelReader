@@ -87,8 +87,8 @@
         <article data-uid="">
 <h1 id="struct-arrowtable">Struct ArrowTable</h1>
 
-<p>A sheet exported through the Arrow C Data Interface: one struct array and its schema.</p>
-<p>Releases both on destruction; move them out to hand them to an Arrow library.</p>
+<p>A sheet or one batch of it, exported through the Arrow C Data Interface: one struct array and its schema.</p>
+<p>Releases both on destruction; move them out to hand them to an Arrow library. ArrowStream::schema() returns one whose <code>array</code> is empty.</p>
 <pre><code class="lang-cpp">struct xl::ArrowTable
 </code></pre>
 <h2 id="fields">Fields</h2>

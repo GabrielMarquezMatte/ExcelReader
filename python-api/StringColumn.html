@@ -89,7 +89,7 @@
 
 <p>A <code>ColumnType.STRING</code> column, held as UTF-8 bytes plus offsets rather than one <code>str</code> per row.</p>
 <p>Decoding is deferred to <code>column[i]</code>, so reading a million-row string column costs no Python
-objects until something actually asks for a value — the same trade <code>ColumnarSheet</code> makes.</p>
+objects until something actually asks for a value.</p>
 <pre><code class="lang-python">class StringColumn
 </code></pre>
 <p>Supports <code>len()</code>, indexing, iteration.</p>

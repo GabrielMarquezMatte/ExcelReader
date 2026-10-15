@@ -90,7 +90,7 @@
 
 
   <h1 id="ExcelReader_Core_Reader_Schema_ExcelColumnType" data-uid="ExcelReader.Core.Reader.Schema.ExcelColumnType" class="text-break">
-Enum ExcelColumnType  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Schema/ExcelColumnType.cs/#L12"><i class="bi bi-code-slash"></i></a>
+Enum ExcelColumnType  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Schema/ExcelColumnType.cs/#L13"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -153,12 +153,13 @@ Enum ExcelColumnType  <a class="header-action link-secondary" title="View source
   <div class="markdown level0 remarks"><p>The underlying values are fixed: they are the XL_T_* constants of the native C ABI
 (see <code>src/ExcelReader.Native/include/excelreader.h</code>), which marshals this enum with a
 plain integer cast rather than a translation table. Renumbering a member is a silent ABI break.</p>
+<p>A minor version can add values, so a <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/operators/switch-expression">switch</a> over this enum should have a default branch. See <a href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</a>.</p>
 </div>
 
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Schema/ExcelColumnType.cs/#L12" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Schema/ExcelColumnType.cs/#L13" class="edit-link">Edit this page</a>
         </div>
 
 

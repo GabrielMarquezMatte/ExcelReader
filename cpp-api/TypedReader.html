@@ -87,7 +87,7 @@
         <article data-uid="">
 <h1 id="class-typedreader">Class TypedReader</h1>
 
-<p>parse_sheet delivered a batch at a time.</p>
+<p>parse delivered a batch at a time.</p>
 <p>An input range of <code>std::expected&lt;TableView&lt;T&gt;, Error&gt;</code> that stops after the first error. Each batch owns its memory and outlives the reader. Use from one thread at a time.</p>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
 class xl::TypedReader
@@ -121,30 +121,6 @@ class xl::TypedReader
 <pre><code class="lang-cpp">std::default_sentinel_t end() const noexcept
 </code></pre>
 <p><strong>Returns</strong> std::default_sentinel_t</p>
-<h3 id="from_raw">from_raw</h3>
-<pre><code class="lang-cpp">static TypedReader from_raw(xl_typed_reader *reader)
-</code></pre>
-<p>Takes ownership of a reader opened through the C ABI.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>reader</code></td>
-<td>xl_typed_reader *</td>
-<td></td>
-<td>Reader from <code>xl_typed_reader_open</code>, closed by this object.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="TypedReader.html">TypedReader</a></p>
 
 </article>
 

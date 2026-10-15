@@ -87,45 +87,21 @@
         <article data-uid="">
 <h1 id="class-arrowstream">Class ArrowStream</h1>
 
-<p>typed_reader's Arrow counterpart: record batches pulled one at a time.</p>
+<p>parse_batches's Arrow counterpart: record batches pulled one at a time.</p>
 <p>Use from one thread at a time.</p>
 <pre><code class="lang-cpp">class xl::ArrowStream
 </code></pre>
 <h2 id="methods">Methods</h2>
 <h3 id="schema">schema</h3>
-<pre><code class="lang-cpp">std::expected&lt;ArrowSchemaGuard, Error&gt; schema()
+<pre><code class="lang-cpp">std::expected&lt;ArrowTable, Error&gt; schema()
 </code></pre>
-<p>The schema every batch shares.</p>
-<p><strong>Returns</strong> std::expected&lt;<a href="ArrowSchemaGuard.html">ArrowSchemaGuard</a>, <a href="Error.html">Error</a>&gt;</p>
+<p>The schema every batch shares, in a table whose <code>array</code> is empty.</p>
+<p><strong>Returns</strong> std::expected&lt;<a href="ArrowTable.html">ArrowTable</a>, <a href="Error.html">Error</a>&gt;</p>
 <h3 id="next">next</h3>
-<pre><code class="lang-cpp">std::expected&lt;std::optional&lt;ArrowArrayGuard&gt;, Error&gt; next()
+<pre><code class="lang-cpp">std::expected&lt;std::optional&lt;ArrowTable&gt;, Error&gt; next()
 </code></pre>
 <p>Reads the next batch.</p>
-<p><strong>Returns</strong> std::expected&lt;std::optional&lt;<a href="ArrowArrayGuard.html">ArrowArrayGuard</a>&gt;, <a href="Error.html">Error</a>&gt;: The batch, or empty at the end of the sheet.</p>
-<h3 id="from_raw">from_raw</h3>
-<pre><code class="lang-cpp">static ArrowStream from_raw(ArrowArrayStream stream)
-</code></pre>
-<p>Takes ownership of a stream produced by the C ABI.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>stream</code></td>
-<td>ArrowArrayStream</td>
-<td></td>
-<td>Stream from <code>xl_parse_arrow_stream</code>, released by this object.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="ArrowStream.html">ArrowStream</a></p>
+<p><strong>Returns</strong> std::expected&lt;std::optional&lt;<a href="ArrowTable.html">ArrowTable</a>&gt;, <a href="Error.html">Error</a>&gt;: The batch with its own copy of the schema, or empty at the end of the sheet.</p>
 
 </article>
 

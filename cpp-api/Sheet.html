@@ -91,36 +91,6 @@
 <p>Holds no resource of its own, so it is cheap to copy and may be handed to another thread; each read opens what it needs. After its workbook is destroyed, every read on it returns <code>XL_INVALID_HANDLE</code>.</p>
 <pre><code class="lang-cpp">class xl::Sheet
 </code></pre>
-<h2 id="constructors">Constructors</h2>
-<h3 id="sheet">Sheet</h3>
-<pre><code class="lang-cpp">Sheet(xl_workbook *handle, int32_t index) noexcept
-</code></pre>
-<p>A sheet of a workbook opened through the C ABI. Workbook hands these out.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>handle</code></td>
-<td>xl_workbook *</td>
-<td></td>
-<td>Workbook handle, not owned.</td>
-</tr>
-<tr>
-<td><code>index</code></td>
-<td>int32_t</td>
-<td></td>
-<td>0-based sheet position.</td>
-</tr>
-</tbody>
-</table>
 <h2 id="methods">Methods</h2>
 <h3 id="index">index</h3>
 <pre><code class="lang-cpp">int32_t index() const noexcept
@@ -142,8 +112,8 @@
 </code></pre>
 <p>A cursor over this sheet, from its first row.</p>
 <p><strong>Returns</strong> std::expected&lt;<a href="RowCursor.html">RowCursor</a>, <a href="Error.html">Error</a>&gt;: A new, independent cursor on every call.</p>
-<h3 id="read_all_decoded">read_all_decoded</h3>
-<pre><code class="lang-cpp">std::expected&lt;DecodedRows, Error&gt; read_all_decoded() const
+<h3 id="read_all">read_all</h3>
+<pre><code class="lang-cpp">std::expected&lt;DecodedRows, Error&gt; read_all() const
 </code></pre>
 <p>The whole sheet from its first row, decoded in one native call.</p>
 <p><strong>Returns</strong> std::expected&lt;<a href="DecodedRows.html">DecodedRows</a>, <a href="Error.html">Error</a>&gt;</p>
@@ -186,11 +156,6 @@
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;std::vector&lt;<a href="InferredColumn.html">InferredColumn</a>&gt;, <a href="Error.html">Error</a>&gt;: One InferredColumn per column, in order.</p>
-<h3 id="handle">handle</h3>
-<pre><code class="lang-cpp">xl_workbook * handle() const noexcept
-</code></pre>
-<p>The native workbook handle.</p>
-<p><strong>Returns</strong> xl_workbook *: The handle, not owned: it dies with its Workbook.</p>
 
 </article>
 

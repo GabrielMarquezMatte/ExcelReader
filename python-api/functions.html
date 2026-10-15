@@ -87,77 +87,19 @@
         <article data-uid="">
 <h1 id="functions">Functions</h1>
 
-<h2 id="decode_cell">decode_cell</h2>
-<pre><code class="lang-python">def decode_cell(sheet: ColumnarSheet, index: int) -&gt; Cell
-</code></pre>
-<p>Materializes the <code>Cell</code> at flat cell index <code>index</code> in <code>sheet</code>, decoding only that one value.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>sheet</code></td>
-<td><a href="ColumnarSheet.html">ColumnarSheet</a></td>
-<td></td>
-</tr>
-<tr>
-<td><code>index</code></td>
-<td>int</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="Cell.html">Cell</a></p>
 <h2 id="encrypt_package">encrypt_package</h2>
 <pre><code class="lang-python">def encrypt_package(
-    package_path: str | Path,
-    destination_path: str | Path,
+    package: Union[str, os.PathLike, bytes, bytearray, memoryview, io.BytesIO],
+    destination: Destination,
     password: str,
 ) -&gt; None
 </code></pre>
 <p>Wraps a finished plaintext XLSX/XLSB package in an agile-encrypted (ECMA-376 4.4) CFB
-container — the inverse of passing <code>password=</code> to <code>open_workbook</code>/<code>open_bytes</code>. <code>package_path</code>
-is read twice, so it must already be a complete file (write it with <code>write_workbook</code> first).
-Encryption parameters are fixed at Excel's own defaults; there are no options.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>package_path</code></td>
-<td>str | Path</td>
-<td></td>
-</tr>
-<tr>
-<td><code>destination_path</code></td>
-<td>str | Path</td>
-<td></td>
-</tr>
-<tr>
-<td><code>password</code></td>
-<td>str</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h2 id="encrypt_package_bytes">encrypt_package_bytes</h2>
-<pre><code class="lang-python">def encrypt_package_bytes(package: bytes, password: str) -&gt; bytes
-</code></pre>
-<p>The in-memory twin of <code>encrypt_package()</code>: takes a finished XLSX/XLSB package's bytes (from
-<code>write_workbook_to_bytes()</code> or a <code>*_to_bytes</code> writer) and returns the encrypted workbook's bytes,
-so the plaintext never has to be written to disk.</p>
+container, the inverse of passing <code>password=</code> to <code>open_workbook</code>.</p>
+<p><code>package</code> is a path to a complete file, or its bytes (<code>bytes</code>, <code>bytearray</code>, <code>memoryview</code>, or an
+<code>io.BytesIO</code> read whole). <code>destination</code> is a path, or a binary object with <code>write()</code> that
+receives the encrypted workbook in one call and is not closed. Encryption parameters are fixed
+at Excel's own defaults; there are no options.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -170,7 +112,12 @@ so the plaintext never has to be written to disk.</p>
 <tbody>
 <tr>
 <td><code>package</code></td>
-<td>bytes</td>
+<td>Union[str, os.PathLike, bytes, bytearray, memoryview, io.BytesIO]</td>
+<td></td>
+</tr>
+<tr>
+<td><code>destination</code></td>
+<td>Destination</td>
 <td></td>
 </tr>
 <tr>
@@ -180,64 +127,34 @@ so the plaintext never has to be written to disk.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> bytes</p>
-<h2 id="open_bytes">open_bytes</h2>
-<pre><code class="lang-python">def open_bytes(
-    data: bytes,
+<h2 id="open_workbook">open_workbook</h2>
+<pre><code class="lang-python">def open_workbook(
+    source: str | os.PathLike[str] | bytes | bytearray | memoryview | IO[bytes] | Source,
     format: str | None = None,
     *,
     options: OpenOptions | None = None,
     password: str | None = None,
 ) -&gt; Workbook
 </code></pre>
-<p>Opens a workbook from an in-memory buffer. The native side copies <code>data</code> immediately.</p>
-<p><code>options</code> overrides reader limits and CSV dialect settings; see <code>OpenOptions</code>. <code>password</code> unlocks
-an encrypted OOXML workbook — see <code>open_workbook()</code> for the full contract.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>data</code></td>
-<td>bytes</td>
-<td></td>
-</tr>
-<tr>
-<td><code>format</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="OpenOptions.html">OpenOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>password</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="Workbook.html">Workbook</a></p>
-<h2 id="open_source">open_source</h2>
-<pre><code class="lang-python">def open_source(
-    source: Source,
-    format: str | None = None,
-    *,
-    options: OpenOptions | None = None,
-    password: str | None = None,
-) -&gt; Workbook
-</code></pre>
-<p>Opens a workbook over bytes <code>source</code> serves; every sheet can be read on its own thread.</p>
-<p>The library keeps a reference to <code>source</code> until the workbook and everything read from it are
-closed. <code>read_at</code> runs with the GIL held, so a local file is better opened with <code>open_workbook()</code>.</p>
+<p>Opens a workbook from a path, bytes in memory, a <code>Source</code>, or a readable stream.</p>
+<p><code>source</code> picks how the workbook is read:</p>
+<ul>
+<li>a <code>str</code> or path-like: the file on disk.</li>
+<li><code>bytes</code>, <code>bytearray</code>, <code>memoryview</code> or <code>io.BytesIO</code>: a copy the native side takes immediately.
+A <code>BytesIO</code> is read whole, whatever its position.</li>
+<li>a <code>Source</code> (<code>size</code> and <code>read_at</code>): fetched in blocks on demand, and every sheet can be read on
+its own thread. The library keeps a reference to it until the workbook and everything read
+from it are closed. <code>read_at</code> runs with the GIL held, so a local file is better opened by path.</li>
+<li>any other object with <code>readinto()</code> or <code>read()</code>, such as an open file, a pipe or
+<code>sys.stdin.buffer</code>: read as a stream that cannot seek. A CSV is read as it arrives, and can be
+read again from the start (<code>infer_schema()</code>, then a read) until 16 MiB of it were read; an
+XLSX, XLSB or XLS is read whole before the workbook opens. The library never closes it.</li>
+</ul>
+<p><code>format</code> is one of auto/xls/xlsx/xlsb/csv; None infers it, from the extension for a path and from
+the content otherwise. The content tells XLS, XLSX and XLSB apart, and a stream that is none of
+them reads as CSV; a CSV in memory or behind a <code>Source</code> needs <code>format=&quot;csv&quot;</code>. <code>options</code> overrides reader limits and CSV dialect settings; see
+<code>OpenOptions</code>. <code>password</code> unlocks an encrypted OOXML workbook (.xlsx/.xlsb); omitting it for one
+raises <code>PasswordRequiredError</code>, and a wrong one raises <code>PasswordIncorrectError</code>.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -250,102 +167,7 @@ closed. <code>read_at</code> runs with the GIL held, so a local file is better o
 <tbody>
 <tr>
 <td><code>source</code></td>
-<td><a href="Source.html">Source</a></td>
-<td></td>
-</tr>
-<tr>
-<td><code>format</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="OpenOptions.html">OpenOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>password</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="Workbook.html">Workbook</a></p>
-<h2 id="open_stream">open_stream</h2>
-<pre><code class="lang-python">def open_stream(
-    stream: object,
-    format: str | None = None,
-    *,
-    options: OpenOptions | None = None,
-    password: str | None = None,
-) -&gt; Workbook
-</code></pre>
-<p>Opens a workbook over a stream that cannot seek, such as <code>sys.stdin.buffer</code> or a socket.</p>
-<p>A CSV (<code>format=&quot;csv&quot;</code>, or no format and neither a ZIP nor an OLE2 signature) is read as it
-arrives, and can be read again from the start
-(<code>infer_schema()</code>, then a read) until 16 MiB of it were read; an XLSX, XLSB or XLS is read whole
-before the workbook opens. <code>stream</code> needs <code>readinto</code> or <code>read</code>; the library never closes it.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>stream</code></td>
-<td>object</td>
-<td></td>
-</tr>
-<tr>
-<td><code>format</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="OpenOptions.html">OpenOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-<tr>
-<td><code>password</code></td>
-<td>str | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="Workbook.html">Workbook</a></p>
-<h2 id="open_workbook">open_workbook</h2>
-<pre><code class="lang-python">def open_workbook(
-    path: str | Path,
-    format: str | None = None,
-    *,
-    options: OpenOptions | None = None,
-    password: str | None = None,
-) -&gt; Workbook
-</code></pre>
-<p>Opens a workbook from disk. <code>format</code> is one of auto/xls/xlsx/xlsb/csv; None infers it.</p>
-<p><code>options</code> overrides reader limits and CSV dialect settings; see <code>OpenOptions</code>. <code>password</code> unlocks
-an encrypted OOXML workbook (.xlsx/.xlsb); omitting it for one raises <code>PasswordRequiredError</code>, and
-a wrong one raises <code>PasswordIncorrectError</code>. An explicit xlsx/xlsb <code>format</code> works for an encrypted
-file too, the same as leaving <code>format</code> unset — both routes decrypt correctly given the right
-<code>password</code>.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>path</code></td>
-<td>str | Path</td>
+<td>str | os.PathLike[str] | bytes | bytearray | memoryview | IO[bytes] | <a href="Source.html">Source</a></td>
 <td></td>
 </tr>
 <tr>
@@ -368,13 +190,17 @@ file too, the same as leaving <code>format</code> unset — both routes decrypt 
 <p><strong>Returns</strong> <a href="Workbook.html">Workbook</a></p>
 <h2 id="open_writer">open_writer</h2>
 <pre><code class="lang-python">def open_writer(
-    path: str | Path,
+    destination: Union[str, os.PathLike, IO[bytes]],
     format: str | None = None,
+    *,
     options: WriteOptions | None = None,
 ) -&gt; SheetWriter
 </code></pre>
-<p>Opens a streaming writer for <code>path</code>, truncating any existing file.</p>
-<p><code>format</code> is one of xlsx/xlsb/xls/csv; None infers it from the path's extension.</p>
+<p>Opens a streaming writer for <code>destination</code>: a path, truncating any existing file, or a binary
+object with <code>write()</code> such as <code>io.BytesIO</code> or an open file.</p>
+<p><code>format</code> is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
+with <code>write()</code> needs it. Such an object receives the whole workbook in one <code>write()</code> call when the
+writer closes, and is not closed itself.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -386,8 +212,8 @@ file too, the same as leaving <code>format</code> unset — both routes decrypt 
 </thead>
 <tbody>
 <tr>
-<td><code>path</code></td>
-<td>str | Path</td>
+<td><code>destination</code></td>
+<td>Union[str, os.PathLike, IO[bytes]]</td>
 <td></td>
 </tr>
 <tr>
@@ -403,259 +229,32 @@ file too, the same as leaving <code>format</code> unset — both routes decrypt 
 </tbody>
 </table>
 <p><strong>Returns</strong> <a href="SheetWriter.html">SheetWriter</a></p>
-<h2 id="open_writer_to_memory">open_writer_to_memory</h2>
-<pre><code class="lang-python">def open_writer_to_memory(
-    format: str,
-    options: WriteOptions | None = None,
-) -&gt; SheetWriter
-</code></pre>
-<p>Opens a streaming writer backed by an in-memory buffer, read out with <code>SheetWriter.bytes()</code>.</p>
-<p><code>format</code> is one of xlsx/xlsb/xls/csv — unlike <code>open_writer</code>, there is no path to infer it from.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>format</code></td>
-<td>str</td>
-<td></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="WriteOptions.html">WriteOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> <a href="SheetWriter.html">SheetWriter</a></p>
-<h2 id="write_arrow">write_arrow</h2>
-<pre><code class="lang-python">def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -&gt; None
-</code></pre>
-<p>Writes a <code>pyarrow.RecordBatch</code> (or <code>Table</code>) to <code>path</code>. Requires pyarrow.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>path</code></td>
-<td>str | Path</td>
-<td></td>
-</tr>
-<tr>
-<td><code>batch</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-<tr>
-<td><code>kwargs</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h2 id="write_arrow_to_bytes">write_arrow_to_bytes</h2>
-<pre><code class="lang-python">def write_arrow_to_bytes(
-    batch: Any,
-    *,
-    format: str,
-    options: WriteOptions | None = None,
-) -&gt; bytes
-</code></pre>
-<p>The in-memory twin of <code>write_arrow()</code>. <code>format</code> is required, as in <code>write_workbook_to_bytes()</code>.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>batch</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-<tr>
-<td><code>format</code></td>
-<td>str</td>
-<td></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="WriteOptions.html">WriteOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> bytes</p>
-<h2 id="write_pandas">write_pandas</h2>
-<pre><code class="lang-python">def write_pandas(path: str | Path, df: Any, **kwargs: Any) -&gt; None
-</code></pre>
-<p>Writes a <code>pandas.DataFrame</code> to <code>path</code>. Requires pyarrow and pandas.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>path</code></td>
-<td>str | Path</td>
-<td></td>
-</tr>
-<tr>
-<td><code>df</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-<tr>
-<td><code>kwargs</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h2 id="write_pandas_to_bytes">write_pandas_to_bytes</h2>
-<pre><code class="lang-python">def write_pandas_to_bytes(
-    df: Any,
-    *,
-    format: str,
-    options: WriteOptions | None = None,
-) -&gt; bytes
-</code></pre>
-<p>The in-memory twin of <code>write_pandas()</code>. Requires pyarrow and pandas.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>df</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-<tr>
-<td><code>format</code></td>
-<td>str</td>
-<td></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="WriteOptions.html">WriteOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> bytes</p>
-<h2 id="write_polars">write_polars</h2>
-<pre><code class="lang-python">def write_polars(path: str | Path, df: Any, **kwargs: Any) -&gt; None
-</code></pre>
-<p>Writes a <code>polars.DataFrame</code> to <code>path</code>. Requires pyarrow and polars.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>path</code></td>
-<td>str | Path</td>
-<td></td>
-</tr>
-<tr>
-<td><code>df</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-<tr>
-<td><code>kwargs</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h2 id="write_polars_to_bytes">write_polars_to_bytes</h2>
-<pre><code class="lang-python">def write_polars_to_bytes(
-    df: Any,
-    *,
-    format: str,
-    options: WriteOptions | None = None,
-) -&gt; bytes
-</code></pre>
-<p>The in-memory twin of <code>write_polars()</code>. Requires pyarrow and polars.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>df</code></td>
-<td>Any</td>
-<td></td>
-</tr>
-<tr>
-<td><code>format</code></td>
-<td>str</td>
-<td></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="WriteOptions.html">WriteOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> bytes</p>
 <h2 id="write_workbook">write_workbook</h2>
 <pre><code class="lang-python">def write_workbook(
-    path: str | Path,
-    table: TypedTable,
-    types: list[ColumnType],
+    destination: Destination,
+    data: Any,
+    types: list[ColumnType] | None = None,
     *,
     format: str | None = None,
     options: WriteOptions | None = None,
 ) -&gt; None
 </code></pre>
-<p>Writes <code>table</code> to <code>path</code> as a single sheet.</p>
-<p><code>table</code> is what <code>Sheet.parse_typed()</code> returns, so reading a sheet and writing it back out is a
-round-trip through the same buffers. <code>types</code> gives each column's <code>ColumnType</code> and is required
-positionally: a <code>TypedTable</code> carries raw buffers (an <code>array</code>/<code>StringColumn</code>/NumPy array), and
-nothing about a raw buffer's element size alone distinguishes, say, I64 from TIME — both are
-8-byte-per-row arrays. The type tag has to travel with the call, not be guessed from the data.
-<code>format</code> is one of xlsx/xlsb/xls/csv; None infers it from the path's extension.</p>
-<p><code>table.names</code> becomes the header row. <code>options</code> sets the sheet name and CSV dialect; see
+<p>Writes <code>data</code> as a single sheet to <code>destination</code>: a path, or a binary object with <code>write()</code>
+such as <code>io.BytesIO</code> or an open file.</p>
+<p><code>data</code> is one of:</p>
+<ul>
+<li>a <code>TypedTable</code>, what <code>Sheet.parse()</code> returns, so reading a sheet and writing it back out
+is a round-trip through the same buffers. <code>types</code> then gives each column's <code>ColumnType</code> and is
+required: a <code>TypedTable</code> carries raw buffers, and nothing about a raw buffer's element size
+alone distinguishes, say, I64 from TIME — both are 8-byte-per-row arrays.</li>
+<li>a <code>pyarrow.RecordBatch</code> or <code>pyarrow.Table</code>, a <code>pandas.DataFrame</code> (its index is not written),
+or any other table exposing <code>__arrow_c_stream__</code>, such as a <code>polars.DataFrame</code>. Each column's
+type comes from its Arrow type, so <code>types</code> must be None. Requires pyarrow.</li>
+</ul>
+<p><code>format</code> is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
+with <code>write()</code> has no extension, so it needs <code>format</code>. The whole workbook is built in memory and
+handed to <code>write()</code> in one call, at the object's current position; the object is not closed.</p>
+<p>The column names become the header row. <code>options</code> sets the sheet name and CSV dialect; see
 <code>WriteOptions</code>.</p>
 <p><strong>Parameters</strong></p>
 <table>
@@ -668,19 +267,19 @@ nothing about a raw buffer's element size alone distinguishes, say, I64 from TIM
 </thead>
 <tbody>
 <tr>
-<td><code>path</code></td>
-<td>str | Path</td>
+<td><code>destination</code></td>
+<td>Destination</td>
 <td></td>
 </tr>
 <tr>
-<td><code>table</code></td>
-<td><a href="TypedTable.html">TypedTable</a></td>
+<td><code>data</code></td>
+<td>Any</td>
 <td></td>
 </tr>
 <tr>
 <td><code>types</code></td>
-<td>list[<a href="ColumnType.html">ColumnType</a>]</td>
-<td></td>
+<td>list[<a href="ColumnType.html">ColumnType</a>] | None</td>
+<td><code>None</code></td>
 </tr>
 <tr>
 <td><code>format</code></td>
@@ -694,51 +293,6 @@ nothing about a raw buffer's element size alone distinguishes, say, I64 from TIM
 </tr>
 </tbody>
 </table>
-<h2 id="write_workbook_to_bytes">write_workbook_to_bytes</h2>
-<pre><code class="lang-python">def write_workbook_to_bytes(
-    table: TypedTable,
-    types: list[ColumnType],
-    *,
-    format: str,
-    options: WriteOptions | None = None,
-) -&gt; bytes
-</code></pre>
-<p>The in-memory twin of <code>write_workbook()</code>.</p>
-<p><code>format</code> is required and is one of xlsx/xlsb/xls/csv — unlike <code>write_workbook</code>, there is no path
-to infer it from.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>table</code></td>
-<td><a href="TypedTable.html">TypedTable</a></td>
-<td></td>
-</tr>
-<tr>
-<td><code>types</code></td>
-<td>list[<a href="ColumnType.html">ColumnType</a>]</td>
-<td></td>
-</tr>
-<tr>
-<td><code>format</code></td>
-<td>str</td>
-<td></td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td><a href="WriteOptions.html">WriteOptions</a> | None</td>
-<td><code>None</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> bytes</p>
 
 </article>
 

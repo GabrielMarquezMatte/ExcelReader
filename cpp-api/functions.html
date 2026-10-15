@@ -94,30 +94,6 @@
 <p>ABI revision of the loaded native library.</p>
 <p>Every open checks it against the <code>XL_ABI_VERSION</code> this header was compiled with and fails on a mismatch.</p>
 <p><strong>Returns</strong> int32_t</p>
-<h2 id="format_from_path">format_from_path</h2>
-<pre><code class="lang-cpp">constexpr int32_t format_from_path(std::string_view path) noexcept
-</code></pre>
-<p>The format a file name's extension names.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>path</code></td>
-<td>std::string_view</td>
-<td></td>
-<td>File name or path. Only its extension is read: .xlsx, .xlsb, .xls or .csv, in any case.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> int32_t: The matching <code>XL_FORMAT_*</code> constant, or <code>XL_FORMAT_AUTO</code> when none matches, which every writer rejects.</p>
 <h2 id="i64_column">i64_column</h2>
 <pre><code class="lang-cpp">constexpr ColumnRef i64_column(
     std::string_view name,
@@ -400,9 +376,9 @@
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>offsets</code>, <code>data</code> and <code>validity</code>.</p>
 <h2 id="make_field">make_field</h2>
 <pre><code class="lang-cpp">template &lt;typename Class, typename T&gt;
-constexpr FieldBinding&lt;Class, T&gt; make_field(const char *name, T Class::*member)
+constexpr detail::FieldBinding&lt;Class, T&gt; make_field(const char *name, T Class::*member)
 template &lt;typename Class, typename T, std::size_t N&gt;
-constexpr FieldBinding&lt;Class, T, N&gt; make_field(const char *(&amp;&amp;names)[N], T Class::*member)
+constexpr detail::FieldBinding&lt;Class, T, N&gt; make_field(const char *(&amp;&amp;names)[N], T Class::*member)
 </code></pre>
 <p>Binds a member to the column with one header.</p>
 <p>Binds a member to the column headed by any of several names.</p>
@@ -437,13 +413,10 @@ constexpr FieldBinding&lt;Class, T, N&gt; make_field(const char *(&amp;&amp;name
 </tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> <a href="FieldBinding.html">FieldBinding</a>&lt;Class, T, N&gt;, <a href="FieldBinding.html">FieldBinding</a>&lt;Class, T&gt;: The binding, for ExcelMapper::get_bindings.</p>
-<h2 id="parse_sheet">parse_sheet</h2>
+<p><strong>Returns</strong> detail::FieldBinding&lt;Class, T, N&gt;, detail::FieldBinding&lt;Class, T&gt;: The binding, for ExcelMapper::get_bindings.</p>
+<h2 id="parse">parse</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
-std::expected&lt;TableView&lt;T&gt;, Error&gt; parse_sheet(
-    Sheet sheet,
-    int32_t header_row = 1,
-    int32_t degree_of_parallelism = 1)
+std::expected&lt;TableView&lt;T&gt;, Error&gt; parse(Sheet sheet, const ReadOptions &amp;options={})
 </code></pre>
 <p>Reads a whole sheet as <code>T</code>.</p>
 <p><strong>Type parameters</strong></p>
@@ -479,26 +452,17 @@ std::expected&lt;TableView&lt;T&gt;, Error&gt; parse_sheet(
 <td>The sheet to read.</td>
 </tr>
 <tr>
-<td><code>header_row</code></td>
-<td>int32_t</td>
-<td><code>1</code></td>
-<td>1-based row holding the headers; 0 when the sheet has none.</td>
-</tr>
-<tr>
-<td><code>degree_of_parallelism</code></td>
-<td>int32_t</td>
-<td><code>1</code></td>
-<td>Threads to split an XLSX, XLSB or CSV across: 0 uses every processor, 1 runs sequentially. The result is the same either way.</td>
+<td><code>options</code></td>
+<td>const <a href="ReadOptions.html">ReadOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Header row and parallelism.</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;<a href="TableView.html">TableView</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;: Every row after the header.</p>
-<h2 id="typed_reader">typed_reader</h2>
+<h2 id="parse_batches">parse_batches</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
-std::expected&lt;TypedReader&lt;T&gt;, Error&gt; typed_reader(
-    Sheet sheet,
-    int32_t header_row = 1,
-    int64_t batch_size = 10000)
+std::expected&lt;TypedReader&lt;T&gt;, Error&gt; parse_batches(Sheet sheet, const ReadOptions &amp;options={})
 </code></pre>
 <p>Opens a TypedReader over a sheet.</p>
 <p><strong>Type parameters</strong></p>
@@ -534,16 +498,10 @@ std::expected&lt;TypedReader&lt;T&gt;, Error&gt; typed_reader(
 <td>The sheet to read.</td>
 </tr>
 <tr>
-<td><code>header_row</code></td>
-<td>int32_t</td>
-<td><code>1</code></td>
-<td>As for parse_sheet.</td>
-</tr>
-<tr>
-<td><code>batch_size</code></td>
-<td>int64_t</td>
-<td><code>10000</code></td>
-<td>Rows per batch: 0 makes one batch of the whole sheet; negative is an error.</td>
+<td><code>options</code></td>
+<td>const <a href="ReadOptions.html">ReadOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Header row and batch size.</td>
 </tr>
 </tbody>
 </table>
@@ -551,16 +509,15 @@ std::expected&lt;TypedReader&lt;T&gt;, Error&gt; typed_reader(
 <h2 id="write_columns">write_columns</h2>
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; write_columns(
     std::string_view path,
-    int32_t format,
     std::span&lt;const ColumnRef&gt; columns,
-    const WriteOptions * options = nullptr)
+    const WriteOptions &amp; options = {})
 std::expected&lt;void, Error&gt; write_columns(
-    std::string_view path,
+    std::vector&lt;uint8_t&gt; &amp; out,
     std::span&lt;const ColumnRef&gt; columns,
-    const WriteOptions * options = nullptr)
+    const WriteOptions &amp; options = {})
 </code></pre>
 <p>Writes columns as one sheet, copying nothing.</p>
-<p>write_columns with the format taken from the file's extension.</p>
+<p>write_columns into memory.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -579,12 +536,6 @@ std::expected&lt;void, Error&gt; write_columns(
 <td>File to create.</td>
 </tr>
 <tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td></td>
-<td>An <code>XL_FORMAT_*</code> constant. <code>XL_FORMAT_AUTO</code> is rejected: a file being created has no signature to detect.</td>
-</tr>
-<tr>
 <td><code>columns</code></td>
 <td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
 <td></td>
@@ -592,52 +543,19 @@ std::expected&lt;void, Error&gt; write_columns(
 </tr>
 <tr>
 <td><code>options</code></td>
-<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Format, sheet name, CSV dialect and format toggles. <code>XL_FORMAT_AUTO</code> takes the format from the path's extension.</td>
+</tr>
+<tr>
+<td><code>out</code></td>
+<td>std::vector&lt;uint8_t&gt; &amp;</td>
+<td></td>
+<td>Replaced with the file's bytes; untouched on failure.</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
-<h2 id="write_columns_to_memory">write_columns_to_memory</h2>
-<pre><code class="lang-cpp">std::expected&lt;std::vector&lt;uint8_t&gt;, Error&gt; write_columns_to_memory(
-    int32_t format,
-    std::span&lt;const ColumnRef&gt; columns,
-    const WriteOptions * options = nullptr)
-</code></pre>
-<p>write_columns into memory.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td></td>
-<td>As for write_columns. There is no default: no file name to infer it from.</td>
-</tr>
-<tr>
-<td><code>columns</code></td>
-<td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
-<td></td>
-<td>As for write_columns.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;std::vector&lt;uint8_t&gt;, <a href="Error.html">Error</a>&gt;: The file's bytes.</p>
 <h2 id="encrypt_package">encrypt_package</h2>
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; encrypt_package(
     std::string_view package_path,
@@ -682,17 +600,16 @@ std::expected&lt;void, Error&gt; write_columns(
 <pre><code class="lang-cpp">template &lt;std::ranges::input_range R&gt;
 std::expected&lt;void, Error&gt; write_sheet(
     std::string_view path,
-    int32_t format,
     R &amp;&amp; rows,
-    const WriteOptions * options = nullptr)
+    const WriteOptions &amp; options = {})
 template &lt;std::ranges::input_range R&gt;
 std::expected&lt;void, Error&gt; write_sheet(
-    std::string_view path,
+    std::vector&lt;uint8_t&gt; &amp; out,
     R &amp;&amp; rows,
-    const WriteOptions * options = nullptr)
+    const WriteOptions &amp; options = {})
 </code></pre>
 <p>Writes rows as one sheet.</p>
-<p>write_sheet with the format taken from the file's extension.</p>
+<p>write_sheet into memory.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -711,80 +628,45 @@ std::expected&lt;void, Error&gt; write_sheet(
 <td>File to create.</td>
 </tr>
 <tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td></td>
-<td>As for write_columns.</td>
-</tr>
-<tr>
 <td><code>rows</code></td>
 <td>R &amp;&amp;</td>
 <td></td>
-<td>Input range of a row type with an ExcelMapper, the mapping parse_sheet reads with. An empty std::optional field writes a blank cell.</td>
+<td>Input range of a row type with an ExcelMapper, the mapping parse reads with. An empty std::optional field writes a blank cell.</td>
 </tr>
 <tr>
 <td><code>options</code></td>
-<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>As for write_columns.</td>
+</tr>
+<tr>
+<td><code>out</code></td>
+<td>std::vector&lt;uint8_t&gt; &amp;</td>
+<td></td>
+<td>Replaced with the file's bytes; untouched on failure.</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
-<h2 id="write_sheet_to_memory">write_sheet_to_memory</h2>
-<pre><code class="lang-cpp">template &lt;std::ranges::input_range R&gt;
-std::expected&lt;std::vector&lt;uint8_t&gt;, Error&gt; write_sheet_to_memory(
-    int32_t format,
-    R &amp;&amp; rows,
-    const WriteOptions * options = nullptr)
-</code></pre>
-<p>write_sheet into memory.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>format</code></td>
-<td>int32_t</td>
-<td></td>
-<td>As for write_columns. There is no default: no file name to infer it from.</td>
-</tr>
-<tr>
-<td><code>rows</code></td>
-<td>R &amp;&amp;</td>
-<td></td>
-<td>As for write_sheet.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="WriteOptions.html">WriteOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Sheet name, CSV dialect and format toggles, or null for the defaults.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;std::vector&lt;uint8_t&gt;, <a href="Error.html">Error</a>&gt;: The file's bytes.</p>
-<h2 id="aggregate_csv_file">aggregate_csv_file</h2>
-<pre><code class="lang-cpp">template &lt;CsvAccumulator Acc, typename Seed&gt;
-std::expected&lt;Acc, Error&gt; aggregate_csv_file(
+<h2 id="aggregate_csv">aggregate_csv</h2>
+<pre><code class="lang-cpp">template &lt;CsvAccumulator Acc&gt;
+std::expected&lt;Acc, Error&gt; aggregate_csv(
     std::string_view path,
-    Seed &amp;&amp; seed,
-    const CsvParallelOptions * options = nullptr)
+    const Acc &amp; seed = Acc{},
+    const OpenOptions &amp; options = {},
+    int32_t header_row = 0,
+    int32_t degree_of_parallelism = 0)
 template &lt;CsvAccumulator Acc&gt;
-std::expected&lt;Acc, Error&gt; aggregate_csv_file(
-    std::string_view path,
-    const CsvParallelOptions * options = nullptr)
+std::expected&lt;Acc, Error&gt; aggregate_csv(
+    std::span&lt;const uint8_t&gt; data,
+    const Acc &amp; seed = Acc{},
+    const OpenOptions &amp; options = {},
+    int32_t header_row = 0,
+    int32_t degree_of_parallelism = 0)
 </code></pre>
 <p>Folds the CSV file at <code>path</code> into one <code>Acc</code> across several threads.</p>
-<p><code>seed</code> is called at least once per partition, on worker threads, and may be called again for a partition that has to be re-read - a seeded accumulator can therefore be destroyed without ever being combined. The call blocks until the run finishes, so <code>seed</code> may capture locals freely. It must be const-callable: the C ABI shares one <code>user_data</code> across every worker and requires it to be read-only or internally synchronized, so the shims invoke it through a reference to const. A capturing <code>mutable</code> lambda therefore fails this constraint cleanly instead of hard-erroring inside a shim. The <code>remove_cvref_t</code> is load-bearing - <code>Seed</code> deduces to an lvalue reference for a named callable, and <code>const Seed &amp;</code> would collapse the <code>const</code> away.</p>
-<p>Folds the CSV file at <code>path</code> into one <code>Acc</code>, seeding each partition with <code>Acc()</code>.</p>
+<p>Each partition starts from a copy of <code>seed</code>, made on a worker thread; a partition that has to be re-read starts again from a fresh copy, so a copy can be destroyed without ever being combined. Copies are made concurrently from the one <code>seed</code>, which the call only reads.</p>
+<p>Folds an in-memory CSV buffer into one <code>Acc</code>; otherwise as for the path overload.</p>
 <p><strong>Type parameters</strong></p>
 <table>
 <thead>
@@ -819,88 +701,42 @@ std::expected&lt;Acc, Error&gt; aggregate_csv_file(
 </tr>
 <tr>
 <td><code>seed</code></td>
-<td>Seed &amp;&amp;</td>
-<td></td>
-<td>Makes a fresh <code>Acc</code> for a partition.</td>
+<td>const Acc &amp;</td>
+<td><code>Acc{}</code></td>
+<td>The state every partition starts from.</td>
 </tr>
 <tr>
 <td><code>options</code></td>
-<td>const <a href="CsvParallelOptions.html">CsvParallelOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Threads, header row and CSV dialect, or null for the defaults.</td>
+<td>const <a href="OpenOptions.html">OpenOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td><code>csv_delimiter</code>, <code>csv_quote</code>, <code>csv_detect_bom</code> and <code>max_cell_bytes</code> apply; the other fields are ignored.</td>
 </tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;Acc, <a href="Error.html">Error</a>&gt;: The combined accumulator.</p>
-<h2 id="aggregate_csv_memory">aggregate_csv_memory</h2>
-<pre><code class="lang-cpp">template &lt;CsvAccumulator Acc, typename Seed&gt;
-std::expected&lt;Acc, Error&gt; aggregate_csv_memory(
-    std::span&lt;const uint8_t&gt; data,
-    Seed &amp;&amp; seed,
-    const CsvParallelOptions * options = nullptr)
-template &lt;CsvAccumulator Acc&gt;
-std::expected&lt;Acc, Error&gt; aggregate_csv_memory(
-    std::span&lt;const uint8_t&gt; data,
-    const CsvParallelOptions * options = nullptr)
-</code></pre>
-<p>Folds an in-memory CSV buffer into one <code>Acc</code>.</p>
-<p>Otherwise identical to aggregate_csv_file.</p>
-<p>Folds an in-memory CSV buffer into one <code>Acc</code>, seeding each partition with <code>Acc()</code>.</p>
-<p><strong>Type parameters</strong></p>
-<table>
-<thead>
 <tr>
-<th>Name</th>
-<th>Description</th>
+<td><code>header_row</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>1-based header row, not aggregated; 0 means none.</td>
 </tr>
-</thead>
-<tbody>
 <tr>
-<td><code>Acc</code></td>
-<td>The accumulator; see CsvAccumulator.</td>
+<td><code>degree_of_parallelism</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>Worker threads; 0 uses every processor, 1 runs sequentially.</td>
 </tr>
-</tbody>
-</table>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
 <tr>
 <td><code>data</code></td>
 <td>std::span&lt;const uint8_t&gt;</td>
 <td></td>
 <td>The CSV bytes. Not copied, so they must stay valid for the call.</td>
 </tr>
-<tr>
-<td><code>seed</code></td>
-<td>Seed &amp;&amp;</td>
-<td></td>
-<td>As for aggregate_csv_file.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="CsvParallelOptions.html">CsvParallelOptions</a> *</td>
-<td><code>nullptr</code></td>
-<td>Threads, header row and CSV dialect, or null for the defaults.</td>
-</tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;Acc, <a href="Error.html">Error</a>&gt;: The combined accumulator.</p>
-<h2 id="parse_arrow">parse_arrow</h2>
+<h2 id="to_arrow">to_arrow</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
-std::expected&lt;ArrowTable, Error&gt; parse_arrow(
-    Sheet sheet,
-    int32_t header_row = 1,
-    int32_t degree_of_parallelism = 1)
+std::expected&lt;ArrowTable, Error&gt; to_arrow(Sheet sheet, const ReadOptions &amp;options={})
 </code></pre>
-<p>parse_sheet into Arrow instead of <code>T</code>.</p>
+<p>parse into Arrow instead of <code>T</code>.</p>
 <p><strong>Type parameters</strong></p>
 <table>
 <thead>
@@ -934,26 +770,17 @@ std::expected&lt;ArrowTable, Error&gt; parse_arrow(
 <td>The sheet to read.</td>
 </tr>
 <tr>
-<td><code>header_row</code></td>
-<td>int32_t</td>
-<td><code>1</code></td>
-<td>As for parse_sheet.</td>
-</tr>
-<tr>
-<td><code>degree_of_parallelism</code></td>
-<td>int32_t</td>
-<td><code>1</code></td>
-<td>As for parse_sheet.</td>
+<td><code>options</code></td>
+<td>const <a href="ReadOptions.html">ReadOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Header row and parallelism.</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;<a href="ArrowTable.html">ArrowTable</a>, <a href="Error.html">Error</a>&gt;</p>
-<h2 id="arrow_stream">arrow_stream</h2>
+<h2 id="to_arrow_stream">to_arrow_stream</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
-std::expected&lt;ArrowStream, Error&gt; arrow_stream(
-    Sheet sheet,
-    int32_t header_row = 1,
-    int64_t batch_size = 10000)
+std::expected&lt;ArrowStream, Error&gt; to_arrow_stream(Sheet sheet, const ReadOptions &amp;options={})
 </code></pre>
 <p>Opens an ArrowStream over a sheet.</p>
 <p><strong>Type parameters</strong></p>
@@ -989,16 +816,10 @@ std::expected&lt;ArrowStream, Error&gt; arrow_stream(
 <td>The sheet to read.</td>
 </tr>
 <tr>
-<td><code>header_row</code></td>
-<td>int32_t</td>
-<td><code>1</code></td>
-<td>As for parse_sheet.</td>
-</tr>
-<tr>
-<td><code>batch_size</code></td>
-<td>int64_t</td>
-<td><code>10000</code></td>
-<td>As for typed_reader.</td>
+<td><code>options</code></td>
+<td>const <a href="ReadOptions.html">ReadOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Header row and batch size.</td>
 </tr>
 </tbody>
 </table>

@@ -94,47 +94,20 @@ cursor, so reads on one workbook never disturb one another.</p>
 </code></pre>
 <p>Supports <code>with</code>.</p>
 <h2 id="properties">Properties</h2>
-<h3 id="sheet_count">sheet_count</h3>
-<pre><code class="lang-python">sheet_count: int
-</code></pre>
-<h3 id="sheet_names">sheet_names</h3>
-<pre><code class="lang-python">sheet_names: list[str]
-</code></pre>
-<p>Every sheet's name, in order.</p>
 <h3 id="sheets">sheets</h3>
 <pre><code class="lang-python">sheets: Sheets
 </code></pre>
 <p><strong>Type</strong> <a href="Sheets.html">Sheets</a></p>
 <p>The workbook's sheets: <code>len()</code>, iteration, and lookup by index, slice or name.</p>
+<p><code>[sheet.name for sheet in workbook.sheets]</code> lists every sheet's name.</p>
 <h3 id="is_date1904">is_date1904</h3>
 <pre><code class="lang-python">is_date1904: bool
 </code></pre>
 <h2 id="methods">Methods</h2>
-<h3 id="sheet_name_at">sheet_name_at</h3>
-<pre><code class="lang-python">def sheet_name_at(index: int) -&gt; str
-</code></pre>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>index</code></td>
-<td>int</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> str</p>
 <h3 id="close">close</h3>
 <pre><code class="lang-python">def close() -&gt; None
 </code></pre>
-<p>Closes the workbook. A generator that has already started, and any record-batch reader already opened, keep working.</p>
+<p>Closes the workbook. A generator that has already started, and any Arrow stream already opened, keep working.</p>
 
 </article>
 

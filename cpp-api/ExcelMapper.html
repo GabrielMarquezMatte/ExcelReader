@@ -88,7 +88,7 @@
 <h1 id="struct-excelmapper">Struct ExcelMapper</h1>
 
 <p>Maps a row type to columns.</p>
-<p>Specialize it with a <code>static constexpr auto get_bindings()</code> that returns a std::tuple of make_field results; parse_sheet, typed_reader, parse_arrow and write_sheet all read the same mapping.</p>
+<p>Specialize it with a <code>static constexpr auto get_bindings()</code> that returns a std::tuple of make_field results; parse, parse_batches, to_arrow and write_sheet all read the same mapping.</p>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
 struct xl::ExcelMapper
 </code></pre>

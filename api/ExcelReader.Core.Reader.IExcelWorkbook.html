@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Reader_IExcelWorkbook" data-uid="ExcelReader.Core.Reader.IExcelWorkbook" class="text-break">
-Interface IExcelWorkbook  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L23"><i class="bi bi-code-slash"></i></a>
+Interface IExcelWorkbook  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L24"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -139,6 +139,7 @@ workbook and every enumerator obtained from it are disposed.</p>
 Disposing the workbook closes it to new sheets and enumerators. Its file, stream and pooled
 buffers are released when the last enumerator obtained from it is disposed.
 </p>
+<p>Only ExcelReader implements this interface, and a minor version can add members to it. See <a href="https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html">versioning and compatibility</a>.</p>
 </div>
 
 
@@ -150,7 +151,7 @@ buffers are released when the last enumerator obtained from it is disposed.
 
   <h3 id="ExcelReader_Core_Reader_IExcelWorkbook_FirstSheet" data-uid="ExcelReader.Core.Reader.IExcelWorkbook.FirstSheet">
   FirstSheet
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L34"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the workbook's first sheet: the same sheet as <code>SheetAt(0)</code>. Opens nothing.</p>
@@ -188,7 +189,7 @@ buffers are released when the last enumerator obtained from it is disposed.
 
   <h3 id="ExcelReader_Core_Reader_IExcelWorkbook_IsDate1904" data-uid="ExcelReader.Core.Reader.IExcelWorkbook.IsDate1904">
   IsDate1904
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L27"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets a value indicating whether the workbook's date system is 1904-based rather than the default 1900-based system.</p>
@@ -220,7 +221,7 @@ buffers are released when the last enumerator obtained from it is disposed.
 
   <h3 id="ExcelReader_Core_Reader_IExcelWorkbook_SheetCount" data-uid="ExcelReader.Core.Reader.IExcelWorkbook.SheetCount">
   SheetCount
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L30"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the number of sheets in the workbook.</p>
@@ -252,7 +253,7 @@ buffers are released when the last enumerator obtained from it is disposed.
 
   <h3 id="ExcelReader_Core_Reader_IExcelWorkbook_Tables" data-uid="ExcelReader.Core.Reader.IExcelWorkbook.Tables">
   Tables
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L54"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the workbook's tables (ranges formatted with &quot;Format as Table&quot;), ordered by sheet and then by
@@ -295,7 +296,7 @@ the order they were created in. Always empty for XLS and CSV. Opens nothing.</p>
 
   <h3 id="ExcelReader_Core_Reader_IExcelWorkbook_SheetAt_System_Int32_" data-uid="ExcelReader.Core.Reader.IExcelWorkbook.SheetAt(System.Int32)">
   SheetAt(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L40"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the sheet at the given zero-based index. Opens nothing.</p>
@@ -342,7 +343,7 @@ the order they were created in. Always empty for XLS and CSV. Opens nothing.</p>
 
   <h3 id="ExcelReader_Core_Reader_IExcelWorkbook_TryGetSheet_System_ReadOnlySpan_System_Char__ExcelReader_Core_Reader_IExcelSheet__" data-uid="ExcelReader.Core.Reader.IExcelWorkbook.TryGetSheet(System.ReadOnlySpan{System.Char},ExcelReader.Core.Reader.IExcelSheet@)">
   TryGetSheet(ReadOnlySpan&lt;char&gt;, out IExcelSheet)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L47"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Finds a sheet by name, ignoring case. Opens nothing.</p>
@@ -390,7 +391,7 @@ the order they were created in. Always empty for XLS and CSV. Opens nothing.</p>
 
   <h3 id="ExcelReader_Core_Reader_IExcelWorkbook_TryGetTable_System_ReadOnlySpan_System_Char__ExcelReader_Core_Reader_ExcelTable__" data-uid="ExcelReader.Core.Reader.IExcelWorkbook.TryGetTable(System.ReadOnlySpan{System.Char},ExcelReader.Core.Reader.ExcelTable@)">
   TryGetTable(ReadOnlySpan&lt;char&gt;, out ExcelTable)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L61"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Finds a table by name, ignoring case. Opens nothing.</p>
@@ -438,7 +439,7 @@ the order they were created in. Always empty for XLS and CSV. Opens nothing.</p>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L23" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IExcelWorkbook.cs/#L24" class="edit-link">Edit this page</a>
         </div>
 
 
