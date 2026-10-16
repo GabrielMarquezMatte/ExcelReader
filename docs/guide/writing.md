@@ -263,8 +263,8 @@ Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):
 
 | Workload | Default | `PrefetchWrite = true` | Gain |
 |---|---:|---:|---:|
-| XLSX | 8.337 ms | 5.175 ms | 38% |
-| XLSB | 5.572 ms | 3.419 ms | 39% |
+| XLSX | 8.527 ms | 5.245 ms | 38% |
+| XLSB | 5.786 ms | 3.234 ms | 44% |
 
 Allocations are unchanged (4.02 MB either way) — the background writer hands over buffers the row
 writer already owns rather than copying them.
