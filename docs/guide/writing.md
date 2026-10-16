@@ -263,8 +263,8 @@ Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):
 
 | Workload | Default | `PrefetchWrite = true` | Gain |
 |---|---:|---:|---:|
-| XLSX | 8.337 ms | 5.175 ms | 38% |
-| XLSB | 5.572 ms | 3.419 ms | 39% |
+| XLSX | 8.527 ms | 5.245 ms | 38% |
+| XLSB | 5.786 ms | 3.234 ms | 44% |
 
 Allocations are unchanged (4.02 MB either way) — the background writer hands over buffers the row
 writer already owns rather than copying them.
@@ -324,16 +324,17 @@ defaults each batch in flight holds about 3 MB (its formatted rows, the compress
 compressed result), whatever the size of the sheet.
 
 Writing 1,000,000 rows of four columns (text, integer, date, number) to a `MemoryStream` at
-`Fastest`, on a Ryzen 7 5700X, median of 9 runs:
+`Fastest`, on a Ryzen 7 5700X (`ParallelRecordWriteBenchmark`):
 
 | Write | XLSX | XLSB |
 |---|---:|---:|
-| Serial | 187.3 ms | 123.6 ms |
-| Serial, `PrefetchWrite` | 117.8 ms | 67.6 ms |
-| Parallel, 1 batch in flight | 172.7 ms | 120.6 ms |
-| Parallel, 2 | 92.1 ms | 63.2 ms |
-| Parallel, 4 | 49.9 ms | 40.9 ms |
-| Parallel, 8 | 35.7 ms | 27.7 ms |
+| Serial | 171.57 ms | 115.39 ms |
+| Serial, `PrefetchWrite` | 104.92 ms | 60.02 ms |
+| Parallel, 1 batch in flight | 165.22 ms | 107.81 ms |
+| Parallel, 2 | 89.69 ms | 57.94 ms |
+| Parallel, 4 | 46.29 ms | 30.62 ms |
+| Parallel, 8 | 30.56 ms | 21.04 ms |
+| Parallel, 16 | 27.93 ms | 18.25 ms |
 
 The file comes out 0.18% (XLSX) or 0.04% (XLSB) larger, because each batch is compressed on its own.
 As with `PrefetchWrite`, this is for single-file batch work: a server already writing many files at

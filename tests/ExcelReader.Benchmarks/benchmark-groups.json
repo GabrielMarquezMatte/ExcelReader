@@ -19,13 +19,13 @@
   },
   {
     "name": "write",
-    "filter": "ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.* ExcelReader.Benchmarks.WritePathBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.* ExcelReader.Benchmarks.WritePathBenchmark.* ExcelReader.Benchmarks.ParallelRecordWriteBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },
   {
     "name": "realdata",
-    "filter": "ExcelReader.Benchmarks.RealDataReadBenchmark.* ExcelReader.Benchmarks.RealDataTypedParseBenchmark.* ExcelReader.Benchmarks.SheetParallelBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.RealDataReadBenchmark.* ExcelReader.Benchmarks.RealDataTypedParseBenchmark.* ExcelReader.Benchmarks.SheetParallelBenchmark.* ExcelReader.Benchmarks.LargeSheetParallelBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },

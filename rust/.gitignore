@@ -1,5 +1,5 @@
 /target/
-/Cargo.lock
+# The workspace lockfile is tracked: every zip 8.x is yanked, and calamine and rust_xlsxwriter only resolve through a lock that already holds it
 # Workspace members shouldn't have their own Cargo.lock or target/
 /excelreader/Cargo.lock
 /excelreader/target/
