@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Csv;
 
 namespace ExcelReader.Native.Writer
@@ -17,6 +18,37 @@ namespace ExcelReader.Native.Writer
         public int CsvQuote;
         public int Date1904;
         public int UseSharedStrings;
+
+        public int DegreeOfParallelism;
+        public int BatchRows;
+
+        internal const int V7Size = 32;
+
+        internal static unsafe bool TryRead(NativeWriteOptionsRaw* options, out NativeWriteOptionsRaw raw, [NotNullWhen(false)] out string? error)
+        {
+            raw = default;
+            error = null;
+            if (options is null)
+            {
+                raw = new NativeWriteOptionsRaw { StructSize = sizeof(NativeWriteOptionsRaw), DegreeOfParallelism = 1 };
+                return true;
+            }
+            int size = options->StructSize;
+            if (size != sizeof(NativeWriteOptionsRaw) && size != V7Size)
+            {
+                error = $"xl_write_options.struct_size is {size}, but this library expects {sizeof(NativeWriteOptionsRaw)} (or {V7Size} for the 7.0 layout).";
+                return false;
+            }
+            NativeWriteOptionsRaw copy = default;
+            Buffer.MemoryCopy(options, &copy, sizeof(NativeWriteOptionsRaw), size);
+            copy.StructSize = sizeof(NativeWriteOptionsRaw);
+            if (size == V7Size)
+            {
+                copy.DegreeOfParallelism = 1;
+            }
+            raw = copy;
+            return true;
+        }
     }
 
     internal readonly struct NativeWriteOptions
@@ -32,6 +64,21 @@ namespace ExcelReader.Native.Writer
         internal byte? CsvQuote { get; init; }
         internal bool? Date1904 { get; init; }
         internal bool? UseSharedStrings { get; init; }
+        internal int DegreeOfParallelism { get; init; }
+        internal int BatchRows { get; init; }
+
+        internal ParallelWriteOptions? ToParallelWriteOptions(int format)
+        {
+            if (format is not (NativeFormat.Xlsx or NativeFormat.Xlsb) || DegreeOfParallelism == 1)
+            {
+                return null;
+            }
+            return new ParallelWriteOptions
+            {
+                DegreeOfParallelism = DegreeOfParallelism,
+                BatchRows = BatchRows == 0 ? ParallelWriteOptions.Default.BatchRows : BatchRows,
+            };
+        }
 
         internal CsvWriterOptions ToCsvWriterOptions()
         {
@@ -63,6 +110,16 @@ namespace ExcelReader.Native.Writer
             {
                 return false;
             }
+            if (raw.DegreeOfParallelism < 0)
+            {
+                error = $"{OptionsName}.degree_of_parallelism must be 0 (processor count) or positive; got {raw.DegreeOfParallelism}.";
+                return false;
+            }
+            if (raw.BatchRows < 0)
+            {
+                error = $"{OptionsName}.batch_rows must be 0 (library default) or positive; got {raw.BatchRows}.";
+                return false;
+            }
 
             options = new NativeWriteOptions
             {
@@ -71,6 +128,8 @@ namespace ExcelReader.Native.Writer
                 CsvQuote = quote,
                 Date1904 = date1904,
                 UseSharedStrings = sharedStrings,
+                DegreeOfParallelism = raw.DegreeOfParallelism,
+                BatchRows = raw.BatchRows,
             };
             return true;
         }

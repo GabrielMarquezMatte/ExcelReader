@@ -69,15 +69,11 @@ namespace ExcelReader.Native
         private static bool TryDecodeWriteOptions(NativeWriteOptionsRaw* options, out NativeWriteOptions decoded)
         {
             decoded = default;
-            int expectedSize = sizeof(NativeWriteOptionsRaw);
-            if (options is not null && options->StructSize != expectedSize)
+            if (!NativeWriteOptionsRaw.TryRead(options, out NativeWriteOptionsRaw raw, out string? readError))
             {
-                NativeApi.SetLastError($"xl_write_options.struct_size is {options->StructSize}, but this library expects {expectedSize}.");
+                NativeApi.SetLastError(readError);
                 return false;
             }
-            NativeWriteOptionsRaw raw = options is null
-                ? new NativeWriteOptionsRaw { StructSize = expectedSize }
-                : *options;
             string? sheetName = null;
             if (raw.SheetName is not null)
             {
