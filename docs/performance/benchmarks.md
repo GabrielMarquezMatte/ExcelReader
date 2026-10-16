@@ -7,7 +7,7 @@ Throwaway numbers go stale; these are regenerated from the benchmark suite in
 
 Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.12 (SDK 10.0.401). Generated-data benchmarks use 50,000 rows, except the string-heavy reads, which use 65,536. Raw results: [GitHub Pages benchmark dashboard](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/) — `tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/` is `.gitignore`-excluded and never actually reaches GitHub, so a link to it 404s for every reader.
 
-Every BenchmarkDotNet table is a `--job Short` run (1 launch, 3 warmup and 3 measured iterations) on an otherwise idle machine. Rows whose 99.9% confidence interval came out wider than 25% of the mean were run again with `--job Medium` (2 launches, 15 iterations) and carry those figures instead: the parallel CSV tables, the CSV cell-by-cell read, the Sylvan XLS read, the Sylvan string-heavy reads, the string-heavy XLSX matched-work read, the generated-workbook matched-work read, `DataTable.Load` and the large encrypted read. The cold-start rows set their own launch count, and the parallel record writes, the Python/C++/Rust figures and the native-library comparison come from other harnesses that were not re-run.
+Every BenchmarkDotNet table is a `--job Short` run (1 launch, 3 warmup and 3 measured iterations) on an otherwise idle machine. Rows whose 99.9% confidence interval came out wider than 25% of the mean were run again with `--job Medium` (2 launches, 15 iterations) and carry those figures instead: the parallel CSV tables, the CSV cell-by-cell read, the Sylvan XLS read, the Sylvan string-heavy reads, the string-heavy XLSX matched-work read, the generated-workbook matched-work read, `DataTable.Load` and the large encrypted read. The cold-start rows set their own launch count, and the file-size and working-set figures under the parallel record writes, the Python/C++/Rust figures and the native-library comparison come from other harnesses that were not re-run. The large-sheet and parallel-write tables are `--job Medium` runs.
 
 **Benchmark methodology.** In the Excel-format tables below, the **"Cell-by-cell read"** rows (including the per-format rows in "Real data reads" / "String-heavy reads") read ExcelReader's `cell.Value` — a zero-copy `ReadOnlySpan<byte>`, no decode or allocation — against each competitor's own idiomatic read call. For Sylvan.Data.Excel, that's the ADO.NET-style `GetString(i)`, which is forced to materialize a UTF-16 `string`; its API has no zero-copy accessor, so it cannot avoid that cost. These rows are therefore not matched work: part of the reported gap is "we parse faster" and part is "we skipped an allocation you were never offered a way to skip." Each affected benchmark class also has a `*_Materialized` sibling (calling `cell.GetString()`, the same UTF-16 materialization Sylvan pays) so the matched-work number is measurable — see `tests/ExcelReader.Benchmarks/Shared/BenchmarkAccumulators.cs`. **Those results are published under [Matched-work reads](#matched-work-reads-_materialized), and reading them is the honest way to judge the comparison:** treat the Excel cell-by-cell ratios in the tables below as an upper bound, not a like-for-like number. The CSV cell-by-cell rows are matched work: Sep and Sylvan.Data.Csv both expose span accessors (`row[i].Span`, `GetFieldSpan(i)`), and the benchmarks use them. The **"Typed row parsing"** / **"Typed record writing"** rows are unaffected — both sides already materialize real objects/strings there, so those comparisons are matched work as published.
 
@@ -82,6 +82,8 @@ The typed path scales ~2.3x by dop 4 on the conversion-heavy corpus (587.8 to 25
 
 The aggregate columns fold each record into a per-partition accumulator through a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and no row object is ever materialized. They scale better than the typed path — ~4.9x (conversion-heavy) and ~5.0x (narrow) at dop 8, ~6.4x and ~6.3x at dop 16 — because they are not fighting the allocator: at dop 4 the conversion-heavy aggregate is ~1.8x faster than typed while allocating ~450x less (1.50 MB against 680.39 MB), with **zero** garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.
 
+The typed path's slowdown past dop 8 is the garbage collector. Every degree allocates the same ~680 MB and runs 42 gen0 collections, but at dop 16 each of them also collects gen1 (41 gen1 collections against 24 at dop 8), and the pauses add up to 100-200 ms against 39 ms. In a console harness on the 4.3 million row corpus, with the default workstation GC, dop 16 took 365 ms; with `DOTNET_gcServer=1` it took 182 ms, faster than dop 8. The aggregate path allocates no row objects and is unaffected.
+
 Type conversion is the floor under both. A single-threaded pass that allocates nothing still costs 472.0 ms, so parsing bytes into `DateTime`/`decimal`/`int` — not allocation and not I/O — is what the parallelism is actually buying down.
 
 Against [Sep](https://github.com/nietras/Sep)'s own `ParallelEnumerate` (all cores; 8,000,000 narrow rows, 3,000,000 conversion-heavy rows):
@@ -105,6 +107,38 @@ Sequentially, ExcelReader's typed parser is ~1.1x faster than Sep on narrow ints
 | 8 | 16.73 ms, 8.16 MB | 13.25 ms, 8.09 MB |
 
 At dop 4 XLSX reads ~3.2x faster than sequentially and XLSB ~2.6x. Dop 2 is a single parse worker running alongside the inflating thread. Past dop 4 nothing improves: the one inflating thread is the floor (~14 ms for XLSX, ~9 ms for XLSB, see [Inflate](#inflate), plus the XLSB record walk that finds row boundaries). Allocation barely moves with dop (8.02 to 8.16 MB): it is the typed model's strings.
+
+### Large sheets
+
+`LargeSheetParallelBenchmark` reads sheets generated in memory at the largest sizes the formats allow. XLSX and XLSB hold 1,000,000 rows by four columns (text, integer, date, number), the limit being 1,048,576 rows per sheet; CSV holds 4,000,000 conversion-heavy rows (two strings, a date, two decimals and an int), and has no such limit. "Aggregate" folds every row into a per-partition sum; "typed parse" is the ordered `ParseAsync` into a class (`ref struct` for the CSV aggregate).
+
+| XLSX, Dop | Aggregate | Typed parse |
+|---:|---:|---:|
+| 1 | 215.91 ms, 77.25 MB | 243.27 ms, 77.25 MB |
+| 2 | 169.84 ms, 77.62 MB | 185.00 ms, 106.81 MB |
+| 4 | 64.81 ms, 77.58 MB | 74.01 ms, 106.75 MB |
+| 8 | 51.11 ms, 77.52 MB | 55.44 ms, 106.78 MB |
+| 16 | 44.51 ms, 77.94 MB | 57.32 ms, 107.11 MB |
+
+| XLSB, Dop | Aggregate | Typed parse |
+|---:|---:|---:|
+| 1 | 160.91 ms, 77.25 MB | 189.08 ms, 77.25 MB |
+| 2 | 119.50 ms, 77.53 MB | 127.86 ms, 99.69 MB |
+| 4 | 48.76 ms, 77.46 MB | 58.04 ms, 99.59 MB |
+| 8 | 46.92 ms, 77.61 MB | 53.51 ms, 99.74 MB |
+| 16 | 49.19 ms, 77.88 MB | 54.30 ms, 100.00 MB |
+
+| CSV, Dop | Aggregate | Typed parse |
+|---:|---:|---:|
+| 1 | 426.07 ms, 1.99 KB | 543.94 ms, 623.08 MB |
+| 2 | 226.22 ms, 6.77 KB | 338.08 ms, 626.87 MB |
+| 4 | 118.30 ms, 10.60 KB | 191.11 ms, 626.71 MB |
+| 8 | 90.67 ms, 18.32 KB | 189.98 ms, 626.43 MB |
+| 16 | 64.16 ms, 34.29 KB | 207.63 ms, 626.57 MB |
+
+The XLSX and XLSB aggregates and typed parses each materialize a `Record` and its name string per row, which is where their ~77-107 MB comes from; the CSV aggregate binds a `ref struct` and allocates kilobytes, while the CSV typed parse allocates ~626 MB at every degree, one row object and two strings per record.
+
+XLSX and XLSB reach ~3.3x at dop 4 and then barely improve, as in the real-data table above (the XLSX aggregate gets to 4.9x at dop 16, the XLSB aggregate to 3.4x at dop 8). The CSV aggregate keeps scaling because nothing but the parser runs on the workers: 4.7x at dop 8 and 6.6x at dop 16. The typed CSV parse reaches 2.9x at dop 8 and then loses 9% at dop 16 to the collector (see [Parallel CSV](#parallel-csv)), so for a 4-million-row file the aggregate at dop 16 is ~3.2x faster than the typed parse and allocates no row objects.
 
 ### Real data reads
 
@@ -205,20 +239,21 @@ The encoder's limits are deliberate:
 
 ### Parallel record writes
 
-`WriteRecordsParallelAsync` formats and compresses batches of 8,192 records on pool threads and appends them to the sheet in order. Writing 1,000,000 rows by four columns (text, integer, date, number) into a pre-sized `MemoryStream` at `Fastest`, on the same Ryzen 7 5700X. Each figure is the median of 9 writes after 3 warm-up writes, from a console harness rather than BenchmarkDotNet:
+`WriteRecordsParallelAsync` formats and compresses batches of 8,192 records on pool threads and appends them to the sheet in order. `ParallelRecordWriteBenchmark` writes 1,000,000 rows by four columns (text, integer, date, number) into a pre-sized `MemoryStream` at `Fastest`, on the same Ryzen 7 5700X, with a number of batches in flight from 1 to 16:
 
 | Write | XLSX | vs serial | XLSB | vs serial |
 |---|---:|---:|---:|---:|
-| Serial | 187.3 ms | 1.0x | 123.6 ms | 1.0x |
-| Serial, `PrefetchWrite` | 117.8 ms | 1.6x | 67.6 ms | 1.8x |
-| Parallel, 1 batch in flight | 172.7 ms | 1.1x | 120.6 ms | 1.0x |
-| Parallel, 2 | 92.1 ms | 2.0x | 63.2 ms | 2.0x |
-| Parallel, 4 | 49.9 ms | 3.8x | 40.9 ms | 3.0x |
-| Parallel, 8 | 35.7 ms | 5.2x | 27.7 ms | 4.5x |
+| Serial | 171.57 ms, 16.11 KB | 1.0x | 115.39 ms, 13.42 KB | 1.0x |
+| Serial, `PrefetchWrite` | 104.92 ms, 18.43 KB | 1.6x | 60.02 ms, 16.25 KB | 1.9x |
+| Parallel, 1 batch in flight | 165.22 ms, 48.09 KB | 1.0x | 107.81 ms, 45.48 KB | 1.1x |
+| Parallel, 2 | 89.69 ms, 83.40 KB | 1.9x | 57.94 ms, 81.92 KB | 2.0x |
+| Parallel, 4 | 46.29 ms, 79.39 KB | 3.7x | 30.62 ms, 77.87 KB | 3.8x |
+| Parallel, 8 | 30.56 ms, 74.61 KB | 5.6x | 21.04 ms, 70.78 KB | 5.5x |
+| Parallel, 16 | 27.93 ms, 72.66 KB | 6.1x | 18.25 ms, 66.78 KB | 6.3x |
 
-It scales because a write is bound by building rows, not by deflate: `PrefetchWrite` already takes deflate off the calling thread and stops at 1.6x to 1.8x, so compressing chunks in parallel would add nothing on top of it, while formatting the rows in parallel does.
+It scales because a write is bound by building rows, not by deflate: `PrefetchWrite` already takes deflate off the calling thread and stops at 1.6x to 1.9x, so compressing chunks in parallel would add nothing on top of it, while formatting the rows in parallel does. Past dop 8 the gain is small, because the machine has 8 physical cores. None of the rows triggers a garbage collection, and every write allocates under 85 KB for 1,000,000 rows.
 
-Each batch is compressed with no reference to the one before it, which costs 0.18% of file size for XLSX (15,481,372 B to 15,508,760 B) and 0.04% for XLSB (16,863,131 B to 16,869,306 B). The process's peak working set rose by 12 MB over the serial write with 4 batches in flight and by 23 MB with 8, about 3 MB per batch, and does not depend on the number of rows.
+Each batch is compressed with no reference to the one before it, which costs 0.18% of file size for XLSX (15,481,372 B to 15,508,760 B) and 0.04% for XLSB (16,863,131 B to 16,869,306 B). The process's peak working set rose by 12 MB over the serial write with 4 batches in flight and by 23 MB with 8, about 3 MB per batch, and does not depend on the number of rows. The file sizes and working sets come from a console harness, because BenchmarkDotNet does not report them.
 
 ### Matched-work reads (`*_Materialized`)
 
