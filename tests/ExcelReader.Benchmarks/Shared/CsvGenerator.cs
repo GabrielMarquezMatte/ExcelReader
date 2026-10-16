@@ -55,9 +55,25 @@ namespace ExcelReader.Benchmarks
         internal static string WriteConversionHeavyFile(int rows)
         {
             string path = Path.Combine(Path.GetTempPath(), $"exr-bench-wide-{Guid.NewGuid():N}.csv");
+            using var writer = new StreamWriter(path, append: false);
+            WriteConversionHeavy(writer, rows);
+            return path;
+        }
+
+        internal static byte[] BuildConversionHeavy(int rows)
+        {
+            using var ms = new MemoryStream(rows * 48);
+            using (var writer = new StreamWriter(ms, new UTF8Encoding(false), 1 << 16, leaveOpen: true))
+            {
+                WriteConversionHeavy(writer, rows);
+            }
+            return ms.ToArray();
+        }
+
+        private static void WriteConversionHeavy(TextWriter writer, int rows)
+        {
             string[] regions = ["Europe", "Asia", "North America", "Sub-Saharan Africa"];
             string[] countries = ["Portugal", "Japan", "Canada", "Kenya", "Brazil", "Norway"];
-            using var writer = new StreamWriter(path, append: false);
             writer.WriteLine("Region,Country,OrderDate,UnitPrice,TotalRevenue,Units");
             var start = new DateTime(2015, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
             for (int i = 0; i < rows; i++)
@@ -77,7 +93,6 @@ namespace ExcelReader.Benchmarks
                 writer.Write(',');
                 writer.WriteLine(((i % 500) + 1).ToString(CultureInfo.InvariantCulture));
             }
-            return path;
         }
 
         internal static string WriteNarrowIntFile(int rows)
