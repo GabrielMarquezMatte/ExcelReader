@@ -300,15 +300,15 @@ they have nothing to overlap and do not offer it.</p>
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">8.337 ms</td>
-<td style="text-align: right;">5.175 ms</td>
+<td style="text-align: right;">8.527 ms</td>
+<td style="text-align: right;">5.245 ms</td>
 <td style="text-align: right;">38%</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">5.572 ms</td>
-<td style="text-align: right;">3.419 ms</td>
-<td style="text-align: right;">39%</td>
+<td style="text-align: right;">5.786 ms</td>
+<td style="text-align: right;">3.234 ms</td>
+<td style="text-align: right;">44%</td>
 </tr>
 </tbody>
 </table>
@@ -363,7 +363,7 @@ differ byte for byte. Their content is the same.</li>
 defaults each batch in flight holds about 3 MB (its formatted rows, the compressor's window and the
 compressed result), whatever the size of the sheet.</p>
 <p>Writing 1,000,000 rows of four columns (text, integer, date, number) to a <code>MemoryStream</code> at
-<code>Fastest</code>, on a Ryzen 7 5700X, median of 9 runs:</p>
+<code>Fastest</code>, on a Ryzen 7 5700X (<code>ParallelRecordWriteBenchmark</code>):</p>
 <table>
 <thead>
 <tr>
@@ -375,33 +375,38 @@ compressed result), whatever the size of the sheet.</p>
 <tbody>
 <tr>
 <td>Serial</td>
-<td style="text-align: right;">187.3 ms</td>
-<td style="text-align: right;">123.6 ms</td>
+<td style="text-align: right;">171.57 ms</td>
+<td style="text-align: right;">115.39 ms</td>
 </tr>
 <tr>
 <td>Serial, <code>PrefetchWrite</code></td>
-<td style="text-align: right;">117.8 ms</td>
-<td style="text-align: right;">67.6 ms</td>
+<td style="text-align: right;">104.92 ms</td>
+<td style="text-align: right;">60.02 ms</td>
 </tr>
 <tr>
 <td>Parallel, 1 batch in flight</td>
-<td style="text-align: right;">172.7 ms</td>
-<td style="text-align: right;">120.6 ms</td>
+<td style="text-align: right;">165.22 ms</td>
+<td style="text-align: right;">107.81 ms</td>
 </tr>
 <tr>
 <td>Parallel, 2</td>
-<td style="text-align: right;">92.1 ms</td>
-<td style="text-align: right;">63.2 ms</td>
+<td style="text-align: right;">89.69 ms</td>
+<td style="text-align: right;">57.94 ms</td>
 </tr>
 <tr>
 <td>Parallel, 4</td>
-<td style="text-align: right;">49.9 ms</td>
-<td style="text-align: right;">40.9 ms</td>
+<td style="text-align: right;">46.29 ms</td>
+<td style="text-align: right;">30.62 ms</td>
 </tr>
 <tr>
 <td>Parallel, 8</td>
-<td style="text-align: right;">35.7 ms</td>
-<td style="text-align: right;">27.7 ms</td>
+<td style="text-align: right;">30.56 ms</td>
+<td style="text-align: right;">21.04 ms</td>
+</tr>
+<tr>
+<td>Parallel, 16</td>
+<td style="text-align: right;">27.93 ms</td>
+<td style="text-align: right;">18.25 ms</td>
 </tr>
 </tbody>
 </table>
