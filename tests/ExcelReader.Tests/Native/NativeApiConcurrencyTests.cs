@@ -67,7 +67,7 @@ namespace ExcelReader.Tests.Native
             return Task.WhenAll(tasks);
         }
 
-        private static List<string> ReadSheet(NativeHandle handle, int sheet)
+        internal static List<string> ReadSheet(NativeHandle handle, int sheet)
         {
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenRows(handle, sheet, out NativeRowCursor? opened));
             using NativeRowCursor cursor = opened!;
