@@ -59,8 +59,8 @@ The in-memory path (`Excel.Open(ReadOnlyMemory<byte>)` and friends) has already 
 by the time it returns, so it always verifies regardless of this setting. Standard encryption has no
 HMAC field, so the setting does not apply to it.
 
-Opening an encrypted workbook costs a fixed ~26 ms for key derivation, whatever the file size. After
-that, reading is ~10% slower than reading the same workbook unencrypted — see
+Opening an encrypted workbook costs a fixed ~25 ms for key derivation, whatever the file size. After
+that, reading is ~3% slower than reading the same workbook unencrypted — see
 [Encrypted workbooks](../performance/benchmarks.md#encrypted-workbooks) in the benchmarks.
 
 Writing an encrypted workbook is a second step: build the package with any writer, then wrap it with
