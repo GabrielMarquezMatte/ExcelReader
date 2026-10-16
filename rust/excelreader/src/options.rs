@@ -343,6 +343,8 @@ pub struct WriteOptions {
     csv_quote: Option<i32>,
     date1904: Option<bool>,
     use_shared_strings: Option<bool>,
+    degree_of_parallelism: Option<i32>,
+    batch_rows: Option<i32>,
 }
 
 impl WriteOptions {
@@ -378,6 +380,12 @@ impl WriteOptions {
         /// XLSX/XLSB only; ignored for XLS and CSV. Shrinks files with many repeated strings, at
         /// the cost of a string table. Library default is `false`.
         use_shared_strings: bool,
+        /// XLSX/XLSB only. Batches formatted and compressed at once: `0` uses every processor,
+        /// `1` writes serially. Unset is serial. With shared strings on, parallel runs give the
+        /// same content in files that differ byte for byte.
+        degree_of_parallelism: i32,
+        /// XLSX/XLSB only. Rows per parallel batch; `0` or unset is the library default (8192).
+        batch_rows: i32,
     }
 
     /// The `XL_FORMAT_*` to write: the explicit format, else one inferred from `path`. With no path
@@ -407,6 +415,8 @@ impl WriteOptions {
             csv_quote: opt_number(self.csv_quote),
             date1904: opt_state(self.date1904),
             use_shared_strings: opt_state(self.use_shared_strings),
+            degree_of_parallelism: self.degree_of_parallelism.unwrap_or(1),
+            batch_rows: self.batch_rows.unwrap_or(0),
         }
     }
 }
@@ -541,6 +551,18 @@ mod tests {
     }
 
     #[test]
+    fn write_options_default_to_a_serial_write() {
+        let raw = WriteOptions::new().to_raw();
+        assert_eq!(raw.struct_size, 40);
+        assert_eq!(raw.degree_of_parallelism, 1);
+        assert_eq!(raw.batch_rows, 0);
+
+        let raw = WriteOptions::new().degree_of_parallelism(0).batch_rows(2).to_raw();
+        assert_eq!(raw.degree_of_parallelism, 0);
+        assert_eq!(raw.batch_rows, 2);
+    }
+
+    #[test]
     fn write_format_is_explicit_or_inferred_from_the_extension() {
         let auto = WriteOptions::new();
         let format = |path: &str| auto.format_for(Some(Path::new(path))).unwrap();
@@ -570,7 +592,7 @@ mod tests {
     /// side garbage where it expects a length and a pointer.
     #[test]
     fn write_options_match_the_c_struct_size() {
-        assert_eq!(std::mem::size_of::<XlWriteOptions>(), 32);
+        assert_eq!(std::mem::size_of::<XlWriteOptions>(), 40);
     }
 
     #[test]
