@@ -122,7 +122,7 @@ pub struct XlStream {
 
 /// Mirrors `xl_write_options`. Field ORDER is the C struct's, not a tidied-up version of it: with
 /// `repr(C)` the 4 bytes of padding after `sheet_name_len` land exactly where a C compiler puts
-/// them, giving the 32-byte x64 layout `tests/ExcelReader.NativeSmoke/smoke.c` static-asserts.
+/// them, giving the 40-byte x64 layout `tests/ExcelReader.NativeSmoke/smoke.c` static-asserts.
 /// Build one through `WriteOptions` rather than by hand.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -134,6 +134,8 @@ pub struct XlWriteOptions {
     pub csv_quote: i32,
     pub date1904: i32,
     pub use_shared_strings: i32,
+    pub degree_of_parallelism: i32,
+    pub batch_rows: i32,
 }
 
 #[repr(C)]

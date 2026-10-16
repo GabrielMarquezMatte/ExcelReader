@@ -289,6 +289,20 @@ than a wrong answer.
 toggles. Its format defaults to `Format::Auto`, inferred from the path's extension; an extension it
 does not recognize is an error - a file being created has no signature bytes to sniff.
 
+For XLSX and XLSB, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
+several threads: `0` uses every processor, `1` writes serially, and leaving it unset is serial.
+Unset `batch_rows` keeps the library default of 8,192. With shared strings on, two parallel runs
+give the same content in files that differ byte for byte. XLS, CSV and `WriterHandle` ignore both.
+
+```rust,no_run
+use excelreader::{write_columns, Column, ColumnData, WriteOptions};
+# let ids = [1i64, 2, 3];
+# let columns = [Column::new(Some("id"), ColumnData::I64(&ids))];
+
+write_columns("big.xlsx", &columns, &WriteOptions::new().degree_of_parallelism(0))?;
+# Ok::<(), excelreader::Error>(())
+```
+
 Each write has a path form and an `io::Write` form: `write_columns_to`/`write_sheet_to` build the
 workbook in memory and write it to the writer in one `write_all`. A writer has no extension, so
 these need an explicit format:
