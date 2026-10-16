@@ -202,7 +202,10 @@ typedef struct xl_write_options {
 
     int32_t date1904;             
 
-    int32_t use_shared_strings;   
+    int32_t use_shared_strings;
+
+    int32_t degree_of_parallelism;
+    int32_t batch_rows;
 } xl_write_options;
 
 int32_t xl_write_typed(const uint8_t* path, int32_t path_len,

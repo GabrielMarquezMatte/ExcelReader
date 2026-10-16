@@ -52,7 +52,9 @@ XL_STATIC_ASSERT(offsetof(xl_write_options, csv_delimiter) == 16, write_options_
 XL_STATIC_ASSERT(offsetof(xl_write_options, csv_quote) == 20, write_options_csv_quote);
 XL_STATIC_ASSERT(offsetof(xl_write_options, date1904) == 24, write_options_date1904);
 XL_STATIC_ASSERT(offsetof(xl_write_options, use_shared_strings) == 28, write_options_use_shared_strings);
-XL_STATIC_ASSERT(sizeof(xl_write_options) == 32, write_options_size);
+XL_STATIC_ASSERT(offsetof(xl_write_options, degree_of_parallelism) == 32, write_options_degree_of_parallelism);
+XL_STATIC_ASSERT(offsetof(xl_write_options, batch_rows) == 36, write_options_batch_rows);
+XL_STATIC_ASSERT(sizeof(xl_write_options) == 40, write_options_size);
 
 XL_STATIC_ASSERT(offsetof(xl_column, type) == 0, column_type);
 XL_STATIC_ASSERT(offsetof(xl_column, length) == 8, column_length);

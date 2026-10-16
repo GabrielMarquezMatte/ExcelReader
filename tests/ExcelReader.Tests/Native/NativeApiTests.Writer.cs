@@ -4,6 +4,7 @@ using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Csv;
 using ExcelReader.Native;
 using ExcelReader.Native.Reading;
@@ -450,6 +451,83 @@ namespace ExcelReader.Tests.Native
             Assert.Null(options.CsvQuote);
             Assert.Null(options.Date1904);
             Assert.Null(options.UseSharedStrings);
+            Assert.Equal(0, options.DegreeOfParallelism);
+            Assert.Equal(0, options.BatchRows);
+        }
+
+        [Fact]
+        public unsafe void WriteOptions_Should_Read_A_Null_Pointer_As_Serial()
+        {
+            Assert.True(NativeWriteOptionsRaw.TryRead(null, out NativeWriteOptionsRaw raw, out _));
+            Assert.Equal(sizeof(NativeWriteOptionsRaw), raw.StructSize);
+            Assert.Equal(1, raw.DegreeOfParallelism);
+        }
+
+        [Fact]
+        public unsafe void WriteOptions_Should_Read_The_7_0_Layout_As_Serial_Without_Reading_Past_It()
+        {
+            byte* buffer = stackalloc byte[sizeof(NativeWriteOptionsRaw)];
+            new Span<byte>(buffer, sizeof(NativeWriteOptionsRaw)).Fill(0xFF);
+            new Span<byte>(buffer, NativeWriteOptionsRaw.V7Size).Clear();
+            ((NativeWriteOptionsRaw*)buffer)->StructSize = NativeWriteOptionsRaw.V7Size;
+
+            Assert.True(NativeWriteOptionsRaw.TryRead((NativeWriteOptionsRaw*)buffer, out NativeWriteOptionsRaw raw, out _));
+            Assert.Equal(1, raw.DegreeOfParallelism);
+            Assert.Equal(0, raw.BatchRows);
+            Assert.Equal(sizeof(NativeWriteOptionsRaw), raw.StructSize);
+        }
+
+        [Fact]
+        public unsafe void WriteOptions_Should_Reject_A_Size_That_Is_Neither_Layout()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.StructSize = 36;
+
+            Assert.False(NativeWriteOptionsRaw.TryRead(&raw, out _, out string? error));
+            Assert.Contains("struct_size", error, StringComparison.Ordinal);
+            Assert.Contains("32", error, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(-1, 0, "degree_of_parallelism")]
+        [InlineData(0, -1, "batch_rows")]
+        public void WriteOptions_Should_Reject_Negative_Parallel_Fields(int degree, int batchRows, string field)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degree;
+            raw.BatchRows = batchRows;
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, null, out _, out string? error));
+            Assert.Contains(field, error, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, 0, 0, 0, 8192)]
+        [InlineData(NativeFormat.Xlsb, 4, 100, 4, 100)]
+        public void WriteOptions_Should_Map_Parallel_Fields_For_Xlsx_And_Xlsb(int format, int degree, int batchRows, int expectedDegree, int expectedBatch)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degree;
+            raw.BatchRows = batchRows;
+
+            Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+            ParallelWriteOptions? parallel = options.ToParallelWriteOptions(format);
+            Assert.NotNull(parallel);
+            Assert.Equal(expectedDegree, parallel.DegreeOfParallelism);
+            Assert.Equal(expectedBatch, parallel.BatchRows);
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, 1)]
+        [InlineData(NativeFormat.Xls, 4)]
+        [InlineData(NativeFormat.Csv, 0)]
+        public void WriteOptions_Should_Stay_Serial_For_Degree_One_Or_Other_Formats(int format, int degree)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degree;
+
+            Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+            Assert.Null(options.ToParallelWriteOptions(format));
         }
 
         [Fact]
