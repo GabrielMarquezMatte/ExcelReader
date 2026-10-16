@@ -339,3 +339,26 @@ Writing 1,000,000 rows of four columns (text, integer, date, number) to a `Memor
 The file comes out 0.18% (XLSX) or 0.04% (XLSB) larger, because each batch is compressed on its own.
 As with `PrefetchWrite`, this is for single-file batch work: a server already writing many files at
 once has no idle cores to give it.
+
+### From the native library and the bindings
+
+`xl_write_typed` and `xl_write_typed_to_memory` take the same two knobs in `xl_write_options`:
+`degree_of_parallelism` and `batch_rows`, with the same meaning (`0` is every processor and the
+8,192-row default). A zero-initialized struct therefore writes XLSX and XLSB in parallel; a struct
+with the 7.0 size (32 bytes) or a NULL options pointer writes serially, as before. The C++, Rust and
+Python wrappers default to a serial write and turn it on only when asked:
+
+```cpp
+xl::write_columns("big.xlsx", columns, {.degree_of_parallelism = 0});
+```
+
+```rust
+write_columns("big.xlsx", &columns, &WriteOptions::new().degree_of_parallelism(0))?;
+```
+
+```python
+write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallelism=0))
+```
+
+The table's buffers are read from several threads, so they must not change while the call runs.
+XLS, CSV and the `xl_writer_handle` API ignore both fields.
