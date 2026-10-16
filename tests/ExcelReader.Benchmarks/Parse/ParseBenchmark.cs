@@ -55,6 +55,19 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
+        public long ExcelParserSyncInterned()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = Excel.FromXlsx(ms, options: new ExcelReaderOptions { InternStrings = true });
+            long acc = 0;
+            foreach (Record rec in ExcelParser.FromAttributes<Record>().Parse(reader.FirstSheet))
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+        [Benchmark]
         public long ExcelParserSyncSharedStrings()
         {
             using var ms = new MemoryStream(_workbookSharedStrings, writable: false);
