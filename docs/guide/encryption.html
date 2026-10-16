@@ -118,8 +118,8 @@ somewhere you do not control and you care that it was not altered:</p>
 <p>The in-memory path (<code>Excel.Open(ReadOnlyMemory&lt;byte&gt;)</code> and friends) has already decrypted everything
 by the time it returns, so it always verifies regardless of this setting. Standard encryption has no
 HMAC field, so the setting does not apply to it.</p>
-<p>Opening an encrypted workbook costs a fixed ~26 ms for key derivation, whatever the file size. After
-that, reading is ~10% slower than reading the same workbook unencrypted — see
+<p>Opening an encrypted workbook costs a fixed ~25 ms for key derivation, whatever the file size. After
+that, reading is ~3% slower than reading the same workbook unencrypted — see
 <a href="../performance/benchmarks.html#encrypted-workbooks">Encrypted workbooks</a> in the benchmarks.</p>
 <p>Writing an encrypted workbook is a second step: build the package with any writer, then wrap it with
 <a class="xref" href="../../api/ExcelReader.Core.Reader.Excel.html#ExcelReader_Core_Reader_Excel_EncryptPackage_"><code>Excel.EncryptPackage</code></a>, which produces an agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC,
