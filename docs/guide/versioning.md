@@ -79,6 +79,8 @@ The C ABI is versioned on its own by `XL_ABI_VERSION`, which `xl_abi_version()` 
 only when a signature or a struct layout does: 7.0 kept version 6. Every options struct starts with
 `struct_size`, so a field added in a later version does not break a caller compiled against an
 earlier header. The Rust, Python and C++ bindings check the ABI version when they load the library.
+`xl_write_options` grew from 32 to 40 bytes after 7.0 (`degree_of_parallelism` and `batch_rows`,
+appended); the 7.0 size is still accepted and writes serially, so the ABI version stayed 6.
 
 ## How it is enforced
 

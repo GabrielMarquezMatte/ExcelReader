@@ -73,6 +73,14 @@ is rejected with `XL_INVALID_ARGUMENT` before anything else is inspected. It is 
 whole-table-in-memory, no styling beyond the temporal number formats — see `include/excelreader.h` for
 the full contract.
 
+For XLSX and XLSB, `degree_of_parallelism` and `batch_rows` format and compress row batches on
+several threads: `degree_of_parallelism` `0` uses every processor and `1` writes serially;
+`batch_rows` `0` keeps the default of 8,192. Negative values are rejected. A zero-initialized struct
+is therefore parallel, while the 7.0 layout (`struct_size` 32) and a NULL options pointer stay serial.
+The `xl_table` buffers are read from several threads, so they must not change during the call. With
+`use_shared_strings` on, parallel runs give the same content in files that differ byte for byte.
+XLS, CSV and the handle API below ignore both fields.
+
 The streaming alternative is `xl_writer_handle`: one sheet and one row open at a time, written
 directly as each call arrives instead of building an `xl_table` up front. Call order is
 `xl_open_write_handle`/`xl_open_write_handle_to_memory`, then per sheet `xl_start_sheet`..`xl_end_sheet`,
