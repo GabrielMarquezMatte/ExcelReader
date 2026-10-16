@@ -186,6 +186,9 @@ namespace xl
 
         int32_t date1904 = XL_OPT_DEFAULT;           ///< XLS/XLSB only: use the 1904 date system. Off by default.
         int32_t use_shared_strings = XL_OPT_DEFAULT; ///< XLSX/XLSB only: store repeated text once in a shared-string table. Off by default.
+
+        int32_t degree_of_parallelism = 1; ///< XLSX/XLSB only: batches formatted and compressed at once. 0 uses every processor, 1 (the default) writes serially.
+        int32_t batch_rows = 0;            ///< XLSX/XLSB only: rows per parallel batch. 0 uses the library default (8192).
     };
 
     namespace detail
@@ -228,6 +231,8 @@ namespace xl
             opts.csv_quote = options.csv_quote;
             opts.date1904 = options.date1904;
             opts.use_shared_strings = options.use_shared_strings;
+            opts.degree_of_parallelism = options.degree_of_parallelism;
+            opts.batch_rows = options.batch_rows;
             return opts;
         }
 

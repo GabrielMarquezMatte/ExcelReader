@@ -350,6 +350,16 @@ toggles. Its `format` defaults to `XL_FORMAT_AUTO`, which takes the format from 
 extension (.xlsx, .xlsb, .xls or .csv, in any case); an unrecognized extension, or AUTO with a vector
 destination, fails the write rather than silently choosing a format.
 
+For XLSX and XLSB, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
+several threads: `0` uses every processor, `1` (the default) writes serially, and `batch_rows = 0`
+keeps the library default of 8,192. The columns must not change while the write runs. With
+`use_shared_strings` on, two parallel runs give the same content in files that differ byte for byte.
+XLS, CSV and `xl::WriterHandle` ignore both fields.
+
+```cpp
+xl::write_columns("big.xlsx", columns, {.degree_of_parallelism = 0});
+```
+
 `write_sheet` walks the range once and appends each field to its own column buffer, with the
 per-field dispatch resolved at compile time. That transpose is the only copy it makes, and it is
 what the ABI's columnar shape costs a row-shaped caller; `write_columns` pays nothing.
