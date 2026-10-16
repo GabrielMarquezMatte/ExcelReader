@@ -282,6 +282,15 @@ write_workbook(
 )
 ```
 
+For xlsx and xlsb, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
+several threads: `0` uses every processor, `1` writes serially, and `None` is serial. A `batch_rows`
+of `None` keeps the library default of 8,192. With shared strings on, two parallel runs give the same
+content in files that differ byte for byte. xls and csv ignore both fields.
+
+```python
+write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallelism=0))
+```
+
 **Phase-1 limits, stated plainly:** a single sheet only (no multi-sheet workbooks); the whole table
 must already be in memory (no streaming/chunked writes); no styling beyond the temporal number
 formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns. `format="auto"` is not accepted —
