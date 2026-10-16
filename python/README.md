@@ -5,6 +5,15 @@
 Read and write XLSX, XLSB, XLS and CSV through ExcelReader's NativeAOT library. No .NET runtime
 required — the shared library is self-contained.
 
+## Install
+
+```bash
+pip install excelreader-native
+```
+
+Wheels ship for Windows x64, macOS (arm64, x64) and Linux (glibc and musl, x64 and arm64). The
+package installs as `excelreader-native` and imports as `excelreader`.
+
 ## Install (from source)
 
 ```bash

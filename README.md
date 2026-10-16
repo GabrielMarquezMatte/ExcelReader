@@ -106,7 +106,7 @@ ExcelReader ships a NativeAOT shared library with a C ABI, so non-.NET languages
 XLSX, XLSB, XLS and CSV without a .NET runtime installed.
 
 - C ABI header: [`src/ExcelReader.Native/include/excelreader.h`](src/ExcelReader.Native/include/excelreader.h)
-- Python package: [`python/`](python/README.md)
+- Python package: `pip install excelreader-native` — see [`python/README.md`](python/README.md).
 - C++ package: header-only CMake wrapper, `xl::Workbook`/`xl::parse_sheet`/`xl::write_sheet` over the same ABI — see [`cpp/README.md`](cpp/README.md).
 - Rust crate: safe `Workbook`/`parse_sheet`/`write_sheet` bindings, downloadable via `cargo add excelreader` — see [`rust/excelreader/README.md`](rust/excelreader/README.md).
 
