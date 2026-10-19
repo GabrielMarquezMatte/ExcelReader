@@ -15,6 +15,17 @@ namespace ExcelReader.Benchmarks
         public decimal TotalRevenue { get; set; }
         public int Units { get; set; }
     }
+    [StructLayout(LayoutKind.Auto)]
+    public struct WideRowStruct
+    {
+        public string? Region { get; set; }
+        public string? Country { get; set; }
+        public DateTime OrderDate { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public int Units { get; set; }
+    }
+
     public ref struct WideRowRef
     {
         public ReadOnlySpan<byte> Region { get; set; }
@@ -68,6 +79,22 @@ namespace ExcelReader.Benchmarks
             long n = 0;
             using CsvReader csv = Excel.FromCsvFile(_wide);
             await foreach (WideRow row in SheetParallel.ParseAsync(csv.FirstSheet, ExcelParser.FromAttributes<WideRow>(), new SheetParallelOptions { DegreeOfParallelism = Dop }))
+            {
+                n += row.Units;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// The same parse into a struct with <see cref="ExcelReaderOptions.InternStrings"/>: no object per row, and the
+        /// corpus's few distinct region and country names are shared, so the GC has almost nothing to collect.
+        /// </summary>
+        [Benchmark]
+        public async Task<long> ConversionHeavyStructInterned()
+        {
+            long n = 0;
+            using CsvReader csv = Excel.FromCsvFile(_wide, new ExcelReaderOptions { InternStrings = true });
+            await foreach (WideRowStruct row in SheetParallel.ParseAsync(csv.FirstSheet, ExcelParser.FromAttributes<WideRowStruct>(), new SheetParallelOptions { DegreeOfParallelism = Dop }))
             {
                 n += row.Units;
             }
