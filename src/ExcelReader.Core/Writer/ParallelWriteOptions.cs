@@ -10,10 +10,19 @@ namespace ExcelReader.Core.Writer
 
         /// <summary>
         /// Gets the most batches formatted and compressed at once. <c>0</c>, the default, means
-        /// <see cref="Environment.ProcessorCount"/>. With <c>1</c> the batches run on the calling flow,
-        /// without the thread pool.
+        /// <see cref="Environment.ProcessorCount"/>. With <c>1</c>, or <c>0</c> on a single processor, the
+        /// rows are written one by one on the calling flow, as a serial write does, and
+        /// <see cref="BatchRows"/> is ignored.
         /// </summary>
         public int DegreeOfParallelism { get; init; }
+
+        internal int EffectiveDegree
+        {
+            get
+            {
+                return DegreeOfParallelism == 0 ? Environment.ProcessorCount : DegreeOfParallelism;
+            }
+        }
 
         /// <summary>
         /// Gets the number of rows per batch. Each batch in flight holds its formatted rows and their
