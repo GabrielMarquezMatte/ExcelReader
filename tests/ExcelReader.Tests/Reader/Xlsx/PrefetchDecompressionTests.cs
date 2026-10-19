@@ -7,6 +7,7 @@ using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Reader.Zip;
 using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Tests.Reader.Xlsx
 {
@@ -286,6 +287,32 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 inner, new DecompressedByteCounter(0), options, "", 0, uncompressedSize: 256 * 1024);
 
             Assert.True(GetInnerStream(wrapped) is PrefetchStream);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void PrefetchChecksTheDeclaredBytesOfAnEntryThatInflatesPastItsSize(bool crcMatches)
+        {
+            const int Declared = 99_000;
+            byte[] data = new byte[100_000];
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = (byte)(i * 31);
+            }
+            uint crc = Crc32.Append(0, data.AsSpan(0, Declared));
+            using var prefetch = new PrefetchStream(new MemoryStream(data), Declared, crcMatches ? crc : ~crc);
+            byte[] read = new byte[Declared];
+
+            if (crcMatches)
+            {
+                prefetch.ReadExactly(read);
+                Assert.Equal(data[..Declared], read);
+            }
+            else
+            {
+                Assert.Throws<InvalidDataException>(() => prefetch.ReadExactly(read));
+            }
         }
 
         [Fact]
