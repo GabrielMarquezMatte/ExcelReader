@@ -82,7 +82,7 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        private static bool HasUnwritableCharacter(string name)
+        internal static bool HasUnwritableCharacter(string name)
         {
             foreach (char c in name)
             {
