@@ -67,6 +67,29 @@ namespace ExcelReader.Benchmarks
             };
         }
 
+        private static NarrowRowStruct ParseNarrowStruct(SepReader.Row row)
+        {
+            return new NarrowRowStruct
+            {
+                A = row["A"].Parse<int>(),
+                B = row["B"].Parse<int>(),
+                C = row["C"].Parse<int>(),
+            };
+        }
+
+        private static WideRowStruct ParseWideStruct(SepReader.Row row)
+        {
+            return new WideRowStruct
+            {
+                Region = row["Region"].ToString(),
+                Country = row["Country"].ToString(),
+                OrderDate = row["OrderDate"].Parse<DateTime>(),
+                UnitPrice = row["UnitPrice"].Parse<decimal>(),
+                TotalRevenue = row["TotalRevenue"].Parse<decimal>(),
+                Units = row["Units"].Parse<int>(),
+            };
+        }
+
         [Benchmark(Baseline = true)]
         public Task<long> ExcelReader_Sequential()
         {
@@ -113,6 +136,89 @@ namespace ExcelReader.Benchmarks
                 return acc;
             }
             foreach (WideRow row in reader.ParallelEnumerate(ParseWide))
+            {
+                acc += row.Units;
+            }
+            return acc;
+        }
+
+        // The *_StructPooled rows give both libraries the same help: rows parsed into a struct, and repeated
+        // strings shared (InternStrings here, a per-column string pool in Sep).
+        [Benchmark]
+        public long ExcelReader_Sequential_StructPooled()
+        {
+            long acc = 0;
+            using CsvReader reader = Excel.FromCsvFile(Path, new ExcelReaderOptions { InternStrings = true });
+            if (Corpus == ParallelCorpus.NarrowInt)
+            {
+                foreach (NarrowRowStruct row in ExcelParser.FromAttributes<NarrowRowStruct>().Parse(reader.FirstSheet))
+                {
+                    acc += row.A;
+                }
+                return acc;
+            }
+            foreach (WideRowStruct row in ExcelParser.FromAttributes<WideRowStruct>().Parse(reader.FirstSheet))
+            {
+                acc += row.Units;
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public async Task<long> ExcelReader_Parallel_StructPooled()
+        {
+            long acc = 0;
+            using CsvReader csv = Excel.FromCsvFile(Path, new ExcelReaderOptions { InternStrings = true });
+            var options = new SheetParallelOptions { DegreeOfParallelism = 0 };
+            if (Corpus == ParallelCorpus.NarrowInt)
+            {
+                await foreach (NarrowRowStruct row in SheetParallel.ParseAsync(csv.FirstSheet, ExcelParser.FromAttributes<NarrowRowStruct>(), options))
+                {
+                    acc += row.A;
+                }
+                return acc;
+            }
+            await foreach (WideRowStruct row in SheetParallel.ParseAsync(csv.FirstSheet, ExcelParser.FromAttributes<WideRowStruct>(), options))
+            {
+                acc += row.Units;
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Sep_Sequential_StructPooled()
+        {
+            long acc = 0;
+            using SepReader reader = Sep.Reader(static o => o with { CreateToString = SepToString.PoolPerCol() }).FromFile(Path);
+            if (Corpus == ParallelCorpus.NarrowInt)
+            {
+                foreach (SepReader.Row row in reader)
+                {
+                    acc += ParseNarrowStruct(row).A;
+                }
+                return acc;
+            }
+            foreach (SepReader.Row row in reader)
+            {
+                acc += ParseWideStruct(row).Units;
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Sep_Parallel_StructPooled()
+        {
+            long acc = 0;
+            using SepReader reader = Sep.Reader(static o => o with { CreateToString = SepToString.PoolPerColThreadSafe() }).FromFile(Path);
+            if (Corpus == ParallelCorpus.NarrowInt)
+            {
+                foreach (NarrowRowStruct row in reader.ParallelEnumerate(ParseNarrowStruct))
+                {
+                    acc += row.A;
+                }
+                return acc;
+            }
+            foreach (WideRowStruct row in reader.ParallelEnumerate(ParseWideStruct))
             {
                 acc += row.Units;
             }
