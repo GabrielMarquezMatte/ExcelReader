@@ -13,30 +13,27 @@ namespace ExcelReader.Core
             return isLessThan60 ? serial + 1.0 : serial;
         }
 
-        private static void ThrowIfNegative(double value, string paramName, string message)
-        {
-            if (value >= 0.0)
-            {
-                return;
-            }
-            throw new ArgumentOutOfRangeException(paramName, value, message);
-        }
-
         internal static double OADateToSerial(double oadate, bool date1904)
         {
-            double serial = oadate;
+            if (!TryOADateToSerial(oadate, date1904, out double serial))
+            {
+                throw new ArgumentOutOfRangeException(nameof(oadate), serial, "Dates before the workbook epoch cannot be written to Excel.");
+            }
+            return serial;
+        }
+
+        /// <summary>False for a date before the workbook epoch, which has no serial.</summary>
+        internal static bool TryOADateToSerial(double oadate, bool date1904, out double serial)
+        {
             if (date1904)
             {
-                serial -= 1462.0;
-                ThrowIfNegative(serial, nameof(oadate), "Dates before the workbook epoch cannot be written to Excel.");
-                return serial;
+                serial = oadate - 1462.0;
             }
-            if (oadate < 61.0)
+            else
             {
-                serial--;
+                serial = oadate < 61.0 ? oadate - 1.0 : oadate;
             }
-            ThrowIfNegative(serial, nameof(oadate), "Dates before the workbook epoch cannot be written to Excel.");
-            return serial;
+            return serial >= 0.0;
         }
     }
 }
