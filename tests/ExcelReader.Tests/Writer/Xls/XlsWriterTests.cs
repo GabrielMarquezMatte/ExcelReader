@@ -56,6 +56,39 @@ namespace ExcelReader.Tests.Writer.Xls
             Assert.False(e.MoveNext());
         }
 
+        private static void WriteRows(XlsSheetWriter sheet, int rows)
+        {
+            for (int i = 0; i < rows; i++)
+            {
+                using var r = sheet.StartRow();
+                r.Write(i);
+            }
+            sheet.End();
+        }
+
+        [Fact]
+        public async Task ContinuationSheetSkipsANameAlreadyTaken()
+        {
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                WriteRows(wb.AddSheet("Data (2)"), 1);
+                WriteRows(wb.AddSheet("Data"), 65_537);
+            }, ct: TestContext.Current.CancellationToken);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            Assert.Equal(["Data (2)", "Data", "Data (3)"], [.. reader.Sheets.Select(static s => s.Name)]);
+        }
+
+        [Fact]
+        public async Task SheetCannotTakeTheNameOfAContinuationSheet()
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => WriteAsync(wb =>
+            {
+                WriteRows(wb.AddSheet("Data"), 65_537);
+                wb.AddSheet("data (2)");
+            }, ct: TestContext.Current.CancellationToken));
+        }
+
         [Fact]
         public async Task NumericOverloadsRoundTrip()
         {

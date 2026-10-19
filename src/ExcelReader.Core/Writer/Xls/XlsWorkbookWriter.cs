@@ -72,6 +72,11 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal int SheetCount => _sheets.Count;
 
+        internal bool TryClaimSheetName(string name)
+        {
+            return _sheetNames.Add(name);
+        }
+
         /// <inheritdoc/>
         public int AddStyle(CellStyle style)
         {
