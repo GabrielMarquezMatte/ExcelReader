@@ -102,7 +102,7 @@ namespace ExcelReader.Core.Reader.Csv
             try
             {
                 return _chunkHandle ??= File.OpenHandle(file.Name, FileMode.Open, FileAccess.Read, FileShare.Read,
-                    FileOptions.RandomAccess);
+                    FileOptions.Asynchronous | FileOptions.RandomAccess);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
