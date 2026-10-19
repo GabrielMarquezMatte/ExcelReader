@@ -2,6 +2,7 @@ using System.Buffers;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Internal;
 using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
@@ -114,6 +115,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvReaderOptions readerOptions,
             ExcelParserOptions config,
             List<T> models,
+            Utf8StringCache? contentCache,
             CancellationToken ct)
         {
             long start = confirmedStart ?? GuessStart(source, chunk, readerOptions.Quote);
@@ -123,7 +125,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             }
 
             CsvReaderOptions chunkOptions = readerOptions with { DetectEncodingFromByteOrderMark = start == 0 };
-            return ParseFromAsync(source, chunk, start, models, map, info, chunkOptions, config, ct);
+            return ParseFromAsync(source, chunk, start, models, map, info, chunkOptions, config, contentCache, ct);
         }
 
         private static async ValueTask<CsvChunkResult<T>> ParseFromAsync<T>(
@@ -135,6 +137,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             TypeMapInfo<T> info,
             CsvReaderOptions options,
             ExcelParserOptions config,
+            Utf8StringCache? contentCache,
             CancellationToken ct)
         {
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);
@@ -142,7 +145,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
             if (source.IsMemory)
             {
-                var rows = new CsvReader.Enumerator(source.SliceAt(start), options, ct);
+                var rows = new CsvReader.Enumerator(source.SliceAt(start), options, contentCache, ct);
                 await using (rows.ConfigureAwait(false))
                 {
                     outcome = await ConsumeAsync(rows, start, chunk, projector, models).ConfigureAwait(false);
@@ -156,7 +159,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             Stream partitionStream = source.OpenAt(start);
             try
             {
-                var outerRows = new CsvReader.Enumerator(partitionStream, options, ct);
+                var outerRows = new CsvReader.Enumerator(partitionStream, options, contentCache, ct);
                 await using (outerRows.ConfigureAwait(false))
                 {
                     outcome = await ConsumeAsync(outerRows, start, chunk, projector, models).ConfigureAwait(false);

@@ -150,7 +150,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 List<T> reuse = result.Models;
                 reuse.Clear();
                 result = await CsvChunkWorker.ParseAsync(
-                    _source, _plan[i], confirmedNextStart, _map, _info, _readerOptions, _config, reuse, ct).ConfigureAwait(false);
+                    _source, _plan[i], confirmedNextStart, _map, _info, _readerOptions, _config, reuse, contentCache: null, ct).ConfigureAwait(false);
             }
 
             state.Results[slot] = null;
@@ -168,6 +168,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CancellationToken ct)
         {
             int claimed = -1;
+            // One per worker: a cache per chunk would be allocated, and start cold, every 64 KB of input.
+            Utf8StringCache? contentCache = _readerOptions.InternStrings ? new Utf8StringCache() : null;
             try
             {
                 while (true)
@@ -182,7 +184,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                     claimed = chunk.Index;
                     long? confirmed = chunk.Index == 0 ? _firstDataRecordOffset : null;
                     CsvChunkResult<T> result = await CsvChunkWorker.ParseAsync(
-                        _source, chunk, confirmed, _map, _info, _readerOptions, _config, lists.TryTake(out List<T>? pooled) ? pooled : [], ct).ConfigureAwait(false);
+                        _source, chunk, confirmed, _map, _info, _readerOptions, _config, lists.TryTake(out List<T>? pooled) ? pooled : [], contentCache, ct).ConfigureAwait(false);
                     results[chunk.Index % ring] = result;
                     ready[chunk.Index % ring].TrySetResult(true);
                 }
