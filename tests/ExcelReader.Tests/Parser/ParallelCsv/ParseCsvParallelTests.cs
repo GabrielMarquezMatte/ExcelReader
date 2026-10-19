@@ -53,6 +53,16 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
+        public async Task EnumeratingTheSameResultTwiceYieldsEveryRowBothTimes()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(20_000));
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(20_000, (await DrainAsync(rows).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken)).Count);
+            Assert.Equal(20_000, (await DrainAsync(rows).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken)).Count);
+        }
+
+        [Fact]
         public async Task FileOverloadMatchesTheSequentialParser()
         {
             byte[] csv = BuildCsv(20_000);

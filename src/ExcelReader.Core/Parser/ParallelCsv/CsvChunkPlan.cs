@@ -45,6 +45,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             return new CsvChunkPlan(dataStart, dataStart + dataLength, chunkSize, count);
         }
 
+        internal CsvChunkPlan Restart()
+        {
+            return new CsvChunkPlan(_dataStart, _dataEnd, _chunkSize, _count);
+        }
+
         internal bool TryTakeNext(out CsvChunk chunk)
         {
             int index = Interlocked.Increment(ref _next);
