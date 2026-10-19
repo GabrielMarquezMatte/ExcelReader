@@ -43,6 +43,34 @@ namespace ExcelReader.Tests.Reader.Xls
             Assert.False(e.MoveNext());
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ReadsAVersion4CompoundFileWith4096ByteSectors(bool fromFile)
+        {
+            object?[][] rows = [.. Enumerable.Range(0, 600).Select(static i => new object?[] { $"row {i}", i })];
+            using MemoryStream built = XlsWorkbookBuilder.BuildWithSectorSize(4096, ("S1", rows));
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-v4-{Guid.NewGuid():N}.xls");
+            File.WriteAllBytes(path, built.ToArray());
+            try
+            {
+                using XlsWorkbook reader = fromFile ? Excel.FromXlsFile(path) : Excel.FromXls(built.ToArray());
+                using var e = reader.FirstSheet.GetEnumerator();
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    Assert.True(e.MoveNext());
+                    Assert.Equal($"row {i}", e.Current[0].GetString());
+                    Assert.True(e.Current[1].TryParse(null, out int value));
+                    Assert.Equal(i, value);
+                }
+                Assert.False(e.MoveNext());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         [Fact]
         public void AFormulaWithADateStyleReadsAsADate()
         {
