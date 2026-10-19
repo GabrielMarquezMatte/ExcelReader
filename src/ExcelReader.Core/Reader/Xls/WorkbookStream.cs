@@ -154,7 +154,9 @@ namespace ExcelReader.Core.Reader.Xls
                 count++;
             }
             long offset = ((long)_chain[chainIndex] + 1) * SectorSize;
-            _source!.ReadExactly(offset, dest[..(count * SectorSize)]);
+            // The stream's last sector may end with the file rather than be padded to a whole sector.
+            int length = (int)Math.Min(count * SectorSize, Length - ((long)chainIndex * SectorSize));
+            _source!.ReadExactly(offset, dest[..length]);
             return count;
         }
 

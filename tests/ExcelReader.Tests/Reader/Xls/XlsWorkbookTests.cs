@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -63,6 +64,35 @@ namespace ExcelReader.Tests.Reader.Xls
                     Assert.True(e.Current[1].TryParse(null, out int value));
                     Assert.Equal(i, value);
                 }
+                Assert.False(e.MoveNext());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ReadsAWorkbookStreamWhoseLastSectorIsNotPadded(bool fromFile)
+        {
+            using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["a", 1], ["b", 2]])]);
+            const int Cut = 100;
+            const int WorkbookSizeOffset = 512 + 512 + 128 + 120;
+            byte[] bytes = built.ToArray()[..^Cut];
+            long size = BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(WorkbookSizeOffset));
+            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(WorkbookSizeOffset), size - Cut);
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-unpadded-{Guid.NewGuid():N}.xls");
+            File.WriteAllBytes(path, bytes);
+            try
+            {
+                using XlsWorkbook reader = fromFile ? Excel.FromXlsFile(path) : Excel.FromXls(bytes);
+                using var e = reader.FirstSheet.GetEnumerator();
+                Assert.True(e.MoveNext());
+                Assert.Equal("a", e.Current[0].GetString());
+                Assert.True(e.MoveNext());
+                Assert.Equal("b", e.Current[0].GetString());
                 Assert.False(e.MoveNext());
             }
             finally
