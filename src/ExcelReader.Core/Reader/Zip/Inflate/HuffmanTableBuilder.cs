@@ -5,12 +5,22 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
 {
     internal static class HuffmanTableBuilder
     {
+        // A method with both a loop and a stackalloc cannot use on-stack replacement, so the JIT compiles it
+        // fully optimized on first call; keeping the stackallocs here, loop-free, lets the rest start at tier 0.
         internal static bool TryBuild(
             Span<uint> table, ReadOnlySpan<byte> lens, ReadOnlySpan<uint> results, int tableBits, int maxLen,
             Span<ushort> sorted, bool shrink, out int tableBitsUsed)
         {
             Span<int> lenCounts = stackalloc int[InflateFormat.MaxCodewordLength + 2];
+            Span<int> offsets = stackalloc int[InflateFormat.MaxCodewordLength + 2];
             lenCounts.Clear();
+            return TryBuild(table, lens, results, tableBits, maxLen, sorted, shrink, lenCounts, offsets, out tableBitsUsed);
+        }
+
+        private static bool TryBuild(
+            Span<uint> table, ReadOnlySpan<byte> lens, ReadOnlySpan<uint> results, int tableBits, int maxLen,
+            Span<ushort> sorted, bool shrink, Span<int> lenCounts, Span<int> offsets, out int tableBitsUsed)
+        {
             foreach (byte len in lens)
             {
                 lenCounts[len]++;
@@ -25,7 +35,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
             }
             tableBitsUsed = tableBits;
 
-            uint codespaceUsed = SortSymbols(lens, lenCounts, maxLen, sorted);
+            uint codespaceUsed = SortSymbols(lens, lenCounts, offsets, maxLen, sorted);
             ReadOnlySpan<ushort> used = sorted[lenCounts[0]..lens.Length];
             uint codespace = 1U << maxLen;
             if (codespaceUsed > codespace)
@@ -40,9 +50,8 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
             return true;
         }
 
-        private static uint SortSymbols(ReadOnlySpan<byte> lens, ReadOnlySpan<int> lenCounts, int maxLen, Span<ushort> sorted)
+        private static uint SortSymbols(ReadOnlySpan<byte> lens, ReadOnlySpan<int> lenCounts, Span<int> offsets, int maxLen, Span<ushort> sorted)
         {
-            Span<int> offsets = stackalloc int[InflateFormat.MaxCodewordLength + 2];
             offsets[0] = 0;
             offsets[1] = lenCounts[0];
             uint codespaceUsed = 0;
@@ -72,7 +81,9 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                 }
                 symbol = used[0];
             }
-            mainTable.Fill(Entry(results[symbol], 1));
+            // Span<uint>.Fill would JIT a generic SpanHelpers.Fill<uint> on the first file; the table is a power of two.
+            mainTable[0] = Entry(results[symbol], 1);
+            Replicate(mainTable, 1, mainTable.Length);
             return true;
         }
 

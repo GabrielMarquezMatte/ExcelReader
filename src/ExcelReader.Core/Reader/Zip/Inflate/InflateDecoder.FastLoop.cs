@@ -22,8 +22,9 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         {
             fixed (byte* inBase = input)
             fixed (byte* outBase = window)
-            fixed (uint* tables = _tables)
+            fixed (byte* tableBytes = _tableBytes)
             {
+                uint* tables = (uint*)tableBytes;
                 byte* inNext = inBase + inPos;
                 byte* outNext = outBase + outPos;
                 LoopStatus status = FastLoop(ref inNext, inBase + inLimit, outBase, ref outNext, outBase + outLimit, tables);
