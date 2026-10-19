@@ -42,11 +42,15 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             return Read(buffer.AsSpan(offset, count));
         }
 
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        // Chunks are read by pool threads that parse what they read, so a blocking positional read holds
+        // no thread the parse would not, and skips the async path's per-read state machine and overlapped.
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            int n = await RandomAccess.ReadAsync(_handle, buffer, _offset, cancellationToken).ConfigureAwait(false);
-            _offset += n;
-            return n;
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return ValueTask.FromCanceled<int>(cancellationToken);
+            }
+            return ValueTask.FromResult(Read(buffer.Span));
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
