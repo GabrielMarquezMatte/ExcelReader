@@ -98,7 +98,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
         internal ExcelParseException? Failure { get; set; }
 
-        internal int FailureRowInChunk { get; set; }
+        /// <summary>Records read before the chunk ended or failed, blank ones included, so rows can be numbered.</summary>
+        internal int Records { get; set; }
     }
 
     internal static class CsvChunkWorker
@@ -141,7 +142,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CancellationToken ct)
         {
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);
-            (long resolvedNextStart, ExcelParseException? failure, int failureRow) outcome;
+            (long resolvedNextStart, ExcelParseException? failure, int records) outcome;
 
             if (source.IsMemory)
             {
@@ -153,7 +154,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 return new CsvChunkResult<T>(chunk.Index, models, start, outcome.resolvedNextStart)
                 {
                     Failure = outcome.failure,
-                    FailureRowInChunk = outcome.failureRow,
+                    Records = outcome.records,
                 };
             }
             Stream partitionStream = source.OpenAt(start);
@@ -172,11 +173,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             return new CsvChunkResult<T>(chunk.Index, models, start, outcome.resolvedNextStart)
             {
                 Failure = outcome.failure,
-                FailureRowInChunk = outcome.failureRow,
+                Records = outcome.records,
             };
         }
 
-        private static async ValueTask<(long resolvedNextStart, ExcelParseException? failure, int failureRow)> ConsumeAsync<T>(
+        private static async ValueTask<(long resolvedNextStart, ExcelParseException? failure, int records)> ConsumeAsync<T>(
             CsvReader.Enumerator rows,
             long start,
             CsvChunk chunk,
@@ -185,7 +186,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             long resolvedNextStart = long.MaxValue;
             ExcelParseException? failure = null;
-            int failureRow = 0;
+            int records = 0;
             while (await rows.MoveNextAsync().ConfigureAwait(false))
             {
                 long absolute = start + rows.CurrentRecordStart;
@@ -205,11 +206,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 catch (ExcelParseException ex)
                 {
                     failure = ex;
-                    failureRow = models.Count;
                     break;
                 }
+                records++;
             }
-            return (resolvedNextStart, failure, failureRow);
+            return (resolvedNextStart, failure, records);
         }
 
         internal static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote)
