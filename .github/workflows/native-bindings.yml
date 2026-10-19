@@ -105,7 +105,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, llvm-tools-preview
+
+      - name: Install cargo-llvm-cov (Linux)
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -143,10 +147,28 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: cargo test
+        if: runner.os != 'Linux'
         working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
+
+      # The derive crate runs inside the compiler, where coverage is not recorded, so it is left out.
+      - name: cargo test with coverage (Linux)
+        if: runner.os == 'Linux'
+        working-directory: rust
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: cargo llvm-cov --workspace --all-features --ignore-filename-regex excelreader-derive --lcov --output-path lcov.info
+
+      - name: Upload Rust coverage to Codecov
+        if: runner.os == 'Linux'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./rust/lcov.info
+          flags: rust
+          fail_ci_if_error: false
 
       # The next two compile the crate again (default features, then the bench profile); that
       # catches nothing platform-specific the test build above missed, so one OS is enough.
@@ -197,10 +219,21 @@ jobs:
         run: chmod +x python/src/excelreader/_lib/*
 
       - name: Install the Python package
-        run: pip install -e "python[dev]"
+        run: pip install -e "python[dev]" ${{ matrix.os == 'ubuntu-latest' && 'pytest-cov' || '' }}
 
       - name: Run the Python tests
-        run: pytest python/tests -v
+        run: >-
+          pytest python/tests -v
+          ${{ matrix.os == 'ubuntu-latest' && '--cov=excelreader --cov-report=xml:coverage-python.xml' || '' }}
+
+      - name: Upload Python coverage to Codecov
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-python.xml
+          flags: python
+          fail_ci_if_error: false
 
       - name: Build the wheel and check it installs here
         run: |

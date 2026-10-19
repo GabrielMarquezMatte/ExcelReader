@@ -134,6 +134,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./TestResults/*.cobertura.xml
+          flags: csharp
           fail_ci_if_error: false
 
   isa-fallback:
