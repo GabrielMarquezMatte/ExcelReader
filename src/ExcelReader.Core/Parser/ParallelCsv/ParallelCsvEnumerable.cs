@@ -60,7 +60,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             var lists = new ConcurrentBag<List<T>>();
             MergeState state = StartWorkers(slots, lists, ring, ct);
             Task allWorkers = Task.WhenAll(state.Workers);
-            long rowsEmitted = 0;
+            long recordsBefore = 0;
 
             try
             {
@@ -75,14 +75,14 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                     int count = models.Count;
                     for (int m = 0; m < count; m++)
                     {
-                        rowsEmitted++;
                         yield return models[m];
                     }
 
                     models.Clear();
                     lists.Add(models);
 
-                    confirmedNextStart = AdvanceOrThrow(result, rowsEmitted);
+                    confirmedNextStart = AdvanceOrThrow(result, recordsBefore);
+                    recordsBefore += result.Records;
                     if (confirmedNextStart >= long.MaxValue)
                     {
                         break;
@@ -97,11 +97,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             }
         }
 
-        private long AdvanceOrThrow(CsvChunkResult<T> result, long rowsEmitted)
+        private long AdvanceOrThrow(CsvChunkResult<T> result, long recordsBefore)
         {
             if (result.Failure is not null)
             {
-                throw RenumberFailure(result.Failure, _config.HeaderRow + rowsEmitted + 1);
+                throw RenumberFailure(result.Failure, _config.HeaderRow + recordsBefore + result.Records + 1);
             }
             return result.ResolvedNextStart;
         }
