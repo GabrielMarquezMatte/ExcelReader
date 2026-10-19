@@ -466,6 +466,10 @@ namespace ExcelReader.Core.Crypto
                 visited[sector] = true;
                 sector = miniFat[sector];
             }
+            if (written < result.Length)
+            {
+                throw new InvalidDataException("The OLE mini stream chain ended early.");
+            }
             return result;
         }
 
