@@ -94,15 +94,16 @@ namespace ExcelReader.Native.Writer
             }
             NativeApi.ClearLastError();
             string filePath = Encoding.UTF8.GetString(path);
-            FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            FileStream? stream = null;
             try
             {
+                stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
                 handle = NativeWriterHandle.Create(stream, format, options);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
             {
-                stream.Dispose();
+                stream?.Dispose();
                 NativeApi.SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
