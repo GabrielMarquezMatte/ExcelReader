@@ -900,8 +900,14 @@ namespace ExcelReader.Core.Reader.Xlsx
             {
                 if (TryParseIsoDate(v, out DateTime dt))
                 {
-                    // ponytail: dt.ToOADate() is exact for dates >= 1900-03-01, which every real t="d"
-                    double serial = dt.ToOADate();
+                    if (!ExcelEpoch.TryOADateToSerial(dt.ToOADate(), _reader.IsDate1904, out double serial))
+                    {
+                        // No serial exists before the workbook epoch; Cell.TryGetDateTime parses the kept text instead.
+                        int textStart = _acc.ValueLength;
+                        AppendRaw(v);
+                        _acc.Add(col, textStart, _acc.ValueLength - textStart, CellType.Date, style, CellValueSource.RowValues);
+                        return;
+                    }
                     int start = _acc.ValueLength;
                     Span<byte> dst = _acc.ReserveValueSpan(32);
                     CellFormatter.TryFormatDouble(serial, dst, out int written);
@@ -931,11 +937,15 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     chars[i] = (char)utf8[i];
                 }
-                const DateTimeStyles dateParseFlag = DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces;
-                if (!DateTime.TryParse(chars[..utf8.Length], CultureInfo.InvariantCulture, dateParseFlag, out value))
+                // A cell has no time zone: keep the clock time as written and drop any offset, so the
+                // result never depends on the machine's zone.
+                const DateTimeStyles dateParseFlag = DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces;
+                if (!DateTimeOffset.TryParse(chars[..utf8.Length], CultureInfo.InvariantCulture, dateParseFlag, out DateTimeOffset parsed))
                 {
+                    value = default;
                     return false;
                 }
+                value = parsed.DateTime;
                 return value.Year >= 100 || RejectDate(out value);
             }
 
