@@ -39,6 +39,10 @@ namespace ExcelReader.Core.Writer.Internal
                 throw new ArgumentException(
                     $"A number format cannot be longer than {MaxNumberFormatLength} characters ({style.NumberFormat.Length} chars).", nameof(style));
             }
+            if (style.NumberFormat is { } numberFormat && WriterStateGuard.HasUnwritableCharacter(numberFormat))
+            {
+                throw new ArgumentException("A number format cannot contain control characters, U+FFFE or U+FFFF.", nameof(style));
+            }
             ClaimNumberFormat(style.NumberFormat);
             index = _styles.Count;
             _styles.Add(style);
