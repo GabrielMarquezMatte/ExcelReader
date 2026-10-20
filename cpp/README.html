@@ -343,6 +343,13 @@ declare the field <code>std::optional&lt;T&gt;</code> and <code>write_sheet</cod
 toggles. Its <code>format</code> defaults to <code>XL_FORMAT_AUTO</code>, which takes the format from the path's
 extension (.xlsx, .xlsb, .xls or .csv, in any case); an unrecognized extension, or AUTO with a vector
 destination, fails the write rather than silently choosing a format.</p>
+<p>For XLSX and XLSB, <code>degree_of_parallelism</code> formats and compresses batches of <code>batch_rows</code> rows on
+several threads: <code>0</code> uses every processor, <code>1</code> (the default) writes serially, and <code>batch_rows = 0</code>
+keeps the library default of 8,192. The columns must not change while the write runs. With
+<code>use_shared_strings</code> on, two parallel runs give the same content in files that differ byte for byte.
+XLS, CSV and <code>xl::WriterHandle</code> ignore both fields.</p>
+<pre><code class="lang-cpp">xl::write_columns(&quot;big.xlsx&quot;, columns, {.degree_of_parallelism = 0});
+</code></pre>
 <p><code>write_sheet</code> walks the range once and appends each field to its own column buffer, with the
 per-field dispatch resolved at compile time. That transpose is the only copy it makes, and it is
 what the ABI's columnar shape costs a row-shaped caller; <code>write_columns</code> pays nothing.</p>
@@ -376,6 +383,32 @@ auto counted = xl::aggregate_csv(&quot;big.csv&quot;, RowCount{}, {.csv_delimite
 </code></pre>
 <p>The dialect (<code>csv_delimiter</code>, <code>csv_quote</code>, <code>csv_detect_bom</code>) and <code>max_cell_bytes</code> come from
 <code>xl::OpenOptions</code>; the header row and the degree of parallelism (0 = every processor) follow it.</p>
+<h2 id="callback-reads">Callback reads</h2>
+<p><code>Sheet::for_each_row</code> calls a function once per row on the calling thread, with cells borrowed from
+the library's buffers for that call instead of copied into a cursor:</p>
+<pre><code class="lang-cpp">double total = 0;
+auto walked = workbook-&gt;sheet(0).for_each_row([&amp;](xl::RowView row)
+{
+    if (row.size() &gt; 1)
+    {
+        total += row[1].as_number().value_or(0);
+    }
+    return XL_OK;
+});
+</code></pre>
+<p><code>Sheet::aggregate</code> folds any sheet, in any format, across worker threads; the accumulator has the same
+shape as for <code>aggregate_csv</code>, so <code>RowCount</code> above works unchanged. New code should use it rather than
+<code>aggregate_csv</code>:</p>
+<pre><code class="lang-cpp">auto counted = workbook-&gt;sheet(0).aggregate(RowCount{}, /*header_row*/ 1);
+</code></pre>
+<p>A cell in these callbacks carries text, a number, or both. <code>value</code> holds only the stored text, so it
+is empty for a cell that carries only a number; <code>text()</code> formats that number itself (shortest
+round-trip form) and <code>as_number()</code> returns it directly, or parses the text when there is no number.
+A return other than <code>XL_OK</code> stops the run and comes back as the error's code (use positive codes),
+and an exception is reported as an error. Calling other functions on the workbook from inside the
+callback is allowed. <code>Sheet::aggregate</code> seeds a copy per chunk of sheet data, not per thread, and may
+destroy a chunk's copy without combining it; XLS, table views and CSV opened from a <code>Source</code> or
+<code>InputStream</code> read sequentially.</p>
 <h2 id="bounds-and-abi">Bounds and ABI</h2>
 <p><code>TableView::operator[]</code> is unchecked, like <code>std::vector</code>'s. Use <code>TableView::at(row)</code>, which returns
 <code>std::optional&lt;T&gt;</code> and is <code>nullopt</code> outside <code>[0, size())</code>.</p>

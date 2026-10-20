@@ -140,7 +140,12 @@ its number or meaning. A <code>switch</code> over them should have a default bra
 <p>The C ABI is versioned on its own by <code>XL_ABI_VERSION</code>, which <code>xl_abi_version()</code> reports. It changes
 only when a signature or a struct layout does: 7.0 kept version 6. Every options struct starts with
 <code>struct_size</code>, so a field added in a later version does not break a caller compiled against an
-earlier header. The Rust, Python and C++ bindings check the ABI version when they load the library.</p>
+earlier header. The Rust, Python and C++ bindings check the ABI version when they load the library.
+<code>xl_write_options</code> grew from 32 to 40 bytes after 7.0 (<code>degree_of_parallelism</code> and <code>batch_rows</code>,
+appended); the 7.0 size is still accepted and writes serially, so the ABI version stayed 6.</p>
+<p>7.x also added <code>xl_rows_foreach</code> and <code>xl_aggregate</code>. They are new exports only, so the ABI version
+stayed 6; a binding built against them fails with a missing-symbol error when it loads an older
+ABI-6 library that lacks them.</p>
 <h2 id="how-it-is-enforced">How it is enforced</h2>
 <p>Every pull request packs <code>ExcelReader.NET</code> and <code>ExcelReader.Arrow</code> and compares them with the last
 release through .NET package validation. A removed or changed member fails the build.</p>

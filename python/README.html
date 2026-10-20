@@ -76,6 +76,11 @@
 <h1 id="excelreader-python">excelreader (Python)</h1>
 <p>Read and write XLSX, XLSB, XLS and CSV through ExcelReader's NativeAOT library. No .NET runtime
 required — the shared library is self-contained.</p>
+<h2 id="install">Install</h2>
+<pre><code class="lang-bash">pip install excelreader-native
+</code></pre>
+<p>Wheels ship for Windows x64, macOS (arm64, x64) and Linux (glibc and musl, x64 and arm64). The
+package installs as <code>excelreader-native</code> and imports as <code>excelreader</code>.</p>
 <h2 id="install-from-source">Install (from source)</h2>
 <pre><code class="lang-bash">python python/scripts/build_native.py   # requires the .NET 10 SDK, once per machine
 pip install -e &quot;python[dev]&quot;
@@ -332,6 +337,12 @@ write_workbook(
     &quot;report.xlsx&quot;, table, types,
     options=WriteOptions(sheet_name=&quot;Q3 Results&quot;, use_shared_strings=True),
 )
+</code></pre>
+<p>For xlsx and xlsb, <code>degree_of_parallelism</code> formats and compresses batches of <code>batch_rows</code> rows on
+several threads: <code>0</code> uses every processor, <code>1</code> writes serially, and <code>None</code> is serial. A <code>batch_rows</code>
+of <code>None</code> keeps the library default of 8,192. With shared strings on, two parallel runs give the same
+content in files that differ byte for byte. xls and csv ignore both fields.</p>
+<pre><code class="lang-python">write_workbook(&quot;big.xlsx&quot;, table, types, options=WriteOptions(degree_of_parallelism=0))
 </code></pre>
 <p><strong>Phase-1 limits, stated plainly:</strong> a single sheet only (no multi-sheet workbooks); the whole table
 must already be in memory (no streaming/chunked writes); no styling beyond the temporal number

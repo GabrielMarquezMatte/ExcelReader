@@ -159,7 +159,7 @@ dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configu
 XLSX, XLSB, XLS and CSV without a .NET runtime installed.</p>
 <ul>
 <li>C ABI header: <a href="src/ExcelReader.Native/include/excelreader.h"><code>src/ExcelReader.Native/include/excelreader.h</code></a></li>
-<li>Python package: <a href="python/README.html"><code>python/</code></a></li>
+<li>Python package: <code>pip install excelreader-native</code> — see <a href="python/README.html"><code>python/README.md</code></a>.</li>
 <li>C++ package: header-only CMake wrapper, <code>xl::Workbook</code>/<code>xl::parse_sheet</code>/<code>xl::write_sheet</code> over the same ABI — see <a href="cpp/README.html"><code>cpp/README.md</code></a>.</li>
 <li>Rust crate: safe <code>Workbook</code>/<code>parse_sheet</code>/<code>write_sheet</code> bindings, downloadable via <code>cargo add excelreader</code> — see <a href="rust/excelreader/README.html"><code>rust/excelreader/README.md</code></a>.</li>
 </ul>
