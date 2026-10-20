@@ -4,6 +4,7 @@
 
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <compare>
 #include <concepts>
 #include <cstdint>
@@ -72,6 +73,11 @@ namespace xl
         }
 
         struct Access;
+
+        /// Status a shim returns for "a callback threw". Positive, so it can never collide with a
+        /// library status (every one of those is <= 0). It CAN collide with a caller's own
+        /// `INT32_MAX`, so the entry points key on `threw` rather than on the status alone.
+        inline constexpr int32_t kCsvCallbackException = (std::numeric_limits<int32_t>::max)();
 
     }
 
@@ -498,9 +504,41 @@ namespace xl
     /// @brief One cell of a row, borrowing the row's memory.
     struct CellView
     {
-        int32_t column{};         ///< 0-based column.
-        CellType type{};          ///< What the cell holds.
-        std::string_view value{}; ///< The text as stored, so a date is its serial number.
+        int32_t column{};              ///< 0-based column.
+        CellType type{};               ///< What the cell holds.
+        std::string_view value{};      ///< The text as stored, so a date is its serial number. Empty for a cell that carries only a number.
+        std::optional<double> number{}; ///< The library's own double, set only by Sheet::for_each_row and Sheet::aggregate, and only when the cell carries one.
+
+        /// @brief `number` when set, else `value` parsed as a double.
+        std::optional<double> as_number() const
+        {
+            if (number.has_value())
+            {
+                return number;
+            }
+            double parsed = 0;
+            const char *last = value.data() + value.size();
+            const auto result = std::from_chars(value.data(), last, parsed);
+            if (value.empty() || result.ec != std::errc{} || result.ptr != last)
+            {
+                return std::nullopt;
+            }
+            return parsed;
+        }
+
+        /// @brief `value` when non-empty, else `number` in shortest round-trip form, else empty.
+        ///
+        /// That formatting is this header's own, so it can differ from the text `xl_rows_next` writes.
+        std::string text() const
+        {
+            if (!value.empty() || !number.has_value())
+            {
+                return std::string(value);
+            }
+            char buffer[32];
+            const auto result = std::to_chars(buffer, buffer + sizeof(buffer), *number);
+            return std::string(buffer, result.ptr);
+        }
     };
 
     /// @brief The cells of one row: a range of CellView.
@@ -519,6 +557,16 @@ namespace xl
         /// @param index Position among the row's cells, below size().
         CellView operator[](size_t index) const
         {
+            if (views_ != nullptr)
+            {
+                const xl_cell_view &view = views_[index];
+                const size_t length = view.value_len > 0 ? static_cast<size_t>(view.value_len) : 0;
+                return CellView{view.column, static_cast<CellType>(view.type),
+                                length == 0 || view.value == nullptr
+                                    ? std::string_view{}
+                                    : std::string_view(reinterpret_cast<const char *>(view.value), length),
+                                view.has_number != 0 ? std::optional<double>(view.number) : std::nullopt};
+            }
             const xl_row_cell &raw = cells_[index];
             const size_t length = raw.value_len > 0 ? static_cast<size_t>(raw.value_len) : 0;
             return CellView{raw.column, static_cast<CellType>(raw.type),
@@ -562,11 +610,14 @@ namespace xl
     private:
         friend class RowCursor;
         friend class DecodedRows;
+        friend class Sheet;
         friend struct detail::Access;
 
         RowView(const xl_row_cell *cells, size_t count) : cells_(cells), count_(count) {}
+        RowView(const xl_cell_view *views, size_t count) : views_(views), count_(views == nullptr ? 0 : count) {}
 
         const xl_row_cell *cells_{};
+        const xl_cell_view *views_{};
         size_t count_{};
     };
 
@@ -760,6 +811,56 @@ namespace xl
                 return std::unexpected(detail::make_error(status));
             }
             return RowCursor(rows);
+        }
+
+        /// @brief Calls `f` once per row on the calling thread, without copying rows into a cursor.
+        ///
+        /// Each RowView borrows the library's buffers for that one call; copy anything you keep. A
+        /// cell carries text, a number, or both: CellView::text() and CellView::as_number() cover all
+        /// three. Returning anything but `XL_OK` stops the walk and comes back as the error's code;
+        /// use positive codes, since every library status is <= 0. An exception from `f` stops the
+        /// walk and is reported as an error. Other calls on this workbook are allowed from inside `f`.
+        /// @param f Called as `int32_t f(RowView)`.
+        template <typename F>
+            requires std::is_invocable_r_v<int32_t, F &, RowView>
+        std::expected<void, Error> for_each_row(F &&f) const
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            struct Walk
+            {
+                std::remove_reference_t<F> *f;
+                bool threw;
+            } walk{std::addressof(f), false};
+            const xl_row_fn shim = [](const xl_cell_view *cells, int32_t count, void *user_data) noexcept -> int32_t
+            {
+                auto *state = static_cast<Walk *>(user_data);
+                try
+                {
+                    return (*state->f)(RowView(cells, count > 0 ? static_cast<size_t>(count) : 0));
+                }
+                catch (...)
+                {
+                    state->threw = true;
+                    return detail::kCsvCallbackException;
+                }
+            };
+            const int32_t status = xl_rows_foreach(handle_, index_, shim, &walk);
+            if (walk.threw)
+            {
+                return std::unexpected(Error{detail::kCsvCallbackException, "a row callback threw"});
+            }
+            if (status > 0)
+            {
+                return std::unexpected(Error{status, "a row callback returned status " + std::to_string(status)});
+            }
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return {};
         }
 
         /// @brief The whole sheet from its first row, decoded in one native call.
@@ -2340,11 +2441,6 @@ namespace xl
 
     namespace detail
     {
-        /// Status a shim returns for "a callback threw". Positive, so it can never collide with a
-        /// library status (every one of those is <= 0). It CAN collide with a caller's own
-        /// `INT32_MAX`, so the entry points key on `threw` rather than on the status alone.
-        inline constexpr int32_t kCsvCallbackException = (std::numeric_limits<int32_t>::max)();
-
         /// What the four shims reach through `user_data`. The C ABI shares one `user_data` across
         /// every worker thread and requires it to be read-only or internally synchronized, so the
         /// seed is held by pointer-to-const and the "a callback threw" flag is atomic.
