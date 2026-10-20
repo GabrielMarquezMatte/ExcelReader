@@ -26,7 +26,7 @@ namespace ExcelReader.Core.Writer.Zip
         // each symbol writes ahead of the position it advances to.
         private const int MaxEncodedBlock = (MaxBlockLength * 9 / 8) + 24;
 
-        private byte[] _window;
+        private byte[] _window = [];
         private uint[] _table;
         private int _encoded;
         private int _end;
@@ -36,14 +36,31 @@ namespace ExcelReader.Core.Writer.Zip
 
         internal DeflateEncoder()
         {
-            _window = ArrayPool<byte>.Shared.Rent(WindowCapacity);
             _table = ArrayPool<uint>.Shared.Rent(1 << HashBits);
             Array.Clear(_table, 0, 1 << HashBits);
         }
 
+        /// <summary>
+        /// Same output as <see cref="Write"/> then <see cref="FlushSync(BiffBuffer)"/> on a new encoder, but matches
+        /// are read from <paramref name="input"/> itself, so no window is rented or filled.
+        /// </summary>
+        internal static void CompressSegment(ReadOnlySpan<byte> input, BiffBuffer output)
+        {
+            using var encoder = new DeflateEncoder();
+            while (input.Length - encoder._encoded >= MaxBlockLength)
+            {
+                encoder.EncodeBlock(input, encoder._encoded + MaxBlockLength, final: false, output);
+            }
+            encoder.FlushSync(input, output);
+        }
+
         internal void Write(ReadOnlySpan<byte> input, BiffBuffer output)
         {
-            ObjectDisposedException.ThrowIf(_window.Length == 0, this);
+            ObjectDisposedException.ThrowIf(_table.Length == 0, this);
+            if (_window.Length == 0)
+            {
+                _window = ArrayPool<byte>.Shared.Rent(WindowCapacity);
+            }
             while (!input.IsEmpty)
             {
                 if (_end == WindowCapacity)
@@ -56,14 +73,14 @@ namespace ExcelReader.Core.Writer.Zip
                 input = input[take..];
                 while (_end - _encoded >= MaxBlockLength)
                 {
-                    EncodeBlock(_encoded + MaxBlockLength, final: false, output);
+                    EncodeBlock(_window, _encoded + MaxBlockLength, final: false, output);
                 }
             }
         }
 
         internal void Finish(BiffBuffer output)
         {
-            EncodeBlock(_end, final: true, output);
+            EncodeBlock(_window, _end, final: true, output);
             Span<byte> tail = output.GetSpan(sizeof(ulong));
             BinaryPrimitives.WriteUInt64LittleEndian(tail, _bits);
             output.Advance((_bitCount + 7) / 8);
@@ -77,7 +94,27 @@ namespace ExcelReader.Core.Writer.Zip
         /// </summary>
         internal void FlushSync(BiffBuffer output)
         {
-            EncodeBlock(_end, final: false, output);
+            FlushSync(_window.AsSpan(0, _end), output);
+        }
+
+        public void Dispose()
+        {
+            if (_table.Length == 0)
+            {
+                return;
+            }
+            if (_window.Length > 0)
+            {
+                ArrayPool<byte>.Shared.Return(_window);
+            }
+            ArrayPool<uint>.Shared.Return(_table);
+            _window = [];
+            _table = [];
+        }
+
+        private void FlushSync(ReadOnlySpan<byte> source, BiffBuffer output)
+        {
+            EncodeBlock(source, source.Length, final: false, output);
             Span<byte> tail = output.GetSpan(sizeof(ulong) + 4);
             int headerBytes = (_bitCount + 3 + 7) / 8;
             BinaryPrimitives.WriteUInt64LittleEndian(tail, _bits);
@@ -85,18 +122,6 @@ namespace ExcelReader.Core.Writer.Zip
             output.Advance(headerBytes + 4);
             _bits = 0;
             _bitCount = 0;
-        }
-
-        public void Dispose()
-        {
-            if (_window.Length == 0)
-            {
-                return;
-            }
-            ArrayPool<byte>.Shared.Return(_window);
-            ArrayPool<uint>.Shared.Return(_table);
-            _window = [];
-            _table = [];
         }
 
         // Keeps the last 32 KB already encoded as history. The hash table holds absolute positions, so
@@ -110,7 +135,7 @@ namespace ExcelReader.Core.Writer.Zip
             _end -= keepFrom;
         }
 
-        private void EncodeBlock(int blockEnd, bool final, BiffBuffer output)
+        private void EncodeBlock(ReadOnlySpan<byte> source, int blockEnd, bool final, BiffBuffer output)
         {
             Span<byte> destination = output.GetSpan(MaxEncodedBlock);
             int length = blockEnd - _encoded;
@@ -121,8 +146,8 @@ namespace ExcelReader.Core.Writer.Zip
             };
             // Up to 31 pending bits plus the 3 header bits can exceed 32; flush so a 31-bit symbol still fits.
             FlushWord(destination, ref state);
-            int next = EncodeMatches(blockEnd, destination, ref state);
-            EncodeLiterals(next, blockEnd, destination, ref state);
+            int next = EncodeMatches(source, blockEnd, destination, ref state);
+            EncodeLiterals(source, next, blockEnd, destination, ref state);
             state.Count += 7;
             FlushWord(destination, ref state);
             long fixedBits = (8L * state.Written) + state.Count - _bitCount;
@@ -134,7 +159,7 @@ namespace ExcelReader.Core.Writer.Zip
             }
             else
             {
-                output.Advance(WriteStored(destination, length, final));
+                output.Advance(WriteStored(source, destination, length, final));
             }
             _encoded = blockEnd;
         }
@@ -145,14 +170,14 @@ namespace ExcelReader.Core.Writer.Zip
             return 3 + padding + 32 + (8L * length);
         }
 
-        private int WriteStored(Span<byte> destination, int length, bool final)
+        private int WriteStored(ReadOnlySpan<byte> source, Span<byte> destination, int length, bool final)
         {
             ulong header = _bits | ((final ? 1UL : 0UL) << _bitCount);
             int headerBytes = (_bitCount + 3 + 7) / 8;
             BinaryPrimitives.WriteUInt64LittleEndian(destination, header);
             BinaryPrimitives.WriteUInt16LittleEndian(destination[headerBytes..], (ushort)length);
             BinaryPrimitives.WriteUInt16LittleEndian(destination[(headerBytes + 2)..], (ushort)~length);
-            _window.AsSpan(_encoded, length).CopyTo(destination[(headerBytes + 4)..]);
+            source.Slice(_encoded, length).CopyTo(destination[(headerBytes + 4)..]);
             _bits = 0;
             _bitCount = 0;
             return headerBytes + 4 + length;
@@ -161,12 +186,12 @@ namespace ExcelReader.Core.Writer.Zip
         // Called once per block, so tiered compilation would run the loop as on-stack-replacement code
         // for the first blocks of a process.
         [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-        private int EncodeMatches(int blockEnd, Span<byte> destination, ref BitState state)
+        private int EncodeMatches(ReadOnlySpan<byte> source, int blockEnd, Span<byte> destination, ref BitState state)
         {
-            byte[] windowArray = _window;
             uint[] tableArray = _table;
-            ObjectDisposedException.ThrowIf(windowArray.Length < WindowCapacity || tableArray.Length < 1 << HashBits, this);
-            ref byte window = ref MemoryMarshal.GetArrayDataReference(windowArray);
+            ObjectDisposedException.ThrowIf(tableArray.Length < 1 << HashBits, this);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(blockEnd, source.Length);
+            ref byte window = ref MemoryMarshal.GetReference(source);
             ref uint table = ref MemoryMarshal.GetArrayDataReference(tableArray);
             ref byte output = ref MemoryMarshal.GetReference(destination);
             ref uint literals = ref MemoryMarshal.GetArrayDataReference(FixedHuffmanCodes.Literals);
@@ -217,11 +242,11 @@ namespace ExcelReader.Core.Writer.Zip
             return index;
         }
 
-        private void EncodeLiterals(int index, int blockEnd, Span<byte> destination, ref BitState state)
+        private static void EncodeLiterals(ReadOnlySpan<byte> source, int index, int blockEnd, Span<byte> destination, ref BitState state)
         {
             for (; index < blockEnd; index++)
             {
-                uint literal = FixedHuffmanCodes.Literals[_window[index]];
+                uint literal = FixedHuffmanCodes.Literals[source[index]];
                 state.Bits |= (ulong)(literal >> FixedHuffmanCodes.LengthShift) << state.Count;
                 state.Count += (int)(literal & FixedHuffmanCodes.LengthMask);
                 FlushWord(destination, ref state);

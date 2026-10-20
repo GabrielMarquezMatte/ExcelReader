@@ -62,6 +62,7 @@ namespace ExcelReader.Core.Reader.Zip
         private static ReadOnlySpan<byte> EocdSignatureBytes => [0x50, 0x4B, 0x05, 0x06];
 
         private const int TailWindowSize = 65535 + EocdFixedSize + Zip64LocatorSize;
+        private const int SmallDirectoryEntries = 64;
 
         private readonly ByteSource _source;
         private readonly ReadOnlyMemory<byte> _file;
@@ -254,10 +255,17 @@ namespace ExcelReader.Core.Reader.Zip
 
         private static void ThrowIfDuplicateEntryNames(ReadOnlyMemory<byte> directory, ZipEntryRef[] entries, int count)
         {
-            if (count <= 1)
+            // A package has a few dozen parts; comparing pairs skips JIT-compiling a sort on every process's first open.
+            if (count <= SmallDirectoryEntries)
             {
+                ThrowIfDuplicateEntryNamesByPairs(directory.Span, entries.AsSpan(0, count));
                 return;
             }
+            ThrowIfDuplicateEntryNamesBySort(directory, entries, count);
+        }
+
+        private static void ThrowIfDuplicateEntryNamesBySort(ReadOnlyMemory<byte> directory, ZipEntryRef[] entries, int count)
+        {
             int[] order = ArrayPool<int>.Shared.Rent(count);
             try
             {
@@ -287,6 +295,21 @@ namespace ExcelReader.Core.Reader.Zip
             finally
             {
                 ArrayPool<int>.Shared.Return(order);
+            }
+        }
+
+        private static void ThrowIfDuplicateEntryNamesByPairs(ReadOnlySpan<byte> directory, ReadOnlySpan<ZipEntryRef> entries)
+        {
+            for (int i = 1; i < entries.Length; i++)
+            {
+                ReadOnlySpan<byte> name = directory.Slice(entries[i].NameStart, entries[i].NameLength);
+                for (int j = 0; j < i; j++)
+                {
+                    if (entries[j].NameLength == name.Length && directory.Slice(entries[j].NameStart, name.Length).SequenceEqual(name))
+                    {
+                        throw new InvalidDataException("The ZIP central directory contains a duplicate entry name.");
+                    }
+                }
             }
         }
 

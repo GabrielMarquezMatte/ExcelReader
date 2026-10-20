@@ -30,6 +30,17 @@ namespace ExcelReader.Tests.Reader.Xls
 
         internal static MemoryStream Build(bool date1904 = false, string? customDateFormat = null, byte[]? sheetStates = null, params (string Name, object?[][] Rows)[] sheets)
         {
+            return BuildOle(BuildWorkbookStream(date1904, customDateFormat, sheetStates, sheets));
+        }
+
+        /// <summary>A version 4 compound file uses 4096-byte sectors, and its header takes a whole sector.</summary>
+        internal static MemoryStream BuildWithSectorSize(int sectorSize, params (string Name, object?[][] Rows)[] sheets)
+        {
+            return BuildOle(BuildWorkbookStream(false, null, null, sheets), sectorSize);
+        }
+
+        private static byte[] BuildWorkbookStream(bool date1904, string? customDateFormat, byte[]? sheetStates, (string Name, object?[][] Rows)[] sheets)
+        {
             List<string> sharedStrings = [];
             Dictionary<string, int> sharedIndexes = new(StringComparer.Ordinal);
             byte[][] sheetStreams = new byte[sheets.Length][];
@@ -45,8 +56,7 @@ namespace ExcelReader.Tests.Reader.Xls
             {
                 workbook.Write(sheet);
             }
-
-            return BuildOle(workbook.ToArray());
+            return workbook.ToArray();
         }
 
         internal static MemoryStream BuildNonBiff8()
@@ -481,17 +491,17 @@ namespace ExcelReader.Tests.Reader.Xls
             return true;
         }
 
-        private static MemoryStream BuildOle(byte[] workbook)
+        private static MemoryStream BuildOle(byte[] workbook, int sectorSize = SectorSize)
         {
-            int workbookSize = Math.Max(RoundUp(workbook.Length, SectorSize), 4096 + SectorSize);
-            int workbookSectorCount = workbookSize / SectorSize;
+            int workbookSize = Math.Max(RoundUp(workbook.Length, sectorSize), 4096 + sectorSize);
+            int workbookSectorCount = workbookSize / sectorSize;
             int totalSectors = 2 + workbookSectorCount;
-            if (totalSectors > 128)
+            if (totalSectors > sectorSize / 4)
             {
                 throw new NotSupportedException("Test workbook too large for the simple OLE builder.");
             }
 
-            byte[] fat = [.. Enumerable.Repeat(FreeSector, 128).SelectMany(I32)];
+            byte[] fat = [.. Enumerable.Repeat(FreeSector, sectorSize / 4).SelectMany(I32)];
             WriteI32(fat, 0, FatSector);
             WriteI32(fat, 4, EndOfChain);
             for (int i = 0; i < workbookSectorCount; i++)
@@ -502,23 +512,23 @@ namespace ExcelReader.Tests.Reader.Xls
             }
 
             MemoryStream ole = new();
-            ole.Write(Header());
+            ole.Write(Header(sectorSize));
             ole.Write(fat);
-            ole.Write(Directory(workbookSize));
+            ole.Write(Directory(workbookSize, sectorSize));
             ole.Write(workbook);
             ole.Write(new byte[workbookSize - workbook.Length]);
             ole.Position = 0;
             return ole;
         }
 
-        private static byte[] Header()
+        private static byte[] Header(int sectorSize)
         {
-            byte[] header = new byte[SectorSize];
+            byte[] header = new byte[sectorSize];
             byte[] sig = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
             sig.CopyTo(header, 0);
             WriteU16(header, 0x1A, 0x003E);
             WriteU16(header, 0x1C, 0x0003);
-            WriteU16(header, 0x1E, 9);
+            WriteU16(header, 0x1E, (ushort)System.Numerics.BitOperations.Log2((uint)sectorSize));
             WriteU16(header, 0x20, 6);
             WriteI32(header, 0x2C, 1);
             WriteI32(header, 0x30, 1);
@@ -535,9 +545,9 @@ namespace ExcelReader.Tests.Reader.Xls
             return header;
         }
 
-        private static byte[] Directory(int workbookSize)
+        private static byte[] Directory(int workbookSize, int sectorSize)
         {
-            byte[] dir = new byte[SectorSize];
+            byte[] dir = new byte[sectorSize];
             WriteDirectoryEntry(dir.AsSpan(0, 128), "Root Entry", 5, EndOfChain, 0, child: 1);
             WriteDirectoryEntry(dir.AsSpan(128, 128), "Workbook", 2, 2, workbookSize, child: EndOfChain);
             return dir;

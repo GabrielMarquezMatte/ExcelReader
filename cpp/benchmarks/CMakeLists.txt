@@ -58,6 +58,8 @@ if(EXCELREADER_BUILD_BENCHMARKS_COMPARE)
         GIT_TAG v1.5.0
     )
     FetchContent_MakeAvailable(xlnt)
+    target_compile_options(xlnt PUBLIC
+        "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:SHELL:-include cstdint;SHELL:-include limits>")
 
     # xlsxio (https://github.com/brechtsanders/xlsxio) - its own CMakeLists.txt requires an
     # already-installed expat + Minizip (FIND_PACKAGE(... REQUIRED), no FetchContent-friendly

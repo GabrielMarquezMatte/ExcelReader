@@ -108,6 +108,16 @@ namespace ExcelReader.Tests.Writer
             });
         }
 
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public void NumberFormatsXmlCannotHoldAreRejected(string format)
+        {
+            foreach (string numberFormat in new[] { "0\u0001", "0\t", "0\n", "0\uFFFE", "0\uFFFF" })
+            {
+                Assert.Throws<ArgumentException>(() => WithWorkbook(format, wb => wb.AddStyle(new CellStyle { NumberFormat = numberFormat })));
+            }
+        }
+
         [Fact]
         public void AValueWithNoNumericFormIsRefusedTheSameWayEverywhere()
         {

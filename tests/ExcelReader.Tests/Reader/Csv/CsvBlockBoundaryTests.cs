@@ -136,7 +136,7 @@ namespace ExcelReader.Tests.Reader.Csv
 
             var rows = new List<string[]>();
             var starts = new List<long>();
-            using var e = new CsvReader.Enumerator(bytes, CsvReaderOptions.Default);
+            using var e = new CsvReader.Enumerator(bytes, CsvReaderOptions.Default, contentCache: null, TestContext.Current.CancellationToken);
             while (e.MoveNext())
             {
                 starts.Add(e.CurrentRecordStart);

@@ -29,6 +29,14 @@ XL_STATIC_ASSERT(offsetof(xl_row_cell, value_len) == 8, row_cell_value_len);
 XL_STATIC_ASSERT(offsetof(xl_row_cell, value) == 16, row_cell_value);
 XL_STATIC_ASSERT(sizeof(xl_row_cell) == 24, row_cell_size);
 
+XL_STATIC_ASSERT(offsetof(xl_cell_view, column) == 0, cell_view_column);
+XL_STATIC_ASSERT(offsetof(xl_cell_view, type) == 4, cell_view_type);
+XL_STATIC_ASSERT(offsetof(xl_cell_view, value_len) == 8, cell_view_value_len);
+XL_STATIC_ASSERT(offsetof(xl_cell_view, has_number) == 12, cell_view_has_number);
+XL_STATIC_ASSERT(offsetof(xl_cell_view, value) == 16, cell_view_value);
+XL_STATIC_ASSERT(offsetof(xl_cell_view, number) == 24, cell_view_number);
+XL_STATIC_ASSERT(sizeof(xl_cell_view) == 32, cell_view_size);
+
 XL_STATIC_ASSERT(offsetof(xl_row, cell_count) == 0, row_cell_count);
 XL_STATIC_ASSERT(offsetof(xl_row, cells) == 8, row_cells);
 XL_STATIC_ASSERT(sizeof(xl_row) == 16, row_size);
@@ -52,7 +60,9 @@ XL_STATIC_ASSERT(offsetof(xl_write_options, csv_delimiter) == 16, write_options_
 XL_STATIC_ASSERT(offsetof(xl_write_options, csv_quote) == 20, write_options_csv_quote);
 XL_STATIC_ASSERT(offsetof(xl_write_options, date1904) == 24, write_options_date1904);
 XL_STATIC_ASSERT(offsetof(xl_write_options, use_shared_strings) == 28, write_options_use_shared_strings);
-XL_STATIC_ASSERT(sizeof(xl_write_options) == 32, write_options_size);
+XL_STATIC_ASSERT(offsetof(xl_write_options, degree_of_parallelism) == 32, write_options_degree_of_parallelism);
+XL_STATIC_ASSERT(offsetof(xl_write_options, batch_rows) == 36, write_options_batch_rows);
+XL_STATIC_ASSERT(sizeof(xl_write_options) == 40, write_options_size);
 
 XL_STATIC_ASSERT(offsetof(xl_column, type) == 0, column_type);
 XL_STATIC_ASSERT(offsetof(xl_column, length) == 8, column_length);
@@ -96,6 +106,8 @@ XL_STATIC_ASSERT(sizeof(struct ArrowArray) == 80, arrow_array_size);
 
 XL_STATIC_ASSERT(offsetof(xl_csv_aggregation, seed) == 8, csv_agg_seed);
 XL_STATIC_ASSERT(sizeof(xl_csv_aggregation) == 48, csv_agg_size);
+XL_STATIC_ASSERT(offsetof(xl_aggregation, accumulate) == 16, agg_accumulate);
+XL_STATIC_ASSERT(sizeof(xl_aggregation) == 48, agg_size);
 XL_STATIC_ASSERT(offsetof(xl_csv_parallel_options, max_cell_bytes) == 24, csv_opt_max_cell_bytes);
 XL_STATIC_ASSERT(sizeof(xl_csv_parallel_options) == 28, csv_opt_size);
 
@@ -1350,6 +1362,90 @@ static int test_open_source(xl_lib_handle lib, const api_t* api, const char* fix
     return 0;
 }
 
+typedef int32_t (*xl_rows_foreach_fn)(xl_workbook*, int32_t, xl_row_fn, void*);
+typedef int32_t (*xl_aggregate_fn)(xl_workbook*, int32_t, const xl_aggregation*, int32_t, int32_t, void**);
+
+static int32_t smoke_count_row(const xl_cell_view* cells, int32_t cell_count, void* user_data)
+{
+    (void)cells;
+    (void)cell_count;
+    (*(int64_t*)user_data)++;
+    return XL_OK;
+}
+
+static int32_t smoke_stop_row(const xl_cell_view* cells, int32_t cell_count, void* user_data)
+{
+    (void)cells;
+    (void)cell_count;
+    (*(int64_t*)user_data)++;
+    return 7;
+}
+
+static int32_t smoke_view_seed(void** out_state, void* user_data)
+{
+    (void)user_data;
+    *out_state = calloc(1, sizeof(int64_t));
+    return *out_state != NULL ? XL_OK : 1;
+}
+
+static int32_t smoke_view_accumulate(void* state, const xl_cell_view* cells, int32_t cell_count, void* user_data)
+{
+    (void)cells;
+    (void)cell_count;
+    (void)user_data;
+    (*(int64_t*)state)++;
+    return XL_OK;
+}
+
+static int32_t smoke_view_combine(void* accumulator, void* next, void* user_data)
+{
+    (void)user_data;
+    *(int64_t*)accumulator += *(int64_t*)next;
+    return XL_OK;
+}
+
+static void smoke_view_free_state(void* state, void* user_data)
+{
+    (void)user_data;
+    free(state);
+}
+
+static int test_callback_reads(xl_lib_handle lib, const api_t* api, const char* fixture)
+{
+    xl_rows_foreach_fn rows_foreach = (xl_rows_foreach_fn)load_symbol(lib, "xl_rows_foreach");
+    CHECK(rows_foreach != NULL, "xl_rows_foreach must be exported");
+    xl_aggregate_fn aggregate = (xl_aggregate_fn)load_symbol(lib, "xl_aggregate");
+    CHECK(aggregate != NULL, "xl_aggregate must be exported");
+
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+
+    int64_t rows = 0;
+    CHECK(rows_foreach(handle, 0, smoke_count_row, &rows) == XL_OK, "xl_rows_foreach must succeed");
+    CHECK(rows == 101, "xl_rows_foreach must see all 101 rows");
+
+    int64_t calls = 0;
+    CHECK(rows_foreach(handle, 0, smoke_stop_row, &calls) == 7, "xl_rows_foreach must return the callback's code");
+    CHECK(calls == 1, "a non-XL_OK callback code must stop the walk");
+
+    xl_aggregation agg;
+    memset(&agg, 0, sizeof(agg));
+    agg.struct_size = (int32_t)sizeof(agg);
+    agg.seed = smoke_view_seed;
+    agg.accumulate = smoke_view_accumulate;
+    agg.combine = smoke_view_combine;
+    agg.free_state = smoke_view_free_state;
+
+    void* state = NULL;
+    CHECK(aggregate(handle, 0, &agg, 0, 0, &state) == XL_OK && state != NULL, "xl_aggregate must succeed");
+    int64_t aggregated = *(int64_t*)state;
+    free(state);
+    CHECK(aggregated == 101, "xl_aggregate must accumulate all 101 rows");
+
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     const char* library_path = argc > 1 ? argv[1] : EXCELREADER_LIB_PATH_DEFAULT;
@@ -1391,6 +1487,7 @@ int main(int argc, char** argv)
     failures += test_csv_aggregate_file(lib);
     failures += test_csv_aggregate_quoted_records(lib);
     failures += test_open_source(lib, &api, fixture_path);
+    failures += test_callback_reads(lib, &api, fixture_path);
 
     if (failures == 0)
     {

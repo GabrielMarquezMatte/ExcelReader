@@ -156,6 +156,11 @@ class WriteOptions:
     apply to CSV output only. `date1904` applies to xls/xlsb only; `use_shared_strings` to
     xlsx/xlsb only, where it shrinks files with many repeated strings at the cost of a string table.
 
+    `degree_of_parallelism` (xlsx/xlsb only) formats and compresses batches of `batch_rows` rows on
+    several threads: 0 uses every processor, 1 writes serially, and None is serial. A `batch_rows`
+    of None keeps the library default of 8192. With shared strings on, two parallel runs give the
+    same content in files that differ byte for byte.
+
     Validation happens on the native side; an out-of-range value or an invalid sheet name raises
     `ExcelReaderError`. Fields mirror xl_write_options in
     src/ExcelReader.Native/include/excelreader.h.
@@ -166,6 +171,8 @@ class WriteOptions:
     csv_quote: int | None = None
     date1904: bool | None = None
     use_shared_strings: bool | None = None
+    degree_of_parallelism: int | None = None
+    batch_rows: int | None = None
 
 
 class StringColumn:

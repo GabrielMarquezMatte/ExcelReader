@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         internal InflateStream(Stream inner)
         {
             _inner = inner;
-            _window.AsSpan(CanaryStart, CanarySize).Fill(CanaryByte);
+            InflateDecoder.FillBytes(_window.AsSpan(CanaryStart, CanarySize), CanaryByte);
         }
 
         public override bool CanRead => !_disposed;

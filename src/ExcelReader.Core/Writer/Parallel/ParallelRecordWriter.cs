@@ -18,7 +18,7 @@ namespace ExcelReader.Core.Writer.Parallel
 
         internal static ValueTask WriteRowsAsync<TSheet, TRow, T>(TSheet sheet, RecordSource<T> records,
             Action<TRow, T> writeRow, ParallelWriteOptions? options, CancellationToken ct)
-            where TSheet : class, IBatchSheet<TSheet, TRow>
+            where TSheet : class, ISheetWriter<TRow>, IBatchSheet<TSheet, TRow>
             where TRow : IRowWriter
         {
             return RunAsync(sheet, records, writeRow, Resolve(options), ct);
@@ -45,9 +45,14 @@ namespace ExcelReader.Core.Writer.Parallel
 
         private static async ValueTask RunAsync<TSheet, TRow, T>(TSheet sheet, RecordSource<T> records,
             Action<TRow, T> writeRow, ParallelWriteOptions options, CancellationToken ct)
-            where TSheet : class, IBatchSheet<TSheet, TRow>
+            where TSheet : class, ISheetWriter<TRow>, IBatchSheet<TSheet, TRow>
             where TRow : IRowWriter
         {
+            if (options.EffectiveDegree == 1)
+            {
+                await RunSeriallyAsync(sheet, records, writeRow, ct).ConfigureAwait(false);
+                return;
+            }
             int rowsBefore = await sheet.BeginSegmentsAsync(ct).ConfigureAwait(false);
             var workers = new ConcurrentBag<TSheet>();
             try
@@ -70,6 +75,28 @@ namespace ExcelReader.Core.Writer.Parallel
                 }
             }
             sheet.EndSegments();
+        }
+
+        // Batching only pays when batches overlap; one worker would add the cutting and sync flushes for nothing.
+        private static async ValueTask RunSeriallyAsync<TSheet, TRow, T>(TSheet sheet, RecordSource<T> records,
+            Action<TRow, T> writeRow, CancellationToken ct)
+            where TSheet : class, ISheetWriter<TRow>, IBatchSheet<TSheet, TRow>
+            where TRow : IRowWriter
+        {
+            try
+            {
+                if (records.Sync is not null)
+                {
+                    await sheet.WriteRecordsAsync(records.Sync, writeRow, ct).ConfigureAwait(false);
+                    return;
+                }
+                await sheet.WriteRecordsAsync(records.Async!, writeRow, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                await sheet.FailSegmentsAsync().ConfigureAwait(false);
+                throw;
+            }
         }
 
         private static BatchSegment FormatBatch<TSheet, TRow, T>(TSheet sheet, ConcurrentBag<TSheet> workers,

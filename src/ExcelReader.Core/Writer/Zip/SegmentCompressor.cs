@@ -29,9 +29,7 @@ namespace ExcelReader.Core.Writer.Zip
             // DeflateEncoder writes and compares native-order words, which is only deflate's bit order on little-endian.
             if (level == CompressionLevel.Fastest && BitConverter.IsLittleEndian)
             {
-                using var encoder = new DeflateEncoder();
-                encoder.Write(input, output);
-                encoder.FlushSync(output);
+                DeflateEncoder.CompressSegment(input, output);
                 return;
             }
             CompressWithZlib(input, level, output);

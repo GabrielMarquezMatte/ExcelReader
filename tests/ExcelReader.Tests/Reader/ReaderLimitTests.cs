@@ -739,6 +739,17 @@ namespace ExcelReader.Tests.Reader
                 CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 0, size: 256));
         }
 
+        [Theory]
+        [InlineData(-2)]
+        [InlineData(-1)]
+        public void MiniStreamChainEndingBeforeItsSizeThrowsInvalidDataInsteadOfZeroFilling(int end)
+        {
+            byte[] miniStream = new byte[256];
+            int[] miniFat = [end, -2, -2, -2];
+            Assert.Throws<InvalidDataException>(() =>
+                CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 0, size: 128));
+        }
+
         [Fact]
         public void SyntheticXlsbTableParses()
         {

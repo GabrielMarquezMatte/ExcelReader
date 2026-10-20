@@ -178,6 +178,46 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal(CellType.Date, e.Current[0].Type);
         }
 
+        [Theory]
+        [InlineData("2020-01-01T00:00:00", false, 2020, 1, 1)]
+        [InlineData("2020-01-01T00:00:00", true, 2020, 1, 1)]
+        [InlineData("1904-01-01", true, 1904, 1, 1)]
+        [InlineData("1900-01-01", false, 1900, 1, 1)]
+        [InlineData("1900-02-28", false, 1900, 2, 28)]
+        [InlineData("1900-03-01", false, 1900, 3, 1)]
+        [InlineData("1899-12-31", false, 1899, 12, 31)]
+        [InlineData("1899-12-30", false, 1899, 12, 30)]
+        [InlineData("1850-06-15", false, 1850, 6, 15)]
+        [InlineData("1903-12-31", true, 1903, 12, 31)]
+        public void IsoDateReadsBackTheSameDayInEitherDateSystem(string text, bool date1904, int year, int month, int day)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                $"""<row r="1"><c r="A1" t="d"><v>{text}</v></c></row>""", date1904: date1904);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime dt));
+            Assert.Equal(new DateTime(year, month, day), dt);
+        }
+
+        [Theory]
+        [InlineData("2020-01-01T10:00:00+05:00")]
+        [InlineData("2020-01-01T10:00:00-08:00")]
+        [InlineData("2020-01-01T10:00:00Z")]
+        public void IsoDateWithAnOffsetKeepsTheClockTimeAsWritten(string text)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                $"""<row r="1"><c r="A1" t="d"><v>{text}</v></c></row>""");
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime dt));
+            Assert.Equal(new DateTime(2020, 1, 1, 10, 0, 0), dt);
+        }
+
         [Fact]
         public async Task IsoDateCellIsParsedAsDateAsync()
         {

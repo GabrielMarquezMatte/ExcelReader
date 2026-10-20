@@ -260,6 +260,19 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_foreach")]
+        public static int RowsForEach(nint handle, int sheet, delegate* unmanaged<NativeCellView*, int, void*, int> callback, void* userData)
+        {
+            NativeApi.ClearLastError();
+
+            if (callback is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            return ReadApi.ForEachRow(Resolve(handle), sheet, callback, userData);
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_read_all_blob")]
         public static int RowsReadAllBlob(nint rows, byte* buffer, int capacity, int* outWritten)
         {

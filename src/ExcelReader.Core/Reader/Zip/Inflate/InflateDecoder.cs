@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace ExcelReader.Core.Reader.Zip.Inflate
 {
@@ -29,7 +31,10 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         private const int LensSize = InflateFormat.MaxLitlenSymbols + InflateFormat.MaxOffsetSymbols + InflateFormat.MaxRepeat;
         private const ulong PrecodeMask = (1UL << InflateFormat.PrecodeTableBits) - 1;
 
-        private readonly uint[] _tables = ArrayPool<uint>.Shared.Rent(InflateFormat.LitlenTableSize + InflateFormat.OffsetTableSize);
+        private const int TableEntries = InflateFormat.LitlenTableSize + InflateFormat.OffsetTableSize;
+
+        // Rented as bytes: ArrayPool<byte> comes precompiled with the runtime, ArrayPool<uint> is JIT-compiled on the first file.
+        private readonly byte[] _tableBytes = ArrayPool<byte>.Shared.Rent(TableEntries * sizeof(uint));
         private ulong _litlenMask;
         private bool _staticCodesLoaded;
         private ulong _bitbuf;
@@ -81,7 +86,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                 return;
             }
             _disposed = true;
-            ArrayPool<uint>.Shared.Return(_tables);
+            ArrayPool<byte>.Shared.Return(_tableBytes);
         }
 
         private bool TryReadHeader(byte[] input, ref int inPos, int inEnd, bool inputEnded)
@@ -220,6 +225,23 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
             return value;
         }
 
+        // Span<byte>.Fill and InitBlock end in a Vector<T> memset that is never precompiled, so either would be
+        // JIT-compiled on the first file; the spans filled here are at most a few hundred bytes.
+        internal static void FillBytes(Span<byte> span, byte value)
+        {
+            ref byte start = ref MemoryMarshal.GetReference(span);
+            ulong pattern = value * 0x0101_0101_0101_0101UL;
+            int i = 0;
+            for (; i + sizeof(ulong) <= span.Length; i += sizeof(ulong))
+            {
+                Unsafe.WriteUnaligned(ref Unsafe.Add(ref start, i), pattern);
+            }
+            for (; i < span.Length; i++)
+            {
+                Unsafe.Add(ref start, i) = value;
+            }
+        }
+
         private void LoadStaticCodes()
         {
             if (_staticCodesLoaded)
@@ -227,11 +249,11 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                 return;
             }
             Span<byte> lens = stackalloc byte[InflateFormat.MaxLitlenSymbols + InflateFormat.MaxOffsetSymbols];
-            lens[..144].Fill(8);
-            lens[144..256].Fill(9);
-            lens[256..280].Fill(7);
-            lens[280..288].Fill(8);
-            lens[288..].Fill(5);
+            FillBytes(lens[..144], 8);
+            FillBytes(lens[144..256], 9);
+            FillBytes(lens[256..280], 7);
+            FillBytes(lens[280..288], 8);
+            FillBytes(lens[288..], 5);
             BuildCodeTables(lens, InflateFormat.MaxLitlenSymbols, InflateFormat.MaxOffsetSymbols);
             _staticCodesLoaded = true;
         }
@@ -286,7 +308,7 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
                     continue;
                 }
                 int repeat = ReadRepeat(symbol, count, lens, out byte value);
-                lens.Slice(count, repeat).Fill(value);
+                FillBytes(lens.Slice(count, repeat), value);
                 count += repeat;
             }
             if (count != total)
@@ -314,17 +336,19 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
             return 3 + (int)PopBits(2);
         }
 
+        private Span<uint> Tables => MemoryMarshal.Cast<byte, uint>(_tableBytes.AsSpan(0, TableEntries * sizeof(uint)));
+
         private void BuildCodeTables(ReadOnlySpan<byte> lens, int litlenSymbols, int offsetSymbols)
         {
             Span<ushort> sorted = stackalloc ushort[InflateFormat.MaxLitlenSymbols];
             if (!HuffmanTableBuilder.TryBuild(
-                _tables.AsSpan(InflateFormat.LitlenTableSize, InflateFormat.OffsetTableSize), lens.Slice(litlenSymbols, offsetSymbols), InflateFormat.OffsetResults,
+                Tables.Slice(InflateFormat.LitlenTableSize, InflateFormat.OffsetTableSize), lens.Slice(litlenSymbols, offsetSymbols), InflateFormat.OffsetResults,
                 InflateFormat.OffsetTableBits, InflateFormat.MaxCodewordLength, sorted, shrink: false, out _))
             {
                 throw new InvalidDataException("A deflate block has an invalid offset code.");
             }
             if (!HuffmanTableBuilder.TryBuild(
-                _tables.AsSpan(0, InflateFormat.LitlenTableSize), lens[..litlenSymbols], InflateFormat.LitlenResults,
+                Tables[..InflateFormat.LitlenTableSize], lens[..litlenSymbols], InflateFormat.LitlenResults,
                 InflateFormat.LitlenTableBits, InflateFormat.MaxCodewordLength, sorted, shrink: true, out int litlenBits))
             {
                 throw new InvalidDataException("A deflate block has an invalid literal/length code.");

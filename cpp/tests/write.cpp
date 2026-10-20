@@ -228,6 +228,45 @@ static int test_write_columns_rejects_bad_input()
     return 0;
 }
 
+static int test_write_columns_in_parallel()
+{
+    CHECK(xl::WriteOptions{}.degree_of_parallelism == 1, "the wrapper must default to a serial write");
+
+    const std::vector<int32_t> offsets{0, 1, 2, 3, 4, 5, 6, 7};
+    const std::vector<uint8_t> blob{'a', 'b', 'c', 'd', 'e', 'f', 'g'};
+    const std::vector<int64_t> values{0, 10, 20, 30, 40, 50, 60};
+    const std::array<xl::ColumnRef, 2> columns{xl::string_column("texto", offsets, blob), xl::i64_column("inteiro", values)};
+
+    for (const int32_t format : {XL_FORMAT_XLSX, XL_FORMAT_XLSB})
+    {
+        std::vector<uint8_t> bytes;
+        CHECK(xl::write_columns(bytes, columns, {.format = format, .degree_of_parallelism = 4, .batch_rows = 2}).has_value(),
+              "a parallel write must succeed");
+
+        auto workbook = xl::Workbook::open(bytes, {.format = format});
+        CHECK(workbook.has_value(), "the parallel output must open");
+        auto cursor = workbook->sheet(0).rows();
+        CHECK(cursor.has_value(), "the parallel output must have a row cursor");
+        int64_t index = 0;
+        for (auto row = cursor->next_row(); row.has_value(); row = cursor->next_row(), ++index)
+        {
+            std::vector<std::string> cells;
+            for (auto cell : *row)
+            {
+                cells.emplace_back(cell.value);
+            }
+            CHECK(cells.size() == 2, "every row must have both cells");
+            if (index > 0)
+            {
+                CHECK(cells[0] == std::string(1, static_cast<char>('a' + index - 1)), "the string column must round-trip in order");
+                CHECK(cells[1] == std::to_string((index - 1) * 10), "the int64 column must round-trip in order");
+            }
+        }
+        CHECK(index == 8, "the header and seven data rows must be written");
+    }
+    return 0;
+}
+
 static int test_write_options()
 {
     const std::vector<int64_t> values{1, 2};
@@ -675,6 +714,10 @@ static int test_writer_handle_class_rejects_auto_for_memory()
 int main()
 {
     if (test_write_options() != 0)
+    {
+        return 1;
+    }
+    if (test_write_columns_in_parallel() != 0)
     {
         return 1;
     }

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
@@ -42,6 +43,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             return Read(buffer.AsSpan(offset, count));
         }
 
+        // Pooled: a state machine box per chunk read was the parallel parse's largest allocation after the rows.
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             int n = await RandomAccess.ReadAsync(_handle, buffer, _offset, cancellationToken).ConfigureAwait(false);

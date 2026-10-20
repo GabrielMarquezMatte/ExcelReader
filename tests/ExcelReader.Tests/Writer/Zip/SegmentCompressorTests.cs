@@ -55,6 +55,23 @@ namespace ExcelReader.Tests.Writer.Zip
         }
 
         [Fact]
+        public void FastestSegmentMatchesTheStreamingEncoder()
+        {
+            byte[] input = DeflateEncoderTests.SheetXml(40_000);
+            Assert.True(input.Length > 2 << 20);
+            using var streamed = new BiffBuffer(4096);
+            using (var encoder = new DeflateEncoder())
+            {
+                encoder.Write(input, streamed);
+                encoder.FlushSync(streamed);
+            }
+            using var segment = new BiffBuffer(4096);
+            SegmentCompressor.Compress(input, CompressionLevel.Fastest, segment);
+
+            Assert.Equal(streamed.Span.ToArray(), segment.Span.ToArray());
+        }
+
+        [Fact]
         public void NoCompressionCopiesTheBytes()
         {
             using var output = new BiffBuffer(64);

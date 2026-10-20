@@ -52,12 +52,18 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.False(index.TryGetEntry("xl/doesNotExist.xml"u8, out _));
         }
 
-        [Fact]
-        public void CreateThrowsOnDuplicateCentralDirectoryEntryNames()
+        [Theory]
+        [InlineData(0)]
+        [InlineData(100)]
+        public void CreateThrowsOnDuplicateCentralDirectoryEntryNames(int otherEntries)
         {
             using var ms = new MemoryStream();
             using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
             {
+                for (int i = 0; i < otherEntries; i++)
+                {
+                    zip.CreateEntry(string.Create(CultureInfo.InvariantCulture, $"part{i}.txt"), CompressionLevel.NoCompression);
+                }
                 using (var s1 = zip.CreateEntry("dup.txt", CompressionLevel.NoCompression).Open())
                 {
                     s1.Write("first"u8);

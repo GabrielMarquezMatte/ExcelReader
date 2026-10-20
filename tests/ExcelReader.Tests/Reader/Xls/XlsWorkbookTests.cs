@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -41,6 +42,63 @@ namespace ExcelReader.Tests.Reader.Xls
             Assert.Equal(CellType.Number, row[4].Type);
             Assert.Equal("12.5", row[4].GetString());
             Assert.False(e.MoveNext());
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ReadsAVersion4CompoundFileWith4096ByteSectors(bool fromFile)
+        {
+            object?[][] rows = [.. Enumerable.Range(0, 600).Select(static i => new object?[] { $"row {i}", i })];
+            using MemoryStream built = XlsWorkbookBuilder.BuildWithSectorSize(4096, ("S1", rows));
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-v4-{Guid.NewGuid():N}.xls");
+            File.WriteAllBytes(path, built.ToArray());
+            try
+            {
+                using XlsWorkbook reader = fromFile ? Excel.FromXlsFile(path) : Excel.FromXls(built.ToArray());
+                using var e = reader.FirstSheet.GetEnumerator();
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    Assert.True(e.MoveNext());
+                    Assert.Equal($"row {i}", e.Current[0].GetString());
+                    Assert.True(e.Current[1].TryParse(null, out int value));
+                    Assert.Equal(i, value);
+                }
+                Assert.False(e.MoveNext());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ReadsAWorkbookStreamWhoseLastSectorIsNotPadded(bool fromFile)
+        {
+            using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["a", 1], ["b", 2]])]);
+            const int Cut = 100;
+            const int WorkbookSizeOffset = 512 + 512 + 128 + 120;
+            byte[] bytes = built.ToArray()[..^Cut];
+            long size = BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(WorkbookSizeOffset));
+            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(WorkbookSizeOffset), size - Cut);
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-unpadded-{Guid.NewGuid():N}.xls");
+            File.WriteAllBytes(path, bytes);
+            try
+            {
+                using XlsWorkbook reader = fromFile ? Excel.FromXlsFile(path) : Excel.FromXls(bytes);
+                using var e = reader.FirstSheet.GetEnumerator();
+                Assert.True(e.MoveNext());
+                Assert.Equal("a", e.Current[0].GetString());
+                Assert.True(e.MoveNext());
+                Assert.Equal("b", e.Current[0].GetString());
+                Assert.False(e.MoveNext());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         [Fact]

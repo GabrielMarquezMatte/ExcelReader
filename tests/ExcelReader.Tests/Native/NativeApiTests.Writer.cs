@@ -4,6 +4,7 @@ using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Csv;
 using ExcelReader.Native;
 using ExcelReader.Native.Reading;
@@ -450,6 +451,83 @@ namespace ExcelReader.Tests.Native
             Assert.Null(options.CsvQuote);
             Assert.Null(options.Date1904);
             Assert.Null(options.UseSharedStrings);
+            Assert.Equal(0, options.DegreeOfParallelism);
+            Assert.Equal(0, options.BatchRows);
+        }
+
+        [Fact]
+        public unsafe void WriteOptions_Should_Read_A_Null_Pointer_As_Serial()
+        {
+            Assert.True(NativeWriteOptionsRaw.TryRead(null, out NativeWriteOptionsRaw raw, out _));
+            Assert.Equal(sizeof(NativeWriteOptionsRaw), raw.StructSize);
+            Assert.Equal(1, raw.DegreeOfParallelism);
+        }
+
+        [Fact]
+        public unsafe void WriteOptions_Should_Read_The_7_0_Layout_As_Serial_Without_Reading_Past_It()
+        {
+            byte* buffer = stackalloc byte[sizeof(NativeWriteOptionsRaw)];
+            new Span<byte>(buffer, sizeof(NativeWriteOptionsRaw)).Fill(0xFF);
+            new Span<byte>(buffer, NativeWriteOptionsRaw.V7Size).Clear();
+            ((NativeWriteOptionsRaw*)buffer)->StructSize = NativeWriteOptionsRaw.V7Size;
+
+            Assert.True(NativeWriteOptionsRaw.TryRead((NativeWriteOptionsRaw*)buffer, out NativeWriteOptionsRaw raw, out _));
+            Assert.Equal(1, raw.DegreeOfParallelism);
+            Assert.Equal(0, raw.BatchRows);
+            Assert.Equal(sizeof(NativeWriteOptionsRaw), raw.StructSize);
+        }
+
+        [Fact]
+        public unsafe void WriteOptions_Should_Reject_A_Size_That_Is_Neither_Layout()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.StructSize = 36;
+
+            Assert.False(NativeWriteOptionsRaw.TryRead(&raw, out _, out string? error));
+            Assert.Contains("struct_size", error, StringComparison.Ordinal);
+            Assert.Contains("32", error, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(-1, 0, "degree_of_parallelism")]
+        [InlineData(0, -1, "batch_rows")]
+        public void WriteOptions_Should_Reject_Negative_Parallel_Fields(int degree, int batchRows, string field)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degree;
+            raw.BatchRows = batchRows;
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, null, out _, out string? error));
+            Assert.Contains(field, error, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, 0, 0, 0, 8192)]
+        [InlineData(NativeFormat.Xlsb, 4, 100, 4, 100)]
+        public void WriteOptions_Should_Map_Parallel_Fields_For_Xlsx_And_Xlsb(int format, int degree, int batchRows, int expectedDegree, int expectedBatch)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degree;
+            raw.BatchRows = batchRows;
+
+            Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+            ParallelWriteOptions? parallel = options.ToParallelWriteOptions(format);
+            Assert.NotNull(parallel);
+            Assert.Equal(expectedDegree, parallel.DegreeOfParallelism);
+            Assert.Equal(expectedBatch, parallel.BatchRows);
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, 1)]
+        [InlineData(NativeFormat.Xls, 4)]
+        [InlineData(NativeFormat.Csv, 0)]
+        public void WriteOptions_Should_Stay_Serial_For_Degree_One_Or_Other_Formats(int format, int degree)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degree;
+
+            Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+            Assert.Null(options.ToParallelWriteOptions(format));
         }
 
         [Fact]
@@ -1174,6 +1252,180 @@ namespace ExcelReader.Tests.Native
             {
                 FreeBuiltTable(ref table);
                 File.Delete(path);
+            }
+        }
+
+        private static NativeColumnSpec[] EveryTypeSpecs()
+        {
+            return
+            [
+                new() { Names = ["text"], Type = NativeColumnType.String },
+                new() { Names = ["int"], Type = NativeColumnType.Int64 },
+                new() { Names = ["float"], Type = NativeColumnType.Float64 },
+                new() { Names = ["bool"], Type = NativeColumnType.Bool },
+                new() { Names = ["date"], Type = NativeColumnType.Date },
+                new() { Names = ["time"], Type = NativeColumnType.Time },
+                new() { Names = ["stamp"], Type = NativeColumnType.Timestamp },
+            ];
+        }
+
+        private static NativeTable BuildEveryTypeTable(int rowCount, long[]? times = null)
+        {
+            string[] texts = [.. Enumerable.Range(0, rowCount).Select(i => i % 2 == 0 ? "repeated" : $"text {i}")];
+            byte[] data = Encoding.UTF8.GetBytes(string.Concat(texts));
+            int[] offsets = new int[rowCount + 1];
+            byte[] validity = new byte[(rowCount + 7) / 8];
+            for (int i = 0; i < rowCount; i++)
+            {
+                offsets[i + 1] = offsets[i] + Encoding.UTF8.GetByteCount(texts[i]);
+                if (i is not 0 and not 2 && i != rowCount - 1)
+                {
+                    validity[i >> 3] |= (byte)(1 << (i & 7));
+                }
+            }
+            IEnumerable<int> rows = Enumerable.Range(0, rowCount);
+            NativeColumn[] columns =
+            [
+                BuildColumn(NativeColumnType.String, offsets, validity, data),
+                BuildColumn(NativeColumnType.Int64, [.. rows.Select(i => i * 10L)], validity),
+                BuildColumn(NativeColumnType.Float64, [.. rows.Select(i => i + 0.5)], validity),
+                BuildColumn(NativeColumnType.Bool, [.. rows.Select(i => (byte)(i & 1))], validity),
+                BuildColumn(NativeColumnType.Date, [.. rows.Select(i => 19000 + i)], validity),
+                BuildColumn(NativeColumnType.Time, times ?? [.. rows.Select(i => i * 1_000_000L)], validity),
+                BuildColumn(NativeColumnType.Timestamp, [.. rows.Select(i => 1_700_000_000_000_000L + (i * 1_000_000L))], validity),
+            ];
+            for (int index = 0; index < columns.Length; index++)
+            {
+                columns[index].Length = rowCount;
+            }
+
+            int size = Marshal.SizeOf<NativeColumn>();
+            IntPtr block = Marshal.AllocHGlobal(size * columns.Length);
+            for (int index = 0; index < columns.Length; index++)
+            {
+                Marshal.StructureToPtr(columns[index], IntPtr.Add(block, index * size), false);
+            }
+            return new NativeTable { ColumnCount = columns.Length, RowCount = rowCount, Columns = block };
+        }
+
+        private static NativeColumn BuildColumn<T>(int type, T[] values, byte[] validity, byte[]? data = null)
+            where T : unmanaged
+        {
+            return new NativeColumn
+            {
+                Type = type,
+                Values = CopyToNative(values),
+                Validity = CopyToNative(validity),
+                Data = data is null ? IntPtr.Zero : CopyToNative(data),
+                DataLen = data?.Length ?? 0,
+            };
+        }
+
+        private static unsafe IntPtr CopyToNative<T>(T[] values)
+            where T : unmanaged
+        {
+            if (values.Length == 0)
+            {
+                return IntPtr.Zero;
+            }
+            IntPtr block = Marshal.AllocHGlobal(values.Length * sizeof(T));
+            values.AsSpan().CopyTo(new Span<T>((void*)block, values.Length));
+            return block;
+        }
+
+        private static NativeWriteOptions ParallelWriteOptionsFor(int degree, int batchRows = 0, bool sharedStrings = false)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degree;
+            raw.BatchRows = batchRows;
+            raw.UseSharedStrings = sharedStrings ? NativeOptionState.True : NativeOptionState.Default;
+            Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+            return options;
+        }
+
+        private static List<string> WriteAndReadBack(int format, NativeTable table, NativeWriteOptions options)
+        {
+            Assert.Equal(NativeStatus.Ok, WriteApi.WriteTypedToMemory(format, EveryTypeSpecs(), table, options, out byte[]? bytes));
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(bytes!, format, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            return NativeApiConcurrencyTests.ReadSheet(live, 0);
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, false)]
+        [InlineData(NativeFormat.Xlsx, true)]
+        [InlineData(NativeFormat.Xlsb, false)]
+        [InlineData(NativeFormat.Xlsb, true)]
+        public void WriteTyped_Parallel_Should_Read_Back_Like_Serial(int format, bool sharedStrings)
+        {
+            NativeTable table = BuildEveryTypeTable(7);
+            try
+            {
+                List<string> serial = WriteAndReadBack(format, table, ParallelWriteOptionsFor(1, sharedStrings: sharedStrings));
+                List<string> parallel = WriteAndReadBack(format, table, ParallelWriteOptionsFor(4, 2, sharedStrings));
+
+                Assert.Equal(8, serial.Count);
+                Assert.Equal(serial, parallel);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xls)]
+        [InlineData(NativeFormat.Csv)]
+        public void WriteTyped_Should_Ignore_Parallel_Fields_For_Xls_And_Csv(int format)
+        {
+            NativeTable table = BuildEveryTypeTable(7);
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, WriteApi.WriteTypedToMemory(format, EveryTypeSpecs(), table, ParallelWriteOptionsFor(1), out byte[]? serial));
+                Assert.Equal(NativeStatus.Ok, WriteApi.WriteTypedToMemory(format, EveryTypeSpecs(), table, ParallelWriteOptionsFor(4, 2), out byte[]? parallel));
+
+                Assert.Equal(serial, parallel);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx)]
+        [InlineData(NativeFormat.Xlsb)]
+        public void WriteTyped_Parallel_Should_Write_A_Header_Only_Sheet_For_Zero_Rows(int format)
+        {
+            NativeTable table = BuildEveryTypeTable(0);
+            try
+            {
+                List<string> rows = WriteAndReadBack(format, table, ParallelWriteOptionsFor(4));
+
+                Assert.Equal(["text|int|float|bool|date|time|stamp|"], rows);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx)]
+        [InlineData(NativeFormat.Xlsb)]
+        public void WriteTyped_Parallel_Should_Report_A_Failing_Batch_As_An_Error(int format)
+        {
+            NativeTable table = BuildEveryTypeTable(7, [0, 0, 0, 0, 0, long.MaxValue, 0]);
+            try
+            {
+                Assert.Equal(NativeStatus.Error, WriteApi.WriteTypedToMemory(format, EveryTypeSpecs(), table, ParallelWriteOptionsFor(4, 2), out byte[]? bytes));
+
+                Assert.Null(bytes);
+                Assert.NotEmpty(NativeApi.LastErrorText());
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
             }
         }
     }

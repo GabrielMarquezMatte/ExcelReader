@@ -31,6 +31,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 CsvReaderOptions.Default,
                 new ExcelParserOptions(),
                 [],
+                contentCache: null,
                 CancellationToken.None);
         }
 
@@ -134,6 +135,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                     CsvReaderOptions.Default,
                     new ExcelParserOptions(),
                     [],
+                    contentCache: null,
                     TestContext.Current.CancellationToken);
 
                 Row row = Assert.Single(result.Models);

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -313,8 +314,200 @@ static int test_aggregate_takes_the_dialect_from_open_options()
     return 0;
 }
 
+namespace
+{
+    std::vector<uint8_t> generate(int32_t format, int64_t rows)
+    {
+        std::vector<uint8_t> bytes;
+        xl::WriteOptions options{};
+        options.format = format;
+        auto writer = xl::WriterHandle::open(bytes, options);
+        if (!writer.has_value() || !writer->start_sheet("S1").has_value())
+        {
+            return {};
+        }
+        (void)writer->start_row();
+        (void)writer->write(std::string_view("id"));
+        (void)writer->write(std::string_view("label"));
+        (void)writer->end_row();
+        for (int64_t i = 1; i <= rows; ++i)
+        {
+            (void)writer->start_row();
+            (void)writer->write(i);
+            (void)writer->write("filler-value-" + std::to_string(i));
+            (void)writer->end_row();
+        }
+        (void)writer->end_sheet();
+        if (!writer->finish().has_value())
+        {
+            return {};
+        }
+        return bytes;
+    }
+
+    std::expected<xl::Workbook, xl::Error> open_generated(const std::vector<uint8_t> &bytes, int32_t format)
+    {
+        return xl::Workbook::open(std::span<const uint8_t>(bytes), xl::OpenOptions{.format = format});
+    }
+
+    struct Totals
+    {
+        int64_t sum = 0;
+        int64_t rows = 0;
+        int64_t combines = 0;
+
+        int32_t accumulate(xl::RowView row)
+        {
+            const auto number = row.empty() ? std::nullopt : row[0].as_number();
+            if (!number.has_value())
+            {
+                return 1;
+            }
+            sum += static_cast<int64_t>(*number);
+            ++rows;
+            return XL_OK;
+        }
+
+        int32_t combine(Totals &next)
+        {
+            sum += next.sum;
+            rows += next.rows;
+            combines += next.combines + 1;
+            return XL_OK;
+        }
+    };
+
+    static_assert(xl::Accumulator<Totals>, "Totals must satisfy xl::Accumulator");
+
+    std::atomic<int> g_live{0};
+
+    struct Live
+    {
+        Live() { g_live.fetch_add(1); }
+        Live(const Live &) { g_live.fetch_add(1); }
+        Live(Live &&) noexcept { g_live.fetch_add(1); }
+        ~Live() { g_live.fetch_sub(1); }
+
+        int32_t accumulate(xl::RowView) noexcept { return XL_OK; }
+        int32_t combine(Live &) noexcept { return XL_OK; }
+    };
+
+    struct Aborting
+    {
+        std::atomic<int64_t> *seen = nullptr;
+
+        int32_t accumulate(xl::RowView) noexcept { return seen->fetch_add(1) >= 20'000 ? 9 : XL_OK; }
+        int32_t combine(Aborting &) noexcept { return XL_OK; }
+    };
+
+    struct Throwing
+    {
+        int64_t rows = 0;
+
+        int32_t accumulate(xl::RowView)
+        {
+            if (++rows == 100)
+            {
+                throw std::runtime_error("boom");
+            }
+            return XL_OK;
+        }
+        int32_t combine(Throwing &next)
+        {
+            rows += next.rows;
+            return XL_OK;
+        }
+    };
+}
+
+static int test_sheet_aggregate_sums_every_data_row_once()
+{
+    for (const int32_t format : {XL_FORMAT_XLSX, XL_FORMAT_XLSB, XL_FORMAT_XLS, XL_FORMAT_CSV})
+    {
+        const auto bytes = generate(format, 60'000);
+        auto workbook = open_generated(bytes, format);
+        CHECK(workbook.has_value(), "open the generated workbook");
+        auto totals = workbook->sheet(0).aggregate(Totals{}, 1, 4);
+        CHECK(totals.has_value(), "Sheet::aggregate must succeed");
+        CHECK(totals->rows == 60'000, "every data row is accumulated once");
+        CHECK(totals->sum == 60'000LL * 60'001 / 2, "every data row is summed once");
+        if (format == XL_FORMAT_XLSX || format == XL_FORMAT_XLSB)
+        {
+            CHECK(totals->combines >= 1, "XLSX and XLSB must partition");
+        }
+    }
+    return 0;
+}
+
+static int test_sheet_aggregate_destroys_every_copy()
+{
+    const auto bytes = generate(XL_FORMAT_XLSX, 60'000);
+    auto workbook = open_generated(bytes, XL_FORMAT_XLSX);
+    CHECK(workbook.has_value(), "open the generated workbook");
+    {
+        auto result = workbook->sheet(0).aggregate(Live{}, 1, 4);
+        CHECK(result.has_value(), "the run must succeed");
+    }
+    CHECK(g_live.load() == 0, "every copy of the accumulator, including the one returned, is destroyed");
+    return 0;
+}
+
+static int test_sheet_aggregate_returns_a_callback_code()
+{
+    const auto bytes = generate(XL_FORMAT_XLSX, 60'000);
+    auto workbook = open_generated(bytes, XL_FORMAT_XLSX);
+    CHECK(workbook.has_value(), "open the generated workbook");
+    std::atomic<int64_t> seen{0};
+    auto result = workbook->sheet(0).aggregate(Aborting{&seen}, 1, 4);
+    CHECK(!result.has_value() && result.error().code == 9, "a callback code comes back as the error code");
+    return 0;
+}
+
+static int test_sheet_aggregate_reports_a_throwing_accumulate()
+{
+    const auto bytes = generate(XL_FORMAT_XLSB, 60'000);
+    auto workbook = open_generated(bytes, XL_FORMAT_XLSB);
+    CHECK(workbook.has_value(), "open the generated workbook");
+    auto result = workbook->sheet(0).aggregate(Throwing{}, 1, 4);
+    CHECK(!result.has_value(), "an exception in accumulate is reported as an error");
+    return 0;
+}
+
+static int test_existing_csv_accumulator_works_unchanged()
+{
+    const auto bytes = generate(XL_FORMAT_CSV, 10'000);
+    auto workbook = open_generated(bytes, XL_FORMAT_CSV);
+    CHECK(workbook.has_value(), "open the generated CSV");
+    auto through_sheet = workbook->sheet(0).aggregate(RowCounter{}, 1, 4);
+    auto through_csv = xl::aggregate_csv(std::span<const uint8_t>(bytes), RowCounter{}, {}, 1, 4);
+    CHECK(through_sheet.has_value() && through_csv.has_value(), "both runs succeed");
+    CHECK(through_sheet->rows == through_csv->rows && through_sheet->rows == 10'000,
+          "a CsvAccumulator gives the same result through Sheet::aggregate");
+    return 0;
+}
+
 int main()
 {
+    if (int failed = test_sheet_aggregate_sums_every_data_row_once())
+    {
+        return failed;
+    }
+    if (int failed = test_sheet_aggregate_destroys_every_copy())
+    {
+        return failed;
+    }
+    if (int failed = test_sheet_aggregate_returns_a_callback_code())
+    {
+        return failed;
+    }
+    if (int failed = test_sheet_aggregate_reports_a_throwing_accumulate())
+    {
+        return failed;
+    }
+    if (int failed = test_existing_csv_accumulator_works_unchanged())
+    {
+        return failed;
+    }
     if (int failed = test_aggregate_csv_memory())
     {
         return failed;

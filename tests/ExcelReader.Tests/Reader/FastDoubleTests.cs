@@ -44,6 +44,13 @@ namespace ExcelReader.Tests.Reader
         [InlineData("123456789.123456")]
         [InlineData("000000000000000123")]
         [InlineData("0.00000000000000123")]
+        [InlineData("1.1234")]
+        [InlineData("1.1234567")]
+        [InlineData("1.12345678")]
+        [InlineData("1.123456789")]
+        [InlineData("-0.123456789012")]
+        [InlineData("0.1234567890123456")]
+        [InlineData("2.99999999")]
         public void AcceptsAndMatchesPlainDecimals(string text)
         {
             AssertMatchesDoubleTryParse(text);
@@ -66,6 +73,8 @@ namespace ExcelReader.Tests.Reader
         [InlineData("1e22")]
         [InlineData("1e-22")]
         [InlineData("-0e5")]
+        [InlineData("1.12345678e2")]
+        [InlineData("1.1234E-3")]
         public void AcceptsAndMatchesScientificNotation(string text)
         {
             AssertMatchesDoubleTryParse(text);
@@ -101,6 +110,10 @@ namespace ExcelReader.Tests.Reader
         [InlineData("1e-400")]
         [InlineData("5E-324")]
         [InlineData("1.7976931348623157E+308")]
+        [InlineData("1.1234567x")]
+        [InlineData("1.12345678x")]
+        [InlineData("1.123x5678")]
+        [InlineData("1.12/4")]
         public void RejectsUnsupportedForms(string text)
         {
             byte[] utf8 = Encoding.ASCII.GetBytes(text);
@@ -179,6 +192,31 @@ namespace ExcelReader.Tests.Reader
                 Assert.True(FastDouble.TryParse(Encoding.ASCII.GetBytes(value), out double actual), $"Expected FastDouble to accept \"{value}\".");
                 Assert.Equal(BitConverter.DoubleToInt64Bits(double.Parse(value, CultureInfo.InvariantCulture)), BitConverter.DoubleToInt64Bits(actual));
             }
+        }
+
+        [Theory]
+        [InlineData("999999999999999")]
+        [InlineData("000000000000000123")]
+        [InlineData("0.00000000000000123")]
+        [InlineData("-0.000000000000000001")]
+        [InlineData("1234567.12345678")]
+        public void LosslessAcceptsUpToFifteenSignificantDigits(string text)
+        {
+            byte[] utf8 = Encoding.ASCII.GetBytes(text);
+            Assert.True(FastDouble.TryParseLossless(utf8, out double actual), $"Expected TryParseLossless to accept \"{text}\".");
+            Assert.Equal(BitConverter.DoubleToInt64Bits(double.Parse(text, CultureInfo.InvariantCulture)), BitConverter.DoubleToInt64Bits(actual));
+        }
+
+        [Theory]
+        [InlineData("1234567890123456")]
+        [InlineData("152.58000000000001")]
+        [InlineData("-12345678.12345678")]
+        [InlineData(".1234567890123456")]
+        [InlineData("0.1234567890123456")]
+        [InlineData("000.0001234567890123456")]
+        public void LosslessRejectsMoreThanFifteenSignificantDigits(string text)
+        {
+            Assert.False(FastDouble.TryParseLossless(Encoding.ASCII.GetBytes(text), out _), $"Expected TryParseLossless to reject \"{text}\".");
         }
 
         [Fact]

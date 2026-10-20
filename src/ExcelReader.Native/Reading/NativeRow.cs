@@ -12,6 +12,17 @@ namespace ExcelReader.Native.Reading
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct NativeCellView
+    {
+        public int Column;
+        public int Type;
+        public int ValueLength;
+        public int HasNumber;
+        public byte* Value;
+        public double Number;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct NativeRow
     {
         public int CellCount;

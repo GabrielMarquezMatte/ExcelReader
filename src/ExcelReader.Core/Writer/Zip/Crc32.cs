@@ -152,9 +152,8 @@ namespace ExcelReader.Core.Writer.Zip
                 position += 16;
             }
             data = data[position..];
-            Span<byte> remainder = stackalloc byte[16];
-            folded.AsByte().CopyTo(remainder);
-            return TableUpdate(0, remainder);
+            // Not a stackalloc: with one, this loop would be compiled fully optimized on first call instead of at tier 0.
+            return TableUpdate(0, MemoryMarshal.AsBytes(new ReadOnlySpan<Vector128<ulong>>(in folded)));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -7,7 +7,7 @@
 //! can unwind into the library, and resumes that panic on the calling thread once the run has
 //! finished freeing every state.
 
-use crate::ffi::{self, XlCsvAggregation, XlRow, XL_OK};
+use crate::ffi::{self, XlAggregation, XlCellView, XlCsvAggregation, XlRow, XlWorkbook, XL_OK};
 use crate::workbook::{self, len_i32, path_str};
 use crate::{Error, ErrorKind, OpenOptions, RowRef};
 use std::any::Any;
@@ -25,7 +25,7 @@ use std::sync::Mutex;
 /// the two by status; it keys on whether the panic slot actually holds a payload, so an ordinary
 /// `Err(i32::MAX)` from `accumulate` or `combine` still surfaces as a normal [`Error`] rather than
 /// being resumed as a panic.
-const PANIC_STATUS: i32 = i32::MAX;
+pub(crate) const PANIC_STATUS: i32 = i32::MAX;
 
 /// What each seeded accumulator is boxed in. The trailing byte keeps the allocation non-zero-sized,
 /// so `seed` hands the library a distinct pointer per partition even when `A` is zero-sized, as the
@@ -53,6 +53,35 @@ struct State<A> {
 /// again after returning an error.
 pub trait CsvAccumulator: Send {
     /// Folds one record in. The row's cell bytes are only valid for the duration of this call.
+    fn accumulate(&mut self, row: RowRef<'_>) -> Result<(), i32>;
+
+    /// Folds `other`'s contents into `self`, leaving `other` for the library to free.
+    fn combine(&mut self, other: &mut Self) -> Result<(), i32>;
+}
+
+/// A fold over the rows of any sheet, one instance per chunk, driven by
+/// [`Sheet::aggregate`](crate::Sheet::aggregate).
+///
+/// `combine` takes `&mut Self` rather than `Self` because the library, not the implementation, owns
+/// `other`: it frees that state through `free_state` once `combine` returns. Drain `other`, do not
+/// consume it.
+///
+/// `accumulate` runs concurrently on worker threads, each on its own instance, which is why `Send`
+/// is required and `Sync` is not. An instance is seeded once per chunk of sheet data, not once per
+/// thread, and a chunk can be accumulated and then dropped without ever being combined. A nonzero
+/// code from `accumulate` fails only that chunk: if the library later re-reads it, the failure is
+/// discarded with it and the run continues; otherwise the run ends with that code. A nonzero code
+/// from `combine`, or a panic from the seed closure, always ends the run. However it ends, the code
+/// is returned to the caller verbatim as [`ErrorKind::Callback`]; use positive codes, since every
+/// code the library itself returns is `<= 0`.
+/// Sibling workers are never stopped, so both `accumulate` and `combine` must tolerate being called
+/// again after returning an error.
+///
+/// XLS, table views and CSV opened from a [`Source`](crate::Source) or stream read sequentially,
+/// with the same result.
+pub trait Accumulator: Send {
+    /// Folds one row in. The row's cells borrow the library's buffers for this call only; a cell
+    /// may carry text, a number, or both.
     fn accumulate(&mut self, row: RowRef<'_>) -> Result<(), i32>;
 
     /// Folds `other`'s contents into `self`, leaving `other` for the library to free.
@@ -126,7 +155,6 @@ impl<A, F> Shared<'_, A, F> {
 /// `user_data` is the `Shared` this crate handed to `xl_csv_aggregate_*`, alive for the whole call.
 unsafe extern "C" fn seed_shim<A, F>(out_state: *mut *mut c_void, user_data: *mut c_void) -> i32
 where
-    A: CsvAccumulator,
     F: Fn() -> A,
 {
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
@@ -194,7 +222,6 @@ where
 /// `user_data` is the `Shared` this crate handed to `xl_csv_aggregate_*`, alive for the whole call.
 unsafe extern "C" fn free_state_shim<A, F>(state: *mut c_void, user_data: *mut c_void)
 where
-    A: CsvAccumulator,
     F: Fn() -> A,
 {
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
@@ -203,6 +230,94 @@ where
     })) {
         shared.store_panic(payload);
     }
+}
+
+/// # Safety
+/// `state` is a state a previous `seed_shim` boxed, and `cells` is valid for this call only.
+unsafe extern "C" fn view_accumulate_shim<A, F>(
+    state: *mut c_void,
+    cells: *const XlCellView,
+    count: i32,
+    user_data: *mut c_void,
+) -> i32
+where
+    A: Accumulator,
+    F: Fn() -> A,
+{
+    let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
+    let accumulator = unsafe { &mut (*(state as *mut State<A>)).value };
+    match catch_unwind(AssertUnwindSafe(|| {
+        accumulator.accumulate(unsafe { RowRef::from_views(cells, count) })
+    })) {
+        Ok(Ok(())) => XL_OK,
+        Ok(Err(code)) => code,
+        Err(payload) => shared.store_panic(payload),
+    }
+}
+
+/// # Safety
+/// `acc` and `next` are two distinct states boxed by `seed_shim`; `next` stays the library's to free.
+unsafe extern "C" fn view_combine_shim<A, F>(
+    acc: *mut c_void,
+    next: *mut c_void,
+    user_data: *mut c_void,
+) -> i32
+where
+    A: Accumulator,
+    F: Fn() -> A,
+{
+    let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
+    let accumulator = unsafe { &mut (*(acc as *mut State<A>)).value };
+    let other = unsafe { &mut (*(next as *mut State<A>)).value };
+    match catch_unwind(AssertUnwindSafe(|| accumulator.combine(other))) {
+        Ok(Ok(())) => XL_OK,
+        Ok(Err(code)) => code,
+        Err(payload) => shared.store_panic(payload),
+    }
+}
+
+fn raw_view_aggregation<A, F>(shared: &Shared<'_, A, F>) -> XlAggregation
+where
+    A: Accumulator,
+    F: Fn() -> A,
+{
+    XlAggregation {
+        struct_size: std::mem::size_of::<XlAggregation>() as i32,
+        seed: Some(seed_shim::<A, F>),
+        accumulate: Some(view_accumulate_shim::<A, F>),
+        combine: Some(view_combine_shim::<A, F>),
+        free_state: Some(free_state_shim::<A, F>),
+        user_data: shared as *const Shared<'_, A, F> as *mut c_void,
+    }
+}
+
+/// The body of [`Sheet::aggregate`](crate::Sheet::aggregate).
+pub(crate) fn aggregate_sheet<A, F>(
+    handle: *mut XlWorkbook,
+    sheet: i32,
+    header_row: i32,
+    degree_of_parallelism: i32,
+    seed: F,
+) -> Result<A, Error>
+where
+    A: Accumulator,
+    F: Fn() -> A + Sync,
+{
+    workbook::check_abi_version()?;
+    let shared = shared::<A, F>(&seed);
+    let agg = raw_view_aggregation(&shared);
+    let mut state: *mut c_void = std::ptr::null_mut();
+    let status = unsafe {
+        ffi::xl_aggregate(
+            handle,
+            sheet,
+            &agg,
+            header_row,
+            degree_of_parallelism,
+            &mut state,
+        )
+    };
+    finish(shared, status, state)
 }
 
 fn raw_aggregation<A, F>(shared: &Shared<'_, A, F>) -> XlCsvAggregation
@@ -321,7 +436,6 @@ where
 /// crossed a foreign frame.
 fn finish<A, F>(shared: Shared<'_, A, F>, status: i32, state: *mut c_void) -> Result<A, Error>
 where
-    A: CsvAccumulator,
     F: Fn() -> A,
 {
     let winner = if state.is_null() {
@@ -354,7 +468,7 @@ where
 /// Library statuses (all `<= 0`) carry a `xl_last_error_ptr` message; a positive status is a code one
 /// of the caller's own callbacks returned, which the library passes through untouched and has no
 /// message for.
-fn status_error(status: i32) -> Error {
+pub(crate) fn status_error(status: i32) -> Error {
     if status > 0 {
         Error::new(
             ErrorKind::Callback(status),

@@ -94,15 +94,16 @@ namespace ExcelReader.Native.Writer
             }
             NativeApi.ClearLastError();
             string filePath = Encoding.UTF8.GetString(path);
-            FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            FileStream? stream = null;
             try
             {
+                stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
                 handle = NativeWriterHandle.Create(stream, format, options);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
             {
-                stream.Dispose();
+                stream?.Dispose();
                 NativeApi.SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
@@ -190,28 +191,32 @@ namespace ExcelReader.Native.Writer
         {
             bool date1904 = options.Date1904 ?? false;
             bool sharedStrings = options.UseSharedStrings ?? false;
+            ParallelWriteOptions? parallel = options.ToParallelWriteOptions(format);
             switch (format)
             {
                 case NativeFormat.Xlsx:
                     WriteWorkbook<XlsxSheetWriter, XlsxRowWriter>(
-                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
+                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader,
+                        parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
                     return;
                 case NativeFormat.Xlsb:
                     WriteWorkbook<XlsbSheetWriter, XlsbRowWriter>(
-                        XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
+                        XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader,
+                        parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
                     return;
                 case NativeFormat.Xls:
                     WriteWorkbook<XlsSheetWriter, XlsRowWriter>(
-                        XlsWorkbookWriter.Create(stream, options: new XlsWriterOptions { Date1904 = date1904 }), specs, table, sheetName, hasHeader);
+                        XlsWorkbookWriter.Create(stream, options: new XlsWriterOptions { Date1904 = date1904 }), specs, table, sheetName, hasHeader, null, null);
                     return;
                 default:
                     WriteWorkbook<CsvSheetWriter, CsvRowWriter>(
-                        CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()), specs, table, sheetName, hasHeader);
+                        CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()), specs, table, sheetName, hasHeader, null, null);
                     return;
             }
         }
 
-        private static void WriteWorkbook<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, NativeColumnSpec[] specs, NativeTable table, string sheetName, bool hasHeader)
+        private static void WriteWorkbook<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, NativeColumnSpec[] specs, NativeTable table, string sheetName, bool hasHeader,
+            ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
@@ -224,9 +229,17 @@ namespace ExcelReader.Native.Writer
                 {
                     WriteHeaderRow<TSheet, TRow>(sheet, specs);
                 }
-                for (long row = 0; row < table.RowCount; row++)
+                if (parallel is not null && writeParallel is not null)
                 {
-                    WriteDataRow<TSheet, TRow>(sheet, table, row);
+                    writeParallel(sheet, RowIndices(table.RowCount), (row, index) => WriteDataCells(row, table, index), parallel)
+                        .AsTask().GetAwaiter().GetResult();
+                }
+                else
+                {
+                    for (long row = 0; row < table.RowCount; row++)
+                    {
+                        WriteDataRow<TSheet, TRow>(sheet, table, row);
+                    }
                 }
 
                 sheet.End();
@@ -282,9 +295,22 @@ namespace ExcelReader.Native.Writer
             where TRow : IRowWriter
         {
             using TRow row = sheet.StartRow();
+            WriteDataCells(row, table, rowIndex);
+        }
+
+        private static void WriteDataCells(IRowWriter row, NativeTable table, long rowIndex)
+        {
             for (int index = 0; index < table.ColumnCount; index++)
             {
                 WriteCell(row, table.ColumnAt(index), rowIndex);
+            }
+        }
+
+        private static IEnumerable<long> RowIndices(long count)
+        {
+            for (long index = 0; index < count; index++)
+            {
+                yield return index;
             }
         }
 
