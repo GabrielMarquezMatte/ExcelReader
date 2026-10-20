@@ -25,7 +25,7 @@ use std::sync::Mutex;
 /// the two by status; it keys on whether the panic slot actually holds a payload, so an ordinary
 /// `Err(i32::MAX)` from `accumulate` or `combine` still surfaces as a normal [`Error`] rather than
 /// being resumed as a panic.
-const PANIC_STATUS: i32 = i32::MAX;
+pub(crate) const PANIC_STATUS: i32 = i32::MAX;
 
 /// What each seeded accumulator is boxed in. The trailing byte keeps the allocation non-zero-sized,
 /// so `seed` hands the library a distinct pointer per partition even when `A` is zero-sized, as the
@@ -354,7 +354,7 @@ where
 /// Library statuses (all `<= 0`) carry a `xl_last_error_ptr` message; a positive status is a code one
 /// of the caller's own callbacks returned, which the library passes through untouched and has no
 /// message for.
-fn status_error(status: i32) -> Error {
+pub(crate) fn status_error(status: i32) -> Error {
     if status > 0 {
         Error::new(
             ErrorKind::Callback(status),

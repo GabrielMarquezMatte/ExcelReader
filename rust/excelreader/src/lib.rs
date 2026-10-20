@@ -7,6 +7,7 @@
 mod aggregate;
 mod error;
 pub(crate) mod ffi;
+mod foreach;
 mod options;
 mod rows;
 mod source;
