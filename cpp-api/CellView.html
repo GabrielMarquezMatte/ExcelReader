@@ -117,10 +117,28 @@
 <td><code>value</code></td>
 <td>std::string_view</td>
 <td><code>{}</code></td>
-<td>The text as stored, so a date is its serial number.</td>
+<td>The text as stored, so a date is its serial number. Empty for a cell that carries only a number.</td>
+</tr>
+<tr>
+<td><code>number</code></td>
+<td>std::optional&lt;double&gt;</td>
+<td><code>{}</code></td>
+<td>The library's own double, set only by Sheet::for_each_row and Sheet::aggregate, and only when the cell carries one.</td>
 </tr>
 </tbody>
 </table>
+<h2 id="methods">Methods</h2>
+<h3 id="as_number">as_number</h3>
+<pre><code class="lang-cpp">std::optional&lt;double&gt; as_number() const
+</code></pre>
+<p><code>number</code> when set, else <code>value</code> parsed as a double.</p>
+<p><strong>Returns</strong> std::optional&lt;double&gt;</p>
+<h3 id="text">text</h3>
+<pre><code class="lang-cpp">std::string text() const
+</code></pre>
+<p><code>value</code> when non-empty, else <code>number</code> in shortest round-trip form, else empty.</p>
+<p>That formatting is this header's own, so it can differ from the text <code>xl_rows_next</code> writes.</p>
+<p><strong>Returns</strong> std::string</p>
 
 </article>
 

@@ -112,6 +112,88 @@
 </code></pre>
 <p>A cursor over this sheet, from its first row.</p>
 <p><strong>Returns</strong> std::expected&lt;<a href="RowCursor.html">RowCursor</a>, <a href="Error.html">Error</a>&gt;: A new, independent cursor on every call.</p>
+<h3 id="for_each_row">for_each_row</h3>
+<pre><code class="lang-cpp">template &lt;typename F&gt;
+std::expected&lt;void, Error&gt; for_each_row(F &amp;&amp;f) const
+</code></pre>
+<p>Calls <code>f</code> once per row on the calling thread, without copying rows into a cursor.</p>
+<p>Each RowView borrows the library's buffers for that one call; copy anything you keep. A cell carries text, a number, or both: CellView::text() and CellView::as_number() cover all three. Returning anything but <code>XL_OK</code> stops the walk and comes back as the error's code; use positive codes, since every library status is &lt;= 0. An exception from <code>f</code> stops the walk and is reported as an error. Other calls on this workbook are allowed from inside <code>f</code>.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>f</code></td>
+<td>F &amp;&amp;</td>
+<td></td>
+<td>Called as <code>int32_t f(RowView)</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="aggregate">aggregate</h3>
+<pre><code class="lang-cpp">template &lt;Accumulator Acc&gt;
+std::expected&lt;Acc, Error&gt; aggregate(
+    const Acc &amp; seed = Acc{},
+    int32_t header_row = 0,
+    int32_t degree_of_parallelism = 0) const
+</code></pre>
+<p>Folds this sheet into one <code>Acc</code> across several threads.</p>
+<p>Each chunk starts from a copy of <code>seed</code>, made on a worker thread; copies are made concurrently from the one <code>seed</code>, which the call only reads. The CSV dialect, password and limits come from the OpenOptions the workbook was opened with.</p>
+<p><strong>Type parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Acc</code></td>
+<td>The accumulator; see Accumulator.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>seed</code></td>
+<td>const Acc &amp;</td>
+<td><code>Acc{}</code></td>
+<td>The state every chunk starts from.</td>
+</tr>
+<tr>
+<td><code>header_row</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>1-based header row, not aggregated; 0 means none.</td>
+</tr>
+<tr>
+<td><code>degree_of_parallelism</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>Worker threads; 0 uses every processor, 1 runs sequentially.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;Acc, <a href="Error.html">Error</a>&gt;: The combined accumulator.</p>
 <h3 id="read_all">read_all</h3>
 <pre><code class="lang-cpp">std::expected&lt;DecodedRows, Error&gt; read_all() const
 </code></pre>

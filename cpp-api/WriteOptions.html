@@ -138,6 +138,18 @@
 <td><code>XL_OPT_DEFAULT</code></td>
 <td>XLSX/XLSB only: store repeated text once in a shared-string table. Off by default.</td>
 </tr>
+<tr>
+<td><code>degree_of_parallelism</code></td>
+<td>int32_t</td>
+<td><code>1</code></td>
+<td>XLSX/XLSB only: batches formatted and compressed at once. 0 uses every processor, 1 (the default) writes serially.</td>
+</tr>
+<tr>
+<td><code>batch_rows</code></td>
+<td>int32_t</td>
+<td><code>0</code></td>
+<td>XLSX/XLSB only: rows per parallel batch. 0 uses the library default (8192).</td>
+</tr>
 </tbody>
 </table>
 

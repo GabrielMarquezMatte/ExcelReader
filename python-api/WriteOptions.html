@@ -92,6 +92,10 @@
 <p><code>csv_delimiter</code> and <code>csv_quote</code> are byte values, not strings: pass <code>ord(';')</code>, not <code>';'</code>. They
 apply to CSV output only. <code>date1904</code> applies to xls/xlsb only; <code>use_shared_strings</code> to
 xlsx/xlsb only, where it shrinks files with many repeated strings at the cost of a string table.</p>
+<p><code>degree_of_parallelism</code> (xlsx/xlsb only) formats and compresses batches of <code>batch_rows</code> rows on
+several threads: 0 uses every processor, 1 writes serially, and None is serial. A <code>batch_rows</code>
+of None keeps the library default of 8192. With shared strings on, two parallel runs give the
+same content in files that differ byte for byte.</p>
 <p>Validation happens on the native side; an out-of-range value or an invalid sheet name raises
 <code>ExcelReaderError</code>. Fields mirror xl_write_options in
 src/ExcelReader.Native/include/excelreader.h.</p>

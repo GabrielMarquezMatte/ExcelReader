@@ -1754,6 +1754,16 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/Accumulator.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/Accumulator.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/cpp-api/ArrowStream.md",
       "output": {
         ".html": {

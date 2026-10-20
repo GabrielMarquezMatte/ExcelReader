@@ -413,6 +413,20 @@ compressed result), whatever the size of the sheet.</p>
 <p>The file comes out 0.18% (XLSX) or 0.04% (XLSB) larger, because each batch is compressed on its own.
 As with <code>PrefetchWrite</code>, this is for single-file batch work: a server already writing many files at
 once has no idle cores to give it.</p>
+<h3 id="from-the-native-library-and-the-bindings">From the native library and the bindings</h3>
+<p><code>xl_write_typed</code> and <code>xl_write_typed_to_memory</code> take the same two knobs in <code>xl_write_options</code>:
+<code>degree_of_parallelism</code> and <code>batch_rows</code>, with the same meaning (<code>0</code> is every processor and the
+8,192-row default). A zero-initialized struct therefore writes XLSX and XLSB in parallel; a struct
+with the 7.0 size (32 bytes) or a NULL options pointer writes serially, as before. The C++, Rust and
+Python wrappers default to a serial write and turn it on only when asked:</p>
+<pre><code class="lang-cpp">xl::write_columns(&quot;big.xlsx&quot;, columns, {.degree_of_parallelism = 0});
+</code></pre>
+<pre><code class="lang-rust">write_columns(&quot;big.xlsx&quot;, &amp;columns, &amp;WriteOptions::new().degree_of_parallelism(0))?;
+</code></pre>
+<pre><code class="lang-python">write_workbook(&quot;big.xlsx&quot;, table, types, options=WriteOptions(degree_of_parallelism=0))
+</code></pre>
+<p>The table's buffers are read from several threads, so they must not change while the call runs.
+XLS, CSV and the <code>xl_writer_handle</code> API ignore both fields.</p>
 
 </article>
 
