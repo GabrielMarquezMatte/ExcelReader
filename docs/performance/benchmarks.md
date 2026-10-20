@@ -7,7 +7,7 @@ Throwaway numbers go stale; these are regenerated from the benchmark suite in
 
 Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.12 (SDK 10.0.401). Generated-data benchmarks use 50,000 rows, except the string-heavy reads, which use 65,536. Raw results: [GitHub Pages benchmark dashboard](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/) — `tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/` is `.gitignore`-excluded and never actually reaches GitHub, so a link to it 404s for every reader.
 
-Every BenchmarkDotNet table is a `--job Short` run (1 launch, 3 warmup and 3 measured iterations) on an otherwise idle machine. Rows whose 99.9% confidence interval came out wider than 25% of the mean were run again with `--job Medium` (2 launches, 15 iterations) and carry those figures instead: the parallel CSV tables, the CSV cell-by-cell read, the Sylvan XLS read, the Sylvan string-heavy reads, the string-heavy XLSX matched-work read, the generated-workbook matched-work read, `DataTable.Load` and the large encrypted read. The cold-start rows set their own launch count, and the file-size and working-set figures under the parallel record writes, the Python/C++/Rust figures and the native-library comparison come from other harnesses that were not re-run. The large-sheet and parallel-write tables are `--job Medium` runs.
+Every BenchmarkDotNet table is a `--job Short` run (1 launch, 3 warmup and 3 measured iterations) on an otherwise idle machine. Rows whose 99.9% confidence interval came out wider than 25% of the mean were run again with `--job Medium` (2 launches, 15 iterations) and carry those figures instead: the parallel CSV tables, the CSV cell-by-cell read, the Sylvan XLS read, the Sylvan string-heavy reads, the string-heavy XLSX matched-work read, the generated-workbook matched-work read, `DataTable.Load`, the large encrypted read and the `InternStrings` typed parse. The cold-start rows set their own launch count, and the file-size and working-set figures under the parallel record writes, the Python/C++/Rust figures and the native-library comparison come from other harnesses that were not re-run. The large-sheet and parallel-write tables are `--job Medium` runs.
 
 **Benchmark methodology.** In the Excel-format tables below, the **"Cell-by-cell read"** rows (including the per-format rows in "Real data reads" / "String-heavy reads") read ExcelReader's `cell.Value` — a zero-copy `ReadOnlySpan<byte>`, no decode or allocation — against each competitor's own idiomatic read call. For Sylvan.Data.Excel, that's the ADO.NET-style `GetString(i)`, which is forced to materialize a UTF-16 `string`; its API has no zero-copy accessor, so it cannot avoid that cost. These rows are therefore not matched work: part of the reported gap is "we parse faster" and part is "we skipped an allocation you were never offered a way to skip." Each affected benchmark class also has a `*_Materialized` sibling (calling `cell.GetString()`, the same UTF-16 materialization Sylvan pays) so the matched-work number is measurable — see `tests/ExcelReader.Benchmarks/Shared/BenchmarkAccumulators.cs`. **Those results are published under [Matched-work reads](#matched-work-reads-_materialized), and reading them is the honest way to judge the comparison:** treat the Excel cell-by-cell ratios in the tables below as an upper bound, not a like-for-like number. The CSV cell-by-cell rows are matched work: Sep and Sylvan.Data.Csv both expose span accessors (`row[i].Span`, `GetFieldSpan(i)`), and the benchmarks use them. The **"Typed row parsing"** / **"Typed record writing"** rows are unaffected — both sides already materialize real objects/strings there, so those comparisons are matched work as published.
 
@@ -22,10 +22,11 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 | Typed row parsing | 10.979 ms, 3.87 MB | 56.677 ms, 10.48 MB | 11.802 ms, 2.36 MB | - |
 | Typed row parsing async | 10.958 ms, 3.87 MB | 58.753 ms, 10.48 MB | - | - |
 | Typed row parsing, shared strings | 9.896 ms, 2.29 MB | - | - | - |
+| Typed row parsing, `InternStrings` | 11.58 ms, 2.30 MB | - | - | - |
 | Workbook writing | 8.527 ms, 4.02 MB | - | 18.100 ms, 4.04 MB | 15.393 ms, 15.84 MB |
 | Workbook writing, shared strings | 8.416 ms, 4.06 MB | - | - | - |
 
-ExcelReader is ~5.2x faster than Sylvan for raw XLSX reads, allocating ~534x less, and ~2.1x faster than OfficeIMO. For typed parsing it is ~5.2x faster than Sylvan (~5.4x async against async) and ~1.1x faster than OfficeIMO, which allocates less (2.36 MB against 3.87 MB). For XLSX writing, ExcelReader is ~1.8x faster than SpreadCheetah while allocating ~3.9x less memory, and ~2.1x faster than OfficeIMO. The OfficeIMO rows are OfficeIMO.Excel 3.4.5: that release made its XLSX read and typed parse several times faster than the 3.4.4 figures published before (106.861 ms and 107.805 ms).
+ExcelReader is ~5.2x faster than Sylvan for raw XLSX reads, allocating ~534x less, and ~2.1x faster than OfficeIMO. For typed parsing it is ~5.2x faster than Sylvan (~5.4x async against async) and ~1.1x faster than OfficeIMO, which allocates less (2.36 MB against 3.87 MB) because it always interns strings. `ExcelReaderOptions.InternStrings` is off by default; turned on, ExcelReader allocates 2.30 MB at 11.58 ms, against OfficeIMO's 11.93 ms in the same `--job Medium` run. For XLSX writing, ExcelReader is ~1.8x faster than SpreadCheetah while allocating ~3.9x less memory, and ~2.1x faster than OfficeIMO. The OfficeIMO rows are OfficeIMO.Excel 3.4.5: that release made its XLSX read and typed parse several times faster than the 3.4.4 figures published before (106.861 ms and 107.805 ms).
 
 OfficeIMO.Excel's typed parsing is hand-mapped from its `OpenDataReader`, because `RowsAs<T>` needs an `r` attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.
 
@@ -70,30 +71,36 @@ For raw CSV reads, all three libraries read text through spans. ExcelReader is ~
 
 `SheetParallel.ParseAsync<T>` and `SheetParallel.AggregateAsync` over a `CsvSheet`, on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
 
-| Dop | Conversion-heavy, typed | Narrow ints, typed | Conversion-heavy, `ref struct` aggregate | Narrow ints, `ref struct` aggregate |
-|---:|---:|---:|---:|---:|
-| 1 | 587.8 ms, 671.42 MB | 516.9 ms, 245.76 MB | 472.0 ms, 1.20 MB | 463.9 ms, 1.20 MB |
-| 2 | 461.6 ms, 680.28 MB | 385.8 ms, 254.80 MB | 267.3 ms, 1.35 MB | 265.6 ms, 1.34 MB |
-| 4 | 256.9 ms, 680.39 MB | 217.8 ms, 254.81 MB | 145.2 ms, 1.50 MB | 140.1 ms, 1.51 MB |
-| 8 | 210.5 ms, 680.31 MB | 187.8 ms, 254.77 MB | 96.3 ms, 1.69 MB | 93.1 ms, 1.68 MB |
-| 16 | 471.2 ms, 680.33 MB | 187.0 ms, 255.23 MB | 74.0 ms, 1.79 MB | 73.3 ms, 1.76 MB |
+| Dop | Conversion-heavy, typed | Conversion-heavy, struct + `InternStrings` | Narrow ints, typed | Conversion-heavy, `ref struct` aggregate | Narrow ints, `ref struct` aggregate |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 611.6 ms, 671.42 MB | 543.9 ms, 1.62 MB | 525.5 ms, 245.76 MB | 475.8 ms, 1.20 MB | 473.4 ms, 1.27 MB |
+| 2 | 477.9 ms, 679.58 MB | 431.9 ms, 10.40 MB | 401.5 ms, 254.06 MB | 275.2 ms, 0.90 MB | 266.3 ms, 0.91 MB |
+| 4 | 281.3 ms, 679.64 MB | 243.6 ms, 10.83 MB | 234.4 ms, 254.06 MB | 149.7 ms, 1.09 MB | 149.2 ms, 1.07 MB |
+| 8 | 226.4 ms, 679.59 MB | 186.1 ms, 11.63 MB | 207.0 ms, 253.92 MB | 104.8 ms, 1.27 MB | 101.8 ms, 1.25 MB |
+| 16 | 396.0 ms, 679.61 MB | 181.0 ms, 13.60 MB | 220.1 ms, 254.51 MB | 85.4 ms, 1.31 MB | 87.0 ms, 1.32 MB |
 
-The typed path scales ~2.3x by dop 4 on the conversion-heavy corpus (587.8 to 256.9 ms) and ~2.4x on narrow ints (516.9 to 217.8 ms), then flattens out: narrow ints reach only 187.0 ms at dop 16, and the conversion-heavy corpus gets *slower* past dop 8 (471.2 ms at dop 16 against 210.5 ms at dop 8, standard deviation 23.2 ms). Its ~680 MB is one materialized row object per record, and at dop 16 that costs 42,000 Gen0 plus 41,000 Gen1 collections.
+The typed path scales ~2.2x by dop 4 on both corpora (611.6 to 281.3 ms conversion-heavy, 525.5 to 234.4 ms narrow), then flattens out: narrow ints reach 207.0 ms at dop 8 and no better at dop 16, and the conversion-heavy corpus gets *slower* past dop 8 (396.0 ms at dop 16 against 226.4 ms at dop 8, standard deviation 14.1 ms). Its ~680 MB is one materialized row object and two strings per record, and at dop 16 that costs 42,000 Gen0 plus 41,000 Gen1 collections.
 
-The aggregate columns fold each record into a per-partition accumulator through a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and no row object is ever materialized. They scale better than the typed path — ~4.9x (conversion-heavy) and ~5.0x (narrow) at dop 8, ~6.4x and ~6.3x at dop 16 — because they are not fighting the allocator: at dop 4 the conversion-heavy aggregate is ~1.8x faster than typed while allocating ~450x less (1.50 MB against 680.39 MB), with **zero** garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.
+The struct + `InternStrings` column parses the same rows into a `struct` with `ExcelReaderOptions.InternStrings` on, so there is no row object and each repeated region or country name is one cached string. It never slows down: 186.1 ms at dop 8, 181.0 ms at dop 16, 2.2x faster than the class at dop 16 while allocating ~50x less (13.60 MB, no garbage collections at dop 16). What remains is per-worker caches and the ordered merge's buffers. The interning win depends on the data: the corpus has 4 regions and 6 countries, so every string is a cache hit. Text columns with mostly distinct values (names, ids, free text) allocate a string per cell either way, and on those the struct alone removes only the row object.
 
-The typed path's slowdown past dop 8 is the garbage collector. Every degree allocates the same ~680 MB and runs 42 gen0 collections, but at dop 16 each of them also collects gen1 (41 gen1 collections against 24 at dop 8), and the pauses add up to 100-200 ms against 39 ms. In a console harness on the 4.3 million row corpus, with the default workstation GC, dop 16 took 365 ms; with `DOTNET_gcServer=1` it took 182 ms, faster than dop 8. The aggregate path allocates no row objects and is unaffected.
+The aggregate columns fold each record into a per-partition accumulator through a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and no row object is ever materialized. They scale better than the typed path — ~4.5x (conversion-heavy) and ~4.7x (narrow) at dop 8, ~5.6x and ~5.4x at dop 16 — because they are not fighting the allocator: at dop 4 the conversion-heavy aggregate is ~1.9x faster than typed while allocating ~620x less (1.09 MB against 679.64 MB), with **zero** garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.
 
-Type conversion is the floor under both. A single-threaded pass that allocates nothing still costs 472.0 ms, so parsing bytes into `DateTime`/`decimal`/`int` — not allocation and not I/O — is what the parallelism is actually buying down.
+The typed path's slowdown past dop 8 is the garbage collector. Every degree allocates the same ~680 MB and runs 42 gen0 collections, but at dop 16 each of them also collects gen1 (41 gen1 collections against 24 at dop 8), and the pauses add up to 100-200 ms against 39 ms. In a console harness on the 4.3 million row corpus, with the default workstation GC, dop 16 took 365 ms; with `DOTNET_gcServer=1` it took 182 ms, faster than dop 8. Not allocating per row, as the struct + `InternStrings` and aggregate columns do, avoids it without changing the GC mode.
+
+Type conversion is the floor under all of them. A single-threaded pass that allocates nothing still costs 475.8 ms, so parsing bytes into `DateTime`/`decimal`/`int` — not allocation and not I/O — is what the parallelism is actually buying down.
 
 Against [Sep](https://github.com/nietras/Sep)'s own `ParallelEnumerate` (all cores; 8,000,000 narrow rows, 3,000,000 conversion-heavy rows):
 
-| Corpus | ExcelReader sequential | ExcelReader parallel | Sep sequential | Sep parallel |
+| Corpus, row type | ExcelReader sequential | ExcelReader parallel | Sep sequential | Sep parallel |
 |---|---:|---:|---:|---:|
-| Narrow ints | 479.4 ms, 244.15 MB | 189.8 ms, 255.24 MB | 515.1 ms, 244.15 MB | 434.8 ms, 245.60 MB |
-| Conversion-heavy | 397.9 ms, 467.31 MB | 330.4 ms, 474.83 MB | 808.7 ms, 467.31 MB | 619.0 ms, 469.93 MB |
+| Narrow ints, class | 492.3 ms, 244.15 MB | 227.7 ms, 254.44 MB | 525.1 ms, 244.15 MB | 460.4 ms, 245.89 MB |
+| Narrow ints, struct | 397.2 ms, 10.32 KB | 158.0 ms, 11.58 MB | 494.2 ms, 9.34 KB | 263.1 ms, 2.16 MB |
+| Conversion-heavy, class | 418.9 ms, 467.31 MB | 286.4 ms, 474.33 MB | 831.0 ms, 467.31 MB | 717.6 ms, 468.34 MB |
+| Conversion-heavy, struct + pooled strings | 375.6 ms, 11.37 KB | 121.8 ms, 10.84 MB | 803.5 ms, 10.77 KB | 413.5 ms, 7.76 MB |
 
-Sequentially, ExcelReader's typed parser is ~1.1x faster than Sep on narrow ints (479.4 ms vs. 515.1 ms), and ~2.0x faster on the conversion-heavy corpus, where decimal parsing dominates. In parallel ExcelReader is ~2.3x (narrow) and ~1.9x (conversion-heavy) faster than Sep's, while yielding rows in file order. The conversion-heavy parallel run gains less than the narrow one (330.4 ms against 397.9 ms sequential) because it is bound by the allocator, like the typed dop 16 row above: 28 Gen1 collections per run.
+The struct rows give both libraries the same help: the row is a `struct`, and repeated text is pooled, through `ExcelReaderOptions.InternStrings` on ExcelReader's side and `SepToString.PoolPerCol()` (sequential) or `PoolPerColThreadSafe()` (parallel) on Sep's. Sep's parallel struct rows are from a Medium job, since the Short run spread too much (StdDev 47.6 ms on narrow ints); the conversion-heavy one still has a 30.4 ms standard deviation.
+
+Sequentially, ExcelReader's typed parser is ~1.1x faster than Sep on narrow ints (492.3 ms vs. 525.1 ms), and ~2.0x faster on the conversion-heavy corpus, where decimal parsing dominates. In parallel ExcelReader is ~2.0x (narrow) and ~2.5x (conversion-heavy) faster than Sep's, while yielding rows in file order. With struct rows and pooled strings both libraries speed up and stop collecting, and ExcelReader stays ahead: ~1.2x and ~2.1x sequentially, ~1.7x and ~3.4x in parallel. The class rows gain less from parallelism (286.4 ms against 418.9 ms sequential on the conversion-heavy corpus) because they are bound by the allocator, like the typed dop 16 row above: 28 Gen1 collections per run; the struct rows run 3.1x faster in parallel on the same corpus. As in the table above, pooling pays off here because the conversion-heavy corpus repeats 4 regions and 6 countries.
 
 ### Parallel sheet reading
 
@@ -128,17 +135,17 @@ At dop 4 XLSX reads ~3.2x faster than sequentially and XLSB ~2.6x. Dop 2 is a si
 | 8 | 46.92 ms, 77.61 MB | 53.51 ms, 99.74 MB |
 | 16 | 49.19 ms, 77.88 MB | 54.30 ms, 100.00 MB |
 
-| CSV, Dop | Aggregate | Typed parse |
-|---:|---:|---:|
-| 1 | 426.07 ms, 1.99 KB | 543.94 ms, 623.08 MB |
-| 2 | 226.22 ms, 6.77 KB | 338.08 ms, 626.87 MB |
-| 4 | 118.30 ms, 10.60 KB | 191.11 ms, 626.71 MB |
-| 8 | 90.67 ms, 18.32 KB | 189.98 ms, 626.43 MB |
-| 16 | 64.16 ms, 34.29 KB | 207.63 ms, 626.57 MB |
+| CSV, Dop | Aggregate | Typed parse | Typed parse, struct + `InternStrings` |
+|---:|---:|---:|---:|
+| 1 | 434.80 ms, 2.84 KB | 541.20 ms, 623.08 MB | 504.24 ms, 10.86 KB |
+| 2 | 220.11 ms, 6.79 KB | 369.71 ms, 626.88 MB | 311.99 ms, 4.44 MB |
+| 4 | 148.27 ms, 10.61 KB | 201.27 ms, 626.70 MB | 163.29 ms, 4.67 MB |
+| 8 | 95.41 ms, 18.32 KB | 169.04 ms, 626.46 MB | 138.99 ms, 5.29 MB |
+| 16 | 69.28 ms, 34.10 KB | 250.57 ms, 626.59 MB | 119.77 ms, 7.33 MB |
 
-The XLSX and XLSB aggregates and typed parses each materialize a `Record` and its name string per row, which is where their ~77-107 MB comes from; the CSV aggregate binds a `ref struct` and allocates kilobytes, while the CSV typed parse allocates ~626 MB at every degree, one row object and two strings per record.
+The XLSX and XLSB aggregates and typed parses each materialize a `Record` and its name string per row, which is where their ~77-107 MB comes from; the CSV aggregate binds a `ref struct` and allocates kilobytes, while the CSV typed parse allocates ~626 MB at every degree, one row object and two strings per record. The struct + `InternStrings` parse drops both (the corpus repeats 4 regions and 6 countries, see [Parallel CSV](#parallel-csv)) and keeps a few MB of per-worker caches and merge buffers.
 
-XLSX and XLSB reach ~3.3x at dop 4 and then barely improve, as in the real-data table above (the XLSX aggregate gets to 4.9x at dop 16, the XLSB aggregate to 3.4x at dop 8). The CSV aggregate keeps scaling because nothing but the parser runs on the workers: 4.7x at dop 8 and 6.6x at dop 16. The typed CSV parse reaches 2.9x at dop 8 and then loses 9% at dop 16 to the collector (see [Parallel CSV](#parallel-csv)), so for a 4-million-row file the aggregate at dop 16 is ~3.2x faster than the typed parse and allocates no row objects.
+XLSX and XLSB reach ~3.3x at dop 4 and then barely improve, as in the real-data table above (the XLSX aggregate gets to 4.9x at dop 16, the XLSB aggregate to 3.4x at dop 8). The CSV aggregate keeps scaling because nothing but the parser runs on the workers: 4.6x at dop 8 and 6.3x at dop 16. The typed CSV parse reaches 3.2x at dop 8 and then loses 48% at dop 16 to the collector (standard deviation 15.2 ms), while the struct + `InternStrings` parse keeps going to 4.2x at dop 16, 2.1x faster than the class. The aggregate is still the fastest, ~1.7x ahead of the struct parse at dop 16, because it never builds the row at all.
 
 ### Real data reads
 

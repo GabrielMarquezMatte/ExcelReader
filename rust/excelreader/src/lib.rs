@@ -7,6 +7,7 @@
 mod aggregate;
 mod error;
 pub(crate) mod ffi;
+mod foreach;
 mod options;
 mod rows;
 mod source;
@@ -18,7 +19,7 @@ mod writer_handle;
 #[cfg(feature = "arrow")]
 mod arrow;
 
-pub use aggregate::{aggregate_csv, CsvAccumulator, CsvInput};
+pub use aggregate::{aggregate_csv, Accumulator, CsvAccumulator, CsvInput};
 pub use error::{Error, ErrorKind};
 pub use options::{Format, OpenOptions, ReadOptions, WriteOptions};
 pub use rows::{AllRows, CellIter, CellRef, CellType, RowCursor, RowRef};

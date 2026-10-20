@@ -8,7 +8,6 @@ namespace ExcelReader.Core.Reader.Xls
     [ExcludeFromCodeCoverage(Justification = "Exercised through XlsWorkbook integration tests; guard-rail branches are corrupt-OLE only.")]
     internal sealed class WorkbookStream : IDisposable
     {
-        private const int HeaderSize = 512;
 
         private readonly ByteSource? _source;
         private readonly int[] _chain;
@@ -98,7 +97,7 @@ namespace ExcelReader.Core.Reader.Xls
             }
             runStart = (long)first * SectorSize;
             runEnd = Math.Min(Length, (long)(last + 1) * SectorSize);
-            bufferOffset = HeaderSize + ((long)_chain[first] * SectorSize);
+            bufferOffset = ((long)_chain[first] + 1) * SectorSize;
             if (_chain[first] < 0 || bufferOffset < 0 || bufferOffset + (runEnd - runStart) > _fileLength)
             {
                 throw new InvalidDataException("The OLE sector chain points past the end of the buffer.");
@@ -130,7 +129,7 @@ namespace ExcelReader.Core.Reader.Xls
 
         private ReadOnlySpan<byte> FileSlice(int sector, int within, int len)
         {
-            long offset = HeaderSize + ((long)sector * SectorSize) + within;
+            long offset = (((long)sector + 1) * SectorSize) + within;
             if (sector < 0 || offset < 0 || offset + len > _fileLength)
             {
                 throw new InvalidDataException("The OLE sector chain points past the end of the buffer.");
@@ -154,8 +153,10 @@ namespace ExcelReader.Core.Reader.Xls
                 }
                 count++;
             }
-            long offset = HeaderSize + ((long)_chain[chainIndex] * SectorSize);
-            _source!.ReadExactly(offset, dest[..(count * SectorSize)]);
+            long offset = ((long)_chain[chainIndex] + 1) * SectorSize;
+            // The stream's last sector may end with the file rather than be padded to a whole sector.
+            int length = (int)Math.Min(count * SectorSize, Length - ((long)chainIndex * SectorSize));
+            _source!.ReadExactly(offset, dest[..length]);
             return count;
         }
 

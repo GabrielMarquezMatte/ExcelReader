@@ -167,6 +167,65 @@ fn writing_to_a_writer_needs_an_explicit_format() {
 }
 
 #[test]
+fn write_columns_in_parallel_round_trips() {
+    let offsets = [0i32, 1, 2, 3, 4, 5, 6, 7];
+    let blob = b"abcdefg";
+    let inteiros = [0i64, 10, 20, 30, 40, 50, 60];
+    let validity = [0b0111_1011u8];
+    let columns = [
+        Column::new(
+            Some("texto"),
+            ColumnData::Str {
+                offsets: &offsets,
+                data: blob,
+            },
+        ),
+        Column::new(Some("inteiro"), ColumnData::I64(&inteiros)).validity(&validity),
+    ];
+
+    #[derive(Default, Debug, ExcelMapper)]
+    struct ParallelRow {
+        #[excel(name = "texto")]
+        texto: String,
+        #[excel(name = "inteiro")]
+        inteiro: Option<i64>,
+    }
+
+    for format in [Format::Xlsx, Format::Xlsb] {
+        let mut bytes = Vec::new();
+        let options = WriteOptions::new()
+            .format(format)
+            .degree_of_parallelism(4)
+            .batch_rows(2);
+        write_columns_to(&mut bytes, &columns, &options).expect("a parallel write must succeed");
+
+        let workbook = OpenOptions::new()
+            .format(format)
+            .open_bytes(&bytes)
+            .expect("the parallel output must open");
+        let table = workbook
+            .sheet(0)
+            .expect("sheet 0")
+            .parse::<ParallelRow>(&ReadOptions::new())
+            .expect("the parallel output must parse back");
+        let rows: Vec<(String, Option<i64>)> =
+            table.iter().map(|row| (row.texto, row.inteiro)).collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("a".to_string(), Some(0)),
+                ("b".to_string(), Some(10)),
+                ("c".to_string(), None),
+                ("d".to_string(), Some(30)),
+                ("e".to_string(), Some(40)),
+                ("f".to_string(), Some(50)),
+                ("g".to_string(), Some(60)),
+            ]
+        );
+    }
+}
+
+#[test]
 fn write_columns_writes_nulls_from_the_validity_bitmap() {
     let nomes_offsets = [0i32, 3, 8, 8];
     let nomes = b"AnaBruno";

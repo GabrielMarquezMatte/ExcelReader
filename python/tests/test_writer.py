@@ -79,6 +79,35 @@ def test_write_workbook_rejects_an_unknown_extension(source_csv, tmp_path):
         write_workbook(tmp_path / "out.parquet", table, _TYPES)
 
 
+@pytest.mark.parametrize("extension", ["xlsx", "xlsb"])
+def test_write_workbook_in_parallel_round_trips(tmp_path, extension):
+    source = tmp_path / "nullable.csv"
+    source.write_text("qty\n0\n10\n\n30\n40\n50\n60\n", encoding="utf-8")
+    schema = [ColumnSpec(ColumnType.I64, name="qty", nullable=True)]
+
+    with open_workbook(source) as workbook:
+        table = workbook.sheets[0].parse(schema)
+
+    out = tmp_path / f"out.{extension}"
+    options = WriteOptions(degree_of_parallelism=4, batch_rows=2)
+    write_workbook(out, table, [spec.type for spec in schema], options=options)
+
+    with open_workbook(out) as workbook:
+        result = workbook.sheets[0].parse(schema)
+
+    assert result.row_count == 7
+    assert [result.columns[0][i] for i in range(7) if i != 2] == [0, 10, 30, 40, 50, 60]
+    assert result.validity[0][0] & 0b0111_1111 == 0b0111_1011
+
+
+def test_write_workbook_rejects_a_negative_degree_of_parallelism(source_csv, tmp_path):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+
+    with pytest.raises(ExcelReaderError, match="degree_of_parallelism"):
+        write_workbook(tmp_path / "out.xlsx", table, _TYPES, options=WriteOptions(degree_of_parallelism=-1))
+
+
 def test_write_workbook_reports_a_native_rejection(source_csv, tmp_path):
     with open_workbook(source_csv) as workbook:
         table = workbook.sheets[0].parse(_SCHEMA)

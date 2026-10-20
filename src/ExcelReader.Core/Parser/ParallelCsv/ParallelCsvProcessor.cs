@@ -180,7 +180,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvChunkSource source, CsvChunk chunk, ChunkOutcome<TState> outcome, CsvReaderOptions chunkOptions,
             RowAction<TState> accumulate, CancellationToken ct)
         {
-            var rows = new CsvReader.Enumerator(source.SliceAt(outcome.ActualStart), chunkOptions, ct);
+            var rows = new CsvReader.Enumerator(source.SliceAt(outcome.ActualStart), chunkOptions, contentCache: null, ct);
             try
             {
                 while (rows.MoveNext())
@@ -208,7 +208,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             Stream partition = source.OpenAt(outcome.ActualStart);
             await using (partition.ConfigureAwait(false))
             {
-                var rows = new CsvReader.Enumerator(partition, chunkOptions, ct);
+                var rows = new CsvReader.Enumerator(partition, chunkOptions, contentCache: null, ct);
                 await using (rows.ConfigureAwait(false))
                 {
                     try

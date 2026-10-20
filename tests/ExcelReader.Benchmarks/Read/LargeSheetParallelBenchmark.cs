@@ -49,6 +49,7 @@ namespace ExcelReader.Benchmarks
         private readonly ExcelParser<Record> _parser = ExcelParser.FromAttributes<Record>();
         private readonly ExcelParser<WideRow> _wideParser = ExcelParser.FromAttributes<WideRow>();
         private readonly ExcelParser<WideRowRef> _wideRefParser = ExcelParser.FromAttributes<WideRowRef>();
+        private readonly ExcelParser<WideRowStruct> _wideStructParser = ExcelParser.FromAttributes<WideRowStruct>();
         private byte[] _xlsx = [];
         private byte[] _xlsb = [];
         private byte[] _csv = [];
@@ -144,6 +145,18 @@ namespace ExcelReader.Benchmarks
             long total = 0;
             using CsvReader csv = Excel.FromCsv(_csv);
             await foreach (WideRow row in SheetParallel.ParseAsync(csv.FirstSheet, _wideParser, new SheetParallelOptions { DegreeOfParallelism = Dop }))
+            {
+                total += row.Units;
+            }
+            return total;
+        }
+
+        [Benchmark]
+        public async Task<long> Csv_ParseStructInterned()
+        {
+            long total = 0;
+            using CsvReader csv = Excel.FromCsv(_csv, new ExcelReaderOptions { InternStrings = true });
+            await foreach (WideRowStruct row in SheetParallel.ParseAsync(csv.FirstSheet, _wideStructParser, new SheetParallelOptions { DegreeOfParallelism = Dop }))
             {
                 total += row.Units;
             }

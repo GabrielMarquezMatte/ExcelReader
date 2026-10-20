@@ -264,6 +264,16 @@ def test_write_typed_round_trips_through_parse_typed(tmp_path):
     assert out_path.read_text(encoding="utf-8").replace("\r\n", "\n") == "qty\n3\n7\n"
 
 
+def test_write_options_default_to_a_serial_write():
+    from excelreader import WriteOptions
+
+    assert ctypes.sizeof(_native.NativeWriteOptions) == 40
+    raw = _native.to_native_write_options(WriteOptions())
+    assert (raw.degree_of_parallelism, raw.batch_rows) == (1, 0)
+    raw = _native.to_native_write_options(WriteOptions(degree_of_parallelism=0, batch_rows=2))
+    assert (raw.degree_of_parallelism, raw.batch_rows) == (0, 2)
+
+
 def test_abi_version_matches_the_header():
     header = HEADER_PATH.read_text(encoding="utf-8")
     match = re.search(r"#define XL_ABI_VERSION (\d+)", header)

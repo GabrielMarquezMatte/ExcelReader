@@ -136,6 +136,20 @@ int32_t xl_rows_next(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* 
 
 int32_t xl_rows_next_view(xl_rows* rows, xl_row* out_row);
 
+typedef struct xl_cell_view {
+    int32_t column;
+    int32_t type;
+    int32_t value_len;
+    int32_t has_number;     /* number is valid; a cell carries text, a number, or both */
+    const uint8_t* value;   /* valid only until the callback returns, NOT NUL-terminated; NULL when value_len is 0 */
+    double number;
+} xl_cell_view;
+
+/* cells may be NULL when cell_count is 0; a non-XL_OK return stops the walk and is returned verbatim (use positive codes); other xl_ calls are allowed from inside it */
+typedef int32_t (*xl_row_fn)(const xl_cell_view* cells, int32_t cell_count, void* user_data);
+
+int32_t xl_rows_foreach(xl_workbook* handle, int32_t sheet, xl_row_fn callback, void* user_data);
+
 int32_t xl_rows_read_all_blob(xl_rows* rows, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
 typedef struct xl_rows_decoded {
@@ -202,7 +216,10 @@ typedef struct xl_write_options {
 
     int32_t date1904;             
 
-    int32_t use_shared_strings;   
+    int32_t use_shared_strings;
+
+    int32_t degree_of_parallelism;
+    int32_t batch_rows;
 } xl_write_options;
 
 int32_t xl_write_typed(const uint8_t* path, int32_t path_len,
@@ -304,6 +321,21 @@ int32_t xl_csv_aggregate_memory(const uint8_t* data, int32_t data_len,
                                 const xl_csv_aggregation* agg,
                                 const xl_csv_parallel_options* options,
                                 void** out_state);
+
+typedef int32_t (*xl_accumulate_fn)(void* state, const xl_cell_view* cells, int32_t cell_count, void* user_data);
+
+typedef struct xl_aggregation {
+    int32_t struct_size;
+    xl_csv_seed_fn       seed;
+    xl_accumulate_fn     accumulate;
+    xl_csv_combine_fn    combine;
+    xl_csv_free_state_fn free_state;
+    void*                user_data;
+} xl_aggregation;
+
+/* seeds once per chunk; combine(acc, next) runs in source order and must not free next; free_state runs on the calling thread after the run */
+int32_t xl_aggregate(xl_workbook* handle, int32_t sheet, const xl_aggregation* agg,
+                     int32_t header_row, int32_t degree_of_parallelism, void** out_state);
 
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
 

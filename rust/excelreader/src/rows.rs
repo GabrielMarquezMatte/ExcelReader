@@ -1,8 +1,10 @@
 //! Row-at-a-time and whole-sheet decoded reads over the C ABI's row APIs.
 
+use std::borrow::Cow;
+
 use crate::ffi::{
-    self, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY, XL_CELL_ERROR, XL_CELL_FORMULA,
-    XL_CELL_NUMBER, XL_CELL_STRING,
+    self, XlCellView, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY, XL_CELL_ERROR,
+    XL_CELL_FORMULA, XL_CELL_NUMBER, XL_CELL_STRING,
 };
 use crate::{Error, ErrorKind};
 
@@ -43,17 +45,20 @@ pub struct CellRef<'a> {
     pub column: i32,
     pub cell_type: CellType,
     value: &'a [u8],
+    number: Option<f64>,
 }
 
 impl<'a> CellRef<'a> {
-    /// The raw UTF-8 bytes as stored. A `Date` cell carries an Excel serial number as text.
+    /// The raw UTF-8 bytes as stored. A `Date` cell carries an Excel serial number as text. Empty
+    /// for a cell that carries only a number - use `text()` or `number()`.
     #[must_use]
     pub fn as_bytes(&self) -> &'a [u8] {
         self.value
     }
 
-    /// The value as a string. Fails when the bytes are not valid UTF-8, which a well-formed
-    /// workbook never produces.
+    /// The stored text as a string; empty for a cell that carries only a number - use `text()` or
+    /// `number()`. Fails when the bytes are not valid UTF-8, which a well-formed workbook never
+    /// produces.
     pub fn as_str(&self) -> Result<&'a str, Error> {
         std::str::from_utf8(self.value).map_err(|err| {
             Error::new(
@@ -62,15 +67,35 @@ impl<'a> CellRef<'a> {
             )
         })
     }
+
+    /// The cell's numeric value: the library's own double when the cell carries one, else its
+    /// text parsed as `f64`. Dates are Excel serials.
+    #[must_use]
+    pub fn number(&self) -> Option<f64> {
+        self.number.or_else(|| self.as_str().ok()?.parse().ok())
+    }
+
+    /// The cell's text, or its number in shortest round-trip form when it carries only a number.
+    /// That formatting is this crate's, so it can differ from what `xl_rows_next` writes.
+    pub fn text(&self) -> Result<Cow<'a, str>, Error> {
+        if !self.value.is_empty() {
+            return self.as_str().map(Cow::Borrowed);
+        }
+        Ok(match self.number {
+            Some(number) => Cow::Owned(number.to_string()),
+            None => Cow::Borrowed(""),
+        })
+    }
 }
 
 /// Where a `RowRef`'s cells live. Blob rows come from `xl_rows_next`/`xl_rows_read_all_blob`,
-/// decoded rows from a CSV aggregation callback.
+/// decoded rows from a CSV aggregation callback, views from `xl_rows_foreach`/`xl_aggregate`.
 #[derive(Debug, Clone, Copy)]
 enum RowBacking<'a> {
     /// The bytes AFTER the leading `int32 cell_count`.
     Blob(&'a [u8]),
     Decoded(&'a [XlRowCell]),
+    Views(&'a [XlCellView]),
 }
 
 /// One row, borrowing from whichever buffer produced it.
@@ -112,6 +137,24 @@ impl<'a> RowRef<'a> {
         }
     }
 
+    /// Wraps the cells handed to an `xl_rows_foreach`/`xl_aggregate` callback.
+    ///
+    /// # Safety
+    /// `cells` must point to `count` initialized `XlCellView` values whose `value` pointers stay
+    /// valid for `'a`.
+    pub(crate) unsafe fn from_views(cells: *const XlCellView, count: i32) -> RowRef<'a> {
+        let len = if count > 0 { count as usize } else { 0 };
+        let slice = if len == 0 || cells.is_null() {
+            &[][..]
+        } else {
+            unsafe { std::slice::from_raw_parts(cells, len) }
+        };
+        RowRef {
+            backing: RowBacking::Views(slice),
+            len: slice.len(),
+        }
+    }
+
     #[must_use]
     pub fn len(&self) -> usize {
         self.len
@@ -131,6 +174,7 @@ impl<'a> RowRef<'a> {
         }
         match self.backing {
             RowBacking::Decoded(cells) => cell_from_decoded(&cells[index]),
+            RowBacking::Views(cells) => cell_from_view(&cells[index]),
             RowBacking::Blob(_) => self.iter().nth(index),
         }
     }
@@ -177,6 +221,11 @@ impl<'a> Iterator for CellIter<'a> {
                 self.index += 1;
                 Some(cell)
             }
+            RowBacking::Views(cells) => {
+                let cell = cell_from_view(&cells[self.index])?;
+                self.index += 1;
+                Some(cell)
+            }
             RowBacking::Blob(blob) => {
                 let (cell, next) = cell_from_blob(blob, self.offset)?;
                 self.offset = next;
@@ -217,6 +266,7 @@ fn cell_from_blob(blob: &[u8], offset: usize) -> Option<(CellRef<'_>, usize)> {
             column,
             cell_type,
             value,
+            number: None,
         },
         end,
     ))
@@ -233,6 +283,22 @@ fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
         column: raw.column,
         cell_type,
         value,
+        number: None,
+    })
+}
+
+fn cell_from_view(raw: &XlCellView) -> Option<CellRef<'_>> {
+    let cell_type = CellType::from_raw(raw.cell_type)?;
+    let value = if raw.value.is_null() || raw.value_len <= 0 {
+        &[][..]
+    } else {
+        unsafe { std::slice::from_raw_parts(raw.value, raw.value_len as usize) }
+    };
+    Some(CellRef {
+        column: raw.column,
+        cell_type,
+        value,
+        number: (raw.has_number != 0).then_some(raw.number),
     })
 }
 
@@ -438,6 +504,7 @@ fn malformed_all_rows_blob() -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ffi::XlCellView;
 
     /// Builds a row blob in the wire format documented on `xl_rows_next`:
     /// `int32 cell_count`, then per cell `int32 column, int32 type, int32 value_len, bytes`.
@@ -501,6 +568,71 @@ mod tests {
         bytes.truncate(bytes.len() - 3);
         let row = RowRef::from_blob(&bytes).expect("header is intact");
         assert!(row.get(0).is_none());
+    }
+
+    fn view(column: i32, cell_type: i32, text: &[u8], number: Option<f64>) -> XlCellView {
+        XlCellView {
+            column,
+            cell_type,
+            value_len: text.len() as i32,
+            has_number: number.is_some() as i32,
+            value: if text.is_empty() {
+                std::ptr::null()
+            } else {
+                text.as_ptr()
+            },
+            number: number.unwrap_or(0.0),
+        }
+    }
+
+    #[test]
+    fn view_number_only_cell_has_empty_bytes_and_formats_its_number() {
+        let cells = [view(3, XL_CELL_NUMBER, b"", Some(42.5))];
+        let row = unsafe { RowRef::from_views(cells.as_ptr(), 1) };
+        let cell = row.get(0).unwrap();
+        assert_eq!(cell.column, 3);
+        assert_eq!(cell.as_bytes(), b"");
+        assert_eq!(cell.number(), Some(42.5));
+        assert_eq!(cell.text().unwrap(), "42.5");
+    }
+
+    #[test]
+    fn view_text_and_number_cell_prefers_the_raw_number_and_keeps_the_text() {
+        let cells = [view(0, XL_CELL_DATE, b"45000", Some(45000.25))];
+        let row = unsafe { RowRef::from_views(cells.as_ptr(), 1) };
+        let cell = row.get(0).unwrap();
+        assert_eq!(cell.as_str().unwrap(), "45000");
+        assert_eq!(cell.text().unwrap(), "45000");
+        assert_eq!(cell.number(), Some(45000.25));
+    }
+
+    #[test]
+    fn text_only_cell_parses_its_number() {
+        let cells = [
+            view(0, XL_CELL_NUMBER, b"12.5", None),
+            view(1, XL_CELL_STRING, b"abc", None),
+        ];
+        let row = unsafe { RowRef::from_views(cells.as_ptr(), 2) };
+        let cells: Vec<CellRef<'_>> = row.iter().collect();
+        assert_eq!(cells[0].number(), Some(12.5));
+        assert_eq!(cells[0].text().unwrap(), "12.5");
+        assert_eq!(cells[1].number(), None);
+    }
+
+    #[test]
+    fn empty_view_row_from_null_is_empty() {
+        let row = unsafe { RowRef::from_views(std::ptr::null(), 0) };
+        assert!(row.is_empty());
+        assert_eq!(row.iter().count(), 0);
+    }
+
+    #[test]
+    fn blob_cells_report_no_raw_number() {
+        let bytes = blob(&[(0, XL_CELL_NUMBER, "7")]);
+        let row = RowRef::from_blob(&bytes).unwrap();
+        let cell = row.get(0).unwrap();
+        assert_eq!(cell.number(), Some(7.0));
+        assert_eq!(cell.text().unwrap(), "7");
     }
 
     #[test]

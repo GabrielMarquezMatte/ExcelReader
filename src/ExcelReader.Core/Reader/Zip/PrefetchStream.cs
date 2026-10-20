@@ -209,10 +209,12 @@ namespace ExcelReader.Core.Reader.Zip
                     {
                         break;
                     }
-                    if (_expectedCrc is uint expected)
+                    // Only the declared bytes are summed, so an entry that inflates past its size still has them checked.
+                    if (_expectedCrc is uint expected && produced < _declaredLength)
                     {
-                        crc = Crc32.Append(crc, pending.AsSpan(0, read));
-                        produced += read;
+                        int counted = (int)Math.Min(read, _declaredLength - produced);
+                        crc = Crc32.Append(crc, pending.AsSpan(0, counted));
+                        produced += counted;
                         if (produced == _declaredLength && crc != expected)
                         {
                             throw new InvalidDataException(LimitedReadStream.ChecksumMismatch);

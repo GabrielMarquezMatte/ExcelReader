@@ -27,6 +27,16 @@ namespace ExcelReader.Tests.Native
             return WriteApi.OpenWriteHandleToMemory(format, options, out handle);
         }
 
+        [Fact]
+        public void OpenWriteHandle_Should_Return_An_Error_When_The_File_Cannot_Be_Created()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-missing-{Guid.NewGuid():N}", "out.xlsx");
+
+            Assert.Equal(NativeStatus.Error, OpenWriteHandle(path, NativeFormat.Xlsx, out NativeWriterHandle? handle));
+            Assert.Null(handle);
+            Assert.NotEmpty(NativeApi.LastErrorText());
+        }
+
         [Theory]
         [InlineData(NativeFormat.Xlsx, "xlsx")]
         [InlineData(NativeFormat.Xlsb, "xlsb")]

@@ -5,6 +5,15 @@
 Read and write XLSX, XLSB, XLS and CSV through ExcelReader's NativeAOT library. No .NET runtime
 required — the shared library is self-contained.
 
+## Install
+
+```bash
+pip install excelreader-native
+```
+
+Wheels ship for Windows x64, macOS (arm64, x64) and Linux (glibc and musl, x64 and arm64). The
+package installs as `excelreader-native` and imports as `excelreader`.
+
 ## Install (from source)
 
 ```bash
@@ -271,6 +280,15 @@ write_workbook(
     "report.xlsx", table, types,
     options=WriteOptions(sheet_name="Q3 Results", use_shared_strings=True),
 )
+```
+
+For xlsx and xlsb, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
+several threads: `0` uses every processor, `1` writes serially, and `None` is serial. A `batch_rows`
+of `None` keeps the library default of 8,192. With shared strings on, two parallel runs give the same
+content in files that differ byte for byte. xls and csv ignore both fields.
+
+```python
+write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallelism=0))
 ```
 
 **Phase-1 limits, stated plainly:** a single sheet only (no multi-sheet workbooks); the whole table

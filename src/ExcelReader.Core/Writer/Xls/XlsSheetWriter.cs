@@ -300,10 +300,18 @@ namespace ExcelReader.Core.Writer.Xls
 
         private XlsSheetWriter CreateContinuation()
         {
-            string suffix = $" ({_owner.SheetCount + 1})";
-            string contName = _baseName.Length + suffix.Length <= MaxSheetNameLength
-                ? _baseName + suffix
-                : _baseName[..(MaxSheetNameLength - suffix.Length)] + suffix;
+            string contName;
+            for (int n = _owner.SheetCount + 1; ; n++)
+            {
+                string suffix = $" ({n})";
+                contName = _baseName.Length + suffix.Length <= MaxSheetNameLength
+                    ? _baseName + suffix
+                    : _baseName[..(MaxSheetNameLength - suffix.Length)] + suffix;
+                if (_owner.TryClaimSheetName(contName))
+                {
+                    break;
+                }
+            }
             var cont = new XlsSheetWriter(_owner, contName, _date1904, Visibility, isContinuation: true, baseName: _baseName);
             cont.EnsureStarted();
             return cont;

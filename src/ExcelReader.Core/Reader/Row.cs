@@ -32,6 +32,14 @@ namespace ExcelReader.Core.Reader
         /// <summary>Enumerates only the populated cells in this row, in ascending column order.</summary>
         public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
 
+        internal ReadOnlySpan<CellDesc> Descriptors => _cells;
+
+        internal ReadOnlySpan<byte> RowValues => _rowValues;
+
+        internal ReadOnlySpan<byte> Shared => _shared;
+
+        internal ReadOnlySpan<byte> RowBuffer => _rowBuffer;
+
         internal bool IsEmptyRecord =>
             _cells.IsEmpty || (_cells.Length == 1 && _cells[0].Column == 0 && _cells[0].Type == CellType.Empty);
 

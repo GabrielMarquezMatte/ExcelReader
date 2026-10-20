@@ -25,7 +25,7 @@ namespace ExcelReader.Core.Writer.Parallel
         internal BatchRunner(ParallelWriteOptions options, int rowsBefore, Func<T[], int, int, BatchSegment> format,
             Func<BatchSegment, CancellationToken, ValueTask> emit, CancellationToken ct)
         {
-            _degree = options.DegreeOfParallelism == 0 ? Environment.ProcessorCount : options.DegreeOfParallelism;
+            _degree = options.EffectiveDegree;
             _batchRows = Math.Min(options.BatchRows, ExcelLimits.MaxRows);
             _rowsBefore = rowsBefore;
             _format = format;
@@ -102,14 +102,7 @@ namespace ExcelReader.Core.Writer.Parallel
             _batch = ArrayPool<T>.Shared.Rent(_batchRows);
             _count = 0;
             _rowsBefore += count;
-            if (_degree == 1)
-            {
-                _inFlight.Enqueue(Task.FromResult(Format(batch, count, rowsBefore)));
-            }
-            else
-            {
-                _inFlight.Enqueue(Task.Run(() => Format(batch, count, rowsBefore), CancellationToken.None));
-            }
+            _inFlight.Enqueue(Task.Run(() => Format(batch, count, rowsBefore), CancellationToken.None));
         }
 
         private BatchSegment Format(T[] batch, int count, int rowsBefore)

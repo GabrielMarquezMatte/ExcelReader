@@ -11,6 +11,8 @@ namespace ExcelReader.Native.Csv
 
         internal nint Native { get; set; }
 
+        internal CellViewBuffer? Views { get; set; }
+
         internal NativeRow WriteRow(in Row row)
         {
             int cellCount = 0;
@@ -54,6 +56,8 @@ namespace ExcelReader.Native.Csv
 
         internal void ReleaseScratch()
         {
+            Views?.Dispose();
+            Views = null;
             if (_scratch is not null)
             {
                 NativeMemory.Free(_scratch);

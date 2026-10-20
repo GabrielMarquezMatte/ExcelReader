@@ -3,7 +3,7 @@ use crate::ffi::{
     XL_BUFFER_TOO_SMALL, XL_EOF, XL_OK,
 };
 use crate::{
-    AllRows, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor, Time, Timestamp,
+    AllRows, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor, RowRef, Time, Timestamp,
 };
 use std::marker::PhantomData;
 use std::path::Path;
@@ -334,6 +334,52 @@ impl<'w> Sheet<'w> {
     /// cursor, so several may be alive at once, on this thread or on others.
     pub fn rows(&self) -> Result<RowCursor<'w>, Error> {
         RowCursor::open(self.workbook.handle, self.index)
+    }
+
+    /// Calls `f` once per row on the calling thread, without copying the row into a cursor buffer.
+    ///
+    /// Each row's cells borrow the library's buffers for that call only. A cell may carry text, a
+    /// number, or both: [`CellRef::text`](crate::CellRef::text) and
+    /// [`CellRef::number`](crate::CellRef::number) cover all three. A nonzero `Err(code)` stops the
+    /// walk (`Err(0)` is `XL_OK` and does not); a positive code surfaces as
+    /// [`ErrorKind::Callback`](crate::ErrorKind::Callback). Other calls
+    /// on this workbook are allowed from inside `f`. A panic in `f` stops the walk and is resumed
+    /// here.
+    pub fn for_each_row<F>(&self, f: F) -> Result<(), Error>
+    where
+        F: FnMut(RowRef<'_>) -> Result<(), i32>,
+    {
+        crate::foreach::for_each_row(self.workbook.handle, self.index, f)
+    }
+
+    /// Folds this sheet into one `A` across several threads.
+    ///
+    /// `header_row` is 1-based, `0` meaning no header. `degree_of_parallelism` is `0` for every
+    /// processor, `1` sequential, `n` up to `n` threads. The CSV dialect, password and limits come
+    /// from the options the workbook was opened with.
+    ///
+    /// `seed` is called once per chunk, on worker threads; see [`Accumulator`](crate::Accumulator)
+    /// for the contract. `seed`, `accumulate` and `combine` never run on the calling thread; each
+    /// accumulator is dropped on the calling thread once the run has finished. The call blocks
+    /// until the run finishes, so `seed` may borrow locals. A panic inside any callback aborts the
+    /// run and is resumed here once the library has freed every state.
+    pub fn aggregate<A, F>(
+        &self,
+        header_row: i32,
+        degree_of_parallelism: i32,
+        seed: F,
+    ) -> Result<A, Error>
+    where
+        A: crate::Accumulator,
+        F: Fn() -> A + Sync,
+    {
+        crate::aggregate::aggregate_sheet(
+            self.workbook.handle,
+            self.index,
+            header_row,
+            degree_of_parallelism,
+            seed,
+        )
     }
 
     /// Every row of this sheet, read in one native call into a buffer the result owns outright.

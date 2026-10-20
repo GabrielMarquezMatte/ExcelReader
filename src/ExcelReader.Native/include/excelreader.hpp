@@ -4,6 +4,7 @@
 
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <compare>
 #include <concepts>
 #include <cstdint>
@@ -23,6 +24,10 @@
 #include <utility>
 #include <vector>
 #include <chrono>
+#if !defined(__cpp_lib_to_chars)
+#include <locale>
+#include <sstream>
+#endif
 
 namespace xl
 {
@@ -72,6 +77,11 @@ namespace xl
         }
 
         struct Access;
+
+        /// Status a shim returns for "a callback threw". Positive, so it can never collide with a
+        /// library status (every one of those is <= 0). It CAN collide with a caller's own
+        /// `INT32_MAX`, so the entry points key on `threw` rather than on the status alone.
+        inline constexpr int32_t kCsvCallbackException = (std::numeric_limits<int32_t>::max)();
 
     }
 
@@ -186,6 +196,9 @@ namespace xl
 
         int32_t date1904 = XL_OPT_DEFAULT;           ///< XLS/XLSB only: use the 1904 date system. Off by default.
         int32_t use_shared_strings = XL_OPT_DEFAULT; ///< XLSX/XLSB only: store repeated text once in a shared-string table. Off by default.
+
+        int32_t degree_of_parallelism = 1; ///< XLSX/XLSB only: batches formatted and compressed at once. 0 uses every processor, 1 (the default) writes serially.
+        int32_t batch_rows = 0;            ///< XLSX/XLSB only: rows per parallel batch. 0 uses the library default (8192).
     };
 
     namespace detail
@@ -228,6 +241,8 @@ namespace xl
             opts.csv_quote = options.csv_quote;
             opts.date1904 = options.date1904;
             opts.use_shared_strings = options.use_shared_strings;
+            opts.degree_of_parallelism = options.degree_of_parallelism;
+            opts.batch_rows = options.batch_rows;
             return opts;
         }
 
@@ -493,9 +508,112 @@ namespace xl
     /// @brief One cell of a row, borrowing the row's memory.
     struct CellView
     {
-        int32_t column{};         ///< 0-based column.
-        CellType type{};          ///< What the cell holds.
-        std::string_view value{}; ///< The text as stored, so a date is its serial number.
+        int32_t column{};              ///< 0-based column.
+        CellType type{};               ///< What the cell holds.
+        std::string_view value{};      ///< The text as stored, so a date is its serial number. Empty for a cell that carries only a number.
+        std::optional<double> number{}; ///< The library's own double, set only by Sheet::for_each_row and Sheet::aggregate, and only when the cell carries one.
+
+        /// @brief `number` when set, else `value` parsed as a double.
+        std::optional<double> as_number() const
+        {
+            if (number.has_value())
+            {
+                return number;
+            }
+            if (value.empty())
+            {
+                return std::nullopt;
+            }
+            double parsed = 0;
+#if defined(__cpp_lib_to_chars)
+            const char *last = value.data() + value.size();
+            const auto result = std::from_chars(value.data(), last, parsed);
+            if (result.ec != std::errc{} || result.ptr != last)
+            {
+                return std::nullopt;
+            }
+#else
+            std::istringstream in{std::string(value)};
+            in.imbue(std::locale::classic());
+            in >> std::noskipws >> parsed;
+            if (in.fail() || in.peek() != std::char_traits<char>::eof())
+            {
+                return std::nullopt;
+            }
+#endif
+            return parsed;
+        }
+
+        /// @brief `value` when non-empty, else `number` in shortest round-trip form, else empty.
+        ///
+        /// That formatting is this header's own, so it can differ from the text `xl_rows_next` writes.
+        std::string text() const
+        {
+            if (!value.empty() || !number.has_value())
+            {
+                return std::string(value);
+            }
+#if defined(__cpp_lib_to_chars)
+            char buffer[32];
+            const auto result = std::to_chars(buffer, buffer + sizeof(buffer), *number);
+            return std::string(buffer, result.ptr);
+#else
+            // Mirrors to_chars: the fewest digits that round-trip, fixed unless scientific is shorter.
+            const double v = *number;
+            std::string scientific;
+            for (int precision = 0; precision <= 16; ++precision)
+            {
+                std::ostringstream out;
+                out.imbue(std::locale::classic());
+                out.precision(precision);
+                out << std::scientific << v;
+                scientific = out.str();
+                std::istringstream back{scientific};
+                back.imbue(std::locale::classic());
+                double parsed = 0;
+                if (back >> parsed && parsed == v)
+                {
+                    break;
+                }
+            }
+            const std::size_t e = scientific.find('e');
+            if (e == std::string::npos)
+            {
+                return scientific;
+            }
+            const bool negative = scientific[0] == '-';
+            std::string digits;
+            for (std::size_t i = negative ? 1 : 0; i < e; ++i)
+            {
+                if (scientific[i] != '.')
+                {
+                    digits += scientific[i];
+                }
+            }
+            int exponent = 0;
+            const char *exponent_start = scientific.data() + e + (scientific[e + 1] == '+' ? 2 : 1);
+            std::from_chars(exponent_start, scientific.data() + scientific.size(), exponent);
+            const std::string sign = negative ? "-" : "";
+            std::string fixed;
+            if (exponent >= static_cast<int>(digits.size()) - 1)
+            {
+                std::ostringstream out;
+                out.imbue(std::locale::classic());
+                out.precision(0);
+                out << std::fixed << v;
+                fixed = out.str();
+            }
+            else if (exponent >= 0)
+            {
+                fixed = sign + digits.substr(0, exponent + 1) + "." + digits.substr(exponent + 1);
+            }
+            else
+            {
+                fixed = sign + "0." + std::string(-exponent - 1, '0') + digits;
+            }
+            return fixed.size() <= scientific.size() ? fixed : scientific;
+#endif
+        }
     };
 
     /// @brief The cells of one row: a range of CellView.
@@ -514,6 +632,16 @@ namespace xl
         /// @param index Position among the row's cells, below size().
         CellView operator[](size_t index) const
         {
+            if (views_ != nullptr)
+            {
+                const xl_cell_view &view = views_[index];
+                const size_t length = view.value_len > 0 ? static_cast<size_t>(view.value_len) : 0;
+                return CellView{view.column, static_cast<CellType>(view.type),
+                                length == 0 || view.value == nullptr
+                                    ? std::string_view{}
+                                    : std::string_view(reinterpret_cast<const char *>(view.value), length),
+                                view.has_number != 0 ? std::optional<double>(view.number) : std::nullopt};
+            }
             const xl_row_cell &raw = cells_[index];
             const size_t length = raw.value_len > 0 ? static_cast<size_t>(raw.value_len) : 0;
             return CellView{raw.column, static_cast<CellType>(raw.type),
@@ -557,11 +685,14 @@ namespace xl
     private:
         friend class RowCursor;
         friend class DecodedRows;
+        friend class Sheet;
         friend struct detail::Access;
 
         RowView(const xl_row_cell *cells, size_t count) : cells_(cells), count_(count) {}
+        RowView(const xl_cell_view *views, size_t count) : views_(views), count_(views == nullptr ? 0 : count) {}
 
         const xl_row_cell *cells_{};
+        const xl_cell_view *views_{};
         size_t count_{};
     };
 
@@ -714,6 +845,32 @@ namespace xl
         VeryHidden = XL_SHEET_VERY_HIDDEN, ///< Hidden and absent from the Unhide dialog; only code can show it.
     };
 
+    /// @brief A fold over the rows of any sheet, for Sheet::aggregate.
+    ///
+    /// `Acc` must be move-constructible; the wrapper returns the surviving accumulator by moving out
+    /// of it. `combine` must fold `next` into `*this` without destroying it - the library owns
+    /// `next`'s lifetime and frees it afterwards.
+    ///
+    /// `accumulate` runs concurrently on worker threads, one `Acc` per chunk of sheet data (not per
+    /// thread), never on the calling thread. A chunk can be accumulated and then destroyed without
+    /// being combined. `combine` is effectively single-threaded but is not pinned to any particular
+    /// thread and also never runs on the calling thread. `~Acc()` does run on the calling thread,
+    /// once the run has finished, and must not throw.
+    ///
+    /// The `RowView` handed to `accumulate` borrows the library's buffers and is valid only for the
+    /// duration of that one call; copy anything you keep. A cell carries text, a number, or both.
+    ///
+    /// An exception escaping into the library is undefined behavior, so this wrapper catches
+    /// everything and reports it as an error. XLS, table views and CSV opened from a Source or
+    /// InputStream read sequentially. See `excelreader.h`'s `xl_aggregate` contract.
+    /// @tparam Acc The accumulator type.
+    template <typename Acc>
+    concept Accumulator =
+        std::move_constructible<Acc> && requires(Acc acc, Acc &next, RowView row) {
+            { acc.accumulate(row) } -> std::same_as<int32_t>;
+            { acc.combine(next) } -> std::same_as<int32_t>;
+        };
+
     /// @brief One sheet of a Workbook: the native workbook handle and an index.
     ///
     /// Holds no resource of its own, so it is cheap to copy and may be handed to another thread; each
@@ -756,6 +913,71 @@ namespace xl
             }
             return RowCursor(rows);
         }
+
+        /// @brief Calls `f` once per row on the calling thread, without copying rows into a cursor.
+        ///
+        /// Each RowView borrows the library's buffers for that one call; copy anything you keep. A
+        /// cell carries text, a number, or both: CellView::text() and CellView::as_number() cover all
+        /// three. Returning anything but `XL_OK` stops the walk and comes back as the error's code;
+        /// use positive codes, since every library status is <= 0. An exception from `f` stops the
+        /// walk and is reported as an error. Other calls on this workbook are allowed from inside `f`.
+        /// @param f Called as `int32_t f(RowView)`.
+        template <typename F>
+            requires std::is_invocable_r_v<int32_t, F &, RowView>
+        std::expected<void, Error> for_each_row(F &&f) const
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            struct Walk
+            {
+                std::remove_reference_t<F> *f;
+                bool threw;
+            } walk{std::addressof(f), false};
+            const xl_row_fn shim = [](const xl_cell_view *cells, int32_t count, void *user_data) noexcept -> int32_t
+            {
+                auto *state = static_cast<Walk *>(user_data);
+                try
+                {
+                    return (*state->f)(RowView(cells, count > 0 ? static_cast<size_t>(count) : 0));
+                }
+                catch (...)
+                {
+                    state->threw = true;
+                    return detail::kCsvCallbackException;
+                }
+            };
+            const int32_t status = xl_rows_foreach(handle_, index_, shim, &walk);
+            if (walk.threw)
+            {
+                return std::unexpected(Error{detail::kCsvCallbackException, "a row callback threw"});
+            }
+            if (status > 0)
+            {
+                return std::unexpected(Error{status, "a row callback returned status " + std::to_string(status)});
+            }
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return {};
+        }
+
+        /// @brief Folds this sheet into one `Acc` across several threads.
+        ///
+        /// Each chunk starts from a copy of `seed`, made on a worker thread; copies are made
+        /// concurrently from the one `seed`, which the call only reads. The CSV dialect, password and
+        /// limits come from the OpenOptions the workbook was opened with.
+        /// @tparam Acc The accumulator; see Accumulator.
+        /// @param seed The state every chunk starts from.
+        /// @param header_row 1-based header row, not aggregated; 0 means none.
+        /// @param degree_of_parallelism Worker threads; 0 uses every processor, 1 runs sequentially.
+        /// @return The combined accumulator.
+        template <Accumulator Acc>
+            requires std::copy_constructible<Acc>
+        std::expected<Acc, Error> aggregate(const Acc &seed = Acc{}, int32_t header_row = 0,
+                                            int32_t degree_of_parallelism = 0) const;
 
         /// @brief The whole sheet from its first row, decoded in one native call.
         std::expected<DecodedRows, Error> read_all() const
@@ -2335,11 +2557,6 @@ namespace xl
 
     namespace detail
     {
-        /// Status a shim returns for "a callback threw". Positive, so it can never collide with a
-        /// library status (every one of those is <= 0). It CAN collide with a caller's own
-        /// `INT32_MAX`, so the entry points key on `threw` rather than on the status alone.
-        inline constexpr int32_t kCsvCallbackException = (std::numeric_limits<int32_t>::max)();
-
         /// What the four shims reach through `user_data`. The C ABI shares one `user_data` across
         /// every worker thread and requires it to be read-only or internally synchronized, so the
         /// seed is held by pointer-to-const and the "a callback threw" flag is atomic.
@@ -2477,6 +2694,51 @@ namespace xl
             const int32_t status = call(&agg, &raw, &state);
             return csv_finish<Acc>(context, status, state);
         }
+
+        template <typename Acc>
+        int32_t view_accumulate(void *state, const xl_cell_view *cells, int32_t count, void *user_data) noexcept
+        {
+            auto *context = static_cast<CsvContext<Acc> *>(user_data);
+            try
+            {
+                const size_t length = count > 0 ? static_cast<size_t>(count) : 0;
+                return static_cast<Acc *>(state)->accumulate(Access::make<RowView>(cells, length));
+            }
+            catch (...)
+            {
+                context->threw.store(true, std::memory_order_relaxed);
+                return kCsvCallbackException;
+            }
+        }
+
+        template <typename Acc>
+        xl_aggregation view_aggregation(CsvContext<Acc> &context) noexcept
+        {
+            xl_aggregation agg{};
+            agg.struct_size = static_cast<int32_t>(sizeof(xl_aggregation));
+            agg.seed = &csv_seed<Acc>;
+            agg.accumulate = &view_accumulate<Acc>;
+            agg.combine = &csv_combine<Acc>;
+            agg.free_state = &csv_free_state<Acc>;
+            agg.user_data = &context;
+            return agg;
+        }
+    }
+
+    template <Accumulator Acc>
+        requires std::copy_constructible<Acc>
+    std::expected<Acc, Error> Sheet::aggregate(const Acc &seed, int32_t header_row,
+                                               int32_t degree_of_parallelism) const
+    {
+        if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+        detail::CsvContext<Acc> context{std::addressof(seed), {}};
+        const xl_aggregation agg = detail::view_aggregation<Acc>(context);
+        void *state = nullptr;
+        const int32_t status = xl_aggregate(handle_, index_, &agg, header_row, degree_of_parallelism, &state);
+        return detail::csv_finish<Acc>(context, status, state);
     }
 
     /// @brief Folds the CSV file at `path` into one `Acc` across several threads.

@@ -235,11 +235,11 @@ namespace ExcelReader.Core.Reader.Csv
             {
                 if (_source is not null)
                 {
-                    return new Enumerator(OpenSourceStream(_source), _options, ownsSource: true, Lifetime, ct);
+                    return new Enumerator(OpenSourceStream(_source), _options, ownsSource: true, Lifetime, contentCache: null, ct);
                 }
                 if (_stream is null)
                 {
-                    return new Enumerator(_memory, _options, Lifetime, ct);
+                    return new Enumerator(_memory, _options, Lifetime, contentCache: null, ct);
                 }
                 if (!_stream.TryBeginPass())
                 {
@@ -249,7 +249,7 @@ namespace ExcelReader.Core.Reader.Csv
                 }
                 try
                 {
-                    return new Enumerator(_stream, _options, ownsSource: true, Lifetime, ct);
+                    return new Enumerator(_stream, _options, ownsSource: true, Lifetime, contentCache: null, ct);
                 }
                 catch
                 {

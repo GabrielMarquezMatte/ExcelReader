@@ -1,0 +1,14 @@
+# Each language uploads under its own flag from a path-filtered job, so a flag a commit did not run keeps its last report.
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: csharp
+      paths:
+        - src/
+    - name: rust
+      paths:
+        - rust/
+    - name: python
+      paths:
+        - python/

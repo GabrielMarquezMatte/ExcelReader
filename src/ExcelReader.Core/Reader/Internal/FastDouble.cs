@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -54,19 +55,11 @@ namespace ExcelReader.Core.Reader.Internal
             if (i < s.Length && s[i] == (byte)'.')
             {
                 int fractionStart = ++i;
-                for (; i < s.Length; i++)
-                {
-                    uint d = (uint)(s[i] - (byte)'0');
-                    if (d > 9)
-                    {
-                        break;
-                    }
-                    mantissa = (mantissa * 10) + d;
-                }
+                i = ReadFractionDigits(s, i, ref mantissa);
                 scale = i - fractionStart;
             }
             int allDigits = integerDigits + scale;
-            if (allDigits == 0 || (allDigits > maxDigits && SignificantDigits(s[integerStart..i]) > maxDigits))
+            if (allDigits == 0 || HasTooManyDigits(s[integerStart..i], allDigits, maxDigits))
             {
                 return false;
             }
@@ -153,6 +146,73 @@ namespace ExcelReader.Core.Reader.Internal
             }
             value = BitConverter.UInt64BitsToDouble(m | ((ulong)biasedExponent << 52) | (neg ? 1UL << 63 : 0));
             return true;
+        }
+
+        // fast_float's digit loop: eight digits per step while the next eight bytes are all digits, then one
+        // four-digit step. Integer parts stay byte by byte, since most are too short for a step to pay off.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int ReadFractionDigits(ReadOnlySpan<byte> s, int i, ref ulong mantissa)
+        {
+            while (s.Length - i >= 8)
+            {
+                ulong eight = BinaryPrimitives.ReadUInt64LittleEndian(s[i..]);
+                if ((((eight + 0x4646464646464646) | (eight - 0x3030303030303030)) & 0x8080808080808080) != 0)
+                {
+                    break;
+                }
+                mantissa = (mantissa * 100_000_000) + ParseEightDigits(eight);
+                i += 8;
+            }
+            if (s.Length - i >= 4)
+            {
+                uint four = BinaryPrimitives.ReadUInt32LittleEndian(s[i..]);
+                if ((((four + 0x46464646) | (four - 0x30303030)) & 0x80808080) == 0)
+                {
+                    mantissa = (mantissa * 10_000) + ParseFourDigits(four);
+                    i += 4;
+                }
+            }
+            for (; i < s.Length; i++)
+            {
+                uint d = (uint)(s[i] - (byte)'0');
+                if (d > 9)
+                {
+                    break;
+                }
+                mantissa = (mantissa * 10) + d;
+            }
+            return i;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ulong ParseEightDigits(ulong eight)
+        {
+            eight -= 0x3030303030303030;
+            eight = (eight * 10) + (eight >> 8);
+            return (((eight & 0x000000FF000000FF) * 0x000F424000000064) + (((eight >> 16) & 0x000000FF000000FF) * 0x0000271000000001)) >> 32;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static uint ParseFourDigits(uint four)
+        {
+            four -= 0x30303030;
+            four = (four * 10) + (four >> 8);
+            return (((four & 0x00FF00FF) * 0x00640001) >> 16) & 0xFFFF;
+        }
+
+        // A leading non-zero digit makes every digit significant, so only leading zeros need the count.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool HasTooManyDigits(ReadOnlySpan<byte> number, int allDigits, int maxDigits)
+        {
+            if (allDigits <= maxDigits)
+            {
+                return false;
+            }
+            if (number[0] is >= (byte)'1' and <= (byte)'9')
+            {
+                return true;
+            }
+            return SignificantDigits(number) > maxDigits;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

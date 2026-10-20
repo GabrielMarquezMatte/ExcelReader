@@ -289,6 +289,20 @@ than a wrong answer.
 toggles. Its format defaults to `Format::Auto`, inferred from the path's extension; an extension it
 does not recognize is an error - a file being created has no signature bytes to sniff.
 
+For XLSX and XLSB, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
+several threads: `0` uses every processor, `1` writes serially, and leaving it unset is serial.
+Unset `batch_rows` keeps the library default of 8,192. With shared strings on, two parallel runs
+give the same content in files that differ byte for byte. XLS, CSV and `WriterHandle` ignore both.
+
+```rust,no_run
+use excelreader::{write_columns, Column, ColumnData, WriteOptions};
+# let ids = [1i64, 2, 3];
+# let columns = [Column::new(Some("id"), ColumnData::I64(&ids))];
+
+write_columns("big.xlsx", &columns, &WriteOptions::new().degree_of_parallelism(0))?;
+# Ok::<(), excelreader::Error>(())
+```
+
 Each write has a path form and an `io::Write` form: `write_columns_to`/`write_sheet_to` build the
 workbook in memory and write it to the writer in one `write_all`. A writer has no extension, so
 these need an explicit format:
@@ -422,28 +436,65 @@ The input is a path (`&str`, `&Path`, `&PathBuf`) or bytes (`&[u8]`); then `head
 `degree_of_parallelism`, as in `Sheet::parse`. A nonzero code from a callback comes back as
 `ErrorKind::Callback(code)`; a panic in one is resumed on the calling thread.
 
+## Callback reads
+
+`Sheet::for_each_row` calls a closure once per row on the calling thread, with cells borrowed from
+the library's buffers for that call instead of copied into a cursor:
+
+```rust,no_run
+use excelreader::Workbook;
+
+let workbook = Workbook::open("report.xlsx")?;
+let mut total = 0.0;
+workbook.sheet(0)?.for_each_row(|row| {
+    if let Some(amount) = row.get(1).and_then(|cell| cell.number()) {
+        total += amount;
+    }
+    Ok(())
+})?;
+# Ok::<(), excelreader::Error>(())
+```
+
+`Sheet::aggregate` folds any sheet, in any format, into one accumulator across several threads.
+New code should use it rather than `aggregate_csv`:
+
+```rust,no_run
+use excelreader::{Accumulator, RowRef, Workbook};
+
+struct Count(u64);
+impl Accumulator for Count {
+    fn accumulate(&mut self, _row: RowRef<'_>) -> Result<(), i32> {
+        self.0 += 1;
+        Ok(())
+    }
+    fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
+        self.0 += other.0;
+        Ok(())
+    }
+}
+
+let workbook = Workbook::open("big.xlsx")?;
+let rows = workbook.sheet(0)?.aggregate(1, 0, || Count(0))?;
+# Ok::<(), excelreader::Error>(())
+```
+
+A cell in these callbacks carries text, a number, or both. `as_bytes`/`as_str` return only the
+stored text, so they are empty for a cell that carries only a number; `text()` formats that number
+itself (shortest round-trip form) and `number()` returns it directly, or parses the text when there
+is no number. A positive `Err(code)` comes back as `ErrorKind::Callback(code)`, and a panic is
+resumed on the calling thread. Calling other methods on the workbook from inside the callback is
+allowed.
+
+`Sheet::aggregate` seeds an accumulator per chunk of sheet data, not per thread, and may drop a
+chunk's accumulator without combining it. XLS, table views and CSV opened from a `Source` or stream
+read sequentially.
+
 ## Bounds and panics
 
 `TableView::get` returns `Option<T>` and is `None` outside `0..len()`. The accessors the derive's
 generated code reads columns through panic on an out-of-range row, a column type that does not
 match the binding, or a string the native library returned as non-UTF-8 - each is a contract
 violation rather than recoverable input.
-
-## Parallel aggregation on macOS
-
-`aggregate_csv` over a source large enough to partition (256 KB and up) can crash the process on
-macOS arm64. The fault is inside the native runtime's signal handling, not in this crate: a .NET
-thread resumes at address 0 after a signal the runtime sent it, which ends the process with no
-message. It happens with any `degree_of_parallelism` above 1, and the same runtime built into a
-plain C host does not show it, so a Rust host appears to make it far more likely.
-
-`Sheet::parse` and `Sheet::to_arrow` with a `degree_of_parallelism` above 1 fan out on XLSX and
-XLSB too; this has not been tested on macOS, so treat them the same way.
-
-Until it is fixed upstream, pass a `degree_of_parallelism` of 1 on macOS for a sequential run, or
-keep sources under the 256 KB partitioning floor, where the library never fans out. Linux and
-Windows are unaffected. The crate's own partitioned aggregation tests are `#[ignore]`d on macOS for
-this reason.
 
 ## Build notes
 

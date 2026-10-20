@@ -53,6 +53,41 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
+        public async Task AFailureAfterBlankLinesReportsTheSameRowAsTheSequentialParser()
+        {
+            var sb = new StringBuilder("Name,Age\n");
+            for (int i = 0; i < 30_000; i++)
+            {
+                sb.Append(i == 25_000 ? "bad,x\n" : $"name{i},{i}\n");
+                if (i % 997 == 0)
+                {
+                    sb.Append('\n');
+                }
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+            var options = new ExcelParserOptions { ThrowOnParseFailure = true };
+
+            using CsvReader sequentialSource = Excel.FromCsv(csv);
+            ExcelParseException sequential = Assert.Throws<ExcelParseException>(
+                () => ExcelParser.FromAttributes<Row>(options).Parse(sequentialSource.FirstSheet).ToList());
+            using CsvReader parallelSource = Excel.FromCsv(csv);
+            ExcelParseException parallel = await Assert.ThrowsAsync<ExcelParseException>(
+                () => DrainAsync(SheetParallel.ParseAsync(parallelSource.FirstSheet, ExcelParser.FromAttributes<Row>(options), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken)));
+
+            Assert.Equal(sequential.Row, parallel.Row);
+        }
+
+        [Fact]
+        public async Task EnumeratingTheSameResultTwiceYieldsEveryRowBothTimes()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(20_000));
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(20_000, (await DrainAsync(rows).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken)).Count);
+            Assert.Equal(20_000, (await DrainAsync(rows).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken)).Count);
+        }
+
+        [Fact]
         public async Task FileOverloadMatchesTheSequentialParser()
         {
             byte[] csv = BuildCsv(20_000);

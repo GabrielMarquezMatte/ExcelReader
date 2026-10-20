@@ -337,6 +337,8 @@ class NativeWriteOptions(ctypes.Structure):
         ("csv_quote", ctypes.c_int32),
         ("date1904", ctypes.c_int32),
         ("use_shared_strings", ctypes.c_int32),
+        ("degree_of_parallelism", ctypes.c_int32),
+        ("batch_rows", ctypes.c_int32),
     ]
 
 
@@ -366,6 +368,8 @@ def to_native_write_options(options: WriteOptions) -> NativeWriteOptions:
     raw.csv_quote = _opt_number(options.csv_quote)
     raw.date1904 = _opt_state(options.date1904)
     raw.use_shared_strings = _opt_state(options.use_shared_strings)
+    raw.degree_of_parallelism = 1 if options.degree_of_parallelism is None else options.degree_of_parallelism
+    raw.batch_rows = _opt_number(options.batch_rows)
     return raw
 
 
