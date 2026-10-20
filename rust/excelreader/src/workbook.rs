@@ -351,6 +351,36 @@ impl<'w> Sheet<'w> {
         crate::foreach::for_each_row(self.workbook.handle, self.index, f)
     }
 
+    /// Folds this sheet into one `A` across several threads.
+    ///
+    /// `header_row` is 1-based, `0` meaning no header. `degree_of_parallelism` is `0` for every
+    /// processor, `1` sequential, `n` up to `n` threads. The CSV dialect, password and limits come
+    /// from the options the workbook was opened with.
+    ///
+    /// `seed` is called once per chunk, on worker threads; see [`Accumulator`](crate::Accumulator)
+    /// for the contract. `seed`, `accumulate` and `combine` never run on the calling thread; each
+    /// accumulator is dropped on the calling thread once the run has finished. The call blocks
+    /// until the run finishes, so `seed` may borrow locals. A panic inside any callback aborts the
+    /// run and is resumed here once the library has freed every state.
+    pub fn aggregate<A, F>(
+        &self,
+        header_row: i32,
+        degree_of_parallelism: i32,
+        seed: F,
+    ) -> Result<A, Error>
+    where
+        A: crate::Accumulator,
+        F: Fn() -> A + Sync,
+    {
+        crate::aggregate::aggregate_sheet(
+            self.workbook.handle,
+            self.index,
+            header_row,
+            degree_of_parallelism,
+            seed,
+        )
+    }
+
     /// Every row of this sheet, read in one native call into a buffer the result owns outright.
     pub fn read_all(&self) -> Result<AllRows, Error> {
         let cursor = self.rows()?;
