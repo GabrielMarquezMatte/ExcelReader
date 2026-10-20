@@ -72,9 +72,30 @@ namespace
         std::vector<Cell> cells;
         for (auto cell : row)
         {
-            cells.emplace_back(cell.column, cell.type, cell.as_number(), cell.text());
+            cells.emplace_back(cell.column, cell.type, cell.as_number(), std::string(cell.value));
         }
         return cells;
+    }
+
+    std::vector<uint8_t> large_numbers(int32_t format)
+    {
+        std::vector<uint8_t> bytes;
+        xl::WriteOptions options{};
+        options.format = format;
+        auto writer = xl::WriterHandle::open(bytes, options);
+        if (!writer.has_value() || !writer->start_sheet("S1").has_value())
+        {
+            return {};
+        }
+        for (int64_t i = 1; i <= 20; ++i)
+        {
+            (void)writer->start_row();
+            (void)writer->write(static_cast<double>(i) * 1e20);
+            (void)writer->end_row();
+        }
+        (void)writer->end_sheet();
+        (void)writer->finish();
+        return bytes;
     }
 
     std::string shortest(double value)
@@ -84,10 +105,9 @@ namespace
         return std::string(buffer, result.ptr);
     }
 
-    void for_each_row_matches_the_cursor(const std::string &path)
+    void for_each_row_matches_the_cursor(const std::expected<xl::Workbook, xl::Error> &workbook)
     {
-        auto workbook = xl::Workbook::open(path);
-        check(workbook.has_value(), "open the fixture for for_each_row");
+        check(workbook.has_value(), "open the workbook for for_each_row");
         if (!workbook.has_value())
         {
             return;
@@ -266,8 +286,13 @@ namespace
 
 int main()
 {
-    for_each_row_matches_the_cursor(fixture());
-    for_each_row_matches_the_cursor(EXCELREADER_FIXTURE_PATH);
+    for_each_row_matches_the_cursor(xl::Workbook::open(fixture()));
+    for_each_row_matches_the_cursor(xl::Workbook::open(EXCELREADER_FIXTURE_PATH));
+    {
+        const auto bytes = large_numbers(XL_FORMAT_XLSB);
+        for_each_row_matches_the_cursor(
+            xl::Workbook::open(std::span<const uint8_t>(bytes), xl::OpenOptions{.format = XL_FORMAT_XLSB}));
+    }
     number_only_cell_formats_its_text();
     positive_code_stops_the_walk();
     non_positive_code_is_an_error();

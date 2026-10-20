@@ -340,8 +340,9 @@ impl<'w> Sheet<'w> {
     ///
     /// Each row's cells borrow the library's buffers for that call only. A cell may carry text, a
     /// number, or both: [`CellRef::text`](crate::CellRef::text) and
-    /// [`CellRef::number`](crate::CellRef::number) cover all three. `Err(code)` stops the walk; a
-    /// positive code surfaces as [`ErrorKind::Callback`](crate::ErrorKind::Callback). Other calls
+    /// [`CellRef::number`](crate::CellRef::number) cover all three. A nonzero `Err(code)` stops the
+    /// walk (`Err(0)` is `XL_OK` and does not); a positive code surfaces as
+    /// [`ErrorKind::Callback`](crate::ErrorKind::Callback). Other calls
     /// on this workbook are allowed from inside `f`. A panic in `f` stops the walk and is resumed
     /// here.
     pub fn for_each_row<F>(&self, f: F) -> Result<(), Error>

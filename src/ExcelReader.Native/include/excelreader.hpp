@@ -24,6 +24,10 @@
 #include <utility>
 #include <vector>
 #include <chrono>
+#if !defined(__cpp_lib_to_chars)
+#include <locale>
+#include <sstream>
+#endif
 
 namespace xl
 {
@@ -516,13 +520,27 @@ namespace xl
             {
                 return number;
             }
-            double parsed = 0;
-            const char *last = value.data() + value.size();
-            const auto result = std::from_chars(value.data(), last, parsed);
-            if (value.empty() || result.ec != std::errc{} || result.ptr != last)
+            if (value.empty())
             {
                 return std::nullopt;
             }
+            double parsed = 0;
+#if defined(__cpp_lib_to_chars)
+            const char *last = value.data() + value.size();
+            const auto result = std::from_chars(value.data(), last, parsed);
+            if (result.ec != std::errc{} || result.ptr != last)
+            {
+                return std::nullopt;
+            }
+#else
+            std::istringstream in{std::string(value)};
+            in.imbue(std::locale::classic());
+            in >> std::noskipws >> parsed;
+            if (in.fail() || in.peek() != std::char_traits<char>::eof())
+            {
+                return std::nullopt;
+            }
+#endif
             return parsed;
         }
 
@@ -535,9 +553,29 @@ namespace xl
             {
                 return std::string(value);
             }
+#if defined(__cpp_lib_to_chars)
             char buffer[32];
             const auto result = std::to_chars(buffer, buffer + sizeof(buffer), *number);
             return std::string(buffer, result.ptr);
+#else
+            std::string text;
+            for (int precision = 1; precision <= 17; ++precision)
+            {
+                std::ostringstream out;
+                out.imbue(std::locale::classic());
+                out.precision(precision);
+                out << *number;
+                text = out.str();
+                std::istringstream back{text};
+                back.imbue(std::locale::classic());
+                double parsed = 0;
+                if (back >> parsed && parsed == *number)
+                {
+                    break;
+                }
+            }
+            return text;
+#endif
         }
     };
 
