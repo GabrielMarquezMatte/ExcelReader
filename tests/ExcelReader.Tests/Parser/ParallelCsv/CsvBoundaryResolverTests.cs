@@ -158,6 +158,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Assert.Equal(CsvQuoteParity.Inside, Infer("\",4\n", before: 'a'));
             Assert.Null(Infer("\",4\n", before: ','));
             Assert.Null(Infer("\"x\",4\n", before: '"'));
+            Assert.Null(InferAfter("", "\"x\",4\n"));
         }
 
         [Fact]
@@ -167,6 +168,8 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Assert.Equal(CsvQuoteParity.Outside, InferAfter("x,\"said \"", "\"hi\"\"\",5\n"));
             Assert.Equal(CsvQuoteParity.Inside, InferAfter("x\n\"", "\"\"quoted\"\" start\",5\n"));
             Assert.Null(InferAfter("\"", "\"x\",4\n"));
+            Assert.Null(InferAfter("x,\"", "\"\""));
+            Assert.Null(InferAfter("a\"", "\"b,4\n"));
         }
 
         [Fact]
