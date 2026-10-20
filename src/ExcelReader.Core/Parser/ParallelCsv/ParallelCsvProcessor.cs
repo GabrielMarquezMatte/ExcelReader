@@ -12,13 +12,41 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         private const int MaxChunkBytes = 64 * 1024 * 1024;
         private const int RowsPerCancellationCheck = 4096;
 
-        private sealed class ChunkOutcome<TState>(long actualStart, TState state)
+        private sealed class ChunkOutcome<TState>(long actualStart, TState state, FailureGate? gate)
         {
             public readonly long ActualStart = actualStart;
+            public readonly FailureGate? Gate = gate;
             public long ResolvedNextStart = long.MaxValue;
             public TState State = state;
             public long Delivered;
+            public bool Abandoned;
             public ExceptionDispatchInfo? Failure;
+        }
+
+        // The lowest index of a chunk that failed. Chunks past it stop: the merge throws at that failure before
+        // reaching them, unless the failing chunk was misguessed and is re-read clean, and then it reads them itself.
+        private sealed class FailureGate
+        {
+            private int _first = int.MaxValue;
+
+            internal void Fail(int index)
+            {
+                int seen = Volatile.Read(ref _first);
+                while (index < seen)
+                {
+                    int prior = Interlocked.CompareExchange(ref _first, index, seen);
+                    if (prior == seen)
+                    {
+                        return;
+                    }
+                    seen = prior;
+                }
+            }
+
+            internal bool Past(int index)
+            {
+                return index > Volatile.Read(ref _first);
+            }
         }
 
         internal static Task<TState> RunWithChunkSizeAsync<TState>(
@@ -123,11 +151,12 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 : (int)Math.Clamp(dataLength / ((long)dop * ChunksPerWorker), MinChunkBytes, MaxChunkBytes);
             CsvChunkPlan plan = CsvChunkPlan.Create(dataStart, dataLength, dop, chunkSize);
 
-            var outcomes = new ChunkOutcome<TState>[plan.Count];
+            var outcomes = new ChunkOutcome<TState>?[plan.Count];
+            var gate = new FailureGate();
             var workers = new Task[Math.Min(dop, plan.Count)];
             for (int w = 0; w < workers.Length; w++)
             {
-                workers[w] = Task.Run(() => DrainPlanAsync(source, plan, dataStart, reader, aggregation, outcomes, ct), ct);
+                workers[w] = Task.Run(() => DrainPlanAsync(source, plan, dataStart, reader, aggregation, outcomes, gate, ct), ct);
             }
             await Task.WhenAll(workers).ConfigureAwait(false);
 
@@ -136,10 +165,10 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             long recordsBefore = headerRow;
             for (int i = 0; i < plan.Count && confirmedStart < long.MaxValue; i++)
             {
-                ChunkOutcome<TState> outcome = outcomes[i];
-                if (outcome.ActualStart != confirmedStart)
+                ChunkOutcome<TState>? outcome = outcomes[i];
+                if (outcome is null || outcome.Abandoned || outcome.ActualStart != confirmedStart)
                 {
-                    outcome = await ParseChunkAsync(source, plan[i], confirmedStart, reader, aggregation, ct).ConfigureAwait(false);
+                    outcome = await ParseChunkAsync(source, plan[i], confirmedStart, reader, aggregation, gate: null, ct).ConfigureAwait(false);
                 }
                 if (outcome.Failure is not null)
                 {
@@ -159,21 +188,25 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
         private static async Task DrainPlanAsync<TState>(
             CsvChunkSource source, CsvChunkPlan plan, long dataStart, CsvReaderOptions reader,
-            RowAggregation<TState> aggregation, ChunkOutcome<TState>[] outcomes, CancellationToken ct)
+            RowAggregation<TState> aggregation, ChunkOutcome<TState>?[] outcomes, FailureGate gate, CancellationToken ct)
         {
             while (plan.TryTakeNext(out CsvChunk chunk))
             {
                 ct.ThrowIfCancellationRequested();
+                if (gate.Past(chunk.Index))
+                {
+                    continue;
+                }
                 long start = chunk.Index == 0 ? dataStart : CsvChunkWorker.GuessStart(source, chunk, reader.Quote, reader.Delimiter);
-                outcomes[chunk.Index] = await ParseChunkAsync(source, chunk, start, reader, aggregation, ct).ConfigureAwait(false);
+                outcomes[chunk.Index] = await ParseChunkAsync(source, chunk, start, reader, aggregation, gate, ct).ConfigureAwait(false);
             }
         }
 
         private static ValueTask<ChunkOutcome<TState>> ParseChunkAsync<TState>(
             CsvChunkSource source, CsvChunk chunk, long start, CsvReaderOptions reader,
-            RowAggregation<TState> aggregation, CancellationToken ct)
+            RowAggregation<TState> aggregation, FailureGate? gate, CancellationToken ct)
         {
-            var outcome = new ChunkOutcome<TState>(start, aggregation.Seed());
+            var outcome = new ChunkOutcome<TState>(start, aggregation.Seed(), gate);
             if (start >= source.Length)
             {
                 return new ValueTask<ChunkOutcome<TState>>(outcome);
@@ -204,7 +237,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                outcome.Failure = ExceptionDispatchInfo.Capture(ex);
+                Fail(outcome, chunk, ex);
             }
             finally
             {
@@ -234,11 +267,17 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        outcome.Failure = ExceptionDispatchInfo.Capture(ex);
+                        Fail(outcome, chunk, ex);
                     }
                 }
             }
             return outcome;
+        }
+
+        private static void Fail<TState>(ChunkOutcome<TState> outcome, CsvChunk chunk, Exception ex)
+        {
+            outcome.Failure = ExceptionDispatchInfo.Capture(ex);
+            outcome.Gate?.Fail(chunk.Index);
         }
 
         private static bool DeliverWithinChunk<TState>(
@@ -248,6 +287,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             if (absolute >= chunk.End)
             {
                 outcome.ResolvedNextStart = absolute;
+                return false;
+            }
+            if (outcome.Gate is not null && outcome.Gate.Past(chunk.Index))
+            {
+                outcome.Abandoned = true;
                 return false;
             }
             if (++outcome.Delivered % RowsPerCancellationCheck == 0)

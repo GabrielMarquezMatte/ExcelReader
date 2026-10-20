@@ -110,6 +110,11 @@ namespace ExcelReader.Core.Reader
         /// discarded partition's accumulator is thrown away, and apply the side effects once it returns.
         /// </para>
         /// <para>
+        /// When <paramref name="body"/> or a parse throws, partitions further into the sheet stop: on CSV at their
+        /// next record, on XLSX and XLSB within the few chunks already in flight. Partitions before it run to the
+        /// end, so every record a sequential read would deliver before the failure is delivered.
+        /// </para>
+        /// <para>
         /// A <see cref="ReadOnlySpan{T}"/> column points into a pooled buffer the worker reuses once
         /// <paramref name="body"/> returns. Copy anything that must outlive the call.
         /// </para>
