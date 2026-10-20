@@ -207,6 +207,33 @@ pub struct XlRow {
     pub cells: *mut XlRowCell,
 }
 
+/// Mirrors `xl_cell_view`. `value` is NULL when `value_len` is 0, and `number` is meaningful only
+/// when `has_number` is non-zero; a cell carries text, a number, or both.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct XlCellView {
+    pub column: i32,
+    pub cell_type: i32,
+    pub value_len: i32,
+    pub has_number: i32,
+    pub value: *const u8,
+    pub number: f64,
+}
+
+/// Mirrors `xl_aggregation`: the `xl_csv_aggregation` layout with an `xl_cell_view` accumulate.
+/// Same threading rules as `XlCsvAggregation`; build one through `Sheet::aggregate`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct XlAggregation {
+    pub struct_size: i32,
+    pub seed: Option<unsafe extern "C" fn(*mut *mut c_void, *mut c_void) -> i32>,
+    pub accumulate:
+        Option<unsafe extern "C" fn(*mut c_void, *const XlCellView, i32, *mut c_void) -> i32>,
+    pub combine: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32>,
+    pub free_state: Option<unsafe extern "C" fn(*mut c_void, *mut c_void)>,
+    pub user_data: *mut c_void,
+}
+
 /// Mirrors `xl_csv_aggregation`. Every callback runs on a library worker thread except
 /// `free_state`, which runs on the calling thread after the run has finished; none may let a
 /// panic escape into the library - build one through `aggregate` rather than by hand.
@@ -479,6 +506,27 @@ extern "C" {
         out_state: *mut *mut c_void,
     ) -> c_int;
 
+    /// Calls `callback` once per row of `sheet` on the calling thread, with cells borrowed for the
+    /// call only. A non-`XL_OK` return stops the walk and is returned verbatim.
+    pub fn xl_rows_foreach(
+        handle: *mut XlWorkbook,
+        sheet: i32,
+        callback: Option<unsafe extern "C" fn(*const XlCellView, i32, *mut c_void) -> i32>,
+        user_data: *mut c_void,
+    ) -> c_int;
+
+    /// Folds `sheet` into one caller-owned state across several threads, like
+    /// `xl_csv_aggregate_memory` over any format. See the contract above `xl_aggregate` in
+    /// `excelreader.h`.
+    pub fn xl_aggregate(
+        handle: *mut XlWorkbook,
+        sheet: i32,
+        agg: *const XlAggregation,
+        header_row: i32,
+        degree_of_parallelism: i32,
+        out_state: *mut *mut c_void,
+    ) -> c_int;
+
     pub fn xl_last_error_ptr(out_len: *mut i32) -> *const u8;
 }
 
@@ -493,5 +541,14 @@ mod tests {
             XL_ABI_VERSION,
             "the linked native library speaks a different ABI revision than this crate"
         );
+    }
+
+    #[test]
+    fn view_structs_match_the_c_layout() {
+        assert_eq!(std::mem::size_of::<XlCellView>(), 32);
+        assert_eq!(std::mem::offset_of!(XlCellView, value), 16);
+        assert_eq!(std::mem::offset_of!(XlCellView, number), 24);
+        assert_eq!(std::mem::size_of::<XlAggregation>(), 48);
+        assert_eq!(std::mem::offset_of!(XlAggregation, accumulate), 16);
     }
 }
