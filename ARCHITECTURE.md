@@ -175,15 +175,25 @@ the seam. A wrong start also shifts every field boundary, so on a source with qu
 discarded pass can hand the callback values that appear nowhere in the file. For an accumulator both are
 invisible: the discarded instance is thrown away.
 
-A guess is only wrong when the offset falls inside a quoted field. `CsvChunkWorker.GuessStart` first
-reads the byte before the chunk start and returns the chunk start unchanged when it already sits on a
-record boundary, because `CsvBoundaryResolver.FindRecordStart` only ever scans past a terminator and
+A guess can only be wrong when the offset falls inside a quoted field, so `CsvChunkWorker.GuessStart`
+first decides whether it does. `CsvBoundaryResolver.InferParity` reads the runs of quotes in a window
+of up to 64 KB from the chunk start, reaching back over a run the start cuts and looking past the
+chunk's end when it has to. Under RFC 4180 an odd run that opens a field follows a delimiter or a line
+start, and one that closes a field precedes a delimiter, a line end or the end of the source, so the
+first run that fits only one of the two decides. When a run fits both, the worker does not guess at
+all: the chunk is left to the merge, which reads it from its confirmed start.
+
+When the chunk starts outside quotes and the byte before it is a terminator, `GuessStart` returns the
+chunk start unchanged, because `CsvBoundaryResolver.FindRecordStart` only ever scans past a terminator and
 would otherwise overshoot by a whole record on every chunk that happens to be aligned — which, at a
-1 MiB minimum chunk size, is every chunk of a fixed-width file. That leaves quote-free sources exact,
-and the repeat documented as a caller obligation for the rest rather than designed out. Removing it
-there too needs a quote-parity prefix pass over the bytes before any parsing starts; that pass is a
-barrier and would cost roughly half the dop-16 runtime unless pipelined, which is more machinery than
-the hazard currently warrants.
+1 MiB minimum chunk size, is every chunk of a fixed-width file.
+
+`ForEachAsync` is therefore exactly once on a CSV that follows RFC 4180 quoting with no quoted field
+longer than 64 KB. A stray quote inside an unquoted field, text after a closing quote or a longer quoted
+field can still be misread, and those sources keep the repeat as a documented caller obligation.
+Removing it there too would need a quote-parity prefix pass over the bytes before any parsing starts.
+That pass is a barrier and would cost roughly half the dop-16 runtime unless pipelined, which is more
+machinery than sources that break RFC 4180 warrant.
 
 ## Shared plumbing
 
