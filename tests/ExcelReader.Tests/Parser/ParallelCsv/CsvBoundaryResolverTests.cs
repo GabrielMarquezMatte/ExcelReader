@@ -1,3 +1,4 @@
+using System.Text;
 using ExcelReader.Core.Parser.ParallelCsv;
 
 namespace ExcelReader.Tests.Parser.ParallelCsv
@@ -5,6 +6,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
     public class CsvBoundaryResolverTests
     {
         private const byte Quote = (byte)'"';
+        private const byte Delimiter = (byte)',';
 
         [Fact]
         public void FindsTheByteAfterAPlainNewline()
@@ -94,6 +96,36 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             int start = CsvBoundaryResolver.FindRecordStart(window, Quote, CsvQuoteParity.Outside);
 
             Assert.Equal(3, start);
+        }
+
+        [Theory]
+        [InlineData("th\nree\",4\n")]
+        [InlineData("ree\"\n")]
+        [InlineData("ree\"\r\n")]
+        [InlineData("a\"\"b\",4\n")]
+        public void AQuoteThatClosesAFieldMeansTheWindowStartsInside(string window)
+        {
+            Assert.Equal(CsvQuoteParity.Inside, CsvBoundaryResolver.InferParity(Encoding.UTF8.GetBytes(window), Quote, Delimiter));
+        }
+
+        [Theory]
+        [InlineData("4,\"three\",5\n")]
+        [InlineData(",4\n\"x\ny\",5\n")]
+        [InlineData("4,\"\",5\n")]
+        [InlineData("4,\"\"\"x\",5\n")]
+        [InlineData("plain,4\nplain,5\n")]
+        [InlineData("")]
+        [InlineData("ab\"")]
+        public void AnyOtherFirstQuoteOrNoneMeansOutside(string window)
+        {
+            Assert.Equal(CsvQuoteParity.Outside, CsvBoundaryResolver.InferParity(Encoding.UTF8.GetBytes(window), Quote, Delimiter));
+        }
+
+        [Fact]
+        public void HonoursTheDelimiter()
+        {
+            Assert.Equal(CsvQuoteParity.Inside, CsvBoundaryResolver.InferParity("ree\";4\n"u8, Quote, (byte)';'));
+            Assert.Equal(CsvQuoteParity.Outside, CsvBoundaryResolver.InferParity("ree\";4\n"u8, Quote, Delimiter));
         }
     }
 }
