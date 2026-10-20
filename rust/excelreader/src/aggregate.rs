@@ -308,7 +308,14 @@ where
     let agg = raw_view_aggregation(&shared);
     let mut state: *mut c_void = std::ptr::null_mut();
     let status = unsafe {
-        ffi::xl_aggregate(handle, sheet, &agg, header_row, degree_of_parallelism, &mut state)
+        ffi::xl_aggregate(
+            handle,
+            sheet,
+            &agg,
+            header_row,
+            degree_of_parallelism,
+            &mut state,
+        )
     };
     finish(shared, status, state)
 }

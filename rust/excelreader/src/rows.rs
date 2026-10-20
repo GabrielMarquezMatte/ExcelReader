@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 
 use crate::ffi::{
-    self, XlCellView, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY, XL_CELL_ERROR, XL_CELL_FORMULA,
-    XL_CELL_NUMBER, XL_CELL_STRING,
+    self, XlCellView, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY, XL_CELL_ERROR,
+    XL_CELL_FORMULA, XL_CELL_NUMBER, XL_CELL_STRING,
 };
 use crate::{Error, ErrorKind};
 
@@ -576,7 +576,11 @@ mod tests {
             cell_type,
             value_len: text.len() as i32,
             has_number: number.is_some() as i32,
-            value: if text.is_empty() { std::ptr::null() } else { text.as_ptr() },
+            value: if text.is_empty() {
+                std::ptr::null()
+            } else {
+                text.as_ptr()
+            },
             number: number.unwrap_or(0.0),
         }
     }
