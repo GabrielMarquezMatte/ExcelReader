@@ -49,6 +49,18 @@ int main()
     check(xl::CellView{0, xl::CellType::Number, {}, 42.5}.text() == "42.5", "a short number formats short");
     check(xl::CellView{0, xl::CellType::Number, {}, 3.0}.text() == "3", "an integral number has no fraction");
     check(xl::CellView{0, xl::CellType::Number, "kept", 1.0}.text() == "kept", "stored text wins over the number");
+    check(xl::CellView{0, xl::CellType::Number, {}, 1000.0}.text() == "1000", "fixed wins when it is shorter");
+    check(xl::CellView{0, xl::CellType::Number, {}, 0.001}.text() == "0.001", "fixed wins a tie");
+    check(xl::CellView{0, xl::CellType::Number, {}, 1e20}.text() == "1e+20", "scientific wins when it is shorter");
+    check(xl::CellView{0, xl::CellType::Number, {}, 1e-7}.text() == "1e-07", "a small number goes scientific");
+    check(xl::CellView{0, xl::CellType::Number, {}, 123456789012345680000.0}.text() == "123456789012345683968",
+          "a large integer prints its exact value");
+    check(xl::CellView{0, xl::CellType::Number, {}, 0.0001}.text() == "1e-04", "scientific wins at 1e-04");
+    check(xl::CellView{0, xl::CellType::Number, {}, 123456.0}.text() == "123456", "an integer stays fixed");
+    check(xl::CellView{0, xl::CellType::Number, {}, 1e15}.text() == "1e+15", "a round power of ten goes scientific");
+    check(xl::CellView{0, xl::CellType::Number, {}, 0.0125}.text() == "0.0125", "a fraction places its point");
+    check(xl::CellView{0, xl::CellType::Number, {}, -2.5}.text() == "-2.5", "a negative keeps its sign");
+    check(xl::CellView{0, xl::CellType::Number, {}, 0.0}.text() == "0", "zero is 0");
     round_trips(0.1);
     round_trips(1.0 / 3.0);
     round_trips(1e21);

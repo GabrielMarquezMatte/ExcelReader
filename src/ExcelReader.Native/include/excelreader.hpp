@@ -558,23 +558,60 @@ namespace xl
             const auto result = std::to_chars(buffer, buffer + sizeof(buffer), *number);
             return std::string(buffer, result.ptr);
 #else
-            std::string text;
-            for (int precision = 1; precision <= 17; ++precision)
+            // Mirrors to_chars: the fewest digits that round-trip, fixed unless scientific is shorter.
+            const double v = *number;
+            std::string scientific;
+            for (int precision = 0; precision <= 16; ++precision)
             {
                 std::ostringstream out;
                 out.imbue(std::locale::classic());
                 out.precision(precision);
-                out << *number;
-                text = out.str();
-                std::istringstream back{text};
+                out << std::scientific << v;
+                scientific = out.str();
+                std::istringstream back{scientific};
                 back.imbue(std::locale::classic());
                 double parsed = 0;
-                if (back >> parsed && parsed == *number)
+                if (back >> parsed && parsed == v)
                 {
                     break;
                 }
             }
-            return text;
+            const std::size_t e = scientific.find('e');
+            if (e == std::string::npos)
+            {
+                return scientific;
+            }
+            const bool negative = scientific[0] == '-';
+            std::string digits;
+            for (std::size_t i = negative ? 1 : 0; i < e; ++i)
+            {
+                if (scientific[i] != '.')
+                {
+                    digits += scientific[i];
+                }
+            }
+            int exponent = 0;
+            const char *exponent_start = scientific.data() + e + (scientific[e + 1] == '+' ? 2 : 1);
+            std::from_chars(exponent_start, scientific.data() + scientific.size(), exponent);
+            const std::string sign = negative ? "-" : "";
+            std::string fixed;
+            if (exponent >= static_cast<int>(digits.size()) - 1)
+            {
+                std::ostringstream out;
+                out.imbue(std::locale::classic());
+                out.precision(0);
+                out << std::fixed << v;
+                fixed = out.str();
+            }
+            else if (exponent >= 0)
+            {
+                fixed = sign + digits.substr(0, exponent + 1) + "." + digits.substr(exponent + 1);
+            }
+            else
+            {
+                fixed = sign + "0." + std::string(-exponent - 1, '0') + digits;
+            }
+            return fixed.size() <= scientific.size() ? fixed : scientific;
 #endif
         }
     };
