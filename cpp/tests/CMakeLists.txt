@@ -70,3 +70,16 @@ target_link_libraries(excelreader_cpp_aggregate PRIVATE xl::excelreader)
 
 add_test(NAME excelreader_cpp_aggregate COMMAND excelreader_cpp_aggregate)
 excelreader_copy_native_library(excelreader_cpp_aggregate)
+
+add_executable(excelreader_cpp_numbers numbers.cpp)
+target_link_libraries(excelreader_cpp_numbers PRIVATE xl::excelreader)
+
+add_test(NAME excelreader_cpp_numbers COMMAND excelreader_cpp_numbers)
+excelreader_copy_native_library(excelreader_cpp_numbers)
+
+add_executable(excelreader_cpp_numbers_fallback numbers.cpp)
+target_link_libraries(excelreader_cpp_numbers_fallback PRIVATE xl::excelreader)
+target_compile_definitions(excelreader_cpp_numbers_fallback PRIVATE EXCELREADER_TEST_NO_TO_CHARS)
+
+add_test(NAME excelreader_cpp_numbers_fallback COMMAND excelreader_cpp_numbers_fallback)
+excelreader_copy_native_library(excelreader_cpp_numbers_fallback)

@@ -26,6 +26,7 @@ fn generated(format: Format) -> Workbook {
         writer
             .write_str(Some(&format!("label-{i}")))
             .expect("write");
+        writer.write_f64(Some(i as f64 * 1e20)).expect("write");
         writer.end_row().expect("end row");
     }
     writer.end_sheet().expect("end sheet");
@@ -45,7 +46,7 @@ fn collect(row: RowRef<'_>) -> Vec<Cell> {
                 cell.column,
                 cell.cell_type,
                 cell.number(),
-                cell.text().unwrap().into_owned(),
+                cell.as_str().unwrap().to_owned(),
             )
         })
         .collect()
@@ -85,6 +86,7 @@ fn assert_same_as_cursor(workbook: &Workbook) {
 fn for_each_row_matches_the_cursor_on_every_format() {
     assert_same_as_cursor(&Workbook::open(fixture("RealExcel.xlsx")).expect("open"));
     assert_same_as_cursor(&Workbook::open(fixture("RealExcel.xlsb")).expect("open"));
+    assert_same_as_cursor(&generated(Format::Xlsb));
     assert_same_as_cursor(&generated(Format::Xls));
     assert_same_as_cursor(&generated(Format::Csv));
 }
