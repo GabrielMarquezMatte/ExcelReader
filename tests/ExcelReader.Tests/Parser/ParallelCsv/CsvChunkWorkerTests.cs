@@ -92,13 +92,23 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
-        public async Task GuessesWrongWhenANewlineHidesInsideAQuotedField()
+        public async Task SkipsANewlineHiddenInsideTheQuotedFieldItStartsIn()
         {
             byte[] csv = "Name,Age\n\"a\nb\",0001\nCid,0003\n"u8.ToArray();
 
-            CsvChunkResult<Row> result = await ParseAsync(csv, start: 10, end: 20);
+            CsvChunkResult<Row> result = await ParseAsync(csv, start: 10, end: 22);
 
-            Assert.Equal(12, result.ActualStart);
+            Assert.Equal(20, result.ActualStart);
+        }
+
+        [Fact]
+        public async Task GuessesWrongWhenAQuotedFieldStartsWithTheDelimiter()
+        {
+            byte[] csv = "Name,Age\nAda,0001\n\",b\",0002\nCid,0003\n"u8.ToArray();
+
+            CsvChunkResult<Row> result = await ParseAsync(csv, start: 10, end: 30);
+
+            Assert.NotEqual(18, result.ActualStart);
         }
 
         [Fact]

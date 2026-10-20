@@ -506,15 +506,44 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             }
         }
 
+        [Theory]
+        [InlineData("\"x\ny\",{0}\n")]
+        [InlineData("\"x\",{0},\"y\"\n")]
+        [InlineData("\"said \"\"hi\"\"\",{0}\n")]
+        public async Task ForEachRecord_Chunked_QuotedFields_ReadsEveryChunkAndRecordOnce(string row)
+        {
+            const int rows = 4000;
+            const string header = "Name,Units\n";
+            var sb = new StringBuilder();
+            sb.Append(header);
+            for (int i = 1; i <= rows; i++)
+            {
+                sb.AppendFormat(CultureInfo.InvariantCulture, row, i);
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+            var probe = new ChunkProbe();
+            var calls = new ConcurrentDictionary<int, int>();
+
+            await ChunkedRecord(csv, sale => calls.AddOrUpdate(sale.Units, 1, static (_, n) => n + 1), probe, dop: 4, chunkSize: 2048);
+
+            int planned = CsvChunkPlan.Create(header.Length, csv.Length - header.Length, 4, 2048).Count;
+            Assert.True(planned > 1, $"expected the source to partition, planned {planned} chunk(s)");
+            Assert.Equal(planned, probe.Chunks);
+            Assert.Equal(rows, calls.Count);
+            Assert.All(calls, pair => Assert.Equal(1, pair.Value));
+        }
+
+        // A quoted field that starts with the delimiter makes the opening quote look like a closing one,
+        // so a chunk that starts outside it is guessed to start inside and read twice.
         [Fact]
-        public async Task ForEachRecord_Chunked_QuotedNewlines_InvokesBodyTwiceForSomeRecords()
+        public async Task ForEachRecord_Chunked_AmbiguousQuotes_InvokesBodyTwiceForSomeRecords()
         {
             const int rows = 4000;
             var sb = new StringBuilder();
             sb.Append("Name,Units\n");
             for (int i = 1; i <= rows; i++)
             {
-                sb.Append(CultureInfo.InvariantCulture, $"\"x\ny\",{i}\n");
+                sb.Append(CultureInfo.InvariantCulture, $"\",x\ny\",{i}\n");
             }
             byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
             var probe = new ChunkProbe();

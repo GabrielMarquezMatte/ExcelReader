@@ -153,7 +153,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             while (plan.TryTakeNext(out CsvChunk chunk))
             {
                 ct.ThrowIfCancellationRequested();
-                long start = chunk.Index == 0 ? dataStart : CsvChunkWorker.GuessStart(source, chunk, reader.Quote);
+                long start = chunk.Index == 0 ? dataStart : CsvChunkWorker.GuessStart(source, chunk, reader.Quote, reader.Delimiter);
                 outcomes[chunk.Index] = await ParseChunkAsync(source, chunk, start, reader, aggregation, ct).ConfigureAwait(false);
             }
         }

@@ -97,7 +97,9 @@ namespace ExcelReader.Core.Reader
         /// records, which may also be misparsed: a wrong start shifts every field boundary. An exception
         /// <paramref name="body"/> throws during a discarded pass is discarded with it. A start is only guessed
         /// wrongly inside a quoted field, so a CSV in which the quote character never appears delivers every
-        /// record exactly once. XLSB delivers every row exactly once. XLSX does too for a well-formed sheet; on
+        /// record exactly once. A start inside a quoted field is read off the next quote, so a wrong guess also
+        /// needs a quoted field that begins with the delimiter or a line break, or that runs past 4 KB without a
+        /// quote. XLSB delivers every row exactly once. XLSX does too for a well-formed sheet; on
         /// a malformed one, workers may already have called <paramref name="body"/> for rows that are then
         /// dropped, so a row can be delivered twice or be one the sequential reader would not produce.
         /// </para>
