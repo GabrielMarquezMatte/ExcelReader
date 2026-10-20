@@ -404,6 +404,40 @@ auto counted = xl::aggregate_csv("big.csv", RowCount{}, {.csv_delimiter = ';'}, 
 The dialect (`csv_delimiter`, `csv_quote`, `csv_detect_bom`) and `max_cell_bytes` come from
 `xl::OpenOptions`; the header row and the degree of parallelism (0 = every processor) follow it.
 
+## Callback reads
+
+`Sheet::for_each_row` calls a function once per row on the calling thread, with cells borrowed from
+the library's buffers for that call instead of copied into a cursor:
+
+```cpp
+double total = 0;
+auto walked = workbook->sheet(0).for_each_row([&](xl::RowView row)
+{
+    if (row.size() > 1)
+    {
+        total += row[1].as_number().value_or(0);
+    }
+    return XL_OK;
+});
+```
+
+`Sheet::aggregate` folds any sheet, in any format, across worker threads; the accumulator has the same
+shape as for `aggregate_csv`, so `RowCount` above works unchanged. New code should use it rather than
+`aggregate_csv`:
+
+```cpp
+auto counted = workbook->sheet(0).aggregate(RowCount{}, /*header_row*/ 1);
+```
+
+A cell in these callbacks carries text, a number, or both. `value` holds only the stored text, so it
+is empty for a cell that carries only a number; `text()` formats that number itself (shortest
+round-trip form) and `as_number()` returns it directly, or parses the text when there is no number.
+A return other than `XL_OK` stops the run and comes back as the error's code (use positive codes),
+and an exception is reported as an error. Calling other functions on the workbook from inside the
+callback is allowed. `Sheet::aggregate` seeds a copy per chunk of sheet data, not per thread, and may
+destroy a chunk's copy without combining it; XLS, table views and CSV opened from a `Source` or
+`InputStream` read sequentially.
+
 ## Bounds and ABI
 
 `TableView::operator[]` is unchecked, like `std::vector`'s. Use `TableView::at(row)`, which returns
