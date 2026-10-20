@@ -3,7 +3,7 @@ use crate::ffi::{
     XL_BUFFER_TOO_SMALL, XL_EOF, XL_OK,
 };
 use crate::{
-    AllRows, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor, Time, Timestamp,
+    AllRows, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor, RowRef, Time, Timestamp,
 };
 use std::marker::PhantomData;
 use std::path::Path;
@@ -334,6 +334,21 @@ impl<'w> Sheet<'w> {
     /// cursor, so several may be alive at once, on this thread or on others.
     pub fn rows(&self) -> Result<RowCursor<'w>, Error> {
         RowCursor::open(self.workbook.handle, self.index)
+    }
+
+    /// Calls `f` once per row on the calling thread, without copying the row into a cursor buffer.
+    ///
+    /// Each row's cells borrow the library's buffers for that call only. A cell may carry text, a
+    /// number, or both: [`CellRef::text`](crate::CellRef::text) and
+    /// [`CellRef::number`](crate::CellRef::number) cover all three. `Err(code)` stops the walk; a
+    /// positive code surfaces as [`ErrorKind::Callback`](crate::ErrorKind::Callback). Other calls
+    /// on this workbook are allowed from inside `f`. A panic in `f` stops the walk and is resumed
+    /// here.
+    pub fn for_each_row<F>(&self, f: F) -> Result<(), Error>
+    where
+        F: FnMut(RowRef<'_>) -> Result<(), i32>,
+    {
+        crate::foreach::for_each_row(self.workbook.handle, self.index, f)
     }
 
     /// Every row of this sheet, read in one native call into a buffer the result owns outright.
