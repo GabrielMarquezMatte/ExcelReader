@@ -82,6 +82,10 @@ earlier header. The Rust, Python and C++ bindings check the ABI version when the
 `xl_write_options` grew from 32 to 40 bytes after 7.0 (`degree_of_parallelism` and `batch_rows`,
 appended); the 7.0 size is still accepted and writes serially, so the ABI version stayed 6.
 
+7.x also added `xl_rows_foreach` and `xl_aggregate`. They are new exports only, so the ABI version
+stayed 6; a binding built against them fails with a missing-symbol error when it loads an older
+ABI-6 library that lacks them.
+
 ## How it is enforced
 
 Every pull request packs `ExcelReader.NET` and `ExcelReader.Arrow` and compares them with the last

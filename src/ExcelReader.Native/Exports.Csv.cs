@@ -55,17 +55,42 @@ namespace ExcelReader.Native
             return status;
         }
 
-        private static bool IsValidAggregation(NativeCsvAggregationRaw* aggregation)
+        [UnmanagedCallersOnly(EntryPoint = "xl_aggregate")]
+        public static int Aggregate(
+            nint handle, int sheet, NativeCsvAggregationRaw* aggregation,
+            int headerRow, int degreeOfParallelism, void** outState)
+        {
+            NativeApi.ClearLastError();
+            if (outState is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outState = null;
+            if (!IsValidAggregation(aggregation, "aggregation"))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = CsvAggregateApi.AggregateWorkbook(
+                Resolve(handle), sheet, *aggregation, headerRow, degreeOfParallelism, out nint result);
+            if (status == NativeStatus.Ok)
+            {
+                *outState = (void*)result;
+            }
+            return status;
+        }
+
+        private static bool IsValidAggregation(NativeCsvAggregationRaw* aggregation, string name = "csv_aggregation")
         {
             if (aggregation is null)
             {
-                NativeApi.SetLastError("csv_aggregation must not be NULL.");
+                NativeApi.SetLastError($"{name} must not be NULL.");
                 return false;
             }
             if (aggregation->StructSize != sizeof(NativeCsvAggregationRaw))
             {
                 NativeApi.SetLastError(
-                    $"csv_aggregation.struct_size must be exactly {sizeof(NativeCsvAggregationRaw)}; got {aggregation->StructSize}.");
+                    $"{name}.struct_size must be exactly {sizeof(NativeCsvAggregationRaw)}; got {aggregation->StructSize}.");
                 return false;
             }
             if (aggregation->Seed == IntPtr.Zero || aggregation->Accumulate == IntPtr.Zero
@@ -74,19 +99,19 @@ namespace ExcelReader.Native
                 List<string> missing = [];
                 if (aggregation->Seed == IntPtr.Zero)
                 {
-                    missing.Add("csv_aggregation.seed");
+                    missing.Add($"{name}.seed");
                 }
                 if (aggregation->Accumulate == IntPtr.Zero)
                 {
-                    missing.Add("csv_aggregation.accumulate");
+                    missing.Add($"{name}.accumulate");
                 }
                 if (aggregation->Combine == IntPtr.Zero)
                 {
-                    missing.Add("csv_aggregation.combine");
+                    missing.Add($"{name}.combine");
                 }
                 if (aggregation->FreeState == IntPtr.Zero)
                 {
-                    missing.Add("csv_aggregation.free_state");
+                    missing.Add($"{name}.free_state");
                 }
                 NativeApi.SetLastError($"{string.Join(", ", missing)} must not be NULL.");
                 return false;
