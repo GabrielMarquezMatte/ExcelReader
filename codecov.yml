@@ -1,3 +1,19 @@
+coverage:
+  status:
+    project:
+      csharp:
+        target: 88%
+        flags:
+          - csharp
+      python:
+        target: 88%
+        flags:
+          - python
+      rust:
+        target: 88%
+        flags:
+          - rust
+
 # Each language uploads under its own flag from a path-filtered job, so a flag a commit did not run keeps its last report.
 flag_management:
   default_rules:
