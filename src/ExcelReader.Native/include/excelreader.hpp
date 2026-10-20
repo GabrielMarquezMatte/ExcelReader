@@ -770,6 +770,32 @@ namespace xl
         VeryHidden = XL_SHEET_VERY_HIDDEN, ///< Hidden and absent from the Unhide dialog; only code can show it.
     };
 
+    /// @brief A fold over the rows of any sheet, for Sheet::aggregate.
+    ///
+    /// `Acc` must be move-constructible; the wrapper returns the surviving accumulator by moving out
+    /// of it. `combine` must fold `next` into `*this` without destroying it - the library owns
+    /// `next`'s lifetime and frees it afterwards.
+    ///
+    /// `accumulate` runs concurrently on worker threads, one `Acc` per chunk of sheet data (not per
+    /// thread), never on the calling thread. A chunk can be accumulated and then destroyed without
+    /// being combined. `combine` is effectively single-threaded but is not pinned to any particular
+    /// thread and also never runs on the calling thread. `~Acc()` does run on the calling thread,
+    /// once the run has finished, and must not throw.
+    ///
+    /// The `RowView` handed to `accumulate` borrows the library's buffers and is valid only for the
+    /// duration of that one call; copy anything you keep. A cell carries text, a number, or both.
+    ///
+    /// An exception escaping into the library is undefined behavior, so this wrapper catches
+    /// everything and reports it as an error. XLS, table views and CSV opened from a Source or
+    /// InputStream read sequentially. See `excelreader.h`'s `xl_aggregate` contract.
+    /// @tparam Acc The accumulator type.
+    template <typename Acc>
+    concept Accumulator =
+        std::move_constructible<Acc> && requires(Acc acc, Acc &next, RowView row) {
+            { acc.accumulate(row) } -> std::same_as<int32_t>;
+            { acc.combine(next) } -> std::same_as<int32_t>;
+        };
+
     /// @brief One sheet of a Workbook: the native workbook handle and an index.
     ///
     /// Holds no resource of its own, so it is cheap to copy and may be handed to another thread; each
@@ -862,6 +888,21 @@ namespace xl
             }
             return {};
         }
+
+        /// @brief Folds this sheet into one `Acc` across several threads.
+        ///
+        /// Each chunk starts from a copy of `seed`, made on a worker thread; copies are made
+        /// concurrently from the one `seed`, which the call only reads. The CSV dialect, password and
+        /// limits come from the OpenOptions the workbook was opened with.
+        /// @tparam Acc The accumulator; see Accumulator.
+        /// @param seed The state every chunk starts from.
+        /// @param header_row 1-based header row, not aggregated; 0 means none.
+        /// @param degree_of_parallelism Worker threads; 0 uses every processor, 1 runs sequentially.
+        /// @return The combined accumulator.
+        template <Accumulator Acc>
+            requires std::copy_constructible<Acc>
+        std::expected<Acc, Error> aggregate(const Acc &seed = Acc{}, int32_t header_row = 0,
+                                            int32_t degree_of_parallelism = 0) const;
 
         /// @brief The whole sheet from its first row, decoded in one native call.
         std::expected<DecodedRows, Error> read_all() const
@@ -2578,6 +2619,51 @@ namespace xl
             const int32_t status = call(&agg, &raw, &state);
             return csv_finish<Acc>(context, status, state);
         }
+
+        template <typename Acc>
+        int32_t view_accumulate(void *state, const xl_cell_view *cells, int32_t count, void *user_data) noexcept
+        {
+            auto *context = static_cast<CsvContext<Acc> *>(user_data);
+            try
+            {
+                const size_t length = count > 0 ? static_cast<size_t>(count) : 0;
+                return static_cast<Acc *>(state)->accumulate(Access::make<RowView>(cells, length));
+            }
+            catch (...)
+            {
+                context->threw.store(true, std::memory_order_relaxed);
+                return kCsvCallbackException;
+            }
+        }
+
+        template <typename Acc>
+        xl_aggregation view_aggregation(CsvContext<Acc> &context) noexcept
+        {
+            xl_aggregation agg{};
+            agg.struct_size = static_cast<int32_t>(sizeof(xl_aggregation));
+            agg.seed = &csv_seed<Acc>;
+            agg.accumulate = &view_accumulate<Acc>;
+            agg.combine = &csv_combine<Acc>;
+            agg.free_state = &csv_free_state<Acc>;
+            agg.user_data = &context;
+            return agg;
+        }
+    }
+
+    template <Accumulator Acc>
+        requires std::copy_constructible<Acc>
+    std::expected<Acc, Error> Sheet::aggregate(const Acc &seed, int32_t header_row,
+                                               int32_t degree_of_parallelism) const
+    {
+        if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+        detail::CsvContext<Acc> context{std::addressof(seed), {}};
+        const xl_aggregation agg = detail::view_aggregation<Acc>(context);
+        void *state = nullptr;
+        const int32_t status = xl_aggregate(handle_, index_, &agg, header_row, degree_of_parallelism, &state);
+        return detail::csv_finish<Acc>(context, status, state);
     }
 
     /// @brief Folds the CSV file at `path` into one `Acc` across several threads.
