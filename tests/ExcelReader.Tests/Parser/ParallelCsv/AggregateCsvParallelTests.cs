@@ -158,7 +158,8 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         [Fact]
         public async Task DiscardsExceptionsThrownWhileReadingAMisguessedPartition()
         {
-            byte[] csv = Encoding.UTF8.GetBytes("ok,\"one\nBOOM,x\"\nok,two\nok,\"three\nBOOM,y\"\nok,four\n");
+            // Text after each closing quote keeps the start guess from seeing that a chunk begins inside the field.
+            byte[] csv = Encoding.UTF8.GetBytes("ok,\"one\nBOOM,x\"z\nok,two\nok,\"three\nBOOM,y\"z\nok,four\n");
             List<string> expected = Sequential(csv);
             int misguessedDeliveries = 0;
             var throwOnBoom = new RowAggregation<List<string>>

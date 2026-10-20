@@ -102,13 +102,14 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
-        public async Task GuessesWrongWhenAQuotedFieldStartsWithTheDelimiter()
+        public async Task LeavesAChunkWhoseFirstQuoteCouldOpenOrCloseToTheMerge()
         {
             byte[] csv = "Name,Age\nAda,0001\n\",b\",0002\nCid,0003\n"u8.ToArray();
 
             CsvChunkResult<Row> result = await ParseAsync(csv, start: 10, end: 30);
 
-            Assert.NotEqual(18, result.ActualStart);
+            Assert.Equal(long.MaxValue, result.ActualStart);
+            Assert.Empty(result.Models);
         }
 
         [Fact]
