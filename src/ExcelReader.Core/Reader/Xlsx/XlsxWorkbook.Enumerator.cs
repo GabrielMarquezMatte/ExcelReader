@@ -363,6 +363,15 @@ namespace ExcelReader.Core.Reader.Xlsx
                 ReadOnlySpan<byte> rowEnd = _ns is null ? "</row"u8 : _ns.RowEnd;
                 while (true)
                 {
+                    if (_ns is null)
+                    {
+                        p = ParseCanonicalCells(buf.AsSpan(0, len), p);
+                        if (buf.AsSpan(p, Math.Min(6, len - p)).SequenceEqual("</row>"u8))
+                        {
+                            _pos = p + 6;
+                            return true;
+                        }
+                    }
                     int lt = p < len && buf[p] == (byte)'<' ? p : IndexOfBounded(buf, len, p, (byte)'<');
                     if (lt < 0)
                     {
@@ -483,6 +492,185 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
                 EmitCell(kind, buf.AsSpan(p, cEnd - p), col, style);
                 return cEnd + cClose.Length;
+            }
+
+            // Consumes a run of cells in the shape Excel writes, <c r=".." s=".." t=".."><v>..</v></c> or <c .../>,
+            // and stops at the first anything else, before touching any state, so ParseCellSpan takes it from there.
+            private int ParseCanonicalCells(ReadOnlySpan<byte> buf, int p)
+            {
+                int nextCol = _nextCol;
+                while (true)
+                {
+                    int end = TryParseCanonicalCell(buf, p, ref nextCol);
+                    if (end < 0)
+                    {
+                        break;
+                    }
+                    p = end;
+                }
+                _nextCol = nextCol;
+                return p;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private int TryParseCanonicalCell(ReadOnlySpan<byte> buf, int p, ref int nextCol)
+            {
+                if (buf.Length - p < 6 || buf[p] != (byte)'<' || buf[p + 1] != (byte)'c')
+                {
+                    return -1;
+                }
+                int i = ScanCanonicalAttributes(buf, p + 2, out int col, out int style, out Kind kind);
+                if (i < 0)
+                {
+                    return -1;
+                }
+                if (col < 0)
+                {
+                    col = nextCol;
+                }
+                if (buf[i] == (byte)'/')
+                {
+                    if (buf[i + 1] != (byte)'>')
+                    {
+                        return -1;
+                    }
+                    nextCol = col + 1;
+                    return i + 2;
+                }
+                if (kind == Kind.Inline || !buf.Slice(i, 4).SequenceEqual("><v>"u8))
+                {
+                    return -1;
+                }
+                int start = i + 4;
+                int v = ScanCanonicalValue(buf, start, kind, out int sharedIndex);
+                if (v < 0 || buf.Length - v < 8 || !buf.Slice(v, 8).SequenceEqual("</v></c>"u8))
+                {
+                    return -1;
+                }
+                nextCol = col + 1;
+                EmitCanonicalCell(kind, buf, start, v, col, style, sharedIndex);
+                return v + 8;
+            }
+
+            // A shared string's value must be its index in at most 9 digits; any other value runs to the next markup.
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static int ScanCanonicalValue(ReadOnlySpan<byte> buf, int start, Kind kind, out int sharedIndex)
+            {
+                sharedIndex = 0;
+                int v = start;
+                if (kind != Kind.Shared)
+                {
+                    while ((uint)v < (uint)buf.Length && buf[v] != (byte)'<')
+                    {
+                        v++;
+                    }
+                    return v;
+                }
+                while ((uint)v < (uint)buf.Length && (uint)(buf[v] - '0') <= 9)
+                {
+                    sharedIndex = (sharedIndex * 10) + (buf[v] - '0');
+                    v++;
+                }
+                if (v - start is 0 or > 9)
+                {
+                    return -1;
+                }
+                return v;
+            }
+
+            // Returns the index of the byte after the attributes, which leaves at least 6 bytes in buf, or -1.
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static int ScanCanonicalAttributes(ReadOnlySpan<byte> buf, int i, out int col, out int style, out Kind kind)
+            {
+                col = -1;
+                style = 0;
+                kind = Kind.Number;
+                while (true)
+                {
+                    if (buf.Length - i < 6)
+                    {
+                        return -1;
+                    }
+                    if (buf[i] != (byte)' ')
+                    {
+                        return i;
+                    }
+                    if (buf[i + 2] != (byte)'=' || buf[i + 3] != (byte)'"')
+                    {
+                        return -1;
+                    }
+                    byte name = buf[i + 1];
+                    i += 4;
+                    int valueStart = i;
+                    switch (name)
+                    {
+                        case (byte)'r':
+                            int letters = 0;
+                            while ((uint)i < (uint)buf.Length && (uint)(buf[i] - 'A') <= 25)
+                            {
+                                letters = (letters * 26) + (buf[i] - 'A' + 1);
+                                i++;
+                            }
+                            if (i - valueStart is 0 or > 3)
+                            {
+                                return -1;
+                            }
+                            col = letters - 1;
+                            while ((uint)i < (uint)buf.Length && (uint)(buf[i] - '0') <= 9)
+                            {
+                                i++;
+                            }
+                            break;
+                        case (byte)'s':
+                            int value = 0;
+                            while ((uint)i < (uint)buf.Length && (uint)(buf[i] - '0') <= 9)
+                            {
+                                value = (value * 10) + (buf[i] - '0');
+                                i++;
+                            }
+                            if (i - valueStart is 0 or > 9)
+                            {
+                                return -1;
+                            }
+                            style = value;
+                            break;
+                        case (byte)'t':
+                            while ((uint)i < (uint)buf.Length && buf[i] != (byte)'"')
+                            {
+                                i++;
+                            }
+                            kind = ClassifyKind(buf[valueStart..i]);
+                            break;
+                        default:
+                            return -1;
+                    }
+                    if ((uint)i >= (uint)buf.Length || buf[i] != (byte)'"')
+                    {
+                        return -1;
+                    }
+                    i++;
+                }
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void EmitCanonicalCell(Kind kind, ReadOnlySpan<byte> buf, int start, int end, int col, int style, int sharedIndex)
+            {
+                switch (kind)
+                {
+                    case Kind.Shared:
+                        var (sharedStart, sharedLength, validIndex) = WorkbookLookups.SharedAt(_sharedOffsets, sharedIndex);
+                        _acc.Add(col, sharedStart, sharedLength, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: validIndex);
+                        break;
+                    case Kind.Number:
+                        ReadOnlySpan<byte> number = buf[start..end];
+                        CellType cellType = WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number;
+                        bool hasNumber = FastDouble.TryParseLossless(number, out double parsed);
+                        _acc.Add(col, start, number.Length, cellType, style, CellValueSource.RowBuffer, number: parsed, hasNumber: hasNumber);
+                        break;
+                    default:
+                        EmitScalarValueFast(kind, buf[start..end], start, col, style);
+                        break;
+                }
             }
 
             private int TryEmitSharedIndex(byte[] buf, int len, int valueStart, int col, int style)
@@ -796,6 +984,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private enum Kind { Number, Shared, Inline, Bool, Error, Formula, IsoDate }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static Kind ClassifyKind(ReadOnlySpan<byte> t)
             {
                 return t.Length switch
