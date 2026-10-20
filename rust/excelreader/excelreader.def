@@ -15,6 +15,7 @@ EXPORTS
     xl_rows_close
     xl_rows_next
     xl_rows_next_view
+    xl_rows_foreach
     xl_rows_read_all_decoded
     xl_rows_read_all_blob
     xl_free_rows
@@ -50,5 +51,6 @@ EXPORTS
     xl_write_handle_bytes
     xl_csv_aggregate_file
     xl_csv_aggregate_memory
+    xl_aggregate
     xl_last_error
     xl_last_error_ptr

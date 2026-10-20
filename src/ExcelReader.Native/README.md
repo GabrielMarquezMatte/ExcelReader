@@ -55,7 +55,7 @@ may get worse, not only better.
 Reading exports: `xl_open_file`, `xl_open_memory`, `xl_open_source`, `xl_open_stream`,
 `xl_set_source_error`, `xl_close`, `xl_sheet_count`, `xl_sheet_name_at`,
 `xl_sheet_visibility_at`, `xl_sheet_index`, `xl_is_date1904`, `xl_rows_open`, `xl_rows_next`,
-`xl_rows_next_view`, `xl_rows_read_all_blob`, `xl_rows_read_all_decoded`, `xl_rows_close`,
+`xl_rows_next_view`, `xl_rows_foreach`, `xl_aggregate`, `xl_rows_read_all_blob`, `xl_rows_read_all_decoded`, `xl_rows_close`,
 `xl_free_rows`, `xl_parse_typed`, `xl_free_table`, `xl_typed_reader_open`, `xl_typed_reader_next`,
 `xl_typed_reader_close`, `xl_infer_schema`, `xl_free_schema`, `xl_last_error`, `xl_last_error_ptr`,
 `xl_parse_arrow`, `xl_parse_arrow_stream`.
@@ -89,6 +89,33 @@ each containing `xl_start_row`..`xl_end_row` with one `xl_write_string`/`xl_writ
 call per cell, then `xl_close_write_handle`. `xl_write_handle_bytes` reads back a memory-backed
 handle's bytes so far without releasing it. Both write paths release their buffers with
 `xl_free_buffer` (`xl_table`/`xl_inferred_schema` keep their own `xl_free_table`/`xl_free_schema`).
+
+## Callback reads
+
+`xl_rows_foreach` walks a sheet and calls back once per row with an array of `xl_cell_view`;
+`xl_aggregate` runs the same callback shape over several threads and folds per-chunk states. Both
+skip the copy into a cursor-owned row.
+
+- `value` points into the reader's own row buffers. It is valid only during the callback and is not
+  NUL-terminated. `value` is NULL when `value_len` is 0.
+- A cell carries text, a number, or both. When `has_number` is set, `number` is the cell's numeric
+  value (dates as Excel serials); when `value_len > 0`, `value` is its text. Which formats carry
+  which is not part of the contract.
+- `cells` may be NULL when `cell_count` is 0.
+- A callback returning anything other than `XL_OK` stops the run; that code is returned verbatim and
+  no last-error message is set. Library statuses are all `<= 0`, so use positive codes.
+- Calling other `xl_` functions from inside a callback is allowed. No lock is held across the
+  callback; a nested call only overwrites the thread's last-error message.
+- `xl_rows_foreach` calls back on the calling thread. `xl_aggregate` never runs seed, accumulate or
+  combine on the calling thread; `free_state` runs on the calling thread after the run.
+- `xl_aggregate` seeds once per chunk (256 KiB of sheet data), not once per thread, and folds with
+  `combine(acc, next)` in source order. A chunk can be accumulated and then discarded without being
+  combined, in which case its state goes straight to `free_state`. `combine` must not free `next`;
+  the library does.
+- XLS, table views and CSV opened via `xl_open_stream`/`xl_open_source` read sequentially, with the
+  same result.
+- The CSV dialect, password and limits come from the `xl_open_options` the workbook was opened with;
+  `xl_aggregate` has no options struct of its own.
 
 ## Consuming from C
 

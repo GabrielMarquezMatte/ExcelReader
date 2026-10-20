@@ -25,6 +25,8 @@ namespace ExcelReader.Native.Csv
                 (delegate* unmanaged<void**, void*, int>)raw.Seed;
             internal readonly delegate* unmanaged<void*, NativeRow*, void*, int> Accumulate =
                 (delegate* unmanaged<void*, NativeRow*, void*, int>)raw.Accumulate;
+            internal readonly delegate* unmanaged<void*, NativeCellView*, int, void*, int> AccumulateView =
+                (delegate* unmanaged<void*, NativeCellView*, int, void*, int>)raw.Accumulate;
             internal readonly delegate* unmanaged<void*, void*, void*, int> Combine =
                 (delegate* unmanaged<void*, void*, void*, int>)raw.Combine;
             internal readonly delegate* unmanaged<void*, void*, void> FreeState =
@@ -104,6 +106,19 @@ namespace ExcelReader.Native.Csv
 
         private static RowAggregation<CsvAggregateState> Build(CsvAggregateContext context)
         {
+            return Build(context, (ref state, row) =>
+            {
+                NativeRow native = state.WriteRow(row);
+                int status = context.Accumulate((void*)state.Native, &native, context.UserData);
+                if (status != NativeStatus.Ok)
+                {
+                    CsvAggregateContext.Abort(status);
+                }
+            });
+        }
+
+        private static RowAggregation<CsvAggregateState> Build(CsvAggregateContext context, RowAction<CsvAggregateState> accumulate)
+        {
             return new RowAggregation<CsvAggregateState>
             {
                 Seed = () =>
@@ -119,15 +134,7 @@ namespace ExcelReader.Native.Csv
                     }
                     return state;
                 },
-                Accumulate = (ref CsvAggregateState state, Row row) =>
-                {
-                    NativeRow native = state.WriteRow(row);
-                    int status = context.Accumulate((void*)state.Native, &native, context.UserData);
-                    if (status != NativeStatus.Ok)
-                    {
-                        CsvAggregateContext.Abort(status);
-                    }
-                },
+                Accumulate = accumulate,
                 Combine = (accumulator, next) =>
                 {
                     int status = context.Combine(
@@ -136,6 +143,7 @@ namespace ExcelReader.Native.Csv
                     {
                         CsvAggregateContext.Abort(status);
                     }
+                    next.ReleaseScratch();
                     return accumulator;
                 },
             };
