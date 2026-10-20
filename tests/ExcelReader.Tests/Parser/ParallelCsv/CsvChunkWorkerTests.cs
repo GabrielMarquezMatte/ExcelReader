@@ -36,6 +36,16 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
+        public void AChunkAtTheSourceStartIsGuessedToStartThere()
+        {
+            byte[] csv = "Ada,0001\nBob,0002\n"u8.ToArray();
+
+            long start = CsvChunkWorker.GuessStart(new CsvChunkSource(csv.AsMemory()), new CsvChunk(0, 0, csv.Length), (byte)'"', (byte)',');
+
+            Assert.Equal(0, start);
+        }
+
+        [Fact]
         public async Task ParsesOnlyTheRecordsStartingInsideItsChunk()
         {
             byte[] csv = "Name,Age\nAda,0001\nBob,0002\nCid,0003\n"u8.ToArray();

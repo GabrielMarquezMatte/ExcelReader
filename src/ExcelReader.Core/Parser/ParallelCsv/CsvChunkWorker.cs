@@ -301,7 +301,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             if (start <= 0)
             {
-                return false;
+                return true;
             }
             Span<byte> pair = stackalloc byte[2];
             return source.ReadWindow(start - 1, pair) == pair.Length && CsvBoundaryResolver.StartsRecord(pair);
