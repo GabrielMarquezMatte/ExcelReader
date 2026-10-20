@@ -290,6 +290,73 @@ static void BM_ExcelReader_Csv_Cells(benchmark::State &state)
 }
 BENCHMARK(BM_ExcelReader_Csv_Cells);
 
+static void BM_ExcelReader_Csv_ForEach(benchmark::State &state)
+{
+    const std::vector<std::uint8_t> buffer = read_fixture();
+    for (auto _ : state)
+    {
+        auto workbook = xl::Workbook::open(buffer, {.format = XL_FORMAT_CSV});
+        if (!workbook.has_value())
+        {
+            state.SkipWithError(workbook.error().message);
+            return;
+        }
+        int64_t acc = 0;
+        auto opened = workbook->sheet(0).for_each_row([&acc](const xl::RowView &row) {
+            for (const xl::CellView cell : row)
+            {
+                acc += static_cast<int64_t>(cell.value.size());
+            }
+            return XL_OK;
+        });
+        benchmark::DoNotOptimize(acc);
+        state.counters["checksum"] = static_cast<double>(acc);
+    }
+}
+BENCHMARK(BM_ExcelReader_Csv_ForEach);
+
+static void BM_ExcelReader_Csv_Aggregate(benchmark::State &state)
+{
+    struct AggregateRun
+    {
+        std::int64_t cell_bytes = 0;
+        std::int32_t accumulate(xl::RowView row)
+        {
+            for (const xl::CellView cell : row)
+            {
+                cell_bytes += static_cast<int64_t>(cell.value.size());
+            }
+            return XL_OK;
+        }
+        std::int32_t combine(AggregateRun &next)
+        {
+            cell_bytes += next.cell_bytes;
+            return XL_OK;
+        }
+    };
+    const std::vector<std::uint8_t> buffer = read_fixture();
+    for (auto _ : state)
+    {
+        auto workbook = xl::Workbook::open(buffer, {.format = XL_FORMAT_CSV});
+        if (!workbook.has_value())
+        {
+            state.SkipWithError(workbook.error().message);
+            return;
+        }
+        int64_t acc = 0;
+        auto data = workbook->sheet(0).aggregate<AggregateRun>();
+        if (!data.has_value())
+        {
+            state.SkipWithError(data.error().message);
+            return;
+        }
+        auto &agg = data.value();
+        benchmark::DoNotOptimize(agg);
+        state.counters["checksum"] = static_cast<double>(agg.cell_bytes);
+    }
+}
+BENCHMARK(BM_ExcelReader_Csv_Aggregate);
+
 static void BM_Zsv_Csv_Cells(benchmark::State &state, unsigned char engine)
 {
     const std::vector<std::uint8_t> buffer = read_fixture();
