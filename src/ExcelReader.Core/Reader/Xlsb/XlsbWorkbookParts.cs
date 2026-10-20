@@ -9,18 +9,19 @@ namespace ExcelReader.Core.Reader.Xlsb
             Dictionary<string, string> rels = XlsxXml.ParseRelationships(relsBytes);
             List<(string, string, ExcelSheetVisibility)> sheets = [];
             var reader = new Biff12RecordReader(workbookBin);
+            var alternateLookup = rels.GetAlternateLookup<ReadOnlySpan<char>>();
             while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
             {
                 if (id != Brt.BundleSh)
                 {
                     continue;
                 }
-                AddSheet(payload, rels, sheets);
+                AddSheet(payload, alternateLookup, sheets);
             }
             return [.. sheets];
         }
 
-        private static void AddSheet(ReadOnlySpan<byte> payload, Dictionary<string, string> rels, List<(string, string, ExcelSheetVisibility)> sheets)
+        private static void AddSheet(ReadOnlySpan<byte> payload, Dictionary<string, string>.AlternateLookup<ReadOnlySpan<char>> rels, List<(string, string, ExcelSheetVisibility)> sheets)
         {
             if (payload.Length < 8)
             {
@@ -34,10 +35,11 @@ namespace ExcelReader.Core.Reader.Xlsb
             {
                 return;
             }
-            if (rels.TryGetValue(new string(relId), out string? target))
+            if (!rels.TryGetValue(relId, out string? target))
             {
-                sheets.Add((new string(name), XlsxXml.NormalizePart(target), Visibility(Biff12.ReadU32(payload, 0))));
+                throw new InvalidDataException($"The workbook's sheet '{name}' refers to relationship '{relId}', which xl/_rels/workbook.bin.rels does not define.");
             }
+            sheets.Add((new string(name), XlsxXml.NormalizePart(target), Visibility(Biff12.ReadU32(payload, 0))));
         }
 
         private static ExcelSheetVisibility Visibility(uint state)
