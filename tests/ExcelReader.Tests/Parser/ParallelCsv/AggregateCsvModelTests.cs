@@ -271,18 +271,22 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
-        public async Task ReportsTheExactRowSequentiallyAndZeroWhenPartitioned()
+        public async Task ReportsTheSequentialRowWhenPartitioned()
         {
-            byte[] csv = "Name,Id,Note\nada,1,n\nbob,2,n\ncid,oops,n\ndan,4,n\n"u8.ToArray();
+            byte[] csv = "Name,Id,Note\nada,1,\"x\ny\"\n\nbob,2,n\ncid,oops,n\ndan,4,n\neve,bad,n\n"u8.ToArray();
             ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserOptions { ThrowOnParseFailure = true });
 
             using CsvReader reader = Excel.FromCsv(csv);
             ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => SheetParallel.AggregateAsync<PeopleLog, Person>(
                 reader.FirstSheet, map, new SheetParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 }, TestContext.Current.CancellationToken));
-            Assert.Equal(4, sequential.Row);
+            Assert.Equal(5, sequential.Row);
 
-            ExcelParseException partitioned = await Assert.ThrowsAsync<ExcelParseException>(() => Chunked(csv, map, dop: 4, chunkSize: 8, headerRow: 1));
-            Assert.Equal(0, partitioned.Row);
+            for (int chunkSize = 1; chunkSize <= csv.Length; chunkSize++)
+            {
+                ExcelParseException partitioned = await Assert.ThrowsAsync<ExcelParseException>(() => Chunked(csv, map, dop: 4, chunkSize, headerRow: 1));
+                Assert.Equal(sequential.Row, partitioned.Row);
+                Assert.Equal(sequential.ColumnName, partitioned.ColumnName);
+            }
         }
 
         [Fact]

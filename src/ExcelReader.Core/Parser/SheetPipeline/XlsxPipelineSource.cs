@@ -80,28 +80,34 @@ namespace ExcelReader.Core.Parser.SheetPipeline
             return outcome;
         }
 
-        internal override TState ParseTail<TState>(int headerRow, long skipRows, RowAggregation<TState> aggregation, CancellationToken ct)
+        internal override ChunkOutcome<TState> ParseTail<TState>(int headerRow, long skipRows, RowAggregation<TState> aggregation, CancellationToken ct)
         {
-            TState state = aggregation.Seed();
+            var outcome = new ChunkOutcome<TState>(aggregation.Seed());
             using XlsxWorkbook.Enumerator rows = workbook.OpenSheetWithoutPrefetch(index);
             for (long skipped = 0; skipped < headerRow + skipRows; skipped++)
             {
                 if (!rows.MoveNext())
                 {
-                    return state;
+                    return outcome;
                 }
             }
             RowAction<TState> accumulate = aggregation.Accumulate;
-            long delivered = 0;
-            while (rows.MoveNext())
+            try
             {
-                if (++delivered % RowsPerCancellationCheck == 0)
+                while (rows.MoveNext())
                 {
-                    ct.ThrowIfCancellationRequested();
+                    if (++outcome.Rows % RowsPerCancellationCheck == 0)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                    }
+                    accumulate(ref outcome.State, rows.Current);
                 }
-                accumulate(ref state, rows.Current);
             }
-            return state;
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                outcome.Failure = ExceptionDispatchInfo.Capture(ex);
+            }
+            return outcome;
         }
     }
 }
