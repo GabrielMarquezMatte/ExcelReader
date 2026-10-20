@@ -14,6 +14,12 @@ High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, 
 
 ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, and handles sparse cells. Workbooks open from a path, a `Stream`, or a caller-owned `ReadOnlyMemory<byte>` — the in-memory path decompresses parts directly, without a `ZipArchive` or an intermediate stream.
 
+It moves data, not presentation. Reading gives each cell's value and type, with a formula cell read as
+its last calculated result, plus sheet names, visibility and Excel tables. Formula text, merged cells,
+comments, hyperlinks, charts, images and conditional formatting are not read. Writing covers values,
+column widths and cell styles limited to bold, italic and a number format. To edit an existing workbook
+or produce formatted reports, use a library built for document manipulation.
+
 ## Install
 
 ```bash
