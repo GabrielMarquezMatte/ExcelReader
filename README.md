@@ -51,7 +51,7 @@ foreach (Row row in workbook.FirstSheet)
 - [Reading untrusted files](docs/guide/untrusted-input.md) — the resource limits that bound what one hostile file can cost, and how to reject one cleanly.
 - [Migrating to v7](docs/guide/migrating-to-v7.md) — porting `CsvParallel` code to `SheetParallel`, which now reads XLSX and XLSB on several threads too.
 - [Migrating to v6](docs/guide/migrating-to-v6.md) — porting v5 reader code to workbooks and sheets, and reading sheets in parallel.
-- [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
+- [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, ExcelDataReader, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
 
 ## Command line
 
