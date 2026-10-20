@@ -33,6 +33,7 @@ target_link_libraries(excelreader_cpp_rows PRIVATE xl::excelreader)
 set(EXCELREADER_XLSX_FIXTURE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../RealExcel.xlsx"
     CACHE FILEPATH "Path to the RealExcel.xlsx fixture the C++ row tests read")
 target_compile_definitions(excelreader_cpp_rows PRIVATE
+    EXCELREADER_FIXTURE_PATH="${EXCELREADER_FIXTURE_PATH}"
     EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
 
 add_test(NAME excelreader_cpp_rows COMMAND excelreader_cpp_rows)
