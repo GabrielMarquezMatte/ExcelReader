@@ -13,6 +13,9 @@ coverage:
         target: 88%
         flags:
           - rust
+    patch:
+      default:
+        target: 88%
 
 # Each language uploads under its own flag from a path-filtered job, so a flag a commit did not run keeps its last report.
 flag_management:
