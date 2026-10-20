@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser;
@@ -534,6 +535,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         [InlineData("\"x\ny\",{0}\n")]
         [InlineData("\"x\",{0},\"y\"\n")]
         [InlineData("\"said \"\"hi\"\"\",{0}\n")]
+        [InlineData("\"\"\"quoted\"\" start\",{0}\n")]
         public async Task ForEachRecord_Chunked_QuotedFields_ReadsEveryChunkAndRecordOnce(string row)
         {
             const int rows = 4000;
@@ -557,10 +559,51 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Assert.All(calls, pair => Assert.Equal(1, pair.Value));
         }
 
-        // A quoted field that starts with the delimiter makes the opening quote look like a closing one,
-        // so a chunk that starts outside it is guessed to start inside and read twice.
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "A seeded CSV generator, not randomness protecting anything.")]
+        private static string RandomRfcField(Random random)
+        {
+            const string alphabet = "ab ,\n\r\"";
+            var field = new StringBuilder();
+            for (int n = random.Next(0, 12); n > 0; n--)
+            {
+                field.Append(alphabet[random.Next(alphabet.Length)]);
+            }
+            string text = field.ToString();
+            bool needsQuotes = text.AsSpan().IndexOfAny(",\n\r\"") >= 0;
+            return needsQuotes || random.Next(3) == 0 ? "\"" + text.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : text;
+        }
+
         [Fact]
-        public async Task ForEachRecord_Chunked_AmbiguousQuotes_InvokesBodyTwiceForSomeRecords()
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "A seeded CSV generator, not randomness protecting anything.")]
+        public async Task ForEachRecord_Chunked_RandomRfcCsv_DeliversEveryRecordExactlyOnce()
+        {
+            const int rows = 300;
+            var random = new Random(20261020);
+            for (int file = 0; file < 25; file++)
+            {
+                var sb = new StringBuilder("Name,Units\n");
+                for (int i = 1; i <= rows; i++)
+                {
+                    sb.Append(RandomRfcField(random)).Append(',').Append(i.ToString(CultureInfo.InvariantCulture)).Append(random.Next(4) == 0 ? "\r\n" : "\n");
+                }
+                byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+                foreach (int chunkSize in new[] { 7, 31, 64, 200, 1000 })
+                {
+                    var calls = new ConcurrentDictionary<int, int>();
+                    await ChunkedRecord(csv, sale => calls.AddOrUpdate(sale.Units, 1, static (_, n) => n + 1), new ChunkProbe(), dop: 4, chunkSize);
+
+                    Assert.Equal(rows, calls.Count);
+                    Assert.All(calls, pair => Assert.Equal(1, pair.Value));
+                }
+            }
+        }
+
+        // Quoted fields that start with the delimiter give runs that could open or close a field, so those
+        // chunks are left to the merge, which reads them from their confirmed start.
+        [Fact]
+        public async Task ForEachRecord_Chunked_AmbiguousQuotes_DeliversEveryRecordOnce()
         {
             const int rows = 4000;
             var sb = new StringBuilder();
@@ -568,6 +611,27 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             for (int i = 1; i <= rows; i++)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"\",x\ny\",{i}\n");
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+            var calls = new ConcurrentDictionary<int, int>();
+
+            await ChunkedRecord(csv, sale => calls.AddOrUpdate(sale.Units, 1, static (_, n) => n + 1), new ChunkProbe(), dop: 4, chunkSize: 2048);
+
+            Assert.Equal(rows, calls.Count);
+            Assert.All(calls, pair => Assert.Equal(1, pair.Value));
+        }
+
+        // Text after a closing quote breaks the quoting rules, which the parser reads leniently but the start
+        // guess cannot see, so a chunk that starts inside such a field is read twice.
+        [Fact]
+        public async Task ForEachRecord_Chunked_TextAfterAClosingQuote_InvokesBodyTwiceForSomeRecords()
+        {
+            const int rows = 4000;
+            var sb = new StringBuilder();
+            sb.Append("Name,Units\n");
+            for (int i = 1; i <= rows; i++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"\"x\ny\"z,{i}\n");
             }
             byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
             var probe = new ChunkProbe();
