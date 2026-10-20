@@ -1,6 +1,8 @@
 //! Integration coverage for `Sheet::aggregate` over `xl_aggregate`.
 
-use excelreader::{Accumulator, ErrorKind, Format, OpenOptions, RowRef, Workbook, WriteOptions, WriterHandle};
+use excelreader::{
+    Accumulator, ErrorKind, Format, OpenOptions, RowRef, Workbook, WriteOptions, WriterHandle,
+};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -17,12 +19,17 @@ fn generated(format: Format, rows: i64) -> Workbook {
     for i in 1..=rows {
         writer.start_row().expect("start row");
         writer.write_i64(Some(i)).expect("write");
-        writer.write_str(Some(&format!("filler-value-{i}"))).expect("write");
+        writer
+            .write_str(Some(&format!("filler-value-{i}")))
+            .expect("write");
         writer.end_row().expect("end row");
     }
     writer.end_sheet().expect("end sheet");
     writer.finish().expect("finish");
-    OpenOptions::new().format(format).open_bytes(&bytes).expect("open")
+    OpenOptions::new()
+        .format(format)
+        .open_bytes(&bytes)
+        .expect("open")
 }
 
 fn first_number(row: &RowRef<'_>) -> Result<i64, i32> {
@@ -168,8 +175,10 @@ impl Accumulator for Panicking {
 fn a_panic_in_accumulate_is_resumed() {
     let workbook = generated(Format::Xlsb, 60_000);
     let sheet = workbook.sheet(0).unwrap();
-    let payload = catch_unwind(AssertUnwindSafe(|| sheet.aggregate(1, 4, Panicking::default)))
-        .expect_err("the panic must be resumed");
+    let payload = catch_unwind(AssertUnwindSafe(|| {
+        sheet.aggregate(1, 4, Panicking::default)
+    }))
+    .expect_err("the panic must be resumed");
     assert_eq!(payload.downcast_ref::<&str>(), Some(&"boom"));
 }
 
@@ -195,6 +204,10 @@ impl Accumulator for Count {
 )]
 fn header_row_zero_aggregates_the_header_too() {
     let workbook = generated(Format::Csv, 10);
-    let count = workbook.sheet(0).unwrap().aggregate(0, 1, Count::default).unwrap();
+    let count = workbook
+        .sheet(0)
+        .unwrap()
+        .aggregate(0, 1, Count::default)
+        .unwrap();
     assert_eq!(count.0, 11);
 }

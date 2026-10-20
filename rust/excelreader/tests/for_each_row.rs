@@ -1,4 +1,6 @@
-use excelreader::{CellType, ErrorKind, Format, OpenOptions, RowRef, Workbook, WriteOptions, WriterHandle};
+use excelreader::{
+    CellType, ErrorKind, Format, OpenOptions, RowRef, Workbook, WriteOptions, WriterHandle,
+};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 fn fixture(name: &str) -> String {
@@ -21,19 +23,31 @@ fn generated(format: Format) -> Workbook {
     for i in 1..=200i64 {
         writer.start_row().expect("start row");
         writer.write_i64(Some(i)).expect("write");
-        writer.write_str(Some(&format!("label-{i}"))).expect("write");
+        writer
+            .write_str(Some(&format!("label-{i}")))
+            .expect("write");
         writer.end_row().expect("end row");
     }
     writer.end_sheet().expect("end sheet");
     writer.finish().expect("finish");
-    OpenOptions::new().format(format).open_bytes(&bytes).expect("open")
+    OpenOptions::new()
+        .format(format)
+        .open_bytes(&bytes)
+        .expect("open")
 }
 
 type Cell = (i32, CellType, Option<f64>, String);
 
 fn collect(row: RowRef<'_>) -> Vec<Cell> {
     row.iter()
-        .map(|cell| (cell.column, cell.cell_type, cell.number(), cell.text().unwrap().into_owned()))
+        .map(|cell| {
+            (
+                cell.column,
+                cell.cell_type,
+                cell.number(),
+                cell.text().unwrap().into_owned(),
+            )
+        })
         .collect()
 }
 
@@ -94,7 +108,10 @@ fn a_positive_callback_code_stops_the_walk() {
 #[test]
 fn a_non_positive_callback_code_is_an_error() {
     let workbook = Workbook::open(fixture("RealExcel.xlsx")).expect("open");
-    let result = workbook.sheet(0).expect("sheet 0").for_each_row(|_| Err(-1));
+    let result = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .for_each_row(|_| Err(-1));
     assert!(result.is_err());
 }
 
@@ -140,5 +157,8 @@ fn number_only_cells_format_their_text() {
             Ok(())
         })
         .expect("for_each_row");
-    assert!(seen > 0, "the fixture must have a cell that carries only a number");
+    assert!(
+        seen > 0,
+        "the fixture must have a cell that carries only a number"
+    );
 }

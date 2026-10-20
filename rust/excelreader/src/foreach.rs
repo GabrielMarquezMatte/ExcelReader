@@ -18,7 +18,11 @@ struct Walk<'f, F> {
 
 /// # Safety
 /// `user_data` is the `Walk` handed to `xl_rows_foreach`, and `cells` is valid for this call only.
-unsafe extern "C" fn row_shim<F>(cells: *const XlCellView, count: i32, user_data: *mut c_void) -> i32
+unsafe extern "C" fn row_shim<F>(
+    cells: *const XlCellView,
+    count: i32,
+    user_data: *mut c_void,
+) -> i32
 where
     F: FnMut(RowRef<'_>) -> Result<(), i32>,
 {
