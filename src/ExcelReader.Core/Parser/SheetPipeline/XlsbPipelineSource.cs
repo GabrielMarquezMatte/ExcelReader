@@ -82,7 +82,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
             return outcome;
         }
 
-        internal override TState ParseTail<TState>(int headerRow, long skipRows, RowAggregation<TState> aggregation, CancellationToken ct)
+        internal override ChunkOutcome<TState> ParseTail<TState>(int headerRow, long skipRows, RowAggregation<TState> aggregation, CancellationToken ct)
         {
             throw new System.Diagnostics.UnreachableException("An XLSB chunk always ends on a record boundary.");
         }

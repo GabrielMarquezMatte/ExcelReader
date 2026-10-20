@@ -101,7 +101,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             if (result.Failure is not null)
             {
-                throw RenumberFailure(result.Failure, _config.HeaderRow + recordsBefore + result.Records + 1);
+                throw ProjectionRules.AtRow(result.Failure, _config.HeaderRow + recordsBefore + result.Records + 1);
             }
             return result.ResolvedNextStart;
         }
@@ -213,15 +213,6 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 await allWorkers.ConfigureAwait(false);
             }
             await chunkReady.ConfigureAwait(false);
-        }
-
-        private static ExcelParseException RenumberFailure(ExcelParseException original, long globalRow)
-        {
-            if (original.RawValue.Length == 0)
-            {
-                return ProjectionRules.MissingRequiredValue(original.ColumnName, (int)globalRow);
-            }
-            return new ExcelParseException((int)globalRow, original.ColumnName, original.RawValue);
         }
     }
 }

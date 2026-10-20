@@ -32,7 +32,7 @@ namespace ExcelReader.Core.Reader
     /// </para>
     /// <para>
     /// <see cref="ExcelParseException.Row"/>: <c>ParseAsync</c> renumbers it from the count emitted at the
-    /// merge; <c>ForEachAsync</c> and <c>AggregateAsync</c> report the exact row when sequential and 0 when partitioned.
+    /// merge; <c>ForEachAsync</c> and <c>AggregateAsync</c> report the row a sequential read reports, partitioned or not.
     /// </para>
     /// </remarks>
     public static class SheetParallel
@@ -147,8 +147,8 @@ namespace ExcelReader.Core.Reader
         /// value throws <see cref="ExcelParseException"/>; empty rows are skipped.
         /// </para>
         /// <para>
-        /// <see cref="ExcelParseException.Row"/> is exact when the sheet is read sequentially and
-        /// 0 when it is partitioned, since a partition does not know how many rows precede it.
+        /// <see cref="ExcelParseException.Row"/> is the row a sequential read reports, partitioned or not: the
+        /// partitions merge in sheet order, so the first failure in that order is the one thrown.
         /// </para>
         /// </remarks>
         public static Task ForEachAsync<TModel>(
@@ -214,8 +214,8 @@ namespace ExcelReader.Core.Reader
         /// <c>[ExcelRequired]</c> column or value throws <see cref="ExcelParseException"/>; empty rows are skipped.
         /// </para>
         /// <para>
-        /// <see cref="ExcelParseException.Row"/> is exact when the sheet is read sequentially and 0 when it is
-        /// partitioned, since a partition does not know how many rows precede it.
+        /// <see cref="ExcelParseException.Row"/> is the row a sequential read reports, partitioned or not: the
+        /// partitions merge in sheet order, so the first failure in that order is the one thrown.
         /// </para>
         /// <para>Otherwise carries the same contract and fallbacks as the <see cref="IRowRecord{TSelf}"/> overload.</para>
         /// </remarks>

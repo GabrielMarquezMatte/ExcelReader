@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
@@ -132,6 +133,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
             TState merged = default!;
             long confirmedStart = dataStart;
+            long recordsBefore = headerRow;
             for (int i = 0; i < plan.Count && confirmedStart < long.MaxValue; i++)
             {
                 ChunkOutcome<TState> outcome = outcomes[i];
@@ -139,9 +141,18 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 {
                     outcome = await ParseChunkAsync(source, plan[i], confirmedStart, reader, aggregation, ct).ConfigureAwait(false);
                 }
-                outcome.Failure?.Throw();
+                if (outcome.Failure is not null)
+                {
+                    // A partitioned run parses without row numbers; the failing record is the chunk's last delivered one.
+                    if (outcome.Failure.SourceException is ExcelParseException { Row: 0 } parse)
+                    {
+                        throw ProjectionRules.AtRow(parse, recordsBefore + outcome.Delivered);
+                    }
+                    outcome.Failure.Throw();
+                }
                 merged = i == 0 ? outcome.State : aggregation.Combine(merged, outcome.State);
                 confirmedStart = outcome.ResolvedNextStart;
+                recordsBefore += outcome.Delivered;
             }
             return merged;
         }
