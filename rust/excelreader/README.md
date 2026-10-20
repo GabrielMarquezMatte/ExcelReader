@@ -496,22 +496,6 @@ generated code reads columns through panic on an out-of-range row, a column type
 match the binding, or a string the native library returned as non-UTF-8 - each is a contract
 violation rather than recoverable input.
 
-## Parallel aggregation on macOS
-
-`aggregate_csv` or `Sheet::aggregate` over a source large enough to partition (256 KB and up) can crash the process on
-macOS arm64. The fault is inside the native runtime's signal handling, not in this crate: a .NET
-thread resumes at address 0 after a signal the runtime sent it, which ends the process with no
-message. It happens with any `degree_of_parallelism` above 1, and the same runtime built into a
-plain C host does not show it, so a Rust host appears to make it far more likely.
-
-`Sheet::parse` and `Sheet::to_arrow` with a `degree_of_parallelism` above 1 fan out on XLSX and
-XLSB too; this has not been tested on macOS, so treat them the same way.
-
-Until it is fixed upstream, pass a `degree_of_parallelism` of 1 on macOS for a sequential run, or
-keep sources under the 256 KB partitioning floor, where the library never fans out. Linux and
-Windows are unaffected. The crate's own partitioned aggregation tests are `#[ignore]`d on macOS for
-this reason.
-
 ## Build notes
 
 `build.rs` downloads the native `ExcelReader.Native` binary matching your target from the crate's

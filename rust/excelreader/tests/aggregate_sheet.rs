@@ -59,10 +59,6 @@ impl Accumulator for Totals {
 }
 
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
-)]
 fn aggregate_sums_every_data_row_once_on_every_format() {
     for format in [Format::Xlsx, Format::Xlsb, Format::Xls, Format::Csv] {
         let workbook = generated(format, 60_000);
@@ -100,10 +96,6 @@ impl Accumulator for Live {
 }
 
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
-)]
 fn every_seeded_accumulator_is_dropped_once() {
     let workbook = generated(Format::Xlsx, 60_000);
     let live = Arc::new(AtomicUsize::new(0));
@@ -133,10 +125,6 @@ impl Accumulator for Aborting<'_> {
 }
 
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
-)]
 fn a_callback_code_aborts_with_callback_kind() {
     let workbook = generated(Format::Xlsx, 60_000);
     let seen = AtomicI64::new(0);
@@ -168,10 +156,6 @@ impl Accumulator for Panicking {
 }
 
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
-)]
 fn a_panic_in_accumulate_is_resumed() {
     let workbook = generated(Format::Xlsb, 60_000);
     let sheet = workbook.sheet(0).unwrap();
@@ -198,10 +182,6 @@ impl Accumulator for Count {
 }
 
 #[test]
-#[cfg_attr(
-    target_os = "macos",
-    ignore = "crashes the native runtime on macOS arm64; see \"Parallel aggregation on macOS\" in the crate README"
-)]
 fn header_row_zero_aggregates_the_header_too() {
     let workbook = generated(Format::Csv, 10);
     let count = workbook
