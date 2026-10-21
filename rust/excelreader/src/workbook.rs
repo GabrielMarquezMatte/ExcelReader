@@ -614,7 +614,7 @@ pub struct ColumnBinding<T> {
     /// Candidate header names, in priority order — the first one present in the header row wins.
     pub names: &'static [&'static str],
     pub column_type: ColumnType,
-    pub assign: fn(&mut T, &XlColumn, i64),
+    pub assign: fn(&mut T, ColumnRef<'_>, i64),
 }
 
 // Hand-written: `#[derive(Clone)]` would add a `T: Clone` bound the user's row struct need not meet.
@@ -634,6 +634,21 @@ pub trait ExcelMapper: Sized {
 }
 
 pub use excelreader_derive::ExcelMapper;
+
+/// A column of a table the native library returned. Only this crate can build one, which is what
+/// lets the safe `column_*` accessors trust its pointers: a hand-built `XlColumn` never reaches them.
+///
+/// ```compile_fail
+/// #![forbid(unsafe_code)]
+/// let column = excelreader::__private::XlColumn {
+///     r#type: 1, length: 1,
+///     values: std::ptr::null(), validity: std::ptr::null(),
+///     data: std::ptr::null(), data_len: 0,
+/// };
+/// excelreader::__private::column_i64(excelreader::__private::ColumnRef(&column), 0);
+/// ```
+#[derive(Clone, Copy)]
+pub struct ColumnRef<'a>(&'a XlColumn);
 
 fn is_valid(col: &XlColumn, row: i64) -> bool {
     if col.validity.is_null() {
@@ -674,7 +689,8 @@ fn check_access(col: &XlColumn, row: i64, expected_type: i32, accessor: &str) {
 /// # Panics
 /// If `col` is not a string column, if `row` is out of bounds, or if the native library returned
 /// bytes that are not valid UTF-8 (an ABI contract violation).
-pub fn column_str(col: &XlColumn, row: i64) -> &str {
+pub fn column_str<'a>(col: ColumnRef<'a>, row: i64) -> &'a str {
+    let col = col.0;
     check_access(col, row, ffi::XL_T_STRING, "column_str");
     unsafe {
         let offsets = col.values as *const i32;
@@ -689,28 +705,32 @@ pub fn column_str(col: &XlColumn, row: i64) -> &str {
 
 /// # Panics
 /// If `col` is not an `i64` column, or `row` is out of bounds.
-pub fn column_i64(col: &XlColumn, row: i64) -> i64 {
+pub fn column_i64(col: ColumnRef<'_>, row: i64) -> i64 {
+    let col = col.0;
     check_access(col, row, ffi::XL_T_I64, "column_i64");
     unsafe { *(col.values as *const i64).offset(row as isize) }
 }
 
 /// # Panics
 /// If `col` is not an `f64` column, or `row` is out of bounds.
-pub fn column_f64(col: &XlColumn, row: i64) -> f64 {
+pub fn column_f64(col: ColumnRef<'_>, row: i64) -> f64 {
+    let col = col.0;
     check_access(col, row, ffi::XL_T_F64, "column_f64");
     unsafe { *(col.values as *const f64).offset(row as isize) }
 }
 
 /// # Panics
 /// If `col` is not a bool column, or `row` is out of bounds.
-pub fn column_bool(col: &XlColumn, row: i64) -> bool {
+pub fn column_bool(col: ColumnRef<'_>, row: i64) -> bool {
+    let col = col.0;
     check_access(col, row, ffi::XL_T_BOOL, "column_bool");
     unsafe { *(col.values as *const u8).offset(row as isize) != 0 }
 }
 
 /// # Panics
 /// If `col` is not a date column, or `row` is out of bounds.
-pub fn column_date(col: &XlColumn, row: i64) -> Date {
+pub fn column_date(col: ColumnRef<'_>, row: i64) -> Date {
+    let col = col.0;
     check_access(col, row, ffi::XL_T_DATE, "column_date");
     Date {
         days_since_epoch: unsafe { *(col.values as *const i32).offset(row as isize) },
@@ -719,7 +739,8 @@ pub fn column_date(col: &XlColumn, row: i64) -> Date {
 
 /// # Panics
 /// If `col` is not a time column, or `row` is out of bounds.
-pub fn column_time(col: &XlColumn, row: i64) -> Time {
+pub fn column_time(col: ColumnRef<'_>, row: i64) -> Time {
+    let col = col.0;
     check_access(col, row, ffi::XL_T_TIME, "column_time");
     Time {
         micros_since_midnight: unsafe { *(col.values as *const i64).offset(row as isize) },
@@ -728,7 +749,8 @@ pub fn column_time(col: &XlColumn, row: i64) -> Time {
 
 /// # Panics
 /// If `col` is not a timestamp column, or `row` is out of bounds.
-pub fn column_timestamp(col: &XlColumn, row: i64) -> Timestamp {
+pub fn column_timestamp(col: ColumnRef<'_>, row: i64) -> Timestamp {
+    let col = col.0;
     check_access(col, row, ffi::XL_T_TIMESTAMP, "column_timestamp");
     Timestamp {
         micros_since_epoch: unsafe { *(col.values as *const i64).offset(row as isize) },
@@ -803,7 +825,7 @@ impl<T: ExcelMapper> TableView<T> {
         };
         for (col, binding) in columns.iter().zip(self.bindings.iter()) {
             if is_valid(col, row) {
-                (binding.assign)(&mut instance, col, row);
+                (binding.assign)(&mut instance, ColumnRef(col), row);
             }
         }
         Some(instance)
