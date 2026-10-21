@@ -1502,6 +1502,10 @@ namespace xl
             return (col.validity[byte_idx] & (1 << bit_idx)) != 0;
         }
 
+        /// The standard integer type `std::in_range` accepts in place of a character type.
+        template <typename T>
+        using standard_integer_t = std::conditional_t<std::is_signed_v<T>, std::make_signed_t<T>, std::make_unsigned_t<T>>;
+
         template <typename Class, typename T, std::size_t N>
         void assign_field(Class &instance, const xl_column &col, int64_t row, const FieldBinding<Class, T, N> &binding)
         {
@@ -1588,6 +1592,43 @@ namespace xl
             static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
             populate_instance(instance, table, row, bindings, std::make_index_sequence<num_fields>{});
             return instance;
+        }
+
+        template <typename Class, typename T, std::size_t N>
+        std::optional<Error> check_range(const xl_column &col, int64_t rows, const FieldBinding<Class, T, N> &binding)
+        {
+            using Field = unwrap_optional_t<T>;
+            if constexpr (std::is_integral_v<Field> && !std::is_same_v<Field, bool>)
+            {
+                const int64_t *values = static_cast<const int64_t *>(col.values);
+                for (int64_t row = 0; row < rows; ++row)
+                {
+                    if (is_valid(col, row) && !std::in_range<standard_integer_t<Field>>(values[row]))
+                    {
+                        return Error{XL_INVALID_ARGUMENT, "column '" + std::string(binding.column_names[0]) + "' holds " +
+                                                              std::to_string(values[row]) + " at row " + std::to_string(row) +
+                                                              ", which its field's type cannot represent"};
+                    }
+                }
+            }
+            return std::nullopt;
+        }
+
+        template <typename Tuple, std::size_t... Is>
+        std::optional<Error> check_ranges(const xl_table &table, const Tuple &bindings, std::index_sequence<Is...>)
+        {
+            std::optional<Error> problem;
+            (void)(... || (problem = check_range(table.columns[Is], table.row_count, std::get<Is>(bindings))).has_value());
+            return problem;
+        }
+
+        /// TableView converts on access and returns `T`, so a value the row type cannot hold is
+        /// refused once, when the table is handed over, instead of wrapping on every read.
+        template <typename T>
+        std::optional<Error> check_ranges(const xl_table &table)
+        {
+            static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+            return check_ranges(table, bindings, std::make_index_sequence<std::tuple_size_v<decltype(bindings)>>{});
         }
 
         template <typename T, typename Call>
@@ -1785,7 +1826,12 @@ namespace xl
         {
             return std::unexpected(detail::make_error(status));
         }
-        return detail::Access::make<TableView<T>>(table);
+        TableView<T> view = detail::Access::make<TableView<T>>(table);
+        if (std::optional<Error> problem = detail::check_ranges<T>(table))
+        {
+            return std::unexpected(std::move(*problem));
+        }
+        return view;
     }
 
 
@@ -1829,7 +1875,12 @@ namespace xl
             {
                 return std::unexpected(detail::make_error(status));
             }
-            return std::optional<TableView<T>>(TableView<T>(table));
+            TableView<T> view(table);
+            if (std::optional<Error> problem = detail::check_ranges<T>(table))
+            {
+                return std::unexpected(std::move(*problem));
+            }
+            return std::optional<TableView<T>>(std::move(view));
         }
 
         class iterator
@@ -2112,6 +2163,7 @@ namespace xl
             typename ColumnStorage<column_type>::type storage{};
             std::vector<uint8_t> validity{};
             int64_t rows = 0;
+            bool out_of_range = false;
 
             void reserve(size_t count)
             {
@@ -2214,6 +2266,7 @@ namespace xl
                 }
                 else if constexpr (std::is_integral_v<Field>)
                 {
+                    out_of_range |= !std::in_range<int64_t>(static_cast<standard_integer_t<Field>>(value));
                     storage.push_back(static_cast<int64_t>(value));
                 }
                 else if constexpr (std::is_floating_point_v<Field>)
@@ -2272,6 +2325,12 @@ namespace xl
             return (... || std::get<Is>(builders).overflowed());
         }
 
+        template <typename Builders, std::size_t... Is>
+        bool any_out_of_range(const Builders &builders, std::index_sequence<Is...>)
+        {
+            return (... || std::get<Is>(builders).out_of_range);
+        }
+
         template <typename Builders, typename Tuple, std::size_t... Is>
         std::array<ColumnRef, sizeof...(Is)> to_refs(const Builders &builders, const Tuple &bindings,
                                                      std::index_sequence<Is...>)
@@ -2305,6 +2364,11 @@ namespace xl
             {
                 return std::unexpected(Error{XL_INVALID_ARGUMENT,
                                              "a string column exceeds 2 GiB, which int32 offsets cannot address."});
+            }
+            if (any_out_of_range(builders, indices))
+            {
+                return std::unexpected(Error{XL_INVALID_ARGUMENT, "an integer field holds a value above INT64_MAX, "
+                                                                  "which an int64 column cannot represent."});
             }
 
             // refs borrows pointers into builders, so both must stay in the scope of the write call.
@@ -2426,6 +2490,11 @@ namespace xl
             }
             else if constexpr (std::is_integral_v<Value>)
             {
+                if (!std::in_range<int64_t>(static_cast<detail::standard_integer_t<Value>>(value)))
+                {
+                    return std::unexpected(Error{XL_INVALID_ARGUMENT, "the value is above INT64_MAX, which an int64 "
+                                                                      "cell cannot represent."});
+                }
                 return status_result(xl_write_int64(handle_, static_cast<int64_t>(value)));
             }
             else if constexpr (std::is_floating_point_v<Value>)
