@@ -45,6 +45,21 @@ struct xl::ExcelMapper<WrittenRow>
     }
 };
 
+struct NamedRow
+{
+    std::string name = "fallback";
+    std::string_view view = "fallback";
+};
+
+template <>
+struct xl::ExcelMapper<NamedRow>
+{
+    static constexpr auto get_bindings()
+    {
+        return std::make_tuple(xl::make_field("name", &NamedRow::name), xl::make_field("view", &NamedRow::view));
+    }
+};
+
 static std::filesystem::path temp_path(std::string_view name)
 {
     return std::filesystem::temp_directory_path() /
@@ -711,8 +726,26 @@ static int test_writer_handle_class_rejects_auto_for_memory()
     return 0;
 }
 
+static int test_a_valid_empty_string_replaces_the_default()
+{
+    const int32_t offsets[] = {0, 0};
+    xl_column columns[] = {
+        xl_column{XL_T_STRING, 1, offsets, nullptr, nullptr, 0},
+        xl_column{XL_T_STRING, 1, offsets, nullptr, nullptr, 0},
+    };
+    const xl_table table{2, 1, columns};
+    const NamedRow row = xl::detail::row_at<NamedRow>(table, 0);
+    CHECK(row.name.empty(), "an empty std::string must overwrite the default");
+    CHECK(row.view.empty(), "an empty std::string_view must overwrite the default");
+    return 0;
+}
+
 int main()
 {
+    if (test_a_valid_empty_string_replaces_the_default() != 0)
+    {
+        return 1;
+    }
     if (test_write_options() != 0)
     {
         return 1;

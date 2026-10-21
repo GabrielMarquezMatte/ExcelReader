@@ -1526,11 +1526,13 @@ namespace xl
                 const int32_t *offsets = static_cast<const int32_t *>(col.values);
                 int32_t start = offsets[row];
                 int32_t end = offsets[row + 1];
-                if (end > start && col.data != nullptr)
+                if (end <= start || col.data == nullptr)
                 {
-                    const char *str_data = reinterpret_cast<const char *>(col.data) + start;
-                    instance.*(binding.member) = T(str_data, static_cast<size_t>(end - start));
+                    instance.*(binding.member) = T{};
+                    return;
                 }
+                const char *str_data = reinterpret_cast<const char *>(col.data) + start;
+                instance.*(binding.member) = T(str_data, static_cast<size_t>(end - start));
             }
             else if constexpr (std::is_same_v<T, bool>)
             {
