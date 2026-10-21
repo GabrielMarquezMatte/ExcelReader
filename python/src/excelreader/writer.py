@@ -41,54 +41,81 @@ def _resolve_write_format(name: str | None, path: Path) -> int:
         ) from None
 
 
-def _buffer_of(values: Any) -> tuple[Any, int]:
-    """Returns (ctypes-addressable buffer, byte length) for one column's values.
+_SIGNED_FORMATS = frozenset("bhilqn")
+_ELEMENTS = {
+    ColumnType.I64: (_SIGNED_FORMATS, 8),
+    ColumnType.TIME: (_SIGNED_FORMATS, 8),
+    ColumnType.TIMESTAMP: (_SIGNED_FORMATS, 8),
+    ColumnType.F64: (frozenset("d"), 8),
+    ColumnType.BOOL: (frozenset("bB?"), 1),
+    ColumnType.DATE: (_SIGNED_FORMATS, 4),
+}
 
-    NumPy arrays, `array.array` and `bytes` all expose the buffer protocol, so one `memoryview` reads
-    every input shape the same way. The bytes are then COPIED into a ctypes block rather than
-    borrowed: the copy is owned by this module and cannot be moved or freed out from under the native
-    side while the call runs. The caller must keep the returned object alive for as long as the
-    pointer is in use.
+
+def _checked_view(values: Any, formats: frozenset[str], itemsize: int, count: int, what: str) -> memoryview:
+    """The native side trusts `length` and the column type, and cannot see how big a Python
+    allocation really is, so a buffer of the wrong shape must be refused here, before any pointer
+    to it exists.
     """
-    if isinstance(values, (bytes, bytearray)):
-        raw: Any = values
-    elif isinstance(values, array):
-        raw = values
-    else:
-        raw = getattr(values, "data", values)  
-    blob = memoryview(raw).tobytes()
-    return (ctypes.c_char * len(blob)).from_buffer_copy(blob), len(blob)
+    view = memoryview(getattr(values, "data", values))
+    code = view.format.lstrip("@=")
+    if view.ndim != 1 or view.itemsize != itemsize or code not in formats:
+        raise TypeError(
+            f"{what} must be a 1-D buffer of {itemsize}-byte elements with format one of {sorted(formats)}; "
+            f"got format {view.format!r} with {view.itemsize}-byte elements"
+        )
+    if len(view) != count:
+        raise ValueError(f"{what} has {len(view)} elements but {count} are needed")
+    return view
+
+
+def _copy(view: memoryview) -> Any:
+    """COPIES the bytes into a ctypes block rather than borrowing them: the copy is owned by this
+    module and cannot be moved or freed out from under the native side while the call runs. The
+    caller must keep the returned object alive for as long as the pointer is in use.
+    """
+    blob = view.tobytes()
+    return (ctypes.c_char * len(blob)).from_buffer_copy(blob)
 
 
 def _native_column(column: Any, column_type: ColumnType, validity: bytes | None, row_count: int, keepalive: list[Any]) -> _native.NativeColumn:
     if isinstance(column, StringColumn):
-        offsets, _ = _buffer_of(column.offsets)
-        data, data_len = _buffer_of(column.data)
+        offsets = _copy(_checked_view(column.offsets, _SIGNED_FORMATS, 4, row_count + 1, "a STRING column's offsets"))
+        data_view = memoryview(column.data)
+        data_len = data_view.nbytes
+        data = _copy(data_view)
         keepalive += [offsets, data]
         return _native.NativeColumn(
             type=int(ColumnType.STRING),
             length=row_count,
             values=ctypes.cast(offsets, ctypes.c_void_p),
-            validity=_validity_pointer(validity, keepalive),
+            validity=_validity_pointer(validity, row_count, keepalive),
             data=ctypes.cast(data, ctypes.POINTER(ctypes.c_uint8)) if data_len else None,
             data_len=data_len,
         )
 
-    values, _ = _buffer_of(column)
+    if column_type is ColumnType.STRING:
+        raise TypeError("a STRING column must be a StringColumn")
+    formats, itemsize = _ELEMENTS[column_type]
+    values = _copy(_checked_view(column, formats, itemsize, row_count, f"a {column_type.name} column"))
     keepalive.append(values)
     return _native.NativeColumn(
         type=int(column_type),
         length=row_count,
         values=ctypes.cast(values, ctypes.c_void_p),
-        validity=_validity_pointer(validity, keepalive),
+        validity=_validity_pointer(validity, row_count, keepalive),
         data=None,
         data_len=0,
     )
 
 
-def _validity_pointer(validity: bytes | None, keepalive: list[Any]) -> Any:
+def _validity_pointer(validity: bytes | None, row_count: int, keepalive: list[Any]) -> Any:
     if validity is None:
         return None
+    if len(validity) < (row_count + 7) // 8:
+        raise ValueError(
+            f"the validity bitmap is {len(validity)} bytes, but {row_count} rows need {(row_count + 7) // 8}"
+        )
     buffer = (ctypes.c_uint8 * len(validity)).from_buffer_copy(validity)
     keepalive.append(buffer)
     return ctypes.cast(buffer, ctypes.POINTER(ctypes.c_uint8))
