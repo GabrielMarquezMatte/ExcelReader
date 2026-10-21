@@ -177,7 +177,8 @@ def write_workbook(
 
     `format` is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
     with `write()` has no extension, so it needs `format`. The whole workbook is built in memory and
-    handed to `write()` in one call, at the object's current position; the object is not closed.
+    handed to `write()` at the object's current position, again for the rest whenever `write()`
+    returns that it took only part; the object is not closed.
 
     The column names become the header row. `options` sets the sheet name and CSV dialect; see
     `WriteOptions`.
@@ -201,7 +202,24 @@ def write_workbook(
         raise ValueError(
             f"format= is required when writing to an object with write(); one of {sorted(_FORMAT_NAMES)}"
         )
-    destination.write(_write_memory(table, types, format, options))
+    _write_all(destination, _write_memory(table, types, format, options))
+
+
+def _write_all(destination: IO[bytes], data: bytes) -> None:
+    """Calls `write()` until it has taken all of `data`. A `write()` that returns None is taken to
+    have written everything, as files that predate the `int` return convention do.
+    """
+    view = memoryview(data)
+    offset = 0
+    while offset < len(data):
+        written = destination.write(data if offset == 0 else view[offset:])
+        if written is None:
+            return
+        if not 0 < written <= len(data) - offset:
+            raise OSError(
+                f"write() made no progress: it returned {written} with {len(data) - offset} bytes left to write"
+            )
+        offset += written
 
 
 def _write_file(
@@ -398,7 +416,7 @@ def encrypt_package(
 
     `package` is a path to a complete file, or its bytes (`bytes`, `bytearray`, `memoryview`, or an
     `io.BytesIO` read whole). `destination` is a path, or a binary object with `write()` that
-    receives the encrypted workbook in one call and is not closed. Encryption parameters are fixed
+    receives the encrypted workbook, as `write_workbook` hands it over, and is not closed. Encryption parameters are fixed
     at Excel's own defaults; there are no options.
     """
     password_encoded = password.encode("utf-8")
@@ -441,4 +459,4 @@ def encrypt_package(
     if isinstance(destination, (str, os.PathLike)):
         Path(destination).write_bytes(encrypted)
     else:
-        destination.write(encrypted)
+        _write_all(destination, encrypted)
