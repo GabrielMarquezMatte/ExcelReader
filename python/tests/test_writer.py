@@ -395,6 +395,46 @@ def test_write_workbook_rejects_a_destination_it_cannot_write(source_csv):
         write_workbook(42, table, _TYPES, format="xlsx")
 
 
+class _TrickleWriter:
+    def __init__(self, step):
+        self.step = step
+        self.data = bytearray()
+
+    def write(self, chunk):
+        taken = bytes(chunk[: self.step])
+        self.data += taken
+        return len(taken)
+
+
+def test_write_workbook_finishes_a_partial_write(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+    destination = _TrickleWriter(4)
+
+    write_workbook(destination, table, _TYPES, format="xlsx")
+
+    assert bytes(destination.data) == _to_bytes(table)
+
+
+def test_write_workbook_fails_when_write_makes_no_progress(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+
+    with pytest.raises(OSError, match="no progress"):
+        write_workbook(_TrickleWriter(0), table, _TYPES, format="xlsx")
+
+
+def test_encrypt_package_finishes_a_partial_write(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+    destination = _TrickleWriter(7)
+
+    encrypt_package(_to_bytes(table), destination, "hunter2")
+
+    result = _parse_bytes(bytes(destination.data), "xlsx", password="hunter2")
+    assert list(result.columns[0]) == ["widget", "gadget"]
+
+
 def _one_column_table(column, rows=1, validity=None):
     return TypedTable(row_count=rows, names=["n"], columns=[column], validity=[validity])
 
