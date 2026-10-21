@@ -110,6 +110,13 @@ namespace ExcelReader.Core.Reader
                     map[name] = i;
                 }
             }
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (names[i] is null)
+                {
+                    map.TryAdd($"Column{i}", i);
+                }
+            }
             return map;
         }
 
