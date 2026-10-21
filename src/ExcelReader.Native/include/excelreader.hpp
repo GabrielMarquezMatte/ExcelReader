@@ -2,6 +2,7 @@
 
 #include "excelreader.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <charconv>
@@ -1642,6 +1643,27 @@ namespace xl
             return call(Access::handle(sheet), sheet.index(), specs.data(), static_cast<int32_t>(num_fields));
         }
 
+        template <typename Call>
+        int32_t with_specs(const Sheet &sheet, std::span<const InferredColumn> columns, Call &&call)
+        {
+            const size_t count = columns.size();
+            std::vector<const uint8_t *> name_slots(count);
+            std::vector<int32_t> name_lens(count);
+            std::vector<xl_column_spec> specs(count);
+            for (size_t i = 0; i < count; ++i)
+            {
+                const InferredColumn &column = columns[i];
+                if (column.name.has_value())
+                {
+                    name_slots[i] = reinterpret_cast<const uint8_t *>(column.name->data());
+                    name_lens[i] = static_cast<int32_t>(column.name->size());
+                }
+                specs[i] = xl_column_spec{&name_slots[i], &name_lens[i], column.name.has_value() ? 1 : 0,
+                                          column.index, column.type, column.nullable ? 1 : 0};
+            }
+            return call(Access::handle(sheet), sheet.index(), specs.data(), static_cast<int32_t>(count));
+        }
+
         inline std::optional<Error> check_batch_size(int64_t batch_size)
         {
             if (batch_size > 0)
@@ -1834,6 +1856,163 @@ namespace xl
         return view;
     }
 
+    /// @brief The columns of a parse over a runtime schema, held in native columnar memory.
+    ///
+    /// Owns that memory. Its columns are the ColumnRefs write_columns takes, borrowed from this
+    /// table. A column matched by index has no name, and writing needs every column named or none.
+    class Table
+    {
+    public:
+        Table(const Table &) = delete;
+        Table &operator=(const Table &) = delete;
+
+        Table(Table &&other) noexcept
+            : table_(std::exchange(other.table_, xl_table{})), names_(std::move(other.names_)),
+              columns_(std::move(other.columns_))
+        {
+        }
+
+        Table &operator=(Table &&other) noexcept
+        {
+            if (this != &other)
+            {
+                xl_free_table(&table_);
+                table_ = std::exchange(other.table_, xl_table{});
+                names_ = std::move(other.names_);
+                columns_ = std::move(other.columns_);
+            }
+            return *this;
+        }
+
+        ~Table() { xl_free_table(&table_); }
+
+        int64_t size() const noexcept { return table_.row_count; }
+        bool empty() const noexcept { return table_.row_count == 0; }
+
+        /// @brief Every column, in schema order.
+        std::span<const ColumnRef> columns() const noexcept { return columns_; }
+
+    private:
+        friend struct detail::Access;
+
+        // A moved vector keeps its elements in place, so the names columns_ views stay valid.
+        Table(xl_table table, std::span<const InferredColumn> schema) : table_(table)
+        {
+            names_.reserve(schema.size());
+            columns_.reserve(schema.size());
+            for (size_t i = 0; i < schema.size(); ++i)
+            {
+                const std::string &name = names_.emplace_back(schema[i].name.value_or(std::string{}));
+                const xl_column &raw = table_.columns[i];
+                const int64_t validity_len = raw.validity == nullptr ? 0 : (raw.length + 7) / 8;
+                columns_.push_back(ColumnRef{name, raw.type, raw.length, raw.values, raw.validity, validity_len,
+                                             raw.data, raw.data_len});
+            }
+        }
+
+        xl_table table_{};
+        std::vector<std::string> names_;
+        std::vector<ColumnRef> columns_;
+    };
+
+    namespace detail
+    {
+        /// The input iterator of a batched read: `Reader::next()` yields `Batch`es until it is empty
+        /// or fails, and the failure is the last element.
+        template <typename Reader, typename Batch>
+        class BatchIterator
+        {
+        public:
+            using iterator_category = std::input_iterator_tag;
+            using iterator_concept = std::input_iterator_tag;
+            using value_type = std::expected<Batch, Error>;
+            using difference_type = std::ptrdiff_t;
+
+            BatchIterator() = default;
+
+            value_type &operator*() { return *current_; }
+
+            BatchIterator &operator++()
+            {
+                advance();
+                return *this;
+            }
+
+            void operator++(int) { advance(); }
+
+            friend bool operator==(const BatchIterator &it, std::default_sentinel_t) noexcept
+            {
+                return !it.current_.has_value();
+            }
+
+        private:
+            friend struct Access;
+
+            explicit BatchIterator(Reader *reader) : reader_(reader) { advance(); }
+
+            void advance()
+            {
+                if (reader_ == nullptr)
+                {
+                    current_.reset();
+                    return;
+                }
+                current_.reset();
+                std::expected<std::optional<Batch>, Error> batch = reader_->next();
+                if (!batch.has_value())
+                {
+                    current_ = value_type(std::unexpect, std::move(batch.error()));
+                    reader_ = nullptr;
+                    return;
+                }
+                if (!batch->has_value())
+                {
+                    current_.reset();
+                    reader_ = nullptr;
+                    return;
+                }
+                current_ = value_type(std::move(**batch));
+            }
+
+            Reader *reader_ = nullptr;
+            std::optional<value_type> current_{};
+        };
+
+        inline std::expected<Table, Error> adopt_table(xl_table table, std::span<const InferredColumn> schema,
+                                                       const char *source)
+        {
+            const bool consistent = table.row_count >= 0 && table.column_count >= 0 &&
+                                    static_cast<size_t>(table.column_count) == schema.size() &&
+                                    std::all_of(table.columns, table.columns + table.column_count,
+                                                [&](const xl_column &c) { return c.length == table.row_count; });
+            if (!consistent)
+            {
+                xl_free_table(&table);
+                return std::unexpected(Error{XL_ERROR, std::string(source) + " returned a table that does not match its specs"});
+            }
+            return Access::make<Table>(table, schema);
+        }
+    }
+
+    /// @brief parse over a schema chosen at run time, such as one Sheet::infer_schema returned.
+    /// @param sheet The sheet to read.
+    /// @param columns One per output column: matched by `name` when it has one, else by `index`.
+    /// Must not be empty.
+    /// @param options Header row and parallelism.
+    /// @return Every row after the header.
+    inline std::expected<Table, Error> parse(Sheet sheet, std::span<const InferredColumn> columns,
+                                             const ReadOptions &options = {})
+    {
+        xl_table table{};
+        const int32_t status = detail::with_specs(
+            sheet, columns, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
+            { return xl_parse_typed(handle, index, specs, count, options.header_row, options.parallelism, &table); });
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return detail::adopt_table(table, columns, "xl_parse_typed");
+    }
 
     /// @brief parse delivered a batch at a time.
     ///
@@ -1883,65 +2062,9 @@ namespace xl
             return std::optional<TableView<T>>(std::move(view));
         }
 
-        class iterator
-        {
-        public:
-            using iterator_category = std::input_iterator_tag;
-            using iterator_concept = std::input_iterator_tag;
-            using value_type = std::expected<TableView<T>, Error>;
-            using difference_type = std::ptrdiff_t;
+        using iterator = detail::BatchIterator<TypedReader, TableView<T>>;
 
-            iterator() = default;
-
-            value_type &operator*() { return *current_; }
-
-            iterator &operator++()
-            {
-                advance();
-                return *this;
-            }
-
-            void operator++(int) { advance(); }
-
-            friend bool operator==(const iterator &it, std::default_sentinel_t) noexcept
-            {
-                return !it.current_.has_value();
-            }
-
-        private:
-            friend class TypedReader;
-
-            explicit iterator(TypedReader *reader) : reader_(reader) { advance(); }
-
-            void advance()
-            {
-                if (reader_ == nullptr)
-                {
-                    current_.reset();
-                    return;
-                }
-                current_.reset();
-                std::expected<std::optional<TableView<T>>, Error> batch = reader_->next();
-                if (!batch.has_value())
-                {
-                    current_ = value_type(std::unexpect, std::move(batch.error()));
-                    reader_ = nullptr;
-                    return;
-                }
-                if (!batch->has_value())
-                {
-                    current_.reset();
-                    reader_ = nullptr;
-                    return;
-                }
-                current_ = value_type(std::move(**batch));
-            }
-
-            TypedReader *reader_ = nullptr;
-            std::optional<value_type> current_{};
-        };
-
-        iterator begin() { return iterator(this); }
+        iterator begin() { return detail::Access::make<iterator>(this); }
         std::default_sentinel_t end() const noexcept { return {}; }
 
     private:
@@ -1972,6 +2095,94 @@ namespace xl
             return std::unexpected(detail::make_error(status));
         }
         return detail::Access::make<TypedReader<T>>(reader);
+    }
+
+    /// @brief parse over a runtime schema, delivered a batch at a time.
+    ///
+    /// TypedReader's counterpart, whose batches are Tables.
+    class TableReader
+    {
+    public:
+        TableReader(const TableReader &) = delete;
+        TableReader &operator=(const TableReader &) = delete;
+
+        TableReader(TableReader &&other) noexcept
+            : reader_(std::exchange(other.reader_, nullptr)), schema_(std::move(other.schema_))
+        {
+        }
+
+        TableReader &operator=(TableReader &&other) noexcept
+        {
+            if (this != &other)
+            {
+                xl_typed_reader_close(reader_);
+                reader_ = std::exchange(other.reader_, nullptr);
+                schema_ = std::move(other.schema_);
+            }
+            return *this;
+        }
+
+        ~TableReader() { xl_typed_reader_close(reader_); }
+
+        /// @brief Reads the next batch.
+        /// @return The batch, or empty at the end of the sheet.
+        std::expected<std::optional<Table>, Error> next()
+        {
+            xl_table table{};
+            int32_t status = xl_typed_reader_next(reader_, &table);
+            if (status == XL_EOF)
+            {
+                return std::optional<Table>{};
+            }
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            std::expected<Table, Error> batch = detail::adopt_table(table, schema_, "xl_typed_reader_next");
+            if (!batch.has_value())
+            {
+                return std::unexpected(std::move(batch.error()));
+            }
+            return std::optional<Table>(std::move(*batch));
+        }
+
+        using iterator = detail::BatchIterator<TableReader, Table>;
+
+        iterator begin() { return detail::Access::make<iterator>(this); }
+        std::default_sentinel_t end() const noexcept { return {}; }
+
+    private:
+        friend struct detail::Access;
+
+        TableReader(xl_typed_reader *reader, std::span<const InferredColumn> schema)
+            : reader_(reader), schema_(schema.begin(), schema.end())
+        {
+        }
+
+        xl_typed_reader *reader_ = nullptr;
+        std::vector<InferredColumn> schema_;
+    };
+
+    /// @brief Opens a TableReader over a sheet.
+    /// @param sheet The sheet to read.
+    /// @param columns As for the runtime-schema parse; copied, so it need not outlive the reader.
+    /// @param options Header row and batch size.
+    inline std::expected<TableReader, Error> parse_batches(Sheet sheet, std::span<const InferredColumn> columns,
+                                                           const ReadOptions &options = {})
+    {
+        if (std::optional<Error> problem = detail::check_batch_size(options.batch_size))
+        {
+            return std::unexpected(std::move(*problem));
+        }
+        xl_typed_reader *reader = nullptr;
+        const int32_t status = detail::with_specs(
+            sheet, columns, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
+            { return xl_typed_reader_open(handle, index, specs, count, options.header_row, options.batch_size, &reader); });
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return detail::Access::make<TableReader>(reader, columns);
     }
 
     namespace detail
