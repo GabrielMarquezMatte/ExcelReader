@@ -1,5 +1,5 @@
 use excelreader::ReadOptions;
-use excelreader::{ErrorKind, ExcelMapper, TypedBatches, Workbook};
+use excelreader::{ColumnData, ErrorKind, ExcelMapper, TableBatches, TypedBatches, Workbook};
 
 #[derive(Default, ExcelMapper)]
 struct Record {
@@ -122,4 +122,59 @@ fn two_readers_on_one_workbook_each_yield_every_row() {
     };
     assert_eq!(count(one), 100);
     assert_eq!(count(two), 100);
+}
+
+fn schema_batches(workbook: &Workbook, batch_size: i64) -> TableBatches<'_> {
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+    sheet
+        .parse_batches_with_schema(&schema, &ReadOptions::new().batch_size(batch_size))
+        .expect("the batches must open")
+}
+
+#[test]
+fn schema_batches_equal_the_whole_sheet() {
+    let expected: Vec<i64> = whole_sheet().into_iter().map(|(_, n)| n).collect();
+    for batch_size in [1, 7, 8, 9, 1000] {
+        let workbook = open();
+        let mut coluna3 = Vec::new();
+        for batch in schema_batches(&workbook, batch_size) {
+            let batch = batch.expect("a batch must read");
+            assert!(batch.len() <= batch_size);
+            let column = batch
+                .columns()
+                .into_iter()
+                .find(|c| c.name == Some("Coluna3"))
+                .expect("every batch keeps the schema's names");
+            let ColumnData::I64(values) = column.data else {
+                panic!("Coluna3 must stay an i64 column");
+            };
+            coluna3.extend_from_slice(values);
+        }
+        assert_eq!(coluna3, expected, "batch size {batch_size}");
+    }
+}
+
+#[test]
+fn schema_batches_with_batch_size_zero_yield_one_batch() {
+    let workbook = open();
+    let batches: Vec<_> = schema_batches(&workbook, 0)
+        .map(|b| b.expect("a batch must read"))
+        .collect();
+    assert_eq!(batches.len(), 1);
+    assert_eq!(batches[0].len(), 100);
+}
+
+#[test]
+fn schema_batches_reject_a_negative_batch_size() {
+    let workbook = open();
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+    assert!(sheet
+        .parse_batches_with_schema(&schema, &ReadOptions::new().batch_size(-1))
+        .is_err());
 }
