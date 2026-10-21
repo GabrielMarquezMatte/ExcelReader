@@ -90,6 +90,31 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public async Task GetOrdinalResolvesTheNamesGetNameSynthesizes()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync([7, "hello"]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new SheetDataReader(reader.FirstSheet, new SheetDataReaderOptions { HeaderRow = 0 });
+
+            Assert.Equal(0, data.GetOrdinal(data.GetName(0)));
+            Assert.Equal(1, data.GetOrdinal("column1"));
+        }
+
+        [Fact]
+        public async Task GetOrdinalPrefersARealHeaderOverASynthesizedNameItCollidesWith()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Id", null, "Column1", null, "Last"],
+                [1, 2, 3, 4, 5]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new SheetDataReader(reader.FirstSheet);
+
+            Assert.Equal("Column1", data.GetName(1));
+            Assert.Equal(2, data.GetOrdinal("Column1"));
+            Assert.Equal(3, data.GetOrdinal(data.GetName(3)));
+        }
+
+        [Fact]
         public async Task GetOrdinalForUnknownNameThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id"], [1]);
