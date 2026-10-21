@@ -45,6 +45,28 @@ struct xl::ExcelMapper<WrittenRow>
     }
 };
 
+struct NarrowRow
+{
+    uint8_t small;
+};
+
+template <>
+struct xl::ExcelMapper<NarrowRow>
+{
+    static constexpr auto get_bindings() { return std::make_tuple(xl::make_field("small", &NarrowRow::small)); }
+};
+
+struct WideRow
+{
+    uint64_t big;
+};
+
+template <>
+struct xl::ExcelMapper<WideRow>
+{
+    static constexpr auto get_bindings() { return std::make_tuple(xl::make_field("big", &WideRow::big)); }
+};
+
 struct NamedRow
 {
     std::string name = "fallback";
@@ -726,6 +748,74 @@ static int test_writer_handle_class_rejects_auto_for_memory()
     return 0;
 }
 
+static std::expected<xl::TableView<NarrowRow>, xl::Error> parse_narrow(const std::vector<int64_t> &values,
+                                                                       std::vector<uint8_t> &bytes)
+{
+    std::array<xl::ColumnRef, 1> columns{xl::i64_column("small", values)};
+    if (!xl::write_columns(bytes, columns, {.format = XL_FORMAT_XLSX}).has_value())
+    {
+        return std::unexpected(xl::Error{XL_ERROR, "write_columns failed"});
+    }
+    auto workbook = xl::Workbook::open(std::span<const uint8_t>(bytes));
+    if (!workbook.has_value())
+    {
+        return std::unexpected(workbook.error());
+    }
+    auto sheets = workbook->sheets();
+    if (!sheets.has_value())
+    {
+        return std::unexpected(sheets.error());
+    }
+    return xl::parse<NarrowRow>(sheets->front());
+}
+
+static int test_narrow_field_rejects_a_value_it_cannot_hold()
+{
+    std::vector<uint8_t> bytes;
+    auto too_big = parse_narrow({1, 300}, bytes);
+    CHECK(!too_big.has_value(), "300 must not be read into a uint8_t");
+    CHECK(too_big.error().code == XL_INVALID_ARGUMENT, "an out-of-range value is an invalid argument");
+    CHECK(too_big.error().message.find("small") != std::string::npos, "the error must name the column");
+
+    auto negative = parse_narrow({-1}, bytes);
+    CHECK(!negative.has_value(), "-1 must not be read into a uint8_t");
+
+    auto limits = parse_narrow({0, 255}, bytes);
+    CHECK(limits.has_value(), "values at the uint8_t limits must parse");
+    CHECK((*limits)[0].small == 0 && (*limits)[1].small == 255, "values at the limits must round-trip");
+
+    (void)parse_narrow({300}, bytes);
+    auto workbook = xl::Workbook::open(std::span<const uint8_t>(bytes));
+    CHECK(workbook.has_value(), "the written bytes must open");
+    auto batches = xl::parse_batches<NarrowRow>(workbook->sheets()->front());
+    CHECK(batches.has_value(), "parse_batches must open");
+    auto batch = batches->next();
+    CHECK(!batch.has_value(), "a batch holding 300 must fail for a uint8_t field");
+    return 0;
+}
+
+static int test_unsigned_values_past_int64_are_refused_on_write()
+{
+    std::vector<uint8_t> bytes;
+    const std::vector<WideRow> rows{{static_cast<uint64_t>(INT64_MAX) + 1}};
+    auto written = xl::write_sheet(bytes, rows, {.format = XL_FORMAT_XLSX});
+    CHECK(!written.has_value(), "a uint64_t above INT64_MAX must not be written as a negative number");
+
+    const std::vector<WideRow> limit{{static_cast<uint64_t>(INT64_MAX)}};
+    CHECK(xl::write_sheet(bytes, limit, {.format = XL_FORMAT_XLSX}).has_value(), "INT64_MAX must be written");
+    auto workbook = xl::Workbook::open(std::span<const uint8_t>(bytes));
+    CHECK(workbook.has_value(), "the written bytes must open");
+    auto table = xl::parse<WideRow>(workbook->sheets()->front());
+    CHECK(table.has_value() && (*table)[0].big == static_cast<uint64_t>(INT64_MAX), "INT64_MAX must round-trip");
+
+    std::vector<uint8_t> streamed;
+    auto handle = xl::WriterHandle::open(streamed, {.format = XL_FORMAT_XLSX});
+    CHECK(handle.has_value(), "the writer handle must open");
+    CHECK(handle->start_sheet("S").has_value() && handle->start_row().has_value(), "the sheet and row must start");
+    CHECK(!handle->write(UINT64_MAX).has_value(), "WriterHandle::write must refuse a uint64_t above INT64_MAX");
+    return 0;
+}
+
 static int test_a_valid_empty_string_replaces_the_default()
 {
     const int32_t offsets[] = {0, 0};
@@ -742,6 +832,14 @@ static int test_a_valid_empty_string_replaces_the_default()
 
 int main()
 {
+    if (test_narrow_field_rejects_a_value_it_cannot_hold() != 0)
+    {
+        return 1;
+    }
+    if (test_unsigned_values_past_int64_are_refused_on_write() != 0)
+    {
+        return 1;
+    }
     if (test_a_valid_empty_string_replaces_the_default() != 0)
     {
         return 1;
