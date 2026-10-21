@@ -42,10 +42,9 @@ pub use self::arrow::ArrowBatches;
 /// follows semver.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::ffi::XlColumn;
     pub use crate::workbook::{
         column_bool, column_date, column_f64, column_i64, column_str, column_time,
-        column_timestamp, ColumnBinding,
+        column_timestamp, ColumnBinding, ColumnRef,
     };
     pub use crate::writer::{push_str, set_valid, OwnedColumn, OwnedColumnData};
 
