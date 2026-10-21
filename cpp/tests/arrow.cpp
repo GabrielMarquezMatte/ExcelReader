@@ -199,6 +199,43 @@ int main()
         CHECK(reader.has_value(), "a typed reader opens while an Arrow stream is live");
     }
 
+    {
+        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
+        CHECK(wb.has_value(), "opening a workbook for the inferred-schema test must succeed");
+        auto schema = wb->sheet(0).infer_schema();
+        CHECK(schema.has_value() && !schema->empty(), "infer_schema must find columns");
+
+        auto inferred = xl::to_arrow(wb->sheet(0), *schema);
+        CHECK(inferred.has_value(), "to_arrow over an inferred schema must succeed");
+        CHECK(inferred->schema.n_children == static_cast<int64_t>(schema->size()), "one Arrow column per inferred column");
+        CHECK(inferred->array.length == 100, "the inferred read holds every data row");
+        CHECK(std::strcmp(inferred->schema.children[0]->name, "Coluna1") == 0, "columns keep their header names");
+
+        auto by_index = wb->sheet(0).infer_schema(0);
+        CHECK(by_index.has_value() && !(*by_index)[0].name.has_value(), "a schema without a header has no names");
+        auto unnamed = xl::to_arrow(wb->sheet(0), *by_index, {.header_row = 0});
+        CHECK(unnamed.has_value(), "to_arrow resolves unnamed columns by index");
+        CHECK(unnamed->array.length == 101, "with no header the header row is data");
+
+        auto empty = xl::to_arrow(wb->sheet(0), std::span<const xl::InferredColumn>{});
+        CHECK(!empty.has_value() && empty.error().code == XL_INVALID_ARGUMENT, "an empty schema is rejected");
+
+        auto stream = xl::to_arrow_stream(wb->sheet(0), *schema, {.batch_size = 8});
+        CHECK(stream.has_value(), "to_arrow_stream over an inferred schema must open");
+        int64_t rows = 0;
+        while (true)
+        {
+            auto batch = stream->next();
+            CHECK(batch.has_value(), "an inferred-schema batch must read without error");
+            if (!batch->has_value())
+            {
+                break;
+            }
+            rows += (*batch)->array.length;
+        }
+        CHECK(rows == 100, "the inferred stream delivers every data row");
+    }
+
     std::printf("OK: C++ arrow test passed\n");
     return 0;
 }

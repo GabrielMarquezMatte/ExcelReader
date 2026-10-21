@@ -106,7 +106,22 @@ for (xl::Sheet sheet : *workbook->sheets()) { std::println("{}", sheet.name().va
 for (const auto& column : *workbook->sheet(1).infer_schema(1, 100)) {
     // column.name is nullopt when the column must be resolved by column.index instead.
 }
+
+// With no row type, parse the sheet through that schema. The columns are the xl::ColumnRef
+// write_columns takes, so the table writes back as it was read.
+auto schema = workbook->sheet(1).infer_schema();
+auto table = xl::parse(workbook->sheet(1), *schema);
+for (const xl::ColumnRef& column : table->columns()) { /* column.type, column.values, ... */ }
+auto written = xl::write_columns("copy.xlsx", table->columns());
+
+// Or a batch at a time: an xl::TableReader, whose batches are xl::Tables.
+auto reader = xl::parse_batches(workbook->sheet(1), *schema, {.batch_size = 10'000});
+for (auto& batch : *reader) { if (!batch) { break; } /* batch->columns() */ }
 ```
+
+A column matched by index has no name, and writing needs every column named or none. The schema is
+a guess over a sample: a column inferred as `XL_T_I64` that holds a fraction further down fails the
+read, unless the column is `nullable`.
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 
@@ -298,6 +313,18 @@ while (true)
 ```
 
 Same `header_row`/`batch_size` meaning as `xl::parse_batches` above.
+
+With no row type, both take the columns at run time instead, such as the ones `infer_schema`
+returned. A column with a name is matched by it, one without by its index:
+
+```cpp
+auto schema = workbook->sheet(0).infer_schema();
+auto table = xl::to_arrow(workbook->sheet(0), *schema);
+auto stream = xl::to_arrow_stream(workbook->sheet(0), *schema, {.batch_size = 10'000});
+```
+
+The schema is a guess over a sample: a column inferred as `XL_T_I64` that holds a fraction further
+down fails the read, unless the column is `nullable`.
 
 ## Writing
 
