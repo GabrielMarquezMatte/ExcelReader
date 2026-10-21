@@ -13,16 +13,43 @@ use arrow::ffi::{from_ffi, FFI_ArrowArray, FFI_ArrowSchema};
 use arrow::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
 use arrow::record_batch::RecordBatchReader;
 
-use crate::ffi;
-use crate::workbook::{build_specs, check};
-use crate::{Error, ErrorKind, ExcelMapper, ReadOptions, Sheet, Workbook};
+use crate::ffi::{self, XlColumnSpec};
+use crate::workbook::{build_specs, check, schema_specs};
+use crate::{Error, ErrorKind, ExcelMapper, InferredColumn, ReadOptions, Sheet, Workbook};
 
 impl<'w> Sheet<'w> {
     /// [`parse`](Self::parse) into one Arrow [`RecordBatch`], with the same `#[derive(ExcelMapper)]`
     /// mapping and [`ReadOptions`].
     pub fn to_arrow<T: ExcelMapper>(&self, options: &ReadOptions) -> Result<RecordBatch, Error> {
-        let arena = build_specs::<T>();
+        self.arrow_from_specs(&build_specs::<T>().specs, options)
+    }
 
+    /// [`to_arrow`](Self::to_arrow) over a schema chosen at run time, such as one
+    /// [`infer_schema`](Self::infer_schema) returned. A column with a name is matched by it, one
+    /// without by its index; an empty schema is an error.
+    pub fn to_arrow_with_schema(
+        &self,
+        schema: &[InferredColumn],
+        options: &ReadOptions,
+    ) -> Result<RecordBatch, Error> {
+        self.arrow_from_specs(&schema_specs(schema).specs, options)
+    }
+
+    /// [`to_arrow_stream`](Self::to_arrow_stream) over a schema chosen at run time, as in
+    /// [`to_arrow_with_schema`](Self::to_arrow_with_schema).
+    pub fn to_arrow_stream_with_schema(
+        &self,
+        schema: &[InferredColumn],
+        options: &ReadOptions,
+    ) -> Result<ArrowBatches<'w>, Error> {
+        self.arrow_stream_from_specs(&schema_specs(schema).specs, options)
+    }
+
+    fn arrow_from_specs(
+        &self,
+        specs: &[XlColumnSpec],
+        options: &ReadOptions,
+    ) -> Result<RecordBatch, Error> {
         let mut array = FFI_ArrowArray::empty();
         let mut schema = FFI_ArrowSchema::empty();
 
@@ -30,8 +57,8 @@ impl<'w> Sheet<'w> {
             ffi::xl_parse_arrow(
                 self.handle(),
                 self.index(),
-                arena.specs.as_ptr(),
-                arena.specs.len() as i32,
+                specs.as_ptr(),
+                specs.len() as i32,
                 options.header_row,
                 options.parallelism,
                 &mut array as *mut FFI_ArrowArray as *mut c_void,
@@ -55,16 +82,22 @@ impl<'w> Sheet<'w> {
         &self,
         options: &ReadOptions,
     ) -> Result<ArrowBatches<'w>, Error> {
-        let arena = build_specs::<T>();
+        self.arrow_stream_from_specs(&build_specs::<T>().specs, options)
+    }
 
+    fn arrow_stream_from_specs(
+        &self,
+        specs: &[XlColumnSpec],
+        options: &ReadOptions,
+    ) -> Result<ArrowBatches<'w>, Error> {
         let mut stream = FFI_ArrowArrayStream::empty();
 
         check(unsafe {
             ffi::xl_parse_arrow_stream(
                 self.handle(),
                 self.index(),
-                arena.specs.as_ptr(),
-                arena.specs.len() as i32,
+                specs.as_ptr(),
+                specs.len() as i32,
                 options.header_row,
                 options.batch_size,
                 &mut stream as *mut FFI_ArrowArrayStream as *mut c_void,

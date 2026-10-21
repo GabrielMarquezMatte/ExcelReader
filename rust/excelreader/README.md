@@ -103,6 +103,34 @@ for column in sheet.infer_schema(1, 100, false)? {
 `infer_schema`'s last argument, `parse_text`, also types text cells (every CSV field, or numbers
 stored as text): integers, decimals, `true`/`false` and ISO dates.
 
+With no row type, `parse_with_schema` reads the sheet through that schema into a `Table`. Its
+columns are the `Column`s `write_columns` takes, so the table writes back as it was read:
+
+```rust,no_run
+use excelreader::{write_columns, ColumnData, ReadOptions, Workbook, WriteOptions};
+
+let workbook = Workbook::open("book.xlsx")?;
+let sheet = workbook.sheet(0)?;
+let schema = sheet.infer_schema(1, 100, false)?;
+let table = sheet.parse_with_schema(&schema, &ReadOptions::new())?;
+for column in table.columns() {
+    if let ColumnData::I64(values) = column.data {
+        println!("{:?}: {} integers", column.name, values.len());
+    }
+}
+write_columns("copy.xlsx", &table.columns(), &WriteOptions::new())?;
+
+// Or a batch at a time: TableBatches yields one Table per batch.
+for batch in sheet.parse_batches_with_schema(&schema, &ReadOptions::new())? {
+    println!("{} rows", batch?.len());
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+A column matched by index has no name, and writing needs every column named or none. The schema is
+a guess over a sample: a column inferred as `I64` that holds a fraction further down fails the read,
+unless the column is `nullable`.
+
 `Workbook` is `Send + Sync`, so sheets can be read in parallel over one open workbook, which
 loads the shared-string table once:
 
@@ -248,6 +276,28 @@ while let Some(batch) = chunks.next() {
 Same `batch_size` semantics as `parse_batches` below. Unlike `TypedBatches`,
 `ArrowBatches` does not fuse after an error — it follows arrow-rs's own semantics — so break on the
 first `Err` rather than continuing the loop.
+
+With no row type, `to_arrow_with_schema` and `to_arrow_stream_with_schema` take the columns at run
+time instead, such as the ones `infer_schema` returned. A column with a name is matched by it, one
+without by its index:
+
+```rust,no_run
+# #[cfg(feature = "arrow")]
+# fn main() -> Result<(), excelreader::Error> {
+use excelreader::{Workbook, ReadOptions};
+
+let workbook = Workbook::open("book.xlsx")?;
+let sheet = workbook.sheet(0)?;
+let schema = sheet.infer_schema(1, 100, false)?;
+let batch = sheet.to_arrow_with_schema(&schema, &ReadOptions::new())?;
+# Ok(())
+# }
+# #[cfg(not(feature = "arrow"))]
+# fn main() {}
+```
+
+The schema is a guess over a sample: a column inferred as `I64` that holds a fraction further down
+fails the read, unless the column is `nullable`.
 
 ## Writing
 

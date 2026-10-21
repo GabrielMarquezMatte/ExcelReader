@@ -3,7 +3,8 @@ use crate::ffi::{
     XL_BUFFER_TOO_SMALL, XL_EOF, XL_OK,
 };
 use crate::{
-    AllRows, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor, RowRef, Time, Timestamp,
+    AllRows, Column, ColumnData, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor,
+    RowRef, Time, Timestamp,
 };
 use std::marker::PhantomData;
 use std::path::Path;
@@ -408,6 +409,59 @@ impl<'w> Sheet<'w> {
             )
         })?;
         TableView::new(table, arena.bindings, "xl_parse_typed")
+    }
+
+    /// [`parse`](Self::parse) over a schema chosen at run time, such as one
+    /// [`infer_schema`](Self::infer_schema) returned. A column with a name is matched by it, one
+    /// without by its index; an empty schema is an error.
+    pub fn parse_with_schema(
+        &self,
+        schema: &[InferredColumn],
+        options: &ReadOptions,
+    ) -> Result<Table, Error> {
+        let specs = schema_specs(schema);
+        let mut table = empty_table();
+        check(unsafe {
+            ffi::xl_parse_typed(
+                self.workbook.handle,
+                self.index,
+                specs.specs.as_ptr(),
+                specs.specs.len() as i32,
+                options.header_row,
+                options.parallelism,
+                &mut table,
+            )
+        })?;
+        Table::new(table, schema, "xl_parse_typed")
+    }
+
+    /// [`parse_with_schema`](Self::parse_with_schema) delivered [`ReadOptions`]'s batch size rows
+    /// at a time, as [`parse_batches`](Self::parse_batches) does. `schema` is copied, so it need not
+    /// outlive the batches.
+    pub fn parse_batches_with_schema(
+        &self,
+        schema: &[InferredColumn],
+        options: &ReadOptions,
+    ) -> Result<TableBatches<'w>, Error> {
+        let specs = schema_specs(schema);
+        let mut reader: *mut ffi::XlTypedReader = std::ptr::null_mut();
+        check(unsafe {
+            ffi::xl_typed_reader_open(
+                self.workbook.handle,
+                self.index,
+                specs.specs.as_ptr(),
+                specs.specs.len() as i32,
+                options.header_row,
+                options.batch_size,
+                &mut reader,
+            )
+        })?;
+        Ok(TableBatches {
+            reader,
+            schema: schema.to_vec(),
+            done: false,
+            _workbook: PhantomData,
+        })
     }
 
     /// [`parse`](Self::parse) delivered [`ReadOptions`]'s batch size rows at a time; a negative
@@ -863,6 +917,126 @@ impl<T: ExcelMapper> std::fmt::Debug for TableView<T> {
     }
 }
 
+/// Owns a [`Sheet::parse_with_schema`] result. Frees the native table on `Drop`.
+///
+/// Its columns are the [`Column`]s [`write_columns`](crate::write_columns) takes, borrowed from
+/// this table. A column matched by index has no name, and writing needs every column named or none.
+pub struct Table {
+    table: XlTable,
+    names: Vec<Option<String>>,
+}
+
+impl Table {
+    /// Takes ownership of `table`, freeing it and failing if it does not have one column of a known
+    /// type and of `row_count` rows per `schema` entry.
+    fn new(mut table: XlTable, schema: &[InferredColumn], source: &str) -> Result<Self, Error> {
+        let columns = if table.columns.is_null() {
+            &[][..]
+        } else {
+            unsafe { std::slice::from_raw_parts(table.columns, table.column_count.max(0) as usize) }
+        };
+        let consistent = table.row_count >= 0
+            && columns.len() == schema.len()
+            && columns
+                .iter()
+                .all(|c| c.length == table.row_count && ColumnType::from_raw(c.r#type).is_some());
+        if !consistent {
+            unsafe { ffi::xl_free_table(&mut table) };
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!(
+                    "{source} returned a table that does not match its {} specs",
+                    schema.len()
+                ),
+            ));
+        }
+        Ok(Table {
+            table,
+            names: schema.iter().map(|c| c.name.clone()).collect(),
+        })
+    }
+
+    pub fn len(&self) -> i64 {
+        self.table.row_count
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.table.row_count == 0
+    }
+
+    pub fn num_columns(&self) -> usize {
+        self.names.len()
+    }
+
+    /// Column `index`, or `None` past the last one.
+    pub fn column(&self, index: usize) -> Option<Column<'_>> {
+        let name = self.names.get(index)?;
+        let raw = unsafe { &*self.table.columns.add(index) };
+        Some(Column {
+            name: name.as_deref(),
+            data: unsafe { column_data(raw) },
+            validity: (!raw.validity.is_null())
+                .then(|| unsafe { native_slice(raw.validity, (raw.length as usize).div_ceil(8)) }),
+        })
+    }
+
+    /// Every column, in schema order.
+    pub fn columns(&self) -> Vec<Column<'_>> {
+        (0..self.num_columns())
+            .filter_map(|i| self.column(i))
+            .collect()
+    }
+}
+
+/// # Safety
+/// `ptr` must be null or point to `len` live `E`s that outlive `'a`.
+unsafe fn native_slice<'a, E>(ptr: *const E, len: usize) -> &'a [E] {
+    if ptr.is_null() || len == 0 {
+        return &[];
+    }
+    std::slice::from_raw_parts(ptr, len)
+}
+
+/// # Safety
+/// `raw` must be a column of a native table whose type [`Table::new`] checked.
+unsafe fn column_data(raw: &XlColumn) -> ColumnData<'_> {
+    let rows = raw.length as usize;
+    match ColumnType::from_raw(raw.r#type) {
+        Some(ColumnType::String) => ColumnData::Str {
+            offsets: native_slice(raw.values.cast::<i32>(), rows + 1),
+            data: native_slice(raw.data, raw.data_len as usize),
+        },
+        Some(ColumnType::I64) => ColumnData::I64(native_slice(raw.values.cast(), rows)),
+        Some(ColumnType::F64) => ColumnData::F64(native_slice(raw.values.cast(), rows)),
+        Some(ColumnType::Bool) => ColumnData::Bool(native_slice(raw.values.cast(), rows)),
+        Some(ColumnType::Date) => ColumnData::Date(native_slice(raw.values.cast(), rows)),
+        Some(ColumnType::Time) => ColumnData::Time(native_slice(raw.values.cast(), rows)),
+        Some(ColumnType::Timestamp) => ColumnData::Timestamp(native_slice(raw.values.cast(), rows)),
+        None => unreachable!("Table::new rejects unknown column types"),
+    }
+}
+
+impl Drop for Table {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::xl_free_table(&mut self.table);
+        }
+    }
+}
+
+// SAFETY: as for TableView.
+unsafe impl Send for Table {}
+unsafe impl Sync for Table {}
+
+impl std::fmt::Debug for Table {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Table")
+            .field("rows", &self.table.row_count)
+            .field("columns", &self.names)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Iterator over the batches of one chunked typed read. Closes the native reader on `Drop`.
 pub struct TypedBatches<'a, T: ExcelMapper> {
     reader: *mut ffi::XlTypedReader,
@@ -912,6 +1086,57 @@ impl<T: ExcelMapper> std::fmt::Debug for TypedBatches<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TypedBatches")
             .field("columns", &self.bindings.len())
+            .field("done", &self.done)
+            .finish_non_exhaustive()
+    }
+}
+
+/// [`TypedBatches`]' counterpart for [`Sheet::parse_batches_with_schema`], yielding [`Table`]s.
+pub struct TableBatches<'a> {
+    reader: *mut ffi::XlTypedReader,
+    schema: Vec<InferredColumn>,
+    done: bool,
+    _workbook: PhantomData<&'a Workbook>,
+}
+
+// SAFETY: as for TypedBatches.
+unsafe impl Send for TableBatches<'_> {}
+
+impl Iterator for TableBatches<'_> {
+    type Item = Result<Table, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        let mut table = empty_table();
+        let status = unsafe { ffi::xl_typed_reader_next(self.reader, &mut table) };
+        if status == XL_EOF {
+            self.done = true;
+            return None;
+        }
+        if status != XL_OK {
+            self.done = true;
+            return Some(Err(last_error(status)));
+        }
+
+        let batch = Table::new(table, &self.schema, "xl_typed_reader_next");
+        self.done = batch.is_err();
+        Some(batch)
+    }
+}
+
+impl Drop for TableBatches<'_> {
+    fn drop(&mut self) {
+        unsafe { ffi::xl_typed_reader_close(self.reader) };
+    }
+}
+
+impl std::fmt::Debug for TableBatches<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TableBatches")
+            .field("columns", &self.schema.len())
             .field("done", &self.done)
             .finish_non_exhaustive()
     }
@@ -982,5 +1207,45 @@ pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena<T> {
         bindings,
         _name_ptrs: name_ptrs,
         _name_lens: name_lens,
+    }
+}
+
+/// [`SpecArena`] for a schema chosen at run time: `specs` points into `schema`'s names and into the
+/// two `_name_*` vectors, so all three must outlive the native call.
+pub(crate) struct SchemaSpecs<'a> {
+    pub(crate) specs: Vec<XlColumnSpec>,
+    _name_ptrs: Vec<*const u8>,
+    _name_lens: Vec<i32>,
+    _schema: PhantomData<&'a [InferredColumn]>,
+}
+
+/// Lowers a runtime schema into `xl_column_spec`s: a column with a name is matched by it, one
+/// without by its index.
+pub(crate) fn schema_specs(schema: &[InferredColumn]) -> SchemaSpecs<'_> {
+    let name_ptrs: Vec<*const u8> = schema
+        .iter()
+        .map(|c| c.name.as_deref().map_or(std::ptr::null(), str::as_ptr))
+        .collect();
+    let name_lens: Vec<i32> = schema
+        .iter()
+        .map(|c| c.name.as_deref().map_or(0, |n| n.len() as i32))
+        .collect();
+    let specs: Vec<XlColumnSpec> = schema
+        .iter()
+        .enumerate()
+        .map(|(i, c)| XlColumnSpec {
+            names: &name_ptrs[i],
+            name_lens: &name_lens[i],
+            name_count: i32::from(c.name.is_some()),
+            index: c.index,
+            r#type: c.column_type.raw(),
+            nullable: i32::from(c.nullable),
+        })
+        .collect();
+    SchemaSpecs {
+        specs,
+        _name_ptrs: name_ptrs,
+        _name_lens: name_lens,
+        _schema: PhantomData,
     }
 }
