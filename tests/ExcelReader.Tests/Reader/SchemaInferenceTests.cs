@@ -2,6 +2,7 @@ using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Tests.Reader
 {
@@ -226,6 +227,66 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal(new ExcelColumnSchema { Index = 0, Name = "Id", Type = ExcelColumnType.Int64Column, IsNullable = false }, schema[0]);
             Assert.Equal(new ExcelColumnSchema { Index = 1, Name = "Name", Type = ExcelColumnType.StringColumn, IsNullable = false }, schema[1]);
             Assert.Equal(new ExcelColumnSchema { Index = 2, Name = "Ratio", Type = ExcelColumnType.Float64Column, IsNullable = false }, schema[2]);
+        }
+
+        private static ExcelColumnType InferDateStyledColumn(bool date1904, params string[] values)
+        {
+            const string Styles = """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
+            string rows = string.Concat(values.Select((value, i) => $"""<row r="{i + 1}"><c r="A{i + 1}" s="1"><v>{value}</v></c></row>"""));
+            using MemoryStream ms = WorkbookBuilder.Build(rows, styles: Styles, date1904: date1904);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
+            return Excel.InferSchema(reader.FirstSheet, new SchemaInferenceOptions { HeaderRow = 0 })[0].Type;
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Should_KeepADateColumn_When_EverySampledDateIsAtMidnight(bool date1904)
+        {
+            Assert.Equal(ExcelColumnType.DateColumn, InferDateStyledColumn(date1904, "45293", "45294"));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Should_InferATimestamp_When_ASampledDateCarriesATimeOfDay(bool date1904)
+        {
+            Assert.Equal(ExcelColumnType.TimestampColumn, InferDateStyledColumn(date1904, "45293.520833333336"));
+        }
+
+        [Fact]
+        public void Should_PromoteToTimestamp_When_DatesAndTimestampsMix()
+        {
+            Assert.Equal(ExcelColumnType.TimestampColumn, InferDateStyledColumn(false, "45293", "45293.5", "45294"));
+        }
+
+        [Fact]
+        public void Should_KeepADateColumn_When_ADateStyledSerialIsOutOfRange()
+        {
+            Assert.Equal(ExcelColumnType.DateColumn, InferDateStyledColumn(false, "45293", "1E+300"));
+        }
+
+        [Fact]
+        public void Should_InferATimestamp_When_ADateTimeIsWrittenThroughTheFacade()
+        {
+            using var ms = new MemoryStream();
+            using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                XlsxSheetWriter sheet = wb.AddSheet("S");
+                using (XlsxRowWriter row = sheet.StartRow())
+                {
+                    row.Write("When");
+                }
+                using (XlsxRowWriter row = sheet.StartRow())
+                {
+                    row.Write(new DateTime(2024, 1, 2, 12, 30, 0));
+                }
+                sheet.End();
+                wb.End();
+            }
+            using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
+
+            Assert.Equal(ExcelColumnType.TimestampColumn, Excel.InferSchema(reader.FirstSheet)[0].Type);
         }
 
         [Fact]
