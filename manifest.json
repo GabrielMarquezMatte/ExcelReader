@@ -1944,6 +1944,26 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/Table.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/Table.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/TableReader.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/TableReader.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/cpp-api/TableView.md",
       "output": {
         ".html": {

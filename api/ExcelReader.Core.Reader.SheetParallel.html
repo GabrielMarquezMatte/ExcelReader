@@ -161,16 +161,16 @@ usefully, the sheet is an XLS sheet or a table view, or a CSV cannot be partitio
 or a non-UTF-8 encoding).
 </p>
 <p>
-Delivery guarantees. The general contract is the weaker CSV one: <code>ForEachAsync</code> is at-least-once,
-and a partition whose start was guessed wrongly is discarded and read again. XLSB delivers every row
-exactly once, in <code>ForEachAsync</code> too. XLSX delivers exactly once for a well-formed sheet; a
-malformed one can make <code>ForEachAsync</code> deliver a row twice. <code>ParseAsync</code> yields the same items in
+Delivery guarantees. XLSB delivers every row exactly once, in <code>ForEachAsync</code> too. XLSX does for a
+well-formed sheet, and CSV for one that follows RFC 4180 quoting with no quoted field longer than 64 KB;
+outside those, <code>ForEachAsync</code> is at-least-once, since a partition whose start was guessed wrongly
+is discarded and read again. <code>ParseAsync</code> yields the same items in
 the same order as the sequential <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html">ExcelParser&lt;T&gt;</a> on every format, and
 <code>AggregateAsync</code> and <code>ForEachAsync</code> equal their own single-thread run.
 </p>
 <p>
 <a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a>: <code>ParseAsync</code> renumbers it from the count emitted at the
-merge; <code>ForEachAsync</code> and <code>AggregateAsync</code> report the exact row when sequential and 0 when partitioned.
+merge; <code>ForEachAsync</code> and <code>AggregateAsync</code> report the row a sequential read reports, partitioned or not.
 </p>
 </div>
 
@@ -183,7 +183,7 @@ merge; <code>ForEachAsync</code> and <code>AggregateAsync</code> report the exac
 
   <h3 id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_RowAggregation___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync``1(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Reader.RowAggregation{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
   AggregateAsync&lt;TState&gt;(IExcelSheet, RowAggregation&lt;TState&gt;, SheetParallelOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L247"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L257"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads a sheet across several threads and folds every row with the functions of
@@ -250,7 +250,7 @@ merge; <code>ForEachAsync</code> and <code>AggregateAsync</code> report the exac
 
   <h3 id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___1__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync``2(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Parser.ExcelParser{``1},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
   AggregateAsync&lt;TAccumulator, TModel&gt;(IExcelSheet, ExcelParser&lt;TModel&gt;, SheetParallelOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L220"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L230"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads a sheet across several threads, binds every row to a <code class="typeparamref">TModel</code>
@@ -308,8 +308,8 @@ default unless <a class="xref" href="ExcelReader.Core.Parser.ExcelParserOptions.
 <code>[ExcelRequired]</code> column or value throws <a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html">ExcelParseException</a>; empty rows are skipped.
 </p>
 <p>
-<a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a> is exact when the sheet is read sequentially and 0 when it is
-partitioned, since a partition does not know how many rows precede it.
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a> is the row a sequential read reports, partitioned or not: the
+partitions merge in sheet order, so the first failure in that order is the one thrown.
 </p>
 <p>Otherwise carries the same contract and fallbacks as the <a class="xref" href="ExcelReader.Core.Reader.IRowRecord-1.html">IRowRecord&lt;TSelf&gt;</a> overload.</p>
 </div>
@@ -333,7 +333,7 @@ partitioned, since a partition does not know how many rows precede it.
 
   <h3 id="ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.AggregateAsync``2(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
   AggregateAsync&lt;TAccumulator, TRecord&gt;(IExcelSheet, SheetParallelOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L194"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads a sheet across several threads, parses every row into a <code class="typeparamref">TRecord</code>
@@ -404,7 +404,7 @@ holds every record exactly once, but <a class="xref" href="ExcelReader.Core.Read
 
   <h3 id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___0__System_Action___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.ForEachAsync``1(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Parser.ExcelParser{``0},System.Action{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
   ForEachAsync&lt;TModel&gt;(IExcelSheet, ExcelParser&lt;TModel&gt;, Action&lt;TModel&gt;, SheetParallelOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L162"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads a sheet across several threads, binds every row to a <code class="typeparamref">TModel</code>
@@ -464,8 +464,8 @@ in no particular order. A property that fails to parse keeps its default unless
 value throws <a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html">ExcelParseException</a>; empty rows are skipped.
 </p>
 <p>
-<a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a> is exact when the sheet is read sequentially and
-0 when it is partitioned, since a partition does not know how many rows precede it.
+<a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row">Row</a> is the row a sequential read reports, partitioned or not: the
+partitions merge in sheet order, so the first failure in that order is the one thrown.
 </p>
 </div>
 
@@ -488,7 +488,7 @@ value throws <a class="xref" href="ExcelReader.Core.Parser.ExcelParseException.h
 
   <h3 id="ExcelReader_Core_Reader_SheetParallel_ForEachAsync__1_ExcelReader_Core_Reader_IExcelSheet_System_Action___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.ForEachAsync``1(ExcelReader.Core.Reader.IExcelSheet,System.Action{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
   ForEachAsync&lt;TRecord&gt;(IExcelSheet, Action&lt;TRecord&gt;, SheetParallelOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L125"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads a sheet across several threads, parses every row into a <code class="typeparamref">TRecord</code>
@@ -541,21 +541,30 @@ and hands it to <code class="paramref">body</code>.</p>
 several at once; the caller owns any synchronization. Records arrive in no particular order.
 </p>
 <p>
-Delivery is at least once in general: <code class="paramref">body</code> may be invoked more than once for the
+XLSB delivers every row exactly once. CSV does when every quote opens or closes a quoted field or is
+doubled inside one, as RFC 4180 has it, and no quoted field runs past 64 KB: a partition's start is then
+read off the quotes around it, and one whose quotes could open or close a field waits for its confirmed
+start. XLSX delivers exactly once for a well-formed sheet.
+</p>
+<p>
+Outside those, delivery is at least once: <code class="paramref">body</code> may be invoked more than once for the
 same record. On CSV, a partition whose start was guessed wrongly is read again from the confirmed
 offset, and the discarded speculative pass may already have delivered a whole partition's worth of
 records, which may also be misparsed: a wrong start shifts every field boundary. An exception
-<code class="paramref">body</code> throws during a discarded pass is discarded with it. A start is only guessed
-wrongly inside a quoted field, so a CSV in which the quote character never appears delivers every
-record exactly once. XLSB delivers every row exactly once. XLSX does too for a well-formed sheet; on
-a malformed one, workers may already have called <code class="paramref">body</code> for rows that are then
-dropped, so a row can be delivered twice or be one the sequential reader would not produce.
+<code class="paramref">body</code> throws during a discarded pass is discarded with it. On a malformed XLSX sheet,
+workers may already have called <code class="paramref">body</code> for rows that are then dropped, so a row can be
+delivered twice or be one the sequential reader would not produce.
 </p>
 <p>
-A <code class="paramref">body</code> with side effects must therefore be idempotent and tolerate records that
-do not exist. For exactly-once on any source, use
+A <code class="paramref">body</code> with side effects on such a source must therefore be idempotent and tolerate
+records that do not exist. For exactly-once on any source, use
 <a class="xref" href="ExcelReader.Core.Reader.SheetParallel.html#ExcelReader_Core_Reader_SheetParallel_AggregateAsync__2_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_">AggregateAsync&lt;TAccumulator, TRecord&gt;(IExcelSheet, SheetParallelOptions?, CancellationToken)</a>, where the
 discarded partition's accumulator is thrown away, and apply the side effects once it returns.
+</p>
+<p>
+When <code class="paramref">body</code> or a parse throws, partitions further into the sheet stop: on CSV at their
+next record, on XLSX and XLSB within the few chunks already in flight. Partitions before it run to the
+end, so every record a sequential read would deliver before the failure is delivered.
 </p>
 <p>
 A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan&lt;T&gt;</a> column points into a pooled buffer the worker reuses once
@@ -579,7 +588,7 @@ A <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlysp
 
   <h3 id="ExcelReader_Core_Reader_SheetParallel_ParseAsync__1_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Parser_ExcelParser___0__ExcelReader_Core_Reader_SheetParallelOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Reader.SheetParallel.ParseAsync``1(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Parser.ExcelParser{``0},ExcelReader.Core.Reader.SheetParallelOptions,System.Threading.CancellationToken)">
   ParseAsync&lt;T&gt;(IExcelSheet, ExcelParser&lt;T&gt;, SheetParallelOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetParallel.cs/#L62"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Parses a sheet into <code class="typeparamref">T</code> instances across several threads, yielding the
@@ -630,9 +639,10 @@ same sequence, in the same order, that the sequential <a class="xref" href="Exce
   <div class="markdown level1 remarks"><p>Parsing and type conversion run in parallel; whatever the caller does per row does not. A caller
 whose per-row work dominates will see little gain from raising <a class="xref" href="ExcelReader.Core.Reader.SheetParallelOptions.html#ExcelReader_Core_Reader_SheetParallelOptions_DegreeOfParallelism">DegreeOfParallelism</a>.
 For CSV, <span class="xref">ExcelReader.Core.Reader.Csv.CsvReaderOptions.InternStrings</span> yields substantially less here than sequentially,
-since each partition keeps its own dedup cache. A partition read from a wrongly guessed start is
-discarded before any of its rows are yielded, but its cells have already passed through the parser's
-converters and property setters, which must therefore be free of side effects.</p>
+since each partition keeps its own dedup cache. A partition read from a wrongly guessed start, which
+takes a CSV outside the exactly-once conditions of <code>ForEachAsync</code>, is discarded before any of its
+rows are yielded, but its cells have already passed through the parser's converters and property
+setters, which must therefore be free of side effects.</p>
 </div>
 
   <h4 class="section">Exceptions</h4>

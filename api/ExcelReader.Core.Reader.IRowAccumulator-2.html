@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Reader_IRowAccumulator_2" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2" class="text-break">
-Interface IRowAccumulator&lt;TSelf, TModel&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L23"><i class="bi bi-code-slash"></i></a>
+Interface IRowAccumulator&lt;TSelf, TModel&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L24"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -128,8 +128,9 @@ of the sheet gets its own instance.</p>
   <h2 id="ExcelReader_Core_Reader_IRowAccumulator_2_remarks">Remarks</h2>
   <div class="markdown level0 remarks"><p>
 <a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html#ExcelReader_Core_Reader_IRowAccumulator_2_Add__1_">Add(TModel)</a> runs concurrently across instances on worker threads, and must mutate only the
-instance it is called on. For CSV, a partition that started at a misguessed row boundary is read again
-into a new instance and the first one is discarded, so an instance may see rows that are later
+instance it is called on. For CSV, a partition that started at a misguessed row boundary, which takes a
+quote outside RFC 4180 rules or a quoted field longer than 64 KB, is read again into a new instance and
+the first one is discarded, so an instance may see rows that are later
 thrown away — including rows whose parse or <a class="xref" href="ExcelReader.Core.Reader.IRowAccumulator-2.html#ExcelReader_Core_Reader_IRowAccumulator_2_Add__1_">Add(TModel)</a> threw, and rows misparsed from
 the wrong start that appear nowhere in the sheet. A side effect outside the instance is not undone.
 XLSX and XLSB never re-read a partition.
@@ -149,7 +150,7 @@ partition into the accumulator of everything before it. It may receive an instan
 
   <h3 id="ExcelReader_Core_Reader_IRowAccumulator_2_Add__1_" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2.Add(`1)">
   Add(TModel)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L30"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Folds one row into this instance.</p>
@@ -182,7 +183,7 @@ partition into the accumulator of everything before it. It may receive an instan
 
   <h3 id="ExcelReader_Core_Reader_IRowAccumulator_2_Merge__0_" data-uid="ExcelReader.Core.Reader.IRowAccumulator`2.Merge(`0)">
   Merge(TSelf)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L34"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Folds the rows of the partition that immediately follows this one into this instance.</p>
@@ -215,7 +216,7 @@ partition into the accumulator of everything before it. It may receive an instan
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L23" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/IRowAccumulator.cs/#L24" class="edit-link">Edit this page</a>
         </div>
 
 

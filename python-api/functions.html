@@ -98,7 +98,7 @@
 container, the inverse of passing <code>password=</code> to <code>open_workbook</code>.</p>
 <p><code>package</code> is a path to a complete file, or its bytes (<code>bytes</code>, <code>bytearray</code>, <code>memoryview</code>, or an
 <code>io.BytesIO</code> read whole). <code>destination</code> is a path, or a binary object with <code>write()</code> that
-receives the encrypted workbook in one call and is not closed. Encryption parameters are fixed
+receives the encrypted workbook, as <code>write_workbook</code> hands it over, and is not closed. Encryption parameters are fixed
 at Excel's own defaults; there are no options.</p>
 <p><strong>Parameters</strong></p>
 <table>
@@ -253,7 +253,8 @@ type comes from its Arrow type, so <code>types</code> must be None. Requires pya
 </ul>
 <p><code>format</code> is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
 with <code>write()</code> has no extension, so it needs <code>format</code>. The whole workbook is built in memory and
-handed to <code>write()</code> in one call, at the object's current position; the object is not closed.</p>
+handed to <code>write()</code> at the object's current position, again for the rest whenever <code>write()</code>
+returns that it took only part; the object is not closed.</p>
 <p>The column names become the header row. <code>options</code> sets the sheet name and CSV dialect; see
 <code>WriteOptions</code>.</p>
 <p><strong>Parameters</strong></p>

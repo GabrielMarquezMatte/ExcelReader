@@ -149,8 +149,8 @@ blank text cell; the tuple <code>(None, ColumnType.X)</code> is a blank cell typ
 <pre><code class="lang-python">def close() -&gt; None
 </code></pre>
 <p>Finalizes and releases the writer. Safe to call more than once.</p>
-<p>For a destination with <code>write()</code>, the finished workbook is written to it in one call, even
-when sheets or rows were left open.</p>
+<p>For a destination with <code>write()</code>, the finished workbook is written to it, even when sheets
+or rows were left open; a <code>write()</code> that takes only part of it is called again for the rest.</p>
 
 </article>
 

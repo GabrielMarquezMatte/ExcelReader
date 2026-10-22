@@ -417,8 +417,13 @@ constexpr detail::FieldBinding&lt;Class, T, N&gt; make_field(const char *(&amp;&
 <h2 id="parse">parse</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
 std::expected&lt;TableView&lt;T&gt;, Error&gt; parse(Sheet sheet, const ReadOptions &amp;options={})
+std::expected&lt;Table, Error&gt; parse(
+    Sheet sheet,
+    std::span&lt;const InferredColumn&gt; columns,
+    const ReadOptions &amp; options = {})
 </code></pre>
 <p>Reads a whole sheet as <code>T</code>.</p>
+<p>parse over a schema chosen at run time, such as one Sheet::infer_schema returned.</p>
 <p><strong>Type parameters</strong></p>
 <table>
 <thead>
@@ -457,14 +462,25 @@ std::expected&lt;TableView&lt;T&gt;, Error&gt; parse(Sheet sheet, const ReadOpti
 <td><code>{}</code></td>
 <td>Header row and parallelism.</td>
 </tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="InferredColumn.html">InferredColumn</a>&gt;</td>
+<td></td>
+<td>One per output column: matched by <code>name</code> when it has one, else by <code>index</code>. Must not be empty.</td>
+</tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> std::expected&lt;<a href="TableView.html">TableView</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;: Every row after the header.</p>
+<p><strong>Returns</strong> std::expected&lt;<a href="Table.html">Table</a>, <a href="Error.html">Error</a>&gt;, std::expected&lt;<a href="TableView.html">TableView</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;: Every row after the header.</p>
 <h2 id="parse_batches">parse_batches</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
 std::expected&lt;TypedReader&lt;T&gt;, Error&gt; parse_batches(Sheet sheet, const ReadOptions &amp;options={})
+std::expected&lt;TableReader, Error&gt; parse_batches(
+    Sheet sheet,
+    std::span&lt;const InferredColumn&gt; columns,
+    const ReadOptions &amp; options = {})
 </code></pre>
 <p>Opens a TypedReader over a sheet.</p>
+<p>Opens a TableReader over a sheet.</p>
 <p><strong>Type parameters</strong></p>
 <table>
 <thead>
@@ -503,9 +519,15 @@ std::expected&lt;TypedReader&lt;T&gt;, Error&gt; parse_batches(Sheet sheet, cons
 <td><code>{}</code></td>
 <td>Header row and batch size.</td>
 </tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="InferredColumn.html">InferredColumn</a>&gt;</td>
+<td></td>
+<td>As for the runtime-schema parse; copied, so it need not outlive the reader.</td>
+</tr>
 </tbody>
 </table>
-<p><strong>Returns</strong> std::expected&lt;<a href="TypedReader.html">TypedReader</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;</p>
+<p><strong>Returns</strong> std::expected&lt;<a href="TableReader.html">TableReader</a>, <a href="Error.html">Error</a>&gt;, std::expected&lt;<a href="TypedReader.html">TypedReader</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;</p>
 <h2 id="write_columns">write_columns</h2>
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; write_columns(
     std::string_view path,
@@ -735,8 +757,13 @@ std::expected&lt;Acc, Error&gt; aggregate_csv(
 <h2 id="to_arrow">to_arrow</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
 std::expected&lt;ArrowTable, Error&gt; to_arrow(Sheet sheet, const ReadOptions &amp;options={})
+std::expected&lt;ArrowTable, Error&gt; to_arrow(
+    Sheet sheet,
+    std::span&lt;const InferredColumn&gt; columns,
+    const ReadOptions &amp; options = {})
 </code></pre>
 <p>parse into Arrow instead of <code>T</code>.</p>
+<p>to_arrow over a schema chosen at run time, such as one Sheet::infer_schema returned.</p>
 <p><strong>Type parameters</strong></p>
 <table>
 <thead>
@@ -775,14 +802,25 @@ std::expected&lt;ArrowTable, Error&gt; to_arrow(Sheet sheet, const ReadOptions &
 <td><code>{}</code></td>
 <td>Header row and parallelism.</td>
 </tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="InferredColumn.html">InferredColumn</a>&gt;</td>
+<td></td>
+<td>One per output column: matched by <code>name</code> when it has one, else by <code>index</code>. Must not be empty.</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;<a href="ArrowTable.html">ArrowTable</a>, <a href="Error.html">Error</a>&gt;</p>
 <h2 id="to_arrow_stream">to_arrow_stream</h2>
 <pre><code class="lang-cpp">template &lt;typename T&gt;
 std::expected&lt;ArrowStream, Error&gt; to_arrow_stream(Sheet sheet, const ReadOptions &amp;options={})
+std::expected&lt;ArrowStream, Error&gt; to_arrow_stream(
+    Sheet sheet,
+    std::span&lt;const InferredColumn&gt; columns,
+    const ReadOptions &amp; options = {})
 </code></pre>
 <p>Opens an ArrowStream over a sheet.</p>
+<p>to_arrow_stream over a schema chosen at run time, as for the to_arrow overload.</p>
 <p><strong>Type parameters</strong></p>
 <table>
 <thead>
@@ -820,6 +858,12 @@ std::expected&lt;ArrowStream, Error&gt; to_arrow_stream(Sheet sheet, const ReadO
 <td>const <a href="ReadOptions.html">ReadOptions</a> &amp;</td>
 <td><code>{}</code></td>
 <td>Header row and batch size.</td>
+</tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="InferredColumn.html">InferredColumn</a>&gt;</td>
+<td></td>
+<td>One per output column: matched by <code>name</code> when it has one, else by <code>index</code>. Must not be empty.</td>
 </tr>
 </tbody>
 </table>
