@@ -16,7 +16,7 @@ from typing import IO, Any, Sequence, Union
 from excelreader import _native
 from excelreader.reader import _check
 from excelreader.types import ColumnType, WriteOptions
-from excelreader.writer import _write_all
+from excelreader.writer import _marshal, _typed_table, _write_all
 
 _EPOCH_DATE = datetime.date(1970, 1, 1)
 _EPOCH_DATETIME = datetime.datetime(1970, 1, 1)
@@ -43,9 +43,9 @@ class SheetWriter:
     """A streaming workbook writer. Use as a context manager; closing finalizes the workbook, and for
     a destination with `write()` hands it the finished bytes.
 
-    The required call order is `start_sheet` -> `write_row` per row -> `end_sheet`. Calling out of
-    order raises `ExcelReaderError`, and the writer stays usable: fix the order and continue, or
-    close to discard.
+    The required call order is `start_sheet` -> `write_row` per row -> `end_sheet`, or one
+    `write_sheet` per whole table. Calling out of order raises `ExcelReaderError`, and the writer
+    stays usable: fix the order and continue, or close to discard.
     """
 
     __slots__ = ("_handle", "_lib", "_destination")
@@ -66,6 +66,21 @@ class SheetWriter:
 
     def end_sheet(self) -> None:
         _check(self._lib.xl_end_sheet(self._require_handle()))
+
+    def write_sheet(self, name: str, data: Any, types: list[ColumnType] | None = None) -> None:
+        """Writes `data` as a whole sheet named `name`, in one native call instead of one per cell.
+
+        `data` and `types` follow `write_workbook`'s rules: a `TypedTable` with one `ColumnType` per
+        column, or Arrow-compatible data (pyarrow, pandas, polars) with `types` None. The column names
+        become the header row. Parallelism and the other options come from `open_writer`;
+        `WriteOptions.sheet_name` does not apply. Raises `ExcelReaderError` while a sheet started
+        with `start_sheet` is open.
+        """
+        table, types = _typed_table(data, types)
+        specs, native_table, _, keepalive = _marshal(table, types, None)
+        pointer, length = _encode(name)
+        _check(self._lib.xl_write_table(self._require_handle(), pointer, length, specs, ctypes.byref(native_table)))
+        del keepalive
 
     def write_row(self, values: Sequence[Any]) -> None:
         """Writes one row, one cell per value, its type inferred from the value.

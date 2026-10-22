@@ -291,10 +291,30 @@ content in files that differ byte for byte. xls and csv ignore both fields.
 write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallelism=0))
 ```
 
-**Phase-1 limits, stated plainly:** a single sheet only (no multi-sheet workbooks); the whole table
-must already be in memory (no streaming/chunked writes); no styling beyond the temporal number
-formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns. `format="auto"` is not accepted —
-sniffing reads a file's existing signature bytes, and a file being created has none.
+**Phase-1 limits, stated plainly:** `write_workbook` writes a single sheet (for several, see
+`write_sheet` below); the whole table must already be in memory (no streaming/chunked writes); no
+styling beyond the temporal number formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns.
+`format="auto"` is not accepted — sniffing reads a file's existing signature bytes, and a file being
+created has none.
+
+### Several sheets
+
+`open_writer` returns a `SheetWriter`, whose `write_sheet` writes a whole table as one sheet in a
+single native call. It takes the same `data` and `types` as `write_workbook`, so each sheet can be a
+`TypedTable` or a pandas, polars or pyarrow frame:
+
+```python
+from excelreader import WriteOptions, open_writer
+
+with open_writer("report.xlsx", options=WriteOptions(degree_of_parallelism=0)) as writer:
+    writer.write_sheet("Sales", sales_df)
+    writer.write_sheet("Stock", table, types)
+```
+
+Parallelism and the other options come from `open_writer` and apply to every sheet;
+`WriteOptions.sheet_name` does not apply, since each call names its sheet. `write_sheet` raises
+`ExcelReaderError` while a sheet started with `start_sheet` is open; between sheets, the two styles
+mix freely.
 
 ## Writing a sheet row by row
 

@@ -573,6 +573,12 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_end_sheet.argtypes = [ctypes.c_void_p]
     lib.xl_end_sheet.restype = ctypes.c_int32
 
+    lib.xl_write_table.argtypes = [
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_int32,
+        ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable),
+    ]
+    lib.xl_write_table.restype = ctypes.c_int32
+
     lib.xl_close_write_handle.argtypes = [ctypes.c_void_p]
     lib.xl_close_write_handle.restype = ctypes.c_int32
 

@@ -4,7 +4,15 @@ import datetime
 
 import pytest
 
-from excelreader import CellType, ColumnSpec, ColumnType, open_workbook, open_writer
+from excelreader import (
+    CellType,
+    ColumnSpec,
+    ColumnType,
+    ExcelReaderError,
+    WriteOptions,
+    open_workbook,
+    open_writer,
+)
 
 
 def test_round_trips_typed_cells(tmp_path):
@@ -284,3 +292,93 @@ def test_an_integer_beyond_64_bits_is_refused_not_wrapped(tmp_path, value):
             writer.write_row(["fine", value])
         writer.write_row([2**63 - 1, -(2**63)])
         writer.end_sheet()
+
+
+_QTY_SCHEMA = [ColumnSpec(ColumnType.STRING, name="name"), ColumnSpec(ColumnType.I64, name="qty", nullable=True)]
+_QTY_TYPES = [spec.type for spec in _QTY_SCHEMA]
+
+
+def _qty_table(tmp_path, rows):
+    source = tmp_path / "source.csv"
+    source.write_text("name,qty\n" + "".join(f"{name},{qty}\n" for name, qty in rows), encoding="utf-8")
+    with open_workbook(source) as workbook:
+        return workbook.sheets[0].parse(_QTY_SCHEMA)
+
+
+def _parsed(sheet):
+    table = sheet.parse(_QTY_SCHEMA)
+    return list(table.columns[0]), [
+        table.columns[1][i] if table.validity[1] is None or table.validity[1][i >> 3] >> (i & 7) & 1 else None
+        for i in range(table.row_count)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("extension", "options"),
+    [
+        ("xlsx", None),
+        ("xlsb", None),
+        ("xlsx", WriteOptions(degree_of_parallelism=4, batch_rows=2)),
+        ("xlsb", WriteOptions(degree_of_parallelism=4, batch_rows=2)),
+    ],
+)
+def test_write_sheet_writes_several_tables_beside_streamed_rows(tmp_path, extension, options):
+    sales = _qty_table(tmp_path, [("widget", 3), ("gadget", 7)])
+    stock = _qty_table(tmp_path, [(f"item{i}", "" if i == 2 else i * 10) for i in range(7)])
+    path = tmp_path / f"multi.{extension}"
+
+    with open_writer(path, options=options) as writer:
+        writer.write_sheet("Vendas", sales, _QTY_TYPES)
+        writer.start_sheet("Resumo")
+        writer.write_row(["name", "qty"])
+        writer.write_row(["total", 10])
+        writer.end_sheet()
+        writer.write_sheet("Estoque", stock, _QTY_TYPES)
+
+    with open_workbook(path) as workbook:
+        assert [sheet.name for sheet in workbook.sheets] == ["Vendas", "Resumo", "Estoque"]
+        assert _parsed(workbook.sheets[0]) == (["widget", "gadget"], [3, 7])
+        assert _parsed(workbook.sheets[1]) == (["total"], [10])
+        assert _parsed(workbook.sheets[2]) == (
+            [f"item{i}" for i in range(7)],
+            [0, 10, None, 30, 40, 50, 60],
+        )
+
+
+def test_write_sheet_raises_while_a_streamed_sheet_is_open_and_the_writer_stays_usable(tmp_path):
+    table = _qty_table(tmp_path, [("widget", 3)])
+    path = tmp_path / "open.xlsx"
+
+    with open_writer(path) as writer:
+        writer.start_sheet("Streamed")
+        with pytest.raises(ExcelReaderError, match="already open"):
+            writer.write_sheet("Table", table, _QTY_TYPES)
+        writer.end_sheet()
+        writer.write_sheet("Table", table, _QTY_TYPES)
+
+    with open_workbook(path) as workbook:
+        assert [sheet.name for sheet in workbook.sheets] == ["Streamed", "Table"]
+
+
+def test_write_sheet_rejects_a_typed_table_without_types(tmp_path):
+    table = _qty_table(tmp_path, [("widget", 3)])
+    with open_writer(tmp_path / "untyped.xlsx") as writer:
+        with pytest.raises(TypeError, match="types"):
+            writer.write_sheet("Data", table)
+        writer.write_sheet("Data", table, _QTY_TYPES)
+
+
+def test_write_sheet_writes_arrow_data_to_a_bytesio():
+    import io
+
+    pa = pytest.importorskip("pyarrow")
+
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
+        writer.write_sheet("A", pa.table({"name": ["widget"], "qty": [3]}))
+        writer.write_sheet("B", pa.RecordBatch.from_pydict({"name": ["gadget", "gizmo"], "qty": [7, 9]}))
+
+    with open_workbook(buffer.getvalue(), format="xlsx") as workbook:
+        assert [sheet.name for sheet in workbook.sheets] == ["A", "B"]
+        assert _parsed(workbook.sheets[0]) == (["widget"], [3])
+        assert _parsed(workbook.sheets[1]) == (["gadget", "gizmo"], [7, 9])
