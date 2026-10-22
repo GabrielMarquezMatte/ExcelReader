@@ -2554,8 +2554,8 @@ namespace xl
     namespace detail
     {
 
-        template <typename Destination, std::ranges::input_range R>
-        std::expected<void, Error> write_rows(Destination &destination, R &&rows, const WriteOptions &options)
+        template <std::ranges::input_range R, typename Write>
+        std::expected<void, Error> write_rows(R &&rows, Write &&write)
         {
             using T = std::remove_cvref_t<std::ranges::range_value_t<R>>;
             static constexpr auto bindings = ExcelMapper<T>::get_bindings();
@@ -2584,7 +2584,7 @@ namespace xl
 
             // refs borrows pointers into builders, so both must stay in the scope of the write call.
             const std::array<ColumnRef, field_count> refs = to_refs(builders, bindings, indices);
-            return write_columns(destination, refs, options);
+            return write(std::span<const ColumnRef>(refs));
         }
 
     }
@@ -2597,7 +2597,8 @@ namespace xl
     template <std::ranges::input_range R>
     std::expected<void, Error> write_sheet(std::string_view path, R &&rows, const WriteOptions &options = {})
     {
-        return detail::write_rows(path, std::forward<R>(rows), options);
+        return detail::write_rows(std::forward<R>(rows), [&](std::span<const ColumnRef> columns)
+                                  { return write_columns(path, columns, options); });
     }
 
     /// @brief write_sheet into memory.
@@ -2607,14 +2608,15 @@ namespace xl
     template <std::ranges::input_range R>
     std::expected<void, Error> write_sheet(std::vector<uint8_t> &out, R &&rows, const WriteOptions &options = {})
     {
-        return detail::write_rows(out, std::forward<R>(rows), options);
+        return detail::write_rows(std::forward<R>(rows), [&](std::span<const ColumnRef> columns)
+                                  { return write_columns(out, columns, options); });
     }
 
 
     /// @brief Writes a workbook as calls arrive instead of building it in memory first.
     ///
     /// Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and
-    /// end_row; then end_sheet. A call out of order returns an error rather than corrupting the
+    /// end_row; then end_sheet. Or one write_columns or write_sheet per whole sheet. A call out of order returns an error rather than corrupting the
     /// output. Finish with finish(); destruction finishes too, but cannot report a failure.
     class WriterHandle
     {
@@ -2673,6 +2675,29 @@ namespace xl
 
         /// @brief Ends the current sheet.
         std::expected<void, Error> end_sheet() { return status_result(xl_end_sheet(handle_)); }
+
+        /// @brief Writes columns as a whole sheet, as write_columns does, in one call instead of one per cell.
+        ///
+        /// Uses the parallelism of the options the handle was opened with; their sheet name does not
+        /// apply. Fails while a sheet started with start_sheet is open.
+        /// @param name The sheet's name.
+        /// @param columns As for write_columns.
+        std::expected<void, Error> write_columns(std::string_view name, std::span<const ColumnRef> columns)
+        {
+            return detail::write_table(columns, [&](const xl_column_spec *specs, const xl_table *table)
+                                       { return xl_write_table(handle_, reinterpret_cast<const uint8_t *>(name.data()),
+                                                               static_cast<int32_t>(name.size()), specs, table); });
+        }
+
+        /// @brief Writes rows as a whole sheet, as write_sheet does, on top of write_columns.
+        /// @param name The sheet's name.
+        /// @param rows As for write_sheet.
+        template <std::ranges::input_range R>
+        std::expected<void, Error> write_sheet(std::string_view name, R &&rows)
+        {
+            return detail::write_rows(std::forward<R>(rows), [&](std::span<const ColumnRef> columns)
+                                      { return write_columns(name, columns); });
+        }
 
         /// @brief Writes the next cell.
         /// @param value A string, integer, floating-point, bool or std::chrono date or time value, as a
