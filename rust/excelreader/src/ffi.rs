@@ -461,6 +461,13 @@ extern "C" {
 
     pub fn xl_end_row(handle: *mut XlWriterHandle) -> c_int;
     pub fn xl_end_sheet(handle: *mut XlWriterHandle) -> c_int;
+    pub fn xl_write_table(
+        handle: *mut XlWriterHandle,
+        name: *const u8,
+        name_len: i32,
+        specs: *const XlColumnSpec,
+        table: *const XlTable,
+    ) -> c_int;
     pub fn xl_close_write_handle(handle: *mut XlWriterHandle) -> c_int;
 
     /// Reads back everything written so far to a handle opened by `xl_open_write_handle_to_memory`.

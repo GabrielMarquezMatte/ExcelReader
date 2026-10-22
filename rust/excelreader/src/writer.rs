@@ -192,15 +192,15 @@ fn validate(columns: &[Column<'_>]) -> Result<i64, Error> {
 
 /// The ABI's column specs and table for `columns`, borrowing every buffer. `specs` and `table`
 /// point into the other three fields, so the whole value must outlive the FFI call.
-struct RawTable {
-    specs: Vec<XlColumnSpec>,
-    table: XlTable,
+pub(crate) struct RawTable {
+    pub(crate) specs: Vec<XlColumnSpec>,
+    pub(crate) table: XlTable,
     _columns: Vec<XlColumn>,
     _names: Vec<*const u8>,
     _name_lens: Vec<i32>,
 }
 
-fn raw_table(columns: &[Column<'_>]) -> Result<RawTable, Error> {
+pub(crate) fn raw_table(columns: &[Column<'_>]) -> Result<RawTable, Error> {
     let row_count = validate(columns)?;
     let names: Vec<*const u8> = columns
         .iter()
@@ -359,7 +359,7 @@ pub struct OwnedColumn {
 }
 
 impl OwnedColumn {
-    fn as_column(&self) -> Column<'_> {
+    pub(crate) fn as_column(&self) -> Column<'_> {
         let data = match &self.data {
             OwnedColumnData::Str { offsets, data } => ColumnData::Str { offsets, data },
             OwnedColumnData::I64(v) => ColumnData::I64(v),

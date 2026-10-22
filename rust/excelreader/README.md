@@ -342,7 +342,8 @@ does not recognize is an error - a file being created has no signature bytes to 
 For XLSX and XLSB, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
 several threads: `0` uses every processor, `1` writes serially, and leaving it unset is serial.
 Unset `batch_rows` keeps the library default of 8,192. With shared strings on, two parallel runs
-give the same content in files that differ byte for byte. XLS, CSV and `WriterHandle` ignore both.
+give the same content in files that differ byte for byte. XLS, CSV and `WriterHandle`'s per-cell
+writes ignore both.
 
 ```rust,no_run
 use excelreader::{write_columns, Column, ColumnData, WriteOptions};
@@ -396,6 +397,25 @@ call per cell (`None` writes a blank cell), left to right, then `finish`. A call
 returns `Err` rather than corrupting output. A handle from `new` writes the whole workbook to its
 writer once, in `finish`. Dropping a handle without finishing it closes it on a best-effort basis,
 discarding any error, and writes nothing to a writer.
+
+To write several sheets from whole tables, call the handle's `write_sheet` or `write_columns` once
+per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
+instead of one per cell, using the handle's `degree_of_parallelism` and `batch_rows`. Between sheets
+they mix with `start_sheet..end_sheet`; while a sheet is open they return `Err`.
+
+```rust,no_run
+use excelreader::{WriteOptions, WriterHandle};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
+# let sales = vec![Row::default()];
+# let stock = vec![Row::default()];
+
+let mut handle = WriterHandle::create("report.xlsx", &WriteOptions::new().degree_of_parallelism(0))?;
+handle.write_sheet("Sales", &sales)?;
+handle.write_sheet("Stock", &stock)?;
+handle.finish()?;
+# Ok::<(), excelreader::Error>(())
+```
 
 ## Reading rows one at a time
 
