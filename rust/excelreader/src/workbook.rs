@@ -209,6 +209,57 @@ impl Workbook {
         }))
     }
 
+    /// Every Excel table, in workbook order.
+    pub fn tables(&self) -> Result<Vec<TableInfo>, Error> {
+        let mut count: i32 = 0;
+        check(unsafe { ffi::xl_table_count(self.handle, &mut count) })?;
+        (0..count).map(|index| self.table_info(index)).collect()
+    }
+
+    fn table_info(&self, index: i32) -> Result<TableInfo, Error> {
+        let mut raw = ffi::XlTableInfo::default();
+        check(unsafe { ffi::xl_table_info_at(self.handle, index, &mut raw) })?;
+        let name = self.fill_string(|handle, buffer, capacity, out_len| unsafe {
+            ffi::xl_table_name_at(handle, index, buffer, capacity, out_len)
+        })?;
+        Ok(TableInfo {
+            name,
+            index,
+            sheet: raw.sheet,
+            first_row: raw.first_row,
+            last_row: raw.last_row,
+            first_column: raw.first_column,
+            last_column: raw.last_column,
+            header_row_count: raw.header_row_count,
+            totals_row_count: raw.totals_row_count,
+        })
+    }
+
+    /// Table `index` read as a sheet: every [`Sheet`] read covers only the table's range, header
+    /// row first, with the column indexes of the sheet holding it. Its [`Sheet::name`] and
+    /// [`Sheet::visibility`] are that sheet's. An index outside the workbook is an error here.
+    pub fn table(&self, index: i32) -> Result<Sheet<'_>, Error> {
+        let mut raw = ffi::XlTableInfo::default();
+        check(unsafe { ffi::xl_table_info_at(self.handle, index, &mut raw) })?;
+        Ok(Sheet {
+            workbook: self,
+            index: ffi::xl_table_sheet(index),
+        })
+    }
+
+    /// The table called `name`, compared without regard to case, read as in [`table`](Self::table).
+    /// `Ok(None)` when no table matches.
+    pub fn table_by_name(&self, name: &str) -> Result<Option<Sheet<'_>>, Error> {
+        let mut index: i32 = -1;
+        check(unsafe {
+            ffi::xl_table_index(self.handle, name.as_ptr(), len_i32(name.len(), "name")?, &mut index)
+        })?;
+        Ok((index >= 0).then_some(Sheet {
+            workbook: self,
+            index: ffi::xl_table_sheet(index),
+        }))
+    }
+
     /// Shared two-pass buffer dance for the `xl_*` functions that write a UTF-8 name into a caller
     /// buffer and report the required capacity through `XL_BUFFER_TOO_SMALL`.
     fn fill_string(
@@ -283,6 +334,26 @@ impl OpenOptions {
     }
 }
 
+/// One Excel table's place in a workbook. Rows and columns are zero-based and include the header
+/// and totals rows. Read its cells through [`Workbook::table`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TableInfo {
+    pub name: String,
+    /// Position among the workbook's tables, as [`Workbook::table`] takes it.
+    pub index: i32,
+    /// Index of the sheet holding the table.
+    pub sheet: i32,
+    pub first_row: i32,
+    pub last_row: i32,
+    pub first_column: i32,
+    pub last_column: i32,
+    /// 1, or 0 when the table's header row is turned off.
+    pub header_row_count: i32,
+    /// 1 when the table shows a totals row, otherwise 0.
+    pub totals_row_count: i32,
+}
+
 /// How a sheet is shown in the application's tab bar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -301,7 +372,8 @@ pub struct Sheet<'w> {
 }
 
 impl<'w> Sheet<'w> {
-    /// Zero-based position in the workbook.
+    /// Zero-based position in the workbook. A sheet from [`Workbook::table`] reports the table's
+    /// encoded index, which only read calls understand.
     #[must_use]
     pub fn index(&self) -> i32 {
         self.index

@@ -27,11 +27,11 @@ pub use source::Source;
 pub use temporal::{Date, Time, Timestamp};
 pub use workbook::{
     ColumnType, ExcelMapper, InferredColumn, Sheet, SheetVisibility, Table, TableBatches,
-    TableView, TableViewIter, TypedBatches, Workbook,
+    TableInfo, TableView, TableViewIter, TypedBatches, Workbook,
 };
 pub use writer::{
     encrypt_package, write_columns, write_columns_to, write_sheet, write_sheet_to, Column,
-    ColumnData, ExcelWriter,
+    ColumnData, ExcelWriter, TableOptions,
 };
 pub use writer_handle::WriterHandle;
 
