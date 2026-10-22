@@ -820,6 +820,59 @@ static int test_writer_handle_write_columns_fails_while_a_sheet_is_open()
     return 0;
 }
 
+static int test_writer_handle_writes_excel_tables_the_workbook_reads_back()
+{
+    const std::vector<NamedRow> sales{{"widget", "w"}, {"gadget", "g"}};
+    const std::vector<int32_t> offsets{0, 1, 2, 3};
+    const std::vector<uint8_t> blob{'a', 'b', 'c'};
+    const std::vector<int64_t> values{10, 20, 30};
+    const std::array<xl::ColumnRef, 2> stock{xl::string_column("name", offsets, blob), xl::i64_column("qty", values)};
+
+    for (const int32_t format : {XL_FORMAT_XLSX, XL_FORMAT_XLSB})
+    {
+        std::vector<uint8_t> bytes;
+        auto handle = xl::WriterHandle::open(bytes, {.format = format, .degree_of_parallelism = 4, .batch_rows = 1});
+        CHECK(handle.has_value(), "WriterHandle::open over a vector must succeed");
+        CHECK(handle->start_sheet("Notas").has_value(), "start_sheet must succeed");
+        CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
+        CHECK(handle->write_sheet("Vendas", sales, xl::TableOptions{.name = "Sales"}).has_value(),
+              "write_sheet as a table must succeed");
+        CHECK(handle->write_columns("Estoque", stock, xl::TableOptions{.name = "Stock", .style = std::nullopt, .row_stripes = false})
+                  .has_value(),
+              "write_columns as a table must succeed");
+        CHECK(handle->finish().has_value(), "finish must succeed");
+
+        auto workbook = xl::Workbook::open(bytes, {.format = format});
+        CHECK(workbook.has_value(), "the bytes finish wrote must open");
+        auto tables = workbook->tables();
+        CHECK(tables.has_value() && tables->size() == 2, "both tables must be listed");
+        CHECK((*tables)[0].name == "Sales" && (*tables)[1].name == "Stock", "tables keep their names and order");
+        const xl::TableInfo &first = (*tables)[0];
+        CHECK(first.index == 0 && first.sheet == 1 && first.first_row == 0 && first.last_row == 2 && first.first_column == 0 &&
+                  first.last_column == 1 && first.header_row_count == 1 && first.totals_row_count == 0,
+              "the table's range must cover its header and both rows");
+
+        auto found = workbook->table_by_name("sales");
+        CHECK(found.has_value() && found->has_value(), "table_by_name must ignore case");
+        CHECK((*found)->name() == "Vendas", "a table's sheet reports the sheet holding it");
+        CHECK(read_cells(*workbook, (*found)->index()) == (std::vector<std::string>{"name|view", "widget|w", "gadget|g"}),
+              "the table must read its header and rows");
+        CHECK(read_cells(*workbook, workbook->table(1).index()) == (std::vector<std::string>{"name|qty", "a|10", "b|20", "c|30"}),
+              "table() must read the second table");
+
+        auto missing = workbook->table_by_name("missing");
+        CHECK(missing.has_value() && !missing->has_value(), "an unknown table name finds nothing");
+        CHECK(!workbook->table(2).rows().has_value(), "a table index past the end fails at the first read");
+    }
+
+    std::vector<uint8_t> xls;
+    auto handle = xl::WriterHandle::open(xls, {.format = XL_FORMAT_XLS});
+    CHECK(handle.has_value(), "WriterHandle::open over a vector must succeed");
+    CHECK(!handle->write_sheet("Vendas", sales, xl::TableOptions{.name = "Sales"}).has_value(), "XLS has no tables");
+    CHECK(handle->write_sheet("Vendas", sales).has_value(), "a plain sheet must still be written");
+    return 0;
+}
+
 static int test_writer_handle_class_rejects_auto_for_memory()
 {
     std::vector<uint8_t> bytes;
@@ -917,6 +970,10 @@ int main()
         return 1;
     }
     if (test_writer_handle_write_columns_fails_while_a_sheet_is_open() != 0)
+    {
+        return 1;
+    }
+    if (test_writer_handle_writes_excel_tables_the_workbook_reads_back() != 0)
     {
         return 1;
     }
