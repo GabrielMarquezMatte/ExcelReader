@@ -3,8 +3,8 @@
 
 use excelreader::ReadOptions;
 use excelreader::{
-    Date, ErrorKind, ExcelMapper, Format, OpenOptions, Time, Timestamp, Workbook, WriteOptions,
-    WriterHandle,
+    Column, ColumnData, Date, ErrorKind, ExcelMapper, Format, OpenOptions, Time, Timestamp,
+    Workbook, WriteOptions, WriterHandle,
 };
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -237,4 +237,144 @@ fn writer_handle_rejects_out_of_order_calls() {
             .expect("start_sheet must still succeed after the earlier rejected calls");
     }
     std::fs::remove_file(&path).ok();
+}
+
+#[derive(Default, Debug, Clone, PartialEq, ExcelMapper)]
+struct Item {
+    #[excel(name = "name")]
+    name: String,
+    #[excel(name = "qty")]
+    qty: Option<i64>,
+}
+
+fn item(name: &str, qty: Option<i64>) -> Item {
+    Item {
+        name: name.to_string(),
+        qty,
+    }
+}
+
+fn read_items(workbook: &Workbook, index: i32) -> (String, Vec<Item>) {
+    let sheet = workbook.sheet(index).expect("the sheet must exist");
+    let table = sheet
+        .parse::<Item>(&ReadOptions::new())
+        .expect("the sheet must parse back");
+    let rows = (0..table.len())
+        .map(|row| {
+            let read = table.get(row).expect("the row must exist");
+            item(&read.name, read.qty)
+        })
+        .collect();
+    (sheet.name().expect("name must read back"), rows)
+}
+
+#[test]
+fn write_sheet_and_write_columns_write_whole_sheets_beside_streamed_ones() {
+    for (format, degree) in [
+        (Format::Xlsx, 1),
+        (Format::Xlsb, 1),
+        (Format::Xlsx, 4),
+        (Format::Xlsb, 4),
+    ] {
+        let mut bytes = Vec::new();
+        let options = WriteOptions::new()
+            .format(format)
+            .degree_of_parallelism(degree)
+            .batch_rows(2);
+        let mut handle = WriterHandle::new(&mut bytes, &options).expect("new must succeed");
+
+        let sales = [item("widget", Some(3)), item("gadget", Some(7))];
+        handle
+            .write_sheet("Vendas", &sales)
+            .expect("write_sheet must succeed");
+
+        handle
+            .start_sheet("Resumo")
+            .expect("start_sheet must succeed");
+        handle.start_row().expect("start_row must succeed");
+        handle
+            .write_str(Some("name"))
+            .expect("write_str must succeed");
+        handle
+            .write_str(Some("qty"))
+            .expect("write_str must succeed");
+        handle.end_row().expect("end_row must succeed");
+        handle.start_row().expect("start_row must succeed");
+        handle
+            .write_str(Some("total"))
+            .expect("write_str must succeed");
+        handle.write_i64(Some(10)).expect("write_i64 must succeed");
+        handle.end_row().expect("end_row must succeed");
+        handle.end_sheet().expect("end_sheet must succeed");
+
+        let offsets = [0i32, 1, 2, 3, 4, 5];
+        let quantities = [10i64, 20, 0, 40, 50];
+        let validity = [0b1_1011u8];
+        let columns = [
+            Column::new(
+                Some("name"),
+                ColumnData::Str {
+                    offsets: &offsets,
+                    data: b"abcde",
+                },
+            ),
+            Column::new(Some("qty"), ColumnData::I64(&quantities)).validity(&validity),
+        ];
+        handle
+            .write_columns("Estoque", &columns)
+            .expect("write_columns must succeed");
+        handle.finish().expect("finish must succeed");
+
+        let workbook = OpenOptions::new()
+            .open_bytes(&bytes)
+            .expect("the bytes finish wrote must open");
+        assert_eq!(
+            read_items(&workbook, 0),
+            ("Vendas".to_string(), sales.to_vec())
+        );
+        assert_eq!(
+            read_items(&workbook, 1),
+            ("Resumo".to_string(), vec![item("total", Some(10))])
+        );
+        assert_eq!(
+            read_items(&workbook, 2),
+            (
+                "Estoque".to_string(),
+                vec![
+                    item("a", Some(10)),
+                    item("b", Some(20)),
+                    item("c", None),
+                    item("d", Some(40)),
+                    item("e", Some(50)),
+                ]
+            ),
+            "{format:?} at degree {degree}"
+        );
+    }
+}
+
+#[test]
+fn write_sheet_fails_while_a_streamed_sheet_is_open_and_the_handle_stays_usable() {
+    let mut bytes = Vec::new();
+    let options = WriteOptions::new().format(Format::Xlsx);
+    let mut handle = WriterHandle::new(&mut bytes, &options).expect("new must succeed");
+    let rows = [item("widget", Some(3))];
+
+    handle
+        .start_sheet("Aberta")
+        .expect("start_sheet must succeed");
+    let error = handle
+        .write_sheet("Tabela", &rows)
+        .expect_err("a whole sheet cannot start while another is open");
+    assert!(error.to_string().contains("already open"), "{error}");
+    handle.end_sheet().expect("end_sheet must succeed");
+    handle
+        .write_sheet("Tabela", &rows)
+        .expect("write_sheet must succeed once the sheet is ended");
+    handle.finish().expect("finish must succeed");
+
+    let workbook = OpenOptions::new()
+        .open_bytes(&bytes)
+        .expect("the bytes finish wrote must open");
+    assert_eq!(read_items(&workbook, 1).0, "Tabela");
 }
