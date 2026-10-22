@@ -8,15 +8,15 @@ namespace ExcelReader.Native.Reading
         internal static int ResolveSheet(NativeHandle handle, int sheet, out IExcelSheet? resolved)
         {
             resolved = null;
-            if (sheet < 0)
+            if (sheet == -1)
             {
-                NativeApi.SetLastError($"sheet must be a zero-based index; got {sheet}.");
+                NativeApi.SetLastError("sheet must be a zero-based index, or XL_TABLE_SHEET(table) for a table; got -1.");
                 return NativeStatus.InvalidArgument;
             }
 
             try
             {
-                resolved = handle.Workbook.SheetAt(sheet);
+                resolved = sheet >= 0 ? handle.Workbook.SheetAt(sheet) : TableAt(handle, FirstTableSheet - sheet).AsSheet();
                 return NativeStatus.Ok;
             }
             catch (Exception exception)

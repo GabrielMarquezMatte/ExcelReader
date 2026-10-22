@@ -198,6 +198,71 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_table_count")]
+        public static int TableCount(nint handle, int* outCount)
+        {
+            NativeApi.ClearLastError();
+
+            if (outCount is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.TableCount(Resolve(handle), out int count);
+            *outCount = count;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_table_info_at")]
+        public static int TableInfoAt(nint handle, int index, NativeTableInfo* outInfo)
+        {
+            NativeApi.ClearLastError();
+
+            if (outInfo is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.TableInfoAt(Resolve(handle), index, out NativeTableInfo info);
+            *outInfo = info;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_table_name_at")]
+        public static int TableNameAt(nint handle, int index, byte* buffer, int capacity, int* outLength)
+        {
+            NativeApi.ClearLastError();
+
+            if (!IsValidOutBuffer(buffer, capacity, outLength))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.TableNameAt(Resolve(handle), index, new Span<byte>(buffer, capacity), out int length);
+            *outLength = length;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_table_index")]
+        public static int TableIndex(nint handle, byte* name, int nameLength, int* outIndex)
+        {
+            NativeApi.ClearLastError();
+
+            if (outIndex is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outIndex = -1;
+            if (nameLength < 0 || (name is null && nameLength != 0))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.TableIndex(Resolve(handle), new ReadOnlySpan<byte>(name, nameLength), out int index);
+            *outIndex = index;
+            return status;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_open")]
         public static int RowsOpen(nint handle, int sheet, nint* outRows)
         {

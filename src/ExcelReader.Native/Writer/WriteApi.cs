@@ -223,7 +223,7 @@ namespace ExcelReader.Native.Writer
             try
             {
                 TSheet sheet = workbook.AddSheet(sheetName);
-                WriteSheetBody<TSheet, TRow>(workbook, sheet, specs, table, hasHeader, parallel, writeParallel);
+                WriteSheetBody<TSheet, TRow>(workbook, sheet, specs, table, hasHeader, null, parallel, writeParallel);
                 sheet.End();
                 sheet.Dispose();
                 workbook.End();
@@ -235,16 +235,32 @@ namespace ExcelReader.Native.Writer
         }
 
         internal static void WriteSheetBody<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeColumnSpec[] specs, NativeTable table, bool hasHeader,
-            ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
+            NativeExcelTable? excelTable, ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
             ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
 
+            if (excelTable is not null)
+            {
+                var tables = (ITableSheetWriter<TRow>)sheet;
+                tables.BeginTable(excelTable.Name, [.. specs.Select(spec => spec.Names[0])], excelTable.Options);
+                WriteDataRows(sheet, table, parallel, writeParallel);
+                tables.EndTable();
+                return;
+            }
             if (hasHeader)
             {
                 WriteHeaderRow<TSheet, TRow>(sheet, specs);
             }
+            WriteDataRows(sheet, table, parallel, writeParallel);
+        }
+
+        private static void WriteDataRows<TSheet, TRow>(TSheet sheet, NativeTable table,
+            ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
             if (parallel is not null && writeParallel is not null)
             {
                 writeParallel(sheet, RowIndices(table.RowCount), (row, index) => WriteDataCells(row, table, index), parallel)

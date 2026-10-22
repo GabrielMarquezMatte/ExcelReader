@@ -1105,13 +1105,13 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.Ok, WriteApi.OpenWriteHandleToMemory(format, options, out NativeWriterHandle? handle));
                 Assert.NotNull(handle);
 
-                handle.WriteTable("Vendas", QtyNameSpecs(), sales, hasHeader: true);
+                handle.WriteSheet("Vendas", QtyNameSpecs(), sales, hasHeader: true, excelTable: null);
                 handle.StartSheet("Resumo");
                 handle.StartRow();
                 handle.WriteString("total");
                 handle.EndRow();
                 handle.EndSheet();
-                handle.WriteTable("Estoque", QtyNameSpecs(), stock, hasHeader: false);
+                handle.WriteSheet("Estoque", QtyNameSpecs(), stock, hasHeader: false, excelTable: null);
 
                 Assert.Equal(NativeStatus.Ok, WriteApi.GetWriteHandleBytes(handle, out byte[]? bytes));
                 handle.Dispose();
@@ -1140,9 +1140,9 @@ namespace ExcelReader.Tests.Native
                 using (handle)
                 {
                     handle.StartSheet("Open");
-                    Assert.Throws<InvalidOperationException>(() => handle.WriteTable("Table", QtyNameSpecs(), table, hasHeader: true));
+                    Assert.Throws<InvalidOperationException>(() => handle.WriteSheet("Table", QtyNameSpecs(), table, hasHeader: true, excelTable: null));
                     handle.EndSheet();
-                    handle.WriteTable("Table", QtyNameSpecs(), table, hasHeader: true);
+                    handle.WriteSheet("Table", QtyNameSpecs(), table, hasHeader: true, excelTable: null);
                 }
             }
             finally
