@@ -83,6 +83,11 @@
 <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/"><img src="https://img.shields.io/badge/benchmarks-GitHub%20Pages-informational" alt="Benchmarks"></a></p>
 <p>High-performance Excel reading and writing for .NET 10. Reads <code>.xlsx</code>, <code>.xlsb</code>, <code>.xls</code>, and <code>.csv</code>; writes <code>.xlsx</code>, <code>.xlsb</code>, <code>.xls</code>, and <code>.csv</code>.</p>
 <p>ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight <code>ref struct</code> values, resolves shared strings, recognizes date styles, and handles sparse cells. Workbooks open from a path, a <code>Stream</code>, or a caller-owned <code>ReadOnlyMemory&lt;byte&gt;</code> — the in-memory path decompresses parts directly, without a <code>ZipArchive</code> or an intermediate stream.</p>
+<p>It moves data, not presentation. Reading gives each cell's value and type, with a formula cell read as
+its last calculated result, plus sheet names, visibility and Excel tables. Formula text, merged cells,
+comments, hyperlinks, charts, images and conditional formatting are not read. Writing covers values,
+column widths and cell styles limited to bold, italic and a number format. To edit an existing workbook
+or produce formatted reports, use a library built for document manipulation.</p>
 <h2 id="install">Install</h2>
 <pre><code class="lang-bash">dotnet add package ExcelReader.NET
 </code></pre>
@@ -109,7 +114,7 @@ foreach (Row row in workbook.FirstSheet)
 <li><a href="docs/guide/untrusted-input.html">Reading untrusted files</a> — the resource limits that bound what one hostile file can cost, and how to reject one cleanly.</li>
 <li><a href="docs/guide/migrating-to-v7.html">Migrating to v7</a> — porting <code>CsvParallel</code> code to <code>SheetParallel</code>, which now reads XLSX and XLSB on several threads too.</li>
 <li><a href="docs/guide/migrating-to-v6.html">Migrating to v6</a> — porting v5 reader code to workbooks and sheets, and reading sheets in parallel.</li>
-<li><a href="docs/performance/benchmarks.html">Benchmarks</a> — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/">Live results</a>.</li>
+<li><a href="docs/performance/benchmarks.html">Benchmarks</a> — throughput and allocation against Sep, Sylvan, ExcelDataReader, OfficeIMO and SpreadCheetah. <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/">Live results</a>.</li>
 </ul>
 <h2 id="command-line">Command line</h2>
 <pre><code class="lang-bash">dotnet tool install --global ExcelReader.NET.Cli

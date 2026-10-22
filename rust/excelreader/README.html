@@ -181,6 +181,30 @@ for column in sheet.infer_schema(1, 100, false)? {
 </code></pre>
 <p><code>infer_schema</code>'s last argument, <code>parse_text</code>, also types text cells (every CSV field, or numbers
 stored as text): integers, decimals, <code>true</code>/<code>false</code> and ISO dates.</p>
+<p>With no row type, <code>parse_with_schema</code> reads the sheet through that schema into a <code>Table</code>. Its
+columns are the <code>Column</code>s <code>write_columns</code> takes, so the table writes back as it was read:</p>
+<pre><code class="lang-rust,no_run">use excelreader::{write_columns, ColumnData, ReadOptions, Workbook, WriteOptions};
+
+let workbook = Workbook::open(&quot;book.xlsx&quot;)?;
+let sheet = workbook.sheet(0)?;
+let schema = sheet.infer_schema(1, 100, false)?;
+let table = sheet.parse_with_schema(&amp;schema, &amp;ReadOptions::new())?;
+for column in table.columns() {
+    if let ColumnData::I64(values) = column.data {
+        println!(&quot;{:?}: {} integers&quot;, column.name, values.len());
+    }
+}
+write_columns(&quot;copy.xlsx&quot;, &amp;table.columns(), &amp;WriteOptions::new())?;
+
+// Or a batch at a time: TableBatches yields one Table per batch.
+for batch in sheet.parse_batches_with_schema(&amp;schema, &amp;ReadOptions::new())? {
+    println!(&quot;{} rows&quot;, batch?.len());
+}
+# Ok::&lt;(), excelreader::Error&gt;(())
+</code></pre>
+<p>A column matched by index has no name, and writing needs every column named or none. The schema is
+a guess over a sample: a column inferred as <code>I64</code> that holds a fraction further down fails the read,
+unless the column is <code>nullable</code>.</p>
 <p><code>Workbook</code> is <code>Send + Sync</code>, so sheets can be read in parallel over one open workbook, which
 loads the shared-string table once:</p>
 <pre><code class="lang-rust,no_run"># use excelreader::Workbook;
@@ -297,6 +321,24 @@ while let Some(batch) = chunks.next() {
 <p>Same <code>batch_size</code> semantics as <code>parse_batches</code> below. Unlike <code>TypedBatches</code>,
 <code>ArrowBatches</code> does not fuse after an error — it follows arrow-rs's own semantics — so break on the
 first <code>Err</code> rather than continuing the loop.</p>
+<p>With no row type, <code>to_arrow_with_schema</code> and <code>to_arrow_stream_with_schema</code> take the columns at run
+time instead, such as the ones <code>infer_schema</code> returned. A column with a name is matched by it, one
+without by its index:</p>
+<pre><code class="lang-rust,no_run"># #[cfg(feature = &quot;arrow&quot;)]
+# fn main() -&gt; Result&lt;(), excelreader::Error&gt; {
+use excelreader::{Workbook, ReadOptions};
+
+let workbook = Workbook::open(&quot;book.xlsx&quot;)?;
+let sheet = workbook.sheet(0)?;
+let schema = sheet.infer_schema(1, 100, false)?;
+let batch = sheet.to_arrow_with_schema(&amp;schema, &amp;ReadOptions::new())?;
+# Ok(())
+# }
+# #[cfg(not(feature = &quot;arrow&quot;))]
+# fn main() {}
+</code></pre>
+<p>The schema is a guess over a sample: a column inferred as <code>I64</code> that holds a fraction further down
+fails the read, unless the column is <code>nullable</code>.</p>
 <h2 id="writing">Writing</h2>
 <p><code>#[derive(ExcelMapper)]</code> generates both halves, so the same struct reads and writes - the field
 types in the table above apply unchanged:</p>

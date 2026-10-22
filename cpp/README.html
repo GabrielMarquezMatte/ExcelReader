@@ -158,7 +158,21 @@ for (const auto&amp; row : *table) { /* ... */ }
 for (const auto&amp; column : *workbook-&gt;sheet(1).infer_schema(1, 100)) {
     // column.name is nullopt when the column must be resolved by column.index instead.
 }
+
+// With no row type, parse the sheet through that schema. The columns are the xl::ColumnRef
+// write_columns takes, so the table writes back as it was read.
+auto schema = workbook-&gt;sheet(1).infer_schema();
+auto table = xl::parse(workbook-&gt;sheet(1), *schema);
+for (const xl::ColumnRef&amp; column : table-&gt;columns()) { /* column.type, column.values, ... */ }
+auto written = xl::write_columns(&quot;copy.xlsx&quot;, table-&gt;columns());
+
+// Or a batch at a time: an xl::TableReader, whose batches are xl::Tables.
+auto reader = xl::parse_batches(workbook-&gt;sheet(1), *schema, {.batch_size = 10'000});
+for (auto&amp; batch : *reader) { if (!batch) { break; } /* batch-&gt;columns() */ }
 </code></pre>
+<p>A column matched by index has no name, and writing needs every column named or none. The schema is
+a guess over a sample: a column inferred as <code>XL_T_I64</code> that holds a fraction further down fails the
+read, unless the column is <code>nullable</code>.</p>
 <p>Every entry point returns <code>std::expected&lt;T, xl::Error&gt;</code> — this header throws nothing.</p>
 <p>A workbook hands out sheets. An <code>xl::Sheet</code> is the workbook handle and an index: it owns nothing,
 it is cheap to copy, and every read on it opens its own cursor. <code>workbook-&gt;sheet(i)</code> makes no native
@@ -306,6 +320,14 @@ while (true)
 }
 </code></pre>
 <p>Same <code>header_row</code>/<code>batch_size</code> meaning as <code>xl::parse_batches</code> above.</p>
+<p>With no row type, both take the columns at run time instead, such as the ones <code>infer_schema</code>
+returned. A column with a name is matched by it, one without by its index:</p>
+<pre><code class="lang-cpp">auto schema = workbook-&gt;sheet(0).infer_schema();
+auto table = xl::to_arrow(workbook-&gt;sheet(0), *schema);
+auto stream = xl::to_arrow_stream(workbook-&gt;sheet(0), *schema, {.batch_size = 10'000});
+</code></pre>
+<p>The schema is a guess over a sample: a column inferred as <code>XL_T_I64</code> that holds a fraction further
+down fails the read, unless the column is <code>nullable</code>.</p>
 <h2 id="writing">Writing</h2>
 <p>Two layers, mirroring the two on the reading side.</p>
 <p><code>xl::write_sheet&lt;T&gt;</code> uses the same <code>xl::ExcelMapper&lt;T&gt;</code> specialization <code>xl::parse&lt;T&gt;</code> reads
