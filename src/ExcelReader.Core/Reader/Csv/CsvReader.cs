@@ -116,7 +116,7 @@ namespace ExcelReader.Core.Reader.Csv
             {
                 return data;
             }
-            using MemoryStream source = XlsCompoundFile.AsStream(data);
+            using var source = new ReadOnlyMemoryStream(data);
             using Stream transcoding = Encoding.CreateTranscodingStream(source, encoding!, Encoding.UTF8, leaveOpen: true);
             using MemoryStream target = new(data.Length);
             transcoding.CopyTo(target);
