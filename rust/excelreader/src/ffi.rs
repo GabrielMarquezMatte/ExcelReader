@@ -3,6 +3,18 @@
 
 use std::os::raw::{c_int, c_void};
 
+/// Native memory as a slice; empty when `ptr` is null or `len` is zero or negative.
+///
+/// # Safety
+/// `ptr` must be null or point to `len` live `E`s that outlive `'a`.
+pub(crate) unsafe fn native_slice<'a, E>(ptr: *const E, len: impl TryInto<usize>) -> &'a [E] {
+    let len = len.try_into().unwrap_or(0);
+    if ptr.is_null() || len == 0 {
+        return &[];
+    }
+    std::slice::from_raw_parts(ptr, len)
+}
+
 pub const XL_OK: i32 = 0;
 pub const XL_EOF: i32 = -1;
 pub const XL_BUFFER_TOO_SMALL: i32 = -2;

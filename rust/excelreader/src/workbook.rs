@@ -1,6 +1,6 @@
 use crate::ffi::{
-    self, XlColumn, XlColumnSpec, XlInferredSchema, XlOpenOptions, XlTable, XlWorkbook,
-    XL_BUFFER_TOO_SMALL, XL_EOF, XL_OK,
+    self, native_slice, XlColumn, XlColumnSpec, XlInferredSchema, XlOpenOptions, XlTable,
+    XlWorkbook, XL_BUFFER_TOO_SMALL, XL_EOF, XL_OK,
 };
 use crate::{
     AllRows, Column, ColumnData, Date, Error, ErrorKind, OpenOptions, ReadOptions, RowCursor,
@@ -12,11 +12,10 @@ use std::path::Path;
 pub(crate) fn last_error(code: i32) -> Error {
     unsafe {
         let mut len: i32 = 0;
-        let ptr = ffi::xl_last_error_ptr(&mut len);
-        let message = if ptr.is_null() || len <= 0 {
+        let bytes = native_slice(ffi::xl_last_error_ptr(&mut len), len);
+        let message = if bytes.is_empty() {
             "unknown error".to_string()
         } else {
-            let bytes = std::slice::from_raw_parts(ptr, len as usize);
             String::from_utf8_lossy(bytes).into_owned()
         };
         Error::from_status(code, message)
@@ -52,14 +51,9 @@ pub(crate) fn len_i32(len: usize, what: &str) -> Result<i32, Error> {
 }
 
 /// Copies a native `XlBuffer` into an owned `Vec<u8>` and releases the native allocation via
-/// `xl_free_buffer`. `buffer.data` may be null (an empty result), which `from_raw_parts` cannot
-/// take even for a zero-length slice.
+/// `xl_free_buffer`. `buffer.data` may be null (an empty result).
 pub(crate) fn buffer_to_vec(mut buffer: ffi::XlBuffer) -> Vec<u8> {
-    let bytes = if buffer.data.is_null() || buffer.len <= 0 {
-        Vec::new()
-    } else {
-        unsafe { std::slice::from_raw_parts(buffer.data, buffer.len as usize).to_vec() }
-    };
+    let bytes = unsafe { native_slice(buffer.data, buffer.len) }.to_vec();
     unsafe {
         ffi::xl_free_buffer(&mut buffer);
     }
@@ -515,24 +509,9 @@ impl<'w> Sheet<'w> {
         schema: &[InferredColumn],
         options: &ReadOptions,
     ) -> Result<TableBatches<'w>, Error> {
-        let specs = schema_specs(schema);
-        let mut reader: *mut ffi::XlTypedReader = std::ptr::null_mut();
-        check(unsafe {
-            ffi::xl_typed_reader_open(
-                self.workbook.handle,
-                self.index,
-                specs.specs.as_ptr(),
-                specs.specs.len() as i32,
-                options.header_row,
-                options.batch_size,
-                &mut reader,
-            )
-        })?;
         Ok(TableBatches {
-            reader,
+            batches: BatchReader::open(self, &schema_specs(schema).specs, options)?,
             schema: schema.to_vec(),
-            done: false,
-            _workbook: PhantomData,
         })
     }
 
@@ -543,23 +522,9 @@ impl<'w> Sheet<'w> {
         options: &ReadOptions,
     ) -> Result<TypedBatches<'w, T>, Error> {
         let arena = build_specs::<T>();
-        let mut reader: *mut ffi::XlTypedReader = std::ptr::null_mut();
-        check(unsafe {
-            ffi::xl_typed_reader_open(
-                self.workbook.handle,
-                self.index,
-                arena.specs.as_ptr(),
-                arena.specs.len() as i32,
-                options.header_row,
-                options.batch_size,
-                &mut reader,
-            )
-        })?;
         Ok(TypedBatches {
-            reader,
+            batches: BatchReader::open(self, &arena.specs, options)?,
             bindings: arena.bindings,
-            done: false,
-            _workbook: PhantomData,
         })
     }
 
@@ -665,11 +630,7 @@ impl ColumnType {
 /// # Safety
 /// `schema` must be one `xl_infer_schema` returned `XL_OK` for, not yet passed to `xl_free_schema`.
 unsafe fn copy_inferred(schema: &XlInferredSchema) -> Result<Vec<InferredColumn>, Error> {
-    if schema.columns.is_null() || schema.column_count <= 0 {
-        return Ok(Vec::new());
-    }
-    let specs = std::slice::from_raw_parts(schema.columns, schema.column_count as usize);
-    specs
+    native_slice(schema.columns, schema.column_count)
         .iter()
         .map(|spec| {
             let column_type = ColumnType::from_raw(spec.r#type).ok_or_else(|| {
@@ -684,14 +645,8 @@ unsafe fn copy_inferred(schema: &XlInferredSchema) -> Result<Vec<InferredColumn>
             let name = if spec.name_count <= 0 || spec.names.is_null() || spec.name_lens.is_null() {
                 None
             } else {
-                let name_ptr = *spec.names;
-                let name_len = *spec.name_lens;
-                if name_ptr.is_null() || name_len <= 0 {
-                    None
-                } else {
-                    let bytes = std::slice::from_raw_parts(name_ptr, name_len as usize);
-                    Some(String::from_utf8_lossy(bytes).into_owned())
-                }
+                let bytes = native_slice(*spec.names, *spec.name_lens);
+                (!bytes.is_empty()).then(|| String::from_utf8_lossy(bytes).into_owned())
             };
             Ok(InferredColumn {
                 name,
@@ -1002,11 +957,7 @@ impl Table {
     /// Takes ownership of `table`, freeing it and failing if it does not have one column of a known
     /// type and of `row_count` rows per `schema` entry.
     fn new(mut table: XlTable, schema: &[InferredColumn], source: &str) -> Result<Self, Error> {
-        let columns = if table.columns.is_null() {
-            &[][..]
-        } else {
-            unsafe { std::slice::from_raw_parts(table.columns, table.column_count.max(0) as usize) }
-        };
+        let columns = unsafe { native_slice(table.columns, table.column_count) };
         let consistent = table.row_count >= 0
             && columns.len() == schema.len()
             && columns
@@ -1061,15 +1012,6 @@ impl Table {
 }
 
 /// # Safety
-/// `ptr` must be null or point to `len` live `E`s that outlive `'a`.
-unsafe fn native_slice<'a, E>(ptr: *const E, len: usize) -> &'a [E] {
-    if ptr.is_null() || len == 0 {
-        return &[];
-    }
-    std::slice::from_raw_parts(ptr, len)
-}
-
-/// # Safety
 /// `raw` must be a column of a native table whose type [`Table::new`] checked.
 unsafe fn column_data(raw: &XlColumn) -> ColumnData<'_> {
     let rows = raw.length as usize;
@@ -1109,22 +1051,48 @@ impl std::fmt::Debug for Table {
     }
 }
 
-/// Iterator over the batches of one chunked typed read. Closes the native reader on `Drop`.
-pub struct TypedBatches<'a, T: ExcelMapper> {
+/// The native half of a chunked typed read: one `xl_typed_reader`, closed on `Drop`.
+struct BatchReader<'a> {
     reader: *mut ffi::XlTypedReader,
-    bindings: Vec<ColumnBinding<T>>,
     done: bool,
     _workbook: PhantomData<&'a Workbook>,
 }
 
 // SAFETY: a typed reader owns its native enumerator; ABI v6 lets it be used from any one thread
 // at a time.
-unsafe impl<T: ExcelMapper> Send for TypedBatches<'_, T> {}
+unsafe impl Send for BatchReader<'_> {}
 
-impl<T: ExcelMapper> Iterator for TypedBatches<'_, T> {
-    type Item = Result<TableView<T>, Error>;
+impl<'a> BatchReader<'a> {
+    fn open(
+        sheet: &Sheet<'a>,
+        specs: &[XlColumnSpec],
+        options: &ReadOptions,
+    ) -> Result<Self, Error> {
+        let mut reader: *mut ffi::XlTypedReader = std::ptr::null_mut();
+        check(unsafe {
+            ffi::xl_typed_reader_open(
+                sheet.workbook.handle,
+                sheet.index,
+                specs.as_ptr(),
+                specs.len() as i32,
+                options.header_row,
+                options.batch_size,
+                &mut reader,
+            )
+        })?;
+        Ok(BatchReader {
+            reader,
+            done: false,
+            _workbook: PhantomData,
+        })
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Hands the next batch's table to `wrap`, which takes ownership of it. Stops after the first
+    /// error, native or from `wrap`.
+    fn next_with<R>(
+        &mut self,
+        wrap: impl FnOnce(XlTable) -> Result<R, Error>,
+    ) -> Option<Result<R, Error>> {
         if self.done {
             return None;
         }
@@ -1140,16 +1108,32 @@ impl<T: ExcelMapper> Iterator for TypedBatches<'_, T> {
             return Some(Err(last_error(status)));
         }
 
-        // ponytail: one small Vec of function pointers cloned per batch, not per row.
-        let view = TableView::new(table, self.bindings.clone(), "xl_typed_reader_next");
-        self.done = view.is_err();
-        Some(view)
+        let batch = wrap(table);
+        self.done = batch.is_err();
+        Some(batch)
     }
 }
 
-impl<T: ExcelMapper> Drop for TypedBatches<'_, T> {
+impl Drop for BatchReader<'_> {
     fn drop(&mut self) {
         unsafe { ffi::xl_typed_reader_close(self.reader) };
+    }
+}
+
+/// Iterator over the batches of one chunked typed read. Closes the native reader on `Drop`.
+pub struct TypedBatches<'a, T: ExcelMapper> {
+    batches: BatchReader<'a>,
+    bindings: Vec<ColumnBinding<T>>,
+}
+
+impl<T: ExcelMapper> Iterator for TypedBatches<'_, T> {
+    type Item = Result<TableView<T>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let bindings = &self.bindings;
+        // ponytail: one small Vec of function pointers cloned per batch, not per row.
+        self.batches
+            .next_with(|table| TableView::new(table, bindings.clone(), "xl_typed_reader_next"))
     }
 }
 
@@ -1158,50 +1142,24 @@ impl<T: ExcelMapper> std::fmt::Debug for TypedBatches<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TypedBatches")
             .field("columns", &self.bindings.len())
-            .field("done", &self.done)
+            .field("done", &self.batches.done)
             .finish_non_exhaustive()
     }
 }
 
 /// [`TypedBatches`]' counterpart for [`Sheet::parse_batches_with_schema`], yielding [`Table`]s.
 pub struct TableBatches<'a> {
-    reader: *mut ffi::XlTypedReader,
+    batches: BatchReader<'a>,
     schema: Vec<InferredColumn>,
-    done: bool,
-    _workbook: PhantomData<&'a Workbook>,
 }
-
-// SAFETY: as for TypedBatches.
-unsafe impl Send for TableBatches<'_> {}
 
 impl Iterator for TableBatches<'_> {
     type Item = Result<Table, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        let mut table = empty_table();
-        let status = unsafe { ffi::xl_typed_reader_next(self.reader, &mut table) };
-        if status == XL_EOF {
-            self.done = true;
-            return None;
-        }
-        if status != XL_OK {
-            self.done = true;
-            return Some(Err(last_error(status)));
-        }
-
-        let batch = Table::new(table, &self.schema, "xl_typed_reader_next");
-        self.done = batch.is_err();
-        Some(batch)
-    }
-}
-
-impl Drop for TableBatches<'_> {
-    fn drop(&mut self) {
-        unsafe { ffi::xl_typed_reader_close(self.reader) };
+        let schema = &self.schema;
+        self.batches
+            .next_with(|table| Table::new(table, schema, "xl_typed_reader_next"))
     }
 }
 
@@ -1209,7 +1167,7 @@ impl std::fmt::Debug for TableBatches<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TableBatches")
             .field("columns", &self.schema.len())
-            .field("done", &self.done)
+            .field("done", &self.batches.done)
             .finish_non_exhaustive()
     }
 }
