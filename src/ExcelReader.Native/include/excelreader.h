@@ -288,6 +288,11 @@ int32_t xl_write_null(xl_writer_handle* handle, int32_t type);
 
 int32_t xl_end_row(xl_writer_handle* handle);
 int32_t xl_end_sheet(xl_writer_handle* handle);
+
+/* One whole sheet, as xl_write_typed writes it; fails while a sheet is open. */
+int32_t xl_write_table(xl_writer_handle* handle, const uint8_t* name, int32_t name_len,
+                       const xl_column_spec* specs, const xl_table* table);
+
 int32_t xl_close_write_handle(xl_writer_handle* handle);
 
 int32_t xl_write_handle_bytes(xl_writer_handle* handle, xl_buffer* out_buffer);

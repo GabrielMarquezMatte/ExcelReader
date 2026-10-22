@@ -79,14 +79,16 @@ several threads: `degree_of_parallelism` `0` uses every processor and `1` writes
 is therefore parallel, while the 7.0 layout (`struct_size` 32) and a NULL options pointer stay serial.
 The `xl_table` buffers are read from several threads, so they must not change during the call. With
 `use_shared_strings` on, parallel runs give the same content in files that differ byte for byte.
-XLS, CSV and the handle API below ignore both fields.
+XLS, CSV and the handle API's per-cell calls below ignore both fields.
 
 The streaming alternative is `xl_writer_handle`: one sheet and one row open at a time, written
 directly as each call arrives instead of building an `xl_table` up front. Call order is
 `xl_open_write_handle`/`xl_open_write_handle_to_memory`, then per sheet `xl_start_sheet`..`xl_end_sheet`,
 each containing `xl_start_row`..`xl_end_row` with one `xl_write_string`/`xl_write_int64`/
 `xl_write_float64`/`xl_write_bool`/`xl_write_date`/`xl_write_time`/`xl_write_timestamp`/`xl_write_null`
-call per cell, then `xl_close_write_handle`. `xl_write_handle_bytes` reads back a memory-backed
+call per cell, then `xl_close_write_handle`. Between sheets, `xl_write_table` writes a whole
+`xl_table` as one sheet, as `xl_write_typed` does, using the handle's `degree_of_parallelism` and
+`batch_rows`; it fails while a sheet is open. `xl_write_handle_bytes` reads back a memory-backed
 handle's bytes so far without releasing it. Both write paths release their buffers with
 `xl_free_buffer` (`xl_table`/`xl_inferred_schema` keep their own `xl_free_table`/`xl_free_schema`).
 
