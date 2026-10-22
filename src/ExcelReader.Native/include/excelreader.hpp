@@ -202,6 +202,32 @@ namespace xl
         int32_t batch_rows = 0;            ///< XLSX/XLSB only: rows per parallel batch. 0 uses the library default (8192).
     };
 
+    /// @brief Writes a sheet as an Excel table ("Format as Table"), through WriterHandle. XLSX/XLSB only.
+    struct TableOptions
+    {
+        std::string_view name;                                       ///< Unique in the workbook, ignoring case, and valid as an Excel name. Borrowed: must outlive the write.
+        std::optional<std::string_view> style = "TableStyleMedium2"; ///< A built-in table style, or empty for no style.
+        bool row_stripes = true;                                     ///< Band alternate rows.
+        bool column_stripes = false;                                 ///< Band alternate columns.
+        bool first_column = false;                                   ///< Emphasize the first column.
+        bool last_column = false;                                    ///< Emphasize the last column.
+    };
+
+    /// @brief One Excel table's place in a workbook. Rows and columns are 0-based and include the
+    /// header and totals rows. Read its cells through Workbook::table.
+    struct TableInfo
+    {
+        std::string name;
+        int32_t index = 0;            ///< Position among the workbook's tables, as Workbook::table takes it.
+        int32_t sheet = 0;            ///< Index of the sheet holding the table.
+        int32_t first_row = 0;
+        int32_t last_row = 0;
+        int32_t first_column = 0;
+        int32_t last_column = 0;
+        int32_t header_row_count = 0; ///< 1, or 0 when the header row is turned off.
+        int32_t totals_row_count = 0; ///< 1 when the table shows a totals row.
+    };
+
     namespace detail
     {
 
@@ -227,6 +253,20 @@ namespace xl
             opts.verify_zip_checksums = options.verify_zip_checksums;
             opts.password = options.password.empty() ? nullptr : reinterpret_cast<const uint8_t *>(options.password.data());
             opts.password_len = static_cast<int32_t>(options.password.size());
+            return opts;
+        }
+
+        inline xl_sheet_options to_c(const TableOptions &table) noexcept
+        {
+            xl_sheet_options opts{};
+            opts.struct_size = sizeof(xl_sheet_options);
+            opts.table_name = reinterpret_cast<const uint8_t *>(table.name.data());
+            opts.table_name_len = static_cast<int32_t>(table.name.size());
+            opts.table_style = table.style ? reinterpret_cast<const uint8_t *>(table.style->data()) : nullptr;
+            opts.table_style_len = table.style ? static_cast<int32_t>(table.style->size()) : 0;
+            opts.table_flags = (table.style ? 0 : XL_TABLE_NO_STYLE) | (table.row_stripes ? 0 : XL_TABLE_NO_ROW_STRIPES) |
+                               (table.column_stripes ? XL_TABLE_COLUMN_STRIPES : 0) |
+                               (table.first_column ? XL_TABLE_FIRST_COLUMN : 0) | (table.last_column ? XL_TABLE_LAST_COLUMN : 0);
             return opts;
         }
 
@@ -1280,6 +1320,62 @@ namespace xl
                 return std::optional<Sheet>{};
             }
             return std::optional<Sheet>{Sheet(handle_, index)};
+        }
+
+        /// @brief Every Excel table, in workbook order.
+        std::expected<std::vector<TableInfo>, Error> tables() const
+        {
+            int32_t count = 0;
+            int32_t status = xl_table_count(handle_, &count);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            std::vector<TableInfo> result;
+            for (int32_t i = 0; i < count; ++i)
+            {
+                xl_table_info raw{};
+                status = xl_table_info_at(handle_, i, &raw);
+                if (status != XL_OK)
+                {
+                    return std::unexpected(detail::make_error(status));
+                }
+                auto name = detail::fill_string([this, i](uint8_t *buffer, int32_t capacity, int32_t *out_len)
+                                                { return xl_table_name_at(handle_, i, buffer, capacity, out_len); });
+                if (!name)
+                {
+                    return std::unexpected(std::move(name.error()));
+                }
+                result.push_back(TableInfo{std::move(*name), i, raw.sheet, raw.first_row, raw.last_row, raw.first_column,
+                                           raw.last_column, raw.header_row_count, raw.totals_row_count});
+            }
+            return result;
+        }
+
+        /// @brief Table `index` read as a sheet.
+        ///
+        /// Every Sheet read covers only the table's range, header row first, with the column indexes of
+        /// the sheet holding it; its name and visibility are that sheet's. Makes no native call: an index
+        /// outside the workbook is reported by the first read.
+        /// @param index 0-based table position.
+        Sheet table(int32_t index) const noexcept { return Sheet(handle_, XL_TABLE_SHEET(index)); }
+
+        /// @brief The table called `name`, compared without regard to case, read as table() reads it.
+        /// @return The table's sheet, or empty when no table matches.
+        std::expected<std::optional<Sheet>, Error> table_by_name(std::string_view name) const
+        {
+            int32_t index = -1;
+            int32_t status = xl_table_index(handle_, reinterpret_cast<const uint8_t *>(name.data()),
+                                            static_cast<int32_t>(name.size()), &index);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            if (index < 0)
+            {
+                return std::optional<Sheet>{};
+            }
+            return std::optional<Sheet>{table(index)};
         }
 
         /// @brief Whether dates count from 1904 instead of 1900.
@@ -2682,21 +2778,28 @@ namespace xl
         /// apply. Fails while a sheet started with start_sheet is open.
         /// @param name The sheet's name.
         /// @param columns As for write_columns.
-        std::expected<void, Error> write_columns(std::string_view name, std::span<const ColumnRef> columns)
+        /// @param table Writes the sheet as an Excel table (XLSX/XLSB only, every column named).
+        std::expected<void, Error> write_columns(std::string_view name, std::span<const ColumnRef> columns,
+                                                 const std::optional<TableOptions> &table = std::nullopt)
         {
-            return detail::write_table(columns, [&](const xl_column_spec *specs, const xl_table *table)
-                                       { return xl_write_table(handle_, reinterpret_cast<const uint8_t *>(name.data()),
-                                                               static_cast<int32_t>(name.size()), specs, table); });
+            const std::optional<xl_sheet_options> options =
+                table ? std::optional<xl_sheet_options>(detail::to_c(*table)) : std::nullopt;
+            return detail::write_table(columns, [&](const xl_column_spec *specs, const xl_table *raw)
+                                       { return xl_write_sheet(handle_, reinterpret_cast<const uint8_t *>(name.data()),
+                                                               static_cast<int32_t>(name.size()), specs, raw,
+                                                               options ? &*options : nullptr); });
         }
 
         /// @brief Writes rows as a whole sheet, as write_sheet does, on top of write_columns.
         /// @param name The sheet's name.
         /// @param rows As for write_sheet.
+        /// @param table As for write_columns.
         template <std::ranges::input_range R>
-        std::expected<void, Error> write_sheet(std::string_view name, R &&rows)
+        std::expected<void, Error> write_sheet(std::string_view name, R &&rows,
+                                               const std::optional<TableOptions> &table = std::nullopt)
         {
             return detail::write_rows(std::forward<R>(rows), [&](std::span<const ColumnRef> columns)
-                                      { return write_columns(name, columns); });
+                                      { return write_columns(name, columns, table); });
         }
 
         /// @brief Writes the next cell.

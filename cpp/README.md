@@ -166,6 +166,27 @@ for (std::thread &thread : threads)
 A cursor, a typed reader and an Arrow stream are each used by one thread at a time, and keep
 working after the workbook is destroyed. A `Sheet` does not: take what you need from it first.
 
+### Tables
+
+`tables()` lists the workbook's Excel tables ("Format as Table" ranges) as `xl::TableInfo`: name, the
+sheet holding it, and its 0-based range, header and totals rows included. `table(index)` and
+`table_by_name(name)` (ignoring case) return an `xl::Sheet` bounded to the table, so every read works
+on it and starts at the table's header row:
+
+```cpp
+for (const xl::TableInfo &table : *workbook->tables())
+{
+    std::println("{} on sheet {}: rows {}..{}", table.name, table.sheet, table.first_row, table.last_row);
+}
+if (auto sales = workbook->table_by_name("Sales").value())
+{
+    auto rows = xl::parse<Row>(*sales);
+}
+```
+
+Cells keep the column indexes of the sheet holding the table, and the table's `name()` is that
+sheet's. A table is read on one thread whatever the degree of parallelism asks for.
+
 ## Reading rows one at a time
 
 `Sheet::rows()` returns a cursor over that sheet. Each row borrows a buffer the cursor
@@ -422,6 +443,14 @@ auto writer = xl::WriterHandle::open("report.xlsx", {.degree_of_parallelism = 0}
 writer.write_sheet("Sales", sales);        // a range of ExcelMapper rows
 writer.write_columns("Stock", columns);    // xl::ColumnRefs, such as an xl::Table's
 if (auto done = writer.finish(); !done) { /* done.error().message */ }
+```
+
+An `xl::TableOptions` as the last argument writes the sheet as an Excel table, with filter buttons and
+a table style (XLSX and XLSB only, every column named). The name must be unique in the workbook; the
+style defaults to `TableStyleMedium2`, and `.style = std::nullopt` leaves the table unstyled:
+
+```cpp
+writer.write_sheet("Sales", sales, xl::TableOptions{.name = "Sales", .style = "TableStyleLight9"});
 ```
 
 ## Aggregating a CSV in parallel
