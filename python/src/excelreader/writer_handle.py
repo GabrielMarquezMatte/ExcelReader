@@ -15,7 +15,7 @@ from typing import IO, Any, Sequence, Union
 
 from excelreader import _native
 from excelreader.reader import _check
-from excelreader.types import ColumnType, WriteOptions
+from excelreader.types import ColumnType, TableOptions, WriteOptions
 from excelreader.writer import _marshal, _typed_table, _write_all
 
 _EPOCH_DATE = datetime.date(1970, 1, 1)
@@ -67,19 +67,27 @@ class SheetWriter:
     def end_sheet(self) -> None:
         _check(self._lib.xl_end_sheet(self._require_handle()))
 
-    def write_sheet(self, name: str, data: Any, types: list[ColumnType] | None = None) -> None:
+    def write_sheet(
+        self, name: str, data: Any, types: list[ColumnType] | None = None, *, table: TableOptions | None = None
+    ) -> None:
         """Writes `data` as a whole sheet named `name`, in one native call instead of one per cell.
 
         `data` and `types` follow `write_workbook`'s rules: a `TypedTable` with one `ColumnType` per
         column, or Arrow-compatible data (pyarrow, pandas, polars) with `types` None. The column names
-        become the header row. Parallelism and the other options come from `open_writer`;
-        `WriteOptions.sheet_name` does not apply. Raises `ExcelReaderError` while a sheet started
-        with `start_sheet` is open.
+        become the header row. With `table`, the sheet is written as an Excel table (xlsx/xlsb only).
+        Parallelism and the other options come from `open_writer`; `WriteOptions.sheet_name` does not
+        apply. Raises `ExcelReaderError` while a sheet started with `start_sheet` is open.
         """
-        table, types = _typed_table(data, types)
-        specs, native_table, _, keepalive = _marshal(table, types, None)
+        typed, types = _typed_table(data, types)
+        specs, native_table, _, keepalive = _marshal(typed, types, None)
         pointer, length = _encode(name)
-        _check(self._lib.xl_write_table(self._require_handle(), pointer, length, specs, ctypes.byref(native_table)))
+        options = _native.to_native_sheet_options(table)
+        _check(
+            self._lib.xl_write_sheet(
+                self._require_handle(), pointer, length, specs, ctypes.byref(native_table),
+                None if options is None else ctypes.byref(options),
+            )
+        )
         del keepalive
 
     def write_row(self, values: Sequence[Any]) -> None:

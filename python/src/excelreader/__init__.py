@@ -1,6 +1,6 @@
 """Python bindings for ExcelReader."""
 
-from excelreader.reader import Sheet, Sheets, Workbook, open_workbook
+from excelreader.reader import Sheet, Sheets, Table, Tables, Workbook, open_workbook
 from excelreader.sources import Source
 from excelreader.types import (
     Cell,
@@ -13,6 +13,7 @@ from excelreader.types import (
     PasswordRequiredError,
     SheetVisibility,
     StringColumn,
+    TableOptions,
     TypedTable,
     WriteOptions,
 )
@@ -34,6 +35,9 @@ __all__ = [
     "Sheets",
     "Source",
     "StringColumn",
+    "Table",
+    "TableOptions",
+    "Tables",
     "TypedTable",
     "Workbook",
     "WriteOptions",

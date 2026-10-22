@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from excelreader.types import OpenOptions, WriteOptions
+    from excelreader.types import OpenOptions, TableOptions, WriteOptions
 
 XL_OK = 0
 XL_EOF = -1
@@ -27,6 +27,17 @@ XL_STATUS_PASSWORD_REQUIRED = -6
 XL_STATUS_PASSWORD_INCORRECT = -7
 
 XL_ABI_VERSION = 6
+
+XL_TABLE_NO_STYLE = 1
+XL_TABLE_NO_ROW_STRIPES = 2
+XL_TABLE_COLUMN_STRIPES = 4
+XL_TABLE_FIRST_COLUMN = 8
+XL_TABLE_LAST_COLUMN = 16
+
+
+def table_sheet(table: int) -> int:
+    """XL_TABLE_SHEET: the `sheet` value that makes a read call read table `table`."""
+    return -2 - table
 
 XL_SHEET_VISIBLE = 0
 XL_SHEET_HIDDEN = 1
@@ -351,6 +362,51 @@ def default_write_options() -> NativeWriteOptions:
     return options
 
 
+class NativeTableInfo(ctypes.Structure):
+    """Mirrors xl_table_info."""
+
+    _fields_ = [
+        ("sheet", ctypes.c_int32),
+        ("first_row", ctypes.c_int32),
+        ("last_row", ctypes.c_int32),
+        ("first_column", ctypes.c_int32),
+        ("last_column", ctypes.c_int32),
+        ("header_row_count", ctypes.c_int32),
+        ("totals_row_count", ctypes.c_int32),
+    ]
+
+
+class NativeSheetOptions(ctypes.Structure):
+    """Mirrors xl_sheet_options."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_int32),
+        ("table_name_len", ctypes.c_int32),
+        ("table_name", ctypes.c_char_p),
+        ("table_style_len", ctypes.c_int32),
+        ("table_style", ctypes.c_char_p),
+        ("table_flags", ctypes.c_int32),
+    ]
+
+
+def to_native_sheet_options(table: TableOptions | None) -> NativeSheetOptions | None:
+    if table is None:
+        return None
+    raw = NativeSheetOptions(struct_size=ctypes.sizeof(NativeSheetOptions))
+    name = table.name.encode("utf-8")
+    raw.table_name, raw.table_name_len = name, len(name)
+    flags = 0 if table.row_stripes else XL_TABLE_NO_ROW_STRIPES
+    flags |= XL_TABLE_COLUMN_STRIPES if table.column_stripes else 0
+    flags |= XL_TABLE_FIRST_COLUMN if table.first_column else 0
+    flags |= XL_TABLE_LAST_COLUMN if table.last_column else 0
+    flags |= XL_TABLE_NO_STYLE if table.style is None else 0
+    raw.table_flags = flags
+    if table.style is not None:
+        style = table.style.encode("utf-8")
+        raw.table_style, raw.table_style_len = style, len(style)
+    return raw
+
+
 def to_native_write_options(options: WriteOptions) -> NativeWriteOptions:
     """Converts a public `WriteOptions` into the raw ABI struct.
 
@@ -469,6 +525,14 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_sheet_visibility_at.restype = c_int
     lib.xl_sheet_index.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_sheet_index.restype = c_int
+    lib.xl_table_count.argtypes = [p_void, p_int]
+    lib.xl_table_count.restype = c_int
+    lib.xl_table_info_at.argtypes = [p_void, c_int, ctypes.POINTER(NativeTableInfo)]
+    lib.xl_table_info_at.restype = c_int
+    lib.xl_table_name_at.argtypes = [p_void, c_int, p_bytes, c_int, p_int]
+    lib.xl_table_name_at.restype = c_int
+    lib.xl_table_index.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_table_index.restype = c_int
     lib.xl_rows_open.argtypes = [p_void, c_int, pp_void]
     lib.xl_rows_open.restype = c_int
     lib.xl_rows_close.argtypes = [p_void]
@@ -573,11 +637,11 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_end_sheet.argtypes = [ctypes.c_void_p]
     lib.xl_end_sheet.restype = ctypes.c_int32
 
-    lib.xl_write_table.argtypes = [
+    lib.xl_write_sheet.argtypes = [
         ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_int32,
-        ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable),
+        ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable), ctypes.POINTER(NativeSheetOptions),
     ]
-    lib.xl_write_table.restype = ctypes.c_int32
+    lib.xl_write_sheet.restype = ctypes.c_int32
 
     lib.xl_close_write_handle.argtypes = [ctypes.c_void_p]
     lib.xl_close_write_handle.restype = ctypes.c_int32

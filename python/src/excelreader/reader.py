@@ -125,6 +125,12 @@ class Workbook:
         return Sheets(self)
 
     @property
+    def tables(self) -> Tables:
+        """The workbook's Excel tables: `len()`, iteration, and lookup by index, slice or name
+        (ignoring case). Each reads like a `Sheet`, bounded to the table's range."""
+        return Tables(self)
+
+    @property
     def is_date1904(self) -> bool:
         flag = ctypes.c_int32()
         _check(self._lib.xl_is_date1904(self._require_handle(), ctypes.byref(flag)))
@@ -417,6 +423,103 @@ class Sheet:
             return _decode_inferred_schema(schema)
         finally:
             self._lib.xl_free_schema(ctypes.byref(schema))
+
+
+class Tables(Sequence["Table"]):
+    """A workbook's Excel tables, in workbook order. Listing them opens nothing."""
+
+    def __init__(self, workbook: Workbook) -> None:
+        self._workbook = workbook
+
+    def __len__(self) -> int:
+        workbook = self._workbook
+        count = ctypes.c_int32()
+        _check(workbook._lib.xl_table_count(workbook._require_handle(), ctypes.byref(count)))
+        return count.value
+
+    @overload
+    def __getitem__(self, key: SupportsIndex | str) -> Table: ...
+    @overload
+    def __getitem__(self, key: slice) -> list[Table]: ...
+    def __getitem__(self, key: SupportsIndex | str | slice) -> Table | list[Table]:  # type: ignore[override]
+        workbook = self._workbook
+        if isinstance(key, str):
+            encoded = key.encode("utf-8")
+            index = ctypes.c_int32()
+            _check(workbook._lib.xl_table_index(workbook._require_handle(), encoded, len(encoded), ctypes.byref(index)))
+            if index.value < 0:
+                raise KeyError(key)
+            return Table(workbook, index.value)
+        count = len(self)
+        if isinstance(key, slice):
+            return [Table(workbook, index) for index in range(*key.indices(count))]
+        index = operator.index(key)
+        if index < 0:
+            index += count
+        if not 0 <= index < count:
+            raise IndexError(f"table index {key} is out of range; the workbook has {count} tables")
+        return Table(workbook, index)
+
+
+class Table(Sheet):
+    """One Excel table of a `Workbook`. Every `Sheet` read works on it and reads only the table's
+    range, header row first; cells keep the column indexes of the sheet holding it.
+
+    Rows and columns are zero-based and include the header and totals rows.
+    """
+
+    def __init__(self, workbook: Workbook, index: int) -> None:
+        super().__init__(workbook, _native.table_sheet(index))
+        self._table = index
+
+    def __repr__(self) -> str:
+        return f"Table(index={self._table})"
+
+    @property
+    def index(self) -> int:
+        """Zero-based position among the workbook's tables."""
+        return self._table
+
+    @property
+    def name(self) -> str:
+        raw, length = _fill_buffer(self._lib.xl_table_name_at, self._workbook._require_handle(), self._table, initial=256)
+        return raw[:length].decode("utf-8")
+
+    @property
+    def sheet(self) -> Sheet:
+        """The sheet that holds the table."""
+        return Sheet(self._workbook, self._info().sheet)
+
+    @property
+    def first_row(self) -> int:
+        return self._info().first_row
+
+    @property
+    def last_row(self) -> int:
+        return self._info().last_row
+
+    @property
+    def first_column(self) -> int:
+        return self._info().first_column
+
+    @property
+    def last_column(self) -> int:
+        return self._info().last_column
+
+    @property
+    def header_row_count(self) -> int:
+        """1, or 0 when the table's header row is turned off."""
+        return self._info().header_row_count
+
+    @property
+    def totals_row_count(self) -> int:
+        """1 when the table shows a totals row, otherwise 0."""
+        return self._info().totals_row_count
+
+    def _info(self) -> _native.NativeTableInfo:
+        info = _native.NativeTableInfo()
+        _check(self._lib.xl_table_info_at(self._workbook._require_handle(), self._table, ctypes.byref(info)))
+        return info
 
 
 def _decode_row(blob: bytes, length: int, date1904: bool) -> list[Cell]:
