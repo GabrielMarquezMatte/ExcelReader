@@ -381,7 +381,7 @@ For XLSX and XLSB, `degree_of_parallelism` formats and compresses batches of `ba
 several threads: `0` uses every processor, `1` (the default) writes serially, and `batch_rows = 0`
 keeps the library default of 8,192. The columns must not change while the write runs. With
 `use_shared_strings` on, two parallel runs give the same content in files that differ byte for byte.
-XLS, CSV and `xl::WriterHandle` ignore both fields.
+XLS, CSV and `xl::WriterHandle`'s per-cell writes ignore both fields.
 
 ```cpp
 xl::write_columns("big.xlsx", columns, {.degree_of_parallelism = 0});
@@ -411,6 +411,18 @@ if (auto done = writer.finish(); !done) { /* done.error().message */ }
 
 Every call returns `std::expected<void, xl::Error>`; one out of order fails instead of corrupting the
 file.
+
+To write several sheets from whole tables, call the handle's `write_sheet` or `write_columns` once
+per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
+instead of one per cell, using the handle's `degree_of_parallelism` and `batch_rows`. Between sheets
+they mix with `start_sheet`..`end_sheet`; while a sheet is open they fail.
+
+```cpp
+auto writer = xl::WriterHandle::open("report.xlsx", {.degree_of_parallelism = 0}).value();
+writer.write_sheet("Sales", sales);        // a range of ExcelMapper rows
+writer.write_columns("Stock", columns);    // xl::ColumnRefs, such as an xl::Table's
+if (auto done = writer.finish(); !done) { /* done.error().message */ }
+```
 
 ## Aggregating a CSV in parallel
 
