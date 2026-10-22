@@ -524,7 +524,7 @@ namespace ExcelReader.Core.Crypto
 
         internal readonly record struct DirectoryEntry(string Name, byte ObjectType, int StartSector, long Size);
 
-        private sealed class CfbStreamView : Stream
+        private sealed class CfbStreamView : ReadOnlyStream
         {
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly Stream _source;
@@ -541,11 +541,7 @@ namespace ExcelReader.Core.Crypto
                 Length = length;
             }
 
-            public override bool CanRead => true;
-
             public override bool CanSeek => true;
-
-            public override bool CanWrite => false;
 
             public override long Length { get; }
 
@@ -604,20 +600,6 @@ namespace ExcelReader.Core.Crypto
                 }
                 _position = newPosition;
                 return _position;
-            }
-
-            public override void Flush()
-            {
-            }
-
-            public override void SetLength(long value)
-            {
-                throw new NotSupportedException();
-            }
-
-            public override void Write(byte[] buffer, int offset, int count)
-            {
-                throw new NotSupportedException();
             }
 
             protected override void Dispose(bool disposing)
