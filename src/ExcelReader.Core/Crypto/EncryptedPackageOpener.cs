@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Internal;
@@ -35,7 +34,7 @@ namespace ExcelReader.Core.Crypto
         internal static bool IsEncryptedMemory(ReadOnlyMemory<byte> container, ExcelReaderOptions options)
         {
             _ = options;
-            using Stream source = WrapMemory(container);
+            using var source = new ReadOnlyMemoryStream(container);
             try
             {
                 using CfbContainer cfb = CfbContainer.Parse(source, ownsSource: false, ExcelReaderOptions.Default);
@@ -49,7 +48,7 @@ namespace ExcelReader.Core.Crypto
 
         internal static ReadOnlyMemory<byte> DecryptToMemory(ReadOnlyMemory<byte> container, ExcelReaderOptions options)
         {
-            using Stream source = WrapMemory(container);
+            using var source = new ReadOnlyMemoryStream(container);
             using CfbContainer cfb = CfbContainer.Parse(source, ownsSource: false, options);
             if (options.Password is null)
             {
@@ -121,13 +120,6 @@ namespace ExcelReader.Core.Crypto
                 ArrayPool<byte>.Shared.Return(segmentBuffer);
             }
             return result;
-        }
-
-        private static MemoryStream WrapMemory(ReadOnlyMemory<byte> container)
-        {
-            return MemoryMarshal.TryGetArray(container, out ArraySegment<byte> segment)
-                ? new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false)
-                : new MemoryStream(container.ToArray(), writable: false);
         }
 
         internal static Stream Decrypt(Stream source, bool leaveOpen, ExcelReaderOptions options)
