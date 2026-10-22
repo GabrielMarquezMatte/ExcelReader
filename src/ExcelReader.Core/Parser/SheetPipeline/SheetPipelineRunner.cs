@@ -68,7 +68,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                         ChunkOutcome<TState> outcome = await pending.WaitAsync(ct).ConfigureAwait(false);
                         if (outcome.Failure is not null)
                         {
-                            ThrowRenumbered(outcome.Failure, headerRow + rows);
+                            ThrowRenumbered(outcome.Failure, headerRow + rows, outcome.Rows);
                         }
                         rows += outcome.Rows;
                         yield return outcome.State;
@@ -92,16 +92,12 @@ namespace ExcelReader.Core.Parser.SheetPipeline
 
                 if (recover)
                 {
-                    TState tail = default!;
-                    try
+                    ChunkOutcome<TState> tail = source.ParseTail(headerRow, rows, aggregation, cancellationToken);
+                    if (tail.Failure is not null)
                     {
-                        tail = source.ParseTail(headerRow, rows, aggregation, cancellationToken);
+                        ThrowRenumbered(tail.Failure, headerRow + rows, tail.Rows);
                     }
-                    catch (ExcelParseException ex)
-                    {
-                        ThrowRenumbered(ExceptionDispatchInfo.Capture(ex), headerRow + rows);
-                    }
-                    yield return tail;
+                    yield return tail.State;
                 }
             }
             finally
@@ -168,14 +164,13 @@ namespace ExcelReader.Core.Parser.SheetPipeline
             }
         }
 
-        private static void ThrowRenumbered(ExceptionDispatchInfo failure, long rowsBefore)
+        // A chunk numbers its rows from 1 when it parses into models; a callback or accumulator run leaves Row
+        // at 0, and then the chunk's count of rows read, which includes the failing one, places it.
+        private static void ThrowRenumbered(ExceptionDispatchInfo failure, long rowsBefore, long rowsInChunk)
         {
-            if (failure.SourceException is ExcelParseException { Row: > 0 } parse)
+            if (failure.SourceException is ExcelParseException parse)
             {
-                int row = (int)(rowsBefore + parse.Row);
-                throw parse.RawValue.Length == 0
-                    ? ProjectionRules.MissingRequiredValue(parse.ColumnName, row)
-                    : new ExcelParseException(row, parse.ColumnName, parse.RawValue);
+                throw ProjectionRules.AtRow(parse, rowsBefore + (parse.Row > 0 ? parse.Row : rowsInChunk));
             }
             failure.Throw();
         }

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.ParallelCsv;
 using ExcelReader.Core.Parser.SheetPipeline;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Xlsx;
@@ -184,6 +185,36 @@ namespace ExcelReader.Tests.Parser
                     {
                     }
                 });
+                Assert.Equal(sequential.Row, parallel.Row);
+                Assert.Equal(sequential.ColumnName, parallel.ColumnName);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task APartitionedAggregateFailureReportsTheSheetRow(bool needsRecovery)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var sb = new StringBuilder("<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>Name</t></is></c><c r=\"B1\" t=\"inlineStr\"><is><t>Qty</t></is></c></row>");
+            for (int r = 2; r <= 300; r++)
+            {
+                string name = needsRecovery && r == 20 ? "<![CDATA[ <row r=\"9\"> ]]>" : string.Create(CultureInfo.InvariantCulture, $"n{r}");
+                string qty = r == 211 ? "<c r=\"B211\" t=\"inlineStr\"><is><t>oops</t></is></c>" : string.Create(CultureInfo.InvariantCulture, $"<c r=\"B{r}\"><v>{r}</v></c>");
+                sb.Append(CultureInfo.InvariantCulture, $"<row r=\"{r}\"><c r=\"A{r}\" t=\"inlineStr\"><is><t>{name}</t></is></c>{qty}</row>");
+            }
+            using MemoryStream ms = WorkbookBuilder.Build(sb.ToString());
+            using XlsxWorkbook workbook = Excel.FromXlsx(ms);
+            ExcelParser<Sale> parser = ExcelParser.FromAttributes<Sale>(new ExcelParserOptions { ThrowOnParseFailure = true });
+            ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => SheetParallel.AggregateAsync<Names, Sale>(
+                workbook.FirstSheet, parser, new SheetParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 }, ct));
+            Assert.Equal(211, sequential.Row);
+            SheetPipelineSource source = SheetPipelineSource.Create(workbook.FirstSheet)!;
+
+            foreach (int chunkBytes in new[] { 64, 90, 96, 150, 400 })
+            {
+                ExcelParseException parallel = await Assert.ThrowsAsync<ExcelParseException>(() => SheetPipelineRunner.AggregateAsync(
+                    source, MappedAggregation<Names, Sale>.Unbound, MappedAggregation<Names, Sale>.Binder(parser, parser.Info, false, 1), 1, 4, chunkBytes, ct));
                 Assert.Equal(sequential.Row, parallel.Row);
                 Assert.Equal(sequential.ColumnName, parallel.ColumnName);
             }

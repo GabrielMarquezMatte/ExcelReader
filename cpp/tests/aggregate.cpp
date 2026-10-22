@@ -473,6 +473,34 @@ static int test_sheet_aggregate_reports_a_throwing_accumulate()
     return 0;
 }
 
+static int test_sheet_aggregate_fails_on_a_sheet_past_the_end()
+{
+    const auto bytes = generate(XL_FORMAT_XLSX, 10);
+    auto workbook = open_generated(bytes, XL_FORMAT_XLSX);
+    CHECK(workbook.has_value(), "open the generated workbook");
+    auto result = workbook->sheet(99).aggregate(RowCounter{}, 1, 1);
+    CHECK(!result.has_value() && result.error().code < 0, "a sheet past the end fails with the library's status");
+    return 0;
+}
+
+static int test_aggregate_reports_a_seed_copy_that_throws()
+{
+    struct ThrowsOnCopy
+    {
+        ThrowsOnCopy() = default;
+        ThrowsOnCopy(const ThrowsOnCopy &) { throw std::runtime_error("no copies"); }
+        ThrowsOnCopy(ThrowsOnCopy &&) noexcept = default;
+        int32_t accumulate(xl::RowView) noexcept { return XL_OK; }
+        int32_t combine(ThrowsOnCopy &) noexcept { return XL_OK; }
+    };
+
+    std::span<const uint8_t> data(reinterpret_cast<const uint8_t *>(kCsv.data()), kCsv.size());
+    auto result = xl::aggregate_csv(data, ThrowsOnCopy{});
+    CHECK(!result.has_value() && std::string_view(result.error().message).find("threw") != std::string_view::npos,
+          "a seed copy that throws must be reported as a callback that threw");
+    return 0;
+}
+
 static int test_existing_csv_accumulator_works_unchanged()
 {
     const auto bytes = generate(XL_FORMAT_CSV, 10'000);
@@ -505,6 +533,14 @@ int main()
         return failed;
     }
     if (int failed = test_existing_csv_accumulator_works_unchanged())
+    {
+        return failed;
+    }
+    if (int failed = test_sheet_aggregate_fails_on_a_sheet_past_the_end())
+    {
+        return failed;
+    }
+    if (int failed = test_aggregate_reports_a_seed_copy_that_throws())
     {
         return failed;
     }

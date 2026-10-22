@@ -210,6 +210,36 @@ def test_a_writer_over_a_bytesio_finishes_a_sheet_left_open():
         assert [row[0].value for row in workbook.sheets[0].rows()] == ["a"]
 
 
+def test_a_writer_over_a_stream_finishes_a_partial_write():
+    class Trickle:
+        def __init__(self):
+            self.data = bytearray()
+
+        def write(self, chunk):
+            self.data += bytes(chunk[:5])
+            return min(5, len(chunk))
+
+    destination = Trickle()
+    with open_writer(destination, "xlsx") as writer:
+        writer.start_sheet("Data")
+        writer.write_row(["widget", 7])
+
+    with open_workbook(bytes(destination.data)) as workbook:
+        assert [cell.value for cell in next(workbook.sheets[0].rows())] == ["widget", "7"]
+
+
+def test_a_writer_over_a_stream_that_stalls_raises_and_still_closes():
+    class Stalled:
+        def write(self, chunk):
+            return 0
+
+    writer = open_writer(Stalled(), "xlsx")
+    writer.start_sheet("Data")
+    with pytest.raises(OSError, match="no progress"):
+        writer.close()
+    writer.close()
+
+
 def test_a_writer_over_a_stream_needs_a_format_and_a_write_method():
     import io
 

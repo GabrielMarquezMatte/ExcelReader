@@ -14,6 +14,12 @@ High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, 
 
 ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, and handles sparse cells. Workbooks open from a path, a `Stream`, or a caller-owned `ReadOnlyMemory<byte>` — the in-memory path decompresses parts directly, without a `ZipArchive` or an intermediate stream.
 
+It moves data, not presentation. Reading gives each cell's value and type, with a formula cell read as
+its last calculated result, plus sheet names, visibility and Excel tables. Formula text, merged cells,
+comments, hyperlinks, charts, images and conditional formatting are not read. Writing covers values,
+column widths and cell styles limited to bold, italic and a number format. To edit an existing workbook
+or produce formatted reports, use a library built for document manipulation.
+
 ## Install
 
 ```bash
@@ -45,7 +51,7 @@ foreach (Row row in workbook.FirstSheet)
 - [Reading untrusted files](docs/guide/untrusted-input.md) — the resource limits that bound what one hostile file can cost, and how to reject one cleanly.
 - [Migrating to v7](docs/guide/migrating-to-v7.md) — porting `CsvParallel` code to `SheetParallel`, which now reads XLSX and XLSB on several threads too.
 - [Migrating to v6](docs/guide/migrating-to-v6.md) — porting v5 reader code to workbooks and sheets, and reading sheets in parallel.
-- [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
+- [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, ExcelDataReader, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
 
 ## Command line
 

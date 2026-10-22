@@ -174,3 +174,71 @@ fn parallel_parse_arrow_matches_the_sequential_row_count() {
     drop(workbook);
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn an_inferred_schema_reads_into_arrow_without_a_row_type() {
+    let workbook = Workbook::open(fixture_path()).expect("open must succeed");
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+
+    let batch = sheet
+        .to_arrow_with_schema(&schema, &ReadOptions::new())
+        .expect("to_arrow_with_schema must succeed");
+
+    assert_eq!(batch.num_columns(), schema.len());
+    assert_eq!(batch.num_rows(), 100);
+    assert_eq!(batch.schema().field(0).name(), "Coluna1");
+    let coluna3 = batch.column_by_name("Coluna3").expect("Coluna3 is read");
+    assert!(coluna3.as_any().downcast_ref::<Int64Array>().is_some());
+}
+
+#[test]
+fn a_schema_without_names_resolves_columns_by_index() {
+    let workbook = Workbook::open(fixture_path()).expect("open must succeed");
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(0, 100, false)
+        .expect("infer_schema must succeed");
+    assert!(schema.iter().all(|c| c.name.is_none()));
+
+    let batch = sheet
+        .to_arrow_with_schema(&schema, &ReadOptions::new().header_row(0))
+        .expect("to_arrow_with_schema must succeed");
+
+    assert_eq!(batch.num_columns(), schema.len());
+    assert_eq!(
+        batch.num_rows(),
+        101,
+        "with no header the header row is data"
+    );
+}
+
+#[test]
+fn an_empty_schema_is_rejected() {
+    let workbook = Workbook::open(fixture_path()).expect("open must succeed");
+    assert!(workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .to_arrow_with_schema(&[], &ReadOptions::new())
+        .is_err());
+}
+
+#[test]
+fn an_inferred_schema_streams_every_row() {
+    let workbook = Workbook::open(fixture_path()).expect("open must succeed");
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+
+    let stream = sheet
+        .to_arrow_stream_with_schema(&schema, &ReadOptions::new().batch_size(8))
+        .expect("the stream must open");
+    assert_eq!(stream.schema().fields().len(), schema.len());
+    let rows: usize = stream
+        .map(|batch| batch.expect("a batch must read").num_rows())
+        .sum();
+    assert_eq!(rows, 100);
+}

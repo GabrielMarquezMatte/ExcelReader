@@ -16,6 +16,7 @@ from typing import IO, Any, Sequence, Union
 from excelreader import _native
 from excelreader.reader import _check
 from excelreader.types import ColumnType, WriteOptions
+from excelreader.writer import _write_all
 
 _EPOCH_DATE = datetime.date(1970, 1, 1)
 _EPOCH_DATETIME = datetime.datetime(1970, 1, 1)
@@ -131,8 +132,8 @@ class SheetWriter:
     def close(self) -> None:
         """Finalizes and releases the writer. Safe to call more than once.
 
-        For a destination with `write()`, the finished workbook is written to it in one call, even
-        when sheets or rows were left open.
+        For a destination with `write()`, the finished workbook is written to it, even when sheets
+        or rows were left open; a `write()` that takes only part of it is called again for the rest.
         """
         if self._handle is None:
             return
@@ -140,7 +141,7 @@ class SheetWriter:
         destination, self._destination = self._destination, None
         try:
             if destination is not None:
-                destination.write(self._finished_bytes(handle))
+                _write_all(destination, self._finished_bytes(handle))
         finally:
             _check(self._lib.xl_close_write_handle(handle))
 

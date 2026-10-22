@@ -1,4 +1,5 @@
 import io
+from array import array
 
 import pytest
 from excelreader import (
@@ -6,6 +7,8 @@ from excelreader import (
     ColumnType,
     ExcelReaderError,
     PasswordIncorrectError,
+    StringColumn,
+    TypedTable,
     WriteOptions,
     encrypt_package,
     open_workbook,
@@ -390,3 +393,97 @@ def test_write_workbook_rejects_a_destination_it_cannot_write(source_csv):
 
     with pytest.raises(TypeError, match="destination"):
         write_workbook(42, table, _TYPES, format="xlsx")
+
+
+class _TrickleWriter:
+    def __init__(self, step):
+        self.step = step
+        self.data = bytearray()
+
+    def write(self, chunk):
+        taken = bytes(chunk[: self.step])
+        self.data += taken
+        return len(taken)
+
+
+def test_write_workbook_finishes_a_partial_write(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+    destination = _TrickleWriter(4)
+
+    write_workbook(destination, table, _TYPES, format="xlsx")
+
+    assert bytes(destination.data) == _to_bytes(table)
+
+
+def test_write_workbook_fails_when_write_makes_no_progress(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+
+    with pytest.raises(OSError, match="no progress"):
+        write_workbook(_TrickleWriter(0), table, _TYPES, format="xlsx")
+
+
+def test_encrypt_package_finishes_a_partial_write(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+    destination = _TrickleWriter(7)
+
+    encrypt_package(_to_bytes(table), destination, "hunter2")
+
+    result = _parse_bytes(bytes(destination.data), "xlsx", password="hunter2")
+    assert list(result.columns[0]) == ["widget", "gadget"]
+
+
+def _one_column_table(column, rows=1, validity=None):
+    return TypedTable(row_count=rows, names=["n"], columns=[column], validity=[validity])
+
+
+@pytest.mark.parametrize(
+    ("column", "column_type", "rows", "message"),
+    [
+        (array("q", [7]), ColumnType.I64, 10, "1 elements but 10"),
+        (array("i", [1, 2]), ColumnType.I64, 1, "8-byte"),
+        (array("d", [1.0]), ColumnType.I64, 1, "format"),
+        (array("Q", [1]), ColumnType.I64, 1, "format"),
+        (array("q", [1]), ColumnType.DATE, 1, "4-byte"),
+        (StringColumn(array("i", [0]), b""), ColumnType.STRING, 1, "offsets"),
+        (StringColumn(array("q", [0, 1]), b"a"), ColumnType.STRING, 1, "offsets"),
+    ],
+)
+def test_write_workbook_rejects_a_column_buffer_that_does_not_match(column, column_type, rows, message):
+    with pytest.raises((TypeError, ValueError), match=message):
+        write_workbook(io.BytesIO(), _one_column_table(column, rows), [column_type], format="xlsx")
+
+
+def test_write_workbook_rejects_a_short_validity_bitmap():
+    table = _one_column_table(array("q", range(9)), rows=9, validity=b"\xff")
+
+    with pytest.raises(ValueError, match="validity"):
+        write_workbook(io.BytesIO(), table, [ColumnType.I64], format="xlsx")
+
+
+def test_write_workbook_takes_numpy_columns():
+    numpy = pytest.importorskip("numpy")
+    table = TypedTable(
+        row_count=2,
+        names=["qty", "price", "day", "ok"],
+        columns=[
+            numpy.array([3, 7], dtype=numpy.int64),
+            numpy.array([1.5, 2.5]),
+            numpy.array([0, 1], dtype=numpy.int32),
+            numpy.array([True, False]),
+        ],
+        validity=[None, None, None, None],
+    )
+    types = [ColumnType.I64, ColumnType.F64, ColumnType.DATE, ColumnType.BOOL]
+    buffer = io.BytesIO()
+
+    write_workbook(buffer, table, types, format="xlsx")
+
+    schema = [ColumnSpec(t, name=n) for n, t in zip(table.names, types)]
+    with open_workbook(buffer.getvalue(), format="xlsx") as workbook:
+        result = workbook.sheets[0].parse(schema)
+    assert list(result.columns[0]) == [3, 7]
+    assert list(result.columns[1]) == [1.5, 2.5]
+    assert list(result.columns[3]) == [1, 0]

@@ -1,4 +1,4 @@
-use excelreader::ReadOptions;
+use excelreader::{write_columns_to, ColumnData, ReadOptions, Table, WriteOptions};
 use excelreader::{ColumnType, Date, ExcelMapper, Format, OpenOptions, Workbook};
 
 #[derive(Default, ExcelMapper)]
@@ -354,4 +354,102 @@ fn parallel_parse_matches_the_sequential_parse() {
         .is_err());
     drop(workbook);
     let _ = std::fs::remove_file(path);
+}
+
+fn column_by_name<'t>(table: &'t Table, name: &str) -> ColumnData<'t> {
+    table
+        .columns()
+        .into_iter()
+        .find(|c| c.name == Some(name))
+        .unwrap_or_else(|| panic!("{name} must be read"))
+        .data
+}
+
+#[test]
+fn an_inferred_schema_parses_without_a_row_type() {
+    let workbook = open_fixture();
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+
+    let table = sheet
+        .parse_with_schema(&schema, &ReadOptions::new())
+        .expect("parse_with_schema must succeed");
+
+    assert_eq!(table.len(), 100);
+    assert_eq!(table.num_columns(), schema.len());
+    assert!(table.column(schema.len()).is_none());
+    let ColumnData::Str { offsets, data } = column_by_name(&table, "Coluna1") else {
+        panic!("Coluna1 must be a string column");
+    };
+    assert_eq!(&data[offsets[0] as usize..offsets[1] as usize], b"Valor1");
+    let ColumnData::I64(coluna3) = column_by_name(&table, "Coluna3") else {
+        panic!("Coluna3 must be an i64 column");
+    };
+    assert_eq!(coluna3.len(), 100);
+    assert_eq!(coluna3[0], 1);
+}
+
+#[test]
+fn a_schema_without_names_parses_by_index() {
+    let workbook = open_fixture();
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(0, 100, false)
+        .expect("infer_schema must succeed");
+
+    let table = sheet
+        .parse_with_schema(&schema, &ReadOptions::new().header_row(0))
+        .expect("parse_with_schema must succeed");
+
+    assert_eq!(table.len(), 101, "with no header the header row is data");
+    assert!(table.columns().iter().all(|c| c.name.is_none()));
+}
+
+#[test]
+fn parse_with_schema_rejects_an_empty_schema() {
+    let workbook = open_fixture();
+    assert!(workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse_with_schema(&[], &ReadOptions::new())
+        .is_err());
+}
+
+#[test]
+fn a_parsed_table_writes_back_unchanged() {
+    let workbook = open_fixture();
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let schema = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+    let table = sheet
+        .parse_with_schema(&schema, &ReadOptions::new())
+        .expect("parse_with_schema must succeed");
+
+    let mut bytes = Vec::new();
+    write_columns_to(
+        &mut bytes,
+        &table.columns(),
+        &WriteOptions::new().format(Format::Xlsx),
+    )
+    .expect("a parsed table must write");
+
+    let reopened = OpenOptions::new()
+        .open_bytes(&bytes)
+        .expect("the written workbook must open");
+    let again = reopened
+        .sheet(0)
+        .expect("sheet 0")
+        .parse_with_schema(&schema, &ReadOptions::new())
+        .expect("the written workbook must parse with the same schema");
+    assert_eq!(again.len(), table.len());
+    let (ColumnData::I64(before), ColumnData::I64(after)) = (
+        column_by_name(&table, "Coluna3"),
+        column_by_name(&again, "Coluna3"),
+    ) else {
+        panic!("Coluna3 must stay an i64 column");
+    };
+    assert_eq!(before, after);
 }
