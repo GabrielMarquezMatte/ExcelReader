@@ -93,6 +93,20 @@ int main()
 
         auto second = xl::to_arrow_stream<Record>(stream_workbook->sheet(0), {.batch_size = 8});
         CHECK(second.has_value(), "a second stream on one workbook opens");
+
+        xl::ArrowStream moved = std::move(*second);
+        CHECK(!second->schema().has_value(), "a moved-from stream has no schema");
+        CHECK(!second->next().has_value(), "a moved-from stream reads nothing");
+        CHECK(moved.schema().has_value(), "the moved-to stream still reports its schema");
+
+        const xl::InferredColumn columns[] = {{"Coluna3", 0, XL_T_I64, false}};
+        CHECK(!xl::to_arrow_stream<Record>(stream_workbook->sheet(99)).has_value(),
+              "a stream over a sheet past the end fails to open");
+        CHECK(!xl::to_arrow_stream(stream_workbook->sheet(99), columns).has_value(),
+              "a runtime-schema stream over a sheet past the end fails to open");
+        auto zero_batch = xl::to_arrow_stream(stream_workbook->sheet(0), columns, {.batch_size = 0});
+        CHECK(!zero_batch.has_value() && zero_batch.error().code == XL_INVALID_ARGUMENT,
+              "a runtime-schema stream rejects a batch size below 1");
     }
 
     {

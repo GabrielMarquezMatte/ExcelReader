@@ -1,4 +1,5 @@
 #include <xl/excelreader.hpp>
+#include <xl/excelreader_arrow.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -7,11 +8,24 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
+
+struct Quantity
+{
+    int64_t qty;
+};
+
+template <>
+struct xl::ExcelMapper<Quantity>
+{
+    static constexpr auto get_bindings() { return std::make_tuple(xl::make_field("qty", &Quantity::qty)); }
+};
 
 namespace
 {
@@ -98,6 +112,50 @@ namespace
         Counters &counters_;
     };
 
+    class OpaqueThrowingSource final : public xl::Source
+    {
+    public:
+        std::uint64_t size() const override { return 1024; }
+        std::expected<std::size_t, std::string> read_at(std::uint64_t, std::span<std::byte>) const override
+        {
+            throw 42;
+        }
+    };
+
+    class HugeSource final : public xl::Source
+    {
+    public:
+        std::uint64_t size() const override { return std::numeric_limits<std::uint64_t>::max(); }
+        std::expected<std::size_t, std::string> read_at(std::uint64_t, std::span<std::byte>) const override
+        {
+            return std::size_t{0};
+        }
+    };
+
+    /// Serves the first `trip` bytes and fails every read past them, so a read fails partway.
+    class TrippingSource final : public xl::Source
+    {
+    public:
+        TrippingSource(std::vector<std::byte> bytes, std::uint64_t trip) : bytes_(std::move(bytes)), trip_(trip) {}
+
+        std::uint64_t size() const override { return bytes_.size(); }
+
+        std::expected<std::size_t, std::string> read_at(std::uint64_t offset, std::span<std::byte> buffer) const override
+        {
+            if (offset >= trip_)
+            {
+                return std::unexpected(std::string("disk failed mid-read"));
+            }
+            const std::size_t count = std::min<std::size_t>(buffer.size(), bytes_.size() - offset);
+            std::memcpy(buffer.data(), bytes_.data() + offset, count);
+            return count;
+        }
+
+    private:
+        std::vector<std::byte> bytes_;
+        std::uint64_t trip_;
+    };
+
     class ErrorStream final : public xl::InputStream
     {
     public:
@@ -172,6 +230,108 @@ namespace
         auto decoded = workbook.sheet(0).read_all();
         return decoded.has_value() ? decoded->size() : 0;
     }
+
+    bool mentions(const xl::Error &error, std::string_view text)
+    {
+        return error.message.find(text) != std::string::npos;
+    }
+
+    std::expected<xl::Workbook, xl::Error> open_tripping()
+    {
+        std::string csv = "qty\n";
+        for (int i = 0; i < 50'000; ++i)
+        {
+            csv += std::to_string(i) + "\n";
+        }
+        std::vector<std::byte> bytes(csv.size());
+        std::memcpy(bytes.data(), csv.data(), csv.size());
+        const std::uint64_t trip = bytes.size() / 2;
+        return xl::Workbook::open(std::make_unique<TrippingSource>(std::move(bytes), trip),
+                                  {.format = XL_FORMAT_CSV, .source_block_size = -1});
+    }
+
+    /// Drains `next()` and returns the error it stopped on, or nothing if the sheet ended cleanly.
+    template <typename Reader>
+    std::optional<xl::Error> first_error(Reader &reader)
+    {
+        while (true)
+        {
+            auto batch = reader.next();
+            if (!batch.has_value())
+            {
+                return batch.error();
+            }
+            if (!batch->has_value())
+            {
+                return std::nullopt;
+            }
+        }
+    }
+
+    const xl::InferredColumn kQtySchema[] = {{"qty", 0, XL_T_I64, false}};
+
+    void test_a_typed_range_ends_on_a_failed_read()
+    {
+        auto workbook = open_tripping();
+        check(workbook.has_value(), "a tripping source opens");
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        auto reader = xl::parse_batches<Quantity>(workbook->sheet(0), {.batch_size = 100});
+        check(reader.has_value(), "a typed reader opens before the failure");
+        if (!reader.has_value())
+        {
+            return;
+        }
+        int64_t rows = 0;
+        std::optional<xl::Error> last;
+        for (auto &batch : *reader)
+        {
+            if (!batch.has_value())
+            {
+                last = batch.error();
+                break;
+            }
+            rows += batch->size();
+        }
+        check(rows > 0, "batches before the failure arrive");
+        check(last.has_value() && mentions(*last, "disk failed mid-read"), "the range ends on the source's error");
+    }
+
+    void test_a_table_reader_reports_a_failed_read()
+    {
+        auto workbook = open_tripping();
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        auto reader = xl::parse_batches(workbook->sheet(0), kQtySchema, {.batch_size = 100});
+        check(reader.has_value(), "a table reader opens before the failure");
+        if (!reader.has_value())
+        {
+            return;
+        }
+        const std::optional<xl::Error> error = first_error(*reader);
+        check(error.has_value() && mentions(*error, "disk failed mid-read"), "a table reader reports the source's error");
+    }
+
+    void test_an_arrow_stream_reports_a_failed_read()
+    {
+        auto workbook = open_tripping();
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        auto stream = xl::to_arrow_stream(workbook->sheet(0), kQtySchema, {.batch_size = 100});
+        check(stream.has_value(), "an Arrow stream opens before the failure");
+        if (!stream.has_value())
+        {
+            return;
+        }
+        const std::optional<xl::Error> error = first_error(*stream);
+        check(error.has_value() && mentions(*error, "disk failed mid-read"), "an Arrow stream reports the source's error");
+    }
 }
 
 int main()
@@ -215,6 +375,22 @@ int main()
               "an exception from the source becomes an error");
         check(throwing.destroyed.load() == 1, "a source that threw is destroyed exactly once");
     }
+    {
+        auto workbook = xl::Workbook::open(std::make_unique<OpaqueThrowingSource>(), {.format = XL_FORMAT_XLSX});
+        check(!workbook.has_value() && mentions(workbook.error(), "the source threw an exception"),
+              "a throw that is not a std::exception becomes an error");
+    }
+    {
+        auto null_source = xl::Workbook::open(std::unique_ptr<xl::Source>{});
+        check(!null_source.has_value() && null_source.error().code == XL_INVALID_ARGUMENT, "a null source is rejected");
+        auto null_stream = xl::Workbook::open(std::unique_ptr<xl::InputStream>{});
+        check(!null_stream.has_value() && null_stream.error().code == XL_INVALID_ARGUMENT, "a null stream is rejected");
+        auto huge = xl::Workbook::open(std::make_unique<HugeSource>());
+        check(!huge.has_value() && huge.error().code == XL_INVALID_ARGUMENT, "a source larger than INT64_MAX is rejected");
+    }
+    test_a_typed_range_ends_on_a_failed_read();
+    test_a_table_reader_reports_a_failed_read();
+    test_an_arrow_stream_reports_a_failed_read();
     {
         auto workbook = xl::Workbook::open(std::make_unique<ErrorStream>(), {.format = XL_FORMAT_XLSX});
         check(!workbook.has_value() && workbook.error().message.find("pipe broke") != std::string::npos,

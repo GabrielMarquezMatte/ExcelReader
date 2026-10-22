@@ -339,6 +339,7 @@ static int test_format_from_extension()
     }
     CHECK(!xl::write_columns(temp_path("no-extension").string(), columns).has_value(),
           "a path without an extension must be rejected");
+    CHECK(!xl::write_columns("ab", columns).has_value(), "a name shorter than any extension must be rejected");
     return 0;
 }
 

@@ -271,6 +271,56 @@ namespace
 
         xl::Table moved = std::move(*table);
         check(find_column(moved, "Coluna3") != nullptr, "a moved table keeps its column names");
+
+        auto replacement = xl::parse(workbook->sheet(0), *schema);
+        check(replacement.has_value(), "parse a second table to move-assign");
+        if (replacement.has_value())
+        {
+            moved = std::move(*replacement);
+            check(moved.size() == static_cast<int64_t>(expected.size()) && find_column(moved, "Coluna1") != nullptr,
+                  "a move-assigned table holds the other table's rows and names");
+        }
+    }
+
+    void test_move_assigned_view_holds_the_other_rows(const std::vector<OwnedRow> &expected)
+    {
+        auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
+        check(workbook.has_value(), "open the fixture for the move-assigned view");
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        auto whole = xl::parse<Row>(workbook->sheet(0));
+        auto reader = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = 8});
+        check(whole.has_value() && reader.has_value(), "parse a view and open a reader to move-assign from");
+        if (!whole.has_value() || !reader.has_value())
+        {
+            return;
+        }
+        auto batch = reader->next();
+        check(batch.has_value() && batch->has_value(), "read a batch to move-assign over the whole view");
+        if (!batch.has_value() || !batch->has_value())
+        {
+            return;
+        }
+        *whole = std::move(**batch);
+        check(whole->size() == 8 && std::string((*whole)[0].Coluna1) == expected[0].first,
+              "a move-assigned view holds the batch's rows");
+    }
+
+    void test_a_sheet_past_the_end_fails_every_read()
+    {
+        auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
+        check(workbook.has_value(), "open the fixture for the past-the-end sheet");
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        const xl::Sheet missing = workbook->sheet(99);
+        const xl::InferredColumn schema[] = {{"Coluna3", 0, XL_T_I64, false}};
+        check(!xl::parse<Row>(missing).has_value(), "parse fails on a sheet past the end");
+        check(!xl::parse_batches<Row>(missing).has_value(), "parse_batches fails on a sheet past the end");
+        check(!xl::parse_batches(missing, schema).has_value(), "a runtime-schema parse_batches fails on a sheet past the end");
     }
 
     void test_runtime_schema_batches_equal_whole_sheet(const std::vector<OwnedRow> &expected)
@@ -340,6 +390,8 @@ int main()
     test_foreign_read_leaves_the_reader_alone();
     test_runtime_schema_matches_the_typed_parse(expected);
     test_runtime_schema_batches_equal_whole_sheet(expected);
+    test_move_assigned_view_holds_the_other_rows(expected);
+    test_a_sheet_past_the_end_fails_every_read();
 
     if (failures != 0)
     {
