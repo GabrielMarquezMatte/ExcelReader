@@ -154,8 +154,6 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
         }
 
-        internal Lock SharedStringsGate { get; } = new();
-
         /// <inheritdoc/>
         public int AddStyle(CellStyle style)
         {

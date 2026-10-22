@@ -65,7 +65,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             _state = WriterState.Started;
             if (_owner.UseSharedStrings)
             {
-                _workerStrings = new WorkerStringCache(_owner.SharedStrings!, _owner.SharedStringsGate);
+                _workerStrings = new WorkerStringCache(_owner.SharedStrings!);
             }
         }
 
