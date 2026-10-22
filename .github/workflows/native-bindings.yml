@@ -351,3 +351,23 @@ jobs:
 
       - name: Run the consumer
         run: ctest --test-dir build/consumer --output-on-failure -C Release
+
+      # A separate Debug build without the benchmarks, so only the tests count towards coverage.
+      - name: Test with coverage (Linux)
+        if: runner.os == 'Linux'
+        env:
+          EXCELREADER_NATIVE_LIB: ${{ steps.lib.outputs.path }}
+        run: |
+          cmake -S cpp -B build/cpp-coverage -DEXCELREADER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS=--coverage
+          cmake --build build/cpp-coverage
+          ctest --test-dir build/cpp-coverage --output-on-failure
+          pipx run gcovr --root . --filter 'cpp/include/xl/' --exclude-throw-branches --cobertura coverage-cpp.xml --txt
+
+      - name: Upload C++ coverage to Codecov
+        if: runner.os == 'Linux'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-cpp.xml
+          flags: cpp
+          fail_ci_if_error: false
