@@ -181,16 +181,9 @@ def write_workbook(
     returns that it took only part; the object is not closed.
 
     The column names become the header row. `options` sets the sheet name and CSV dialect; see
-    `WriteOptions`.
+    `WriteOptions`. For several sheets, use `SheetWriter.write_sheet`.
     """
-    if isinstance(data, TypedTable):
-        if types is None:
-            raise TypeError("types is required when data is a TypedTable: one ColumnType per column")
-        table = data
-    else:
-        if types is not None:
-            raise TypeError("types must be None unless data is a TypedTable; Arrow data carries its own types")
-        table, types = _table_from_arrow(_arrow_table(data))
+    table, types = _typed_table(data, types)
     if isinstance(destination, (str, os.PathLike)):
         _write_file(Path(destination), table, types, format, options)
         return
@@ -203,6 +196,16 @@ def write_workbook(
             f"format= is required when writing to an object with write(); one of {sorted(_FORMAT_NAMES)}"
         )
     _write_all(destination, _write_memory(table, types, format, options))
+
+
+def _typed_table(data: Any, types: list[ColumnType] | None) -> tuple[TypedTable, list[ColumnType]]:
+    if isinstance(data, TypedTable):
+        if types is None:
+            raise TypeError("types is required when data is a TypedTable: one ColumnType per column")
+        return data, types
+    if types is not None:
+        raise TypeError("types must be None unless data is a TypedTable; Arrow data carries its own types")
+    return _table_from_arrow(_arrow_table(data))
 
 
 def _write_all(destination: IO[bytes], data: bytes) -> None:
