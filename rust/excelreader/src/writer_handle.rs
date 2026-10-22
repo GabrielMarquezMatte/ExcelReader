@@ -11,7 +11,7 @@
 use crate::ffi::{self, XlWriterHandle};
 use crate::workbook::{buffer_to_vec, check, check_abi_version, len_i32, path_str};
 use crate::writer::{raw_table, OwnedColumn};
-use crate::{Column, ColumnType, Date, Error, ExcelWriter, Time, Timestamp, WriteOptions};
+use crate::{Column, ColumnType, Date, Error, ExcelWriter, TableOptions, Time, Timestamp, WriteOptions};
 use std::io::Write;
 use std::path::Path;
 
@@ -150,29 +150,42 @@ impl<'w> WriterHandle<'w> {
     }
 
     /// Writes `columns` as a whole sheet named `name`, as [`write_columns`](crate::write_columns)
-    /// does, in one call instead of one per cell. Uses the parallelism set in the handle's
-    /// [`WriteOptions`]; its sheet name does not apply. Fails while a sheet started with
-    /// [`start_sheet`](Self::start_sheet) is open.
-    pub fn write_columns(&mut self, name: &str, columns: &[Column<'_>]) -> Result<(), Error> {
+    /// does, in one call instead of one per cell; with `table`, as an Excel table (XLSX/XLSB only,
+    /// every column named). Uses the parallelism set in the handle's [`WriteOptions`]; its sheet
+    /// name does not apply. Fails while a sheet started with [`start_sheet`](Self::start_sheet) is
+    /// open.
+    pub fn write_columns(
+        &mut self,
+        name: &str,
+        columns: &[Column<'_>],
+        table: Option<&TableOptions>,
+    ) -> Result<(), Error> {
         let name_len = len_i32(name.len(), "name")?;
         let raw = raw_table(columns)?;
+        let options = table.map(TableOptions::to_raw).transpose()?;
         check(unsafe {
-            ffi::xl_write_table(
+            ffi::xl_write_sheet(
                 self.handle,
                 name.as_ptr(),
                 name_len,
                 raw.specs.as_ptr(),
                 &raw.table,
+                options.as_ref().map_or(std::ptr::null(), |o| o),
             )
         })
     }
 
     /// Writes `rows` as a whole sheet named `name`, as [`write_sheet`](crate::write_sheet) does,
     /// on top of [`write_columns`](Self::write_columns).
-    pub fn write_sheet<T: ExcelWriter>(&mut self, name: &str, rows: &[T]) -> Result<(), Error> {
+    pub fn write_sheet<T: ExcelWriter>(
+        &mut self,
+        name: &str,
+        rows: &[T],
+        table: Option<&TableOptions>,
+    ) -> Result<(), Error> {
         let owned = T::to_columns(rows)?;
         let borrowed: Vec<Column<'_>> = owned.iter().map(OwnedColumn::as_column).collect();
-        self.write_columns(name, &borrowed)
+        self.write_columns(name, &borrowed, table)
     }
 
     /// Completes the workbook and releases the handle. For a handle from [`new`](Self::new), the

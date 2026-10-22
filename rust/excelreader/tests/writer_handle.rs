@@ -285,7 +285,7 @@ fn write_sheet_and_write_columns_write_whole_sheets_beside_streamed_ones() {
 
         let sales = [item("widget", Some(3)), item("gadget", Some(7))];
         handle
-            .write_sheet("Vendas", &sales)
+            .write_sheet("Vendas", &sales, None)
             .expect("write_sheet must succeed");
 
         handle
@@ -321,7 +321,7 @@ fn write_sheet_and_write_columns_write_whole_sheets_beside_streamed_ones() {
             Column::new(Some("qty"), ColumnData::I64(&quantities)).validity(&validity),
         ];
         handle
-            .write_columns("Estoque", &columns)
+            .write_columns("Estoque", &columns, None)
             .expect("write_columns must succeed");
         handle.finish().expect("finish must succeed");
 
@@ -364,12 +364,12 @@ fn write_sheet_fails_while_a_streamed_sheet_is_open_and_the_handle_stays_usable(
         .start_sheet("Aberta")
         .expect("start_sheet must succeed");
     let error = handle
-        .write_sheet("Tabela", &rows)
+        .write_sheet("Tabela", &rows, None)
         .expect_err("a whole sheet cannot start while another is open");
     assert!(error.to_string().contains("already open"), "{error}");
     handle.end_sheet().expect("end_sheet must succeed");
     handle
-        .write_sheet("Tabela", &rows)
+        .write_sheet("Tabela", &rows, None)
         .expect("write_sheet must succeed once the sheet is ended");
     handle.finish().expect("finish must succeed");
 

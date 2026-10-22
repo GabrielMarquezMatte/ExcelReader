@@ -148,6 +148,31 @@ let tables = std::thread::scope(|scope| {
 # Ok::<(), excelreader::Error>(())
 ```
 
+### Tables
+
+`Workbook::tables` lists the workbook's Excel tables ("Format as Table" ranges) as `TableInfo`:
+name, the sheet holding it, and its zero-based range, header and totals rows included.
+`Workbook::table(index)` and `table_by_name(name)` (ignoring case) return a `Sheet` bounded to the
+table, so every read works on it and starts at the table's header row:
+
+```rust,no_run
+# use excelreader::{ReadOptions, Workbook};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Sale { #[excel(name = "Units")] units: i64 }
+let workbook = Workbook::open("report.xlsx")?;
+for table in workbook.tables()? {
+    println!("{} on sheet {}: rows {}..={}", table.name, table.sheet, table.first_row, table.last_row);
+}
+if let Some(sales) = workbook.table_by_name("Sales")? {
+    let rows = sales.parse::<Sale>(&ReadOptions::new())?;
+    println!("{} sales", rows.len());
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+Cells keep the column indexes of the sheet holding the table, and the table's `Sheet::name` is that
+sheet's. A table is read on one thread whatever the degree of parallelism asks for.
+
 ### Encrypted workbooks
 
 `OpenOptions::password` unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm):
@@ -411,11 +436,15 @@ use excelreader::{WriteOptions, WriterHandle};
 # let stock = vec![Row::default()];
 
 let mut handle = WriterHandle::create("report.xlsx", &WriteOptions::new().degree_of_parallelism(0))?;
-handle.write_sheet("Sales", &sales)?;
-handle.write_sheet("Stock", &stock)?;
+handle.write_sheet("Sales", &sales, None)?;
+handle.write_sheet("Stock", &stock, None)?;
 handle.finish()?;
 # Ok::<(), excelreader::Error>(())
 ```
+
+Passing `Some(&TableOptions::new("Sales"))` writes the sheet as an Excel table, with filter buttons
+and a table style (XLSX and XLSB only, every column named). The name must be unique in the
+workbook; the style defaults to `TableStyleMedium2`, and `.style(None)` leaves the table unstyled.
 
 ## Reading rows one at a time
 

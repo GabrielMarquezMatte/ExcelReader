@@ -128,6 +128,84 @@ impl<'a> Column<'a> {
     }
 }
 
+/// Writes a sheet as an Excel table ("Format as Table"), through
+/// [`WriterHandle::write_columns`](crate::WriterHandle::write_columns) or
+/// [`write_sheet`](crate::WriterHandle::write_sheet). XLSX and XLSB only.
+///
+/// ```
+/// use excelreader::TableOptions;
+///
+/// let table = TableOptions::new("Sales").style(Some("TableStyleLight9")).column_stripes(true);
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableOptions {
+    name: String,
+    style: Option<String>,
+    flags: i32,
+}
+
+impl TableOptions {
+    /// A table called `name`: unique in the workbook, ignoring case, and valid as an Excel name.
+    /// Styled `TableStyleMedium2`, with banded rows.
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        TableOptions {
+            name: name.into(),
+            style: Some("TableStyleMedium2".to_string()),
+            flags: 0,
+        }
+    }
+
+    /// A built-in table style such as `TableStyleLight9`, or `None` for no style.
+    #[must_use]
+    pub fn style(mut self, value: Option<&str>) -> Self {
+        self.style = value.map(str::to_string);
+        self
+    }
+
+    /// Whether alternate rows are banded. Default `true`.
+    #[must_use]
+    pub fn row_stripes(self, value: bool) -> Self {
+        self.flag(ffi::XL_TABLE_NO_ROW_STRIPES, !value)
+    }
+
+    /// Whether alternate columns are banded. Default `false`.
+    #[must_use]
+    pub fn column_stripes(self, value: bool) -> Self {
+        self.flag(ffi::XL_TABLE_COLUMN_STRIPES, value)
+    }
+
+    /// Whether the first column gets the style's emphasis. Default `false`.
+    #[must_use]
+    pub fn first_column(self, value: bool) -> Self {
+        self.flag(ffi::XL_TABLE_FIRST_COLUMN, value)
+    }
+
+    /// Whether the last column gets the style's emphasis. Default `false`.
+    #[must_use]
+    pub fn last_column(self, value: bool) -> Self {
+        self.flag(ffi::XL_TABLE_LAST_COLUMN, value)
+    }
+
+    fn flag(mut self, bit: i32, set: bool) -> Self {
+        self.flags = if set { self.flags | bit } else { self.flags & !bit };
+        self
+    }
+
+    /// Borrows `self`'s strings, so the result must not outlive it.
+    pub(crate) fn to_raw(&self) -> Result<ffi::XlSheetOptions, Error> {
+        let style_flag = if self.style.is_none() { ffi::XL_TABLE_NO_STYLE } else { 0 };
+        Ok(ffi::XlSheetOptions {
+            struct_size: std::mem::size_of::<ffi::XlSheetOptions>() as i32,
+            table_name_len: len_i32(self.name.len(), "table name")?,
+            table_name: self.name.as_ptr(),
+            table_style_len: len_i32(self.style.as_ref().map_or(0, String::len), "table style")?,
+            table_style: self.style.as_ref().map_or(std::ptr::null(), |style| style.as_ptr()),
+            table_flags: self.flags | style_flag,
+        })
+    }
+}
+
 fn invalid(message: String) -> Error {
     Error::new(ErrorKind::InvalidArgument, message)
 }
