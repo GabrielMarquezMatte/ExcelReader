@@ -132,6 +132,30 @@ int32_t xl_sheet_index(xl_workbook* handle, const uint8_t* name, int32_t name_le
 
 int32_t xl_is_date1904(xl_workbook* handle, int32_t* out_flag);
 
+/* Excel tables. Passed as the `sheet` of any read call, XL_TABLE_SHEET(table) reads only the table's
+   range, header row first, with the column indexes of the sheet holding it. Rows and columns are
+   zero-based and include the header and totals rows. */
+#define XL_TABLE_SHEET(table) (-2 - (table))
+
+typedef struct xl_table_info {
+    int32_t sheet;
+    int32_t first_row;
+    int32_t last_row;
+    int32_t first_column;
+    int32_t last_column;
+    int32_t header_row_count;
+    int32_t totals_row_count;
+} xl_table_info;
+
+int32_t xl_table_count(xl_workbook* handle, int32_t* out_count);
+
+int32_t xl_table_info_at(xl_workbook* handle, int32_t index, xl_table_info* out_info);
+
+int32_t xl_table_name_at(xl_workbook* handle, int32_t index, uint8_t* buffer, int32_t capacity, int32_t* out_len);
+
+/* Matches names ignoring case; *out_index is -1 when no table has the name. */
+int32_t xl_table_index(xl_workbook* handle, const uint8_t* name, int32_t name_len, int32_t* out_index);
+
 int32_t xl_rows_open(xl_workbook* handle, int32_t sheet, xl_rows** out_rows);
 
 int32_t xl_rows_close(xl_rows* rows);
@@ -289,9 +313,25 @@ int32_t xl_write_null(xl_writer_handle* handle, int32_t type);
 int32_t xl_end_row(xl_writer_handle* handle);
 int32_t xl_end_sheet(xl_writer_handle* handle);
 
-/* One whole sheet, as xl_write_typed writes it; fails while a sheet is open. */
-int32_t xl_write_table(xl_writer_handle* handle, const uint8_t* name, int32_t name_len,
-                       const xl_column_spec* specs, const xl_table* table);
+#define XL_TABLE_NO_STYLE        1
+#define XL_TABLE_NO_ROW_STRIPES  2
+#define XL_TABLE_COLUMN_STRIPES  4
+#define XL_TABLE_FIRST_COLUMN    8
+#define XL_TABLE_LAST_COLUMN    16
+
+typedef struct xl_sheet_options {
+    int32_t struct_size;
+    int32_t table_name_len;
+    const uint8_t* table_name;    /* NULL: a plain sheet; otherwise an Excel table (XLSX/XLSB only) */
+    int32_t table_style_len;
+    const uint8_t* table_style;   /* NULL: TableStyleMedium2 */
+    int32_t table_flags;          /* XL_TABLE_* */
+} xl_sheet_options;
+
+/* One whole sheet, as xl_write_typed writes it; fails while a sheet is open. A NULL options writes a
+   plain sheet; a table needs every column named. */
+int32_t xl_write_sheet(xl_writer_handle* handle, const uint8_t* name, int32_t name_len,
+                       const xl_column_spec* specs, const xl_table* table, const xl_sheet_options* options);
 
 int32_t xl_close_write_handle(xl_writer_handle* handle);
 

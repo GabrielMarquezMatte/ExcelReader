@@ -11,6 +11,10 @@ EXPORTS
     xl_is_date1904
     xl_sheet_visibility_at
     xl_sheet_index
+    xl_table_count
+    xl_table_info_at
+    xl_table_name_at
+    xl_table_index
     xl_rows_open
     xl_rows_close
     xl_rows_next
@@ -47,7 +51,7 @@ EXPORTS
     xl_write_null
     xl_end_row
     xl_end_sheet
-    xl_write_table
+    xl_write_sheet
     xl_close_write_handle
     xl_write_handle_bytes
     xl_csv_aggregate_file

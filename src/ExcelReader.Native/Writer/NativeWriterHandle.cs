@@ -44,7 +44,7 @@ namespace ExcelReader.Native.Writer
 
         protected abstract void Dispose(bool disposing);
 
-        internal abstract void WriteTable(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader);
+        internal abstract void WriteSheet(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader, NativeExcelTable? excelTable);
 
         internal static NativeWriterHandle Create(Stream stream, int format, NativeWriteOptions options)
         {
@@ -184,14 +184,18 @@ namespace ExcelReader.Native.Writer
             _sheet = null;
         }
 
-        internal override void WriteTable(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader)
+        internal override void WriteSheet(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader, NativeExcelTable? excelTable)
         {
             if (_sheet is not null)
             {
-                throw new InvalidOperationException("A sheet is already open; call xl_end_sheet before writing a table.");
+                throw new InvalidOperationException("A sheet is already open; call xl_end_sheet before writing a whole sheet.");
+            }
+            if (excelTable is not null && !typeof(TSheet).IsAssignableTo(typeof(ITableSheetWriter<TRow>)))
+            {
+                throw new NotSupportedException("Excel tables can only be written to XLSX or XLSB.");
             }
             _sheet = _workbook.AddSheet(name);
-            WriteApi.WriteSheetBody(_workbook, _sheet, specs, table, hasHeader, _parallel, _writeParallel);
+            WriteApi.WriteSheetBody(_workbook, _sheet, specs, table, hasHeader, excelTable, _parallel, _writeParallel);
             EndSheet();
         }
 

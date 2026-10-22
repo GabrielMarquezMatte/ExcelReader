@@ -54,7 +54,8 @@ may get worse, not only better.
 
 Reading exports: `xl_open_file`, `xl_open_memory`, `xl_open_source`, `xl_open_stream`,
 `xl_set_source_error`, `xl_close`, `xl_sheet_count`, `xl_sheet_name_at`,
-`xl_sheet_visibility_at`, `xl_sheet_index`, `xl_is_date1904`, `xl_rows_open`, `xl_rows_next`,
+`xl_sheet_visibility_at`, `xl_sheet_index`, `xl_table_count`, `xl_table_info_at`, `xl_table_name_at`,
+`xl_table_index`, `xl_is_date1904`, `xl_rows_open`, `xl_rows_next`,
 `xl_rows_next_view`, `xl_rows_foreach`, `xl_aggregate`, `xl_rows_read_all_blob`, `xl_rows_read_all_decoded`, `xl_rows_close`,
 `xl_free_rows`, `xl_parse_typed`, `xl_free_table`, `xl_typed_reader_open`, `xl_typed_reader_next`,
 `xl_typed_reader_close`, `xl_infer_schema`, `xl_free_schema`, `xl_last_error`, `xl_last_error_ptr`,
@@ -64,6 +65,13 @@ A workbook handle has no current sheet and no cursor. Every read names its sheet
 and opens its own enumerator, so calls on one handle may run on several threads at once. A cursor,
 typed reader or Arrow stream is used by one thread at a time and keeps working after `xl_close` on
 its workbook.
+
+Excel tables are read through the same calls. `XL_TABLE_SHEET(table)` passed as the `sheet` of any
+read (rows, callbacks, typed, Arrow, schema inference, aggregation) reads only that table's range,
+header row first, with the column indexes of the sheet holding it; `xl_sheet_name_at` and
+`xl_sheet_visibility_at` report that sheet. `xl_table_count`, `xl_table_info_at` (sheet, range,
+header and totals row counts), `xl_table_name_at` and `xl_table_index` (ignoring case, `-1` when
+absent) describe the workbook's tables. A table read is never partitioned.
 
 Writing has two layers. The one-shot export, `xl_write_typed` (plus its in-memory twin
 `xl_write_typed_to_memory`), takes a whole `xl_table` and writes it in a single call; it takes an
@@ -86,9 +94,12 @@ directly as each call arrives instead of building an `xl_table` up front. Call o
 `xl_open_write_handle`/`xl_open_write_handle_to_memory`, then per sheet `xl_start_sheet`..`xl_end_sheet`,
 each containing `xl_start_row`..`xl_end_row` with one `xl_write_string`/`xl_write_int64`/
 `xl_write_float64`/`xl_write_bool`/`xl_write_date`/`xl_write_time`/`xl_write_timestamp`/`xl_write_null`
-call per cell, then `xl_close_write_handle`. Between sheets, `xl_write_table` writes a whole
+call per cell, then `xl_close_write_handle`. Between sheets, `xl_write_sheet` writes a whole
 `xl_table` as one sheet, as `xl_write_typed` does, using the handle's `degree_of_parallelism` and
-`batch_rows`; it fails while a sheet is open. `xl_write_handle_bytes` reads back a memory-backed
+`batch_rows`; it fails while a sheet is open. Its `xl_sheet_options*` (NULL for a plain sheet, same
+`struct_size` contract) can write the sheet as an Excel table: `table_name`, `table_style` (NULL keeps
+`TableStyleMedium2`) and `XL_TABLE_*` flags for no style, row and column stripes and first- and
+last-column emphasis. A table needs every column named and an XLSX or XLSB handle. `xl_write_handle_bytes` reads back a memory-backed
 handle's bytes so far without releasing it. Both write paths release their buffers with
 `xl_free_buffer` (`xl_table`/`xl_inferred_schema` keep their own `xl_free_table`/`xl_free_schema`).
 
