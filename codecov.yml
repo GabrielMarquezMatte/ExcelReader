@@ -13,9 +13,17 @@ coverage:
         target: 88%
         flags:
           - rust
+      cpp:
+        target: 88%
+        flags:
+          - cpp
     patch:
       default:
         target: 88%
+
+# gcov reports the C++ headers through the cpp/include/xl symlink; git tracks them at their real path.
+fixes:
+  - "cpp/include/xl/::src/ExcelReader.Native/include/"
 
 # Each language uploads under its own flag from a path-filtered job, so a flag a commit did not run keeps its last report.
 flag_management:
@@ -31,3 +39,6 @@ flag_management:
     - name: python
       paths:
         - python/
+    - name: cpp
+      paths:
+        - src/ExcelReader.Native/include/
