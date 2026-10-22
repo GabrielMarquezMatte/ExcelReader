@@ -31,6 +31,20 @@ namespace ExcelReader.Core.Writer.Internal
             columnWidths[columnIndex] = width;
         }
 
+        internal static SortedSet<int> Columns(Dictionary<int, int>? columnStyles, Dictionary<int, double>? columnWidths)
+        {
+            var columns = new SortedSet<int>();
+            if (columnStyles is not null)
+            {
+                columns.UnionWith(columnStyles.Keys);
+            }
+            if (columnWidths is not null)
+            {
+                columns.UnionWith(columnWidths.Keys);
+            }
+            return columns;
+        }
+
         private static void RequireNotStarted(WriterState state, object writer)
         {
             WriterStateGuard.ThrowIfEnded(state, writer);

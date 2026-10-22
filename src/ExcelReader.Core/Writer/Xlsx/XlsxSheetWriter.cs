@@ -14,7 +14,7 @@ namespace ExcelReader.Core.Writer.Xlsx
     /// <summary>
     /// Writes a single worksheet's XML into an XLSX ZIP archive, buffering rows and flushing them to the entry stream once they cross a size threshold.
     /// </summary>
-    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>, ITableSheetWriter<XlsxRowWriter>, IBatchSheet<XlsxSheetWriter, XlsxRowWriter>
+    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>, ITableSheetWriter<XlsxRowWriter>, IBatchSheet<XlsxSheetWriter, XlsxRowWriter>, IZipSheet
     {
         private readonly TableTracker _tables = new();
         private readonly XlsxWorkbookWriter _owner;
@@ -129,23 +129,14 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
             try
             {
-                ZipEntryStream entry = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-                _entry = entry;
-                _stream = _offloadWrite ? new WriteOffloadStream(entry) : entry;
-                _rowBuffer.Reset();
-                _rowBuffer.WriteUtf8(
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">{BuildColsXml()}<sheetData>");
-                _stream.Write(_rowBuffer.Span);
+                OpenEntry().Write(_rowBuffer.Span);
             }
             catch
             {
                 Fault();
                 throw;
             }
-            _rowBuffer.Reset();
-            _state = WriterState.Started;
-            _owner.RegisterSheet(Name, SheetId, Visibility);
+            MarkStarted();
         }
 
         internal ValueTask EnsureStartedAsync(CancellationToken ct)
@@ -158,20 +149,31 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             try
             {
-                ZipEntryStream entry = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-                _entry = entry;
-                _stream = _offloadWrite ? new WriteOffloadStream(entry) : entry;
-                _rowBuffer.Reset();
-                _rowBuffer.WriteUtf8(
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">{BuildColsXml()}<sheetData>");
-                await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+                await OpenEntry().WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
             }
             catch
             {
                 await FaultAsync().ConfigureAwait(false);
                 throw;
             }
+            MarkStarted();
+        }
+
+        // Leaves the worksheet header in the row buffer for the caller to write.
+        private Stream OpenEntry()
+        {
+            ZipEntryStream entry = _zip.OpenEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+            _entry = entry;
+            _stream = _offloadWrite ? new WriteOffloadStream(entry) : entry;
+            _rowBuffer.Reset();
+            _rowBuffer.WriteUtf8(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">{BuildColsXml()}<sheetData>");
+            return _stream;
+        }
+
+        private void MarkStarted()
+        {
             _rowBuffer.Reset();
             _state = WriterState.Started;
             _owner.RegisterSheet(Name, SheetId, Visibility);
@@ -183,17 +185,8 @@ namespace ExcelReader.Core.Writer.Xlsx
             {
                 return string.Empty;
             }
-            var columns = new SortedSet<int>();
-            if (_columnStyles is not null)
-            {
-                columns.UnionWith(_columnStyles.Keys);
-            }
-            if (_columnWidths is not null)
-            {
-                columns.UnionWith(_columnWidths.Keys);
-            }
             var sb = new StringBuilder("<cols>");
-            foreach (int columnIndex in columns)
+            foreach (int columnIndex in SheetColumnValidation.Columns(_columnStyles, _columnWidths))
             {
                 int oneBased = columnIndex + 1;
                 sb.Append(CultureInfo.InvariantCulture, $"<col min=\"{oneBased}\" max=\"{oneBased}\"");
@@ -386,12 +379,12 @@ namespace ExcelReader.Core.Writer.Xlsx
             Release(faulted: true);
         }
 
-        internal void Abandon()
+        void IZipSheet.Abandon()
         {
             Fault();
         }
 
-        internal ValueTask AbandonAsync()
+        ValueTask IZipSheet.AbandonAsync()
         {
             return FaultAsync();
         }

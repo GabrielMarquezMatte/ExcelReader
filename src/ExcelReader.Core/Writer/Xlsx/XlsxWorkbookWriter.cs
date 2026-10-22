@@ -10,30 +10,20 @@ namespace ExcelReader.Core.Writer.Xlsx
     /// <summary>
     /// Writes a workbook to the XLSX (Office Open XML) format, streaming each sheet's rows into a ZIP archive as they're written.
     /// </summary>
-    public sealed class XlsxWorkbookWriter : IWorkbookWriter<XlsxSheetWriter>
+    public sealed class XlsxWorkbookWriter : IWorkbookWriter<XlsxSheetWriter>, IZipWorkbookParts
     {
-        private readonly ZipPackageWriter _zip;
-        private readonly Stream _stream;
-        private readonly bool _leaveOpen;
+        private readonly ZipWorkbookPackage _package;
         private readonly CompressionLevel _compression;
         private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
         private readonly StyleTable _styles = new();
         private readonly List<(string Name, int SheetId, ExcelSheetVisibility Visibility)> _sheets = [];
         private readonly List<(int SheetId, IReadOnlyList<WrittenTable> Tables)> _sheetTables = [];
-        private bool _ended;
-        private bool _sheetActive;
-        private XlsxSheetWriter? _activeSheet;
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
-        private bool _faulted;
-        private bool _zipClosed;
-        private bool _disposed;
 
-        private XlsxWorkbookWriter(ZipPackageWriter zip, Stream stream, bool leaveOpen, XlsxWriterOptions options)
+        private XlsxWorkbookWriter(Stream stream, bool leaveOpen, XlsxWriterOptions options)
         {
-            _zip = zip;
-            _stream = stream;
-            _leaveOpen = leaveOpen;
+            _package = new ZipWorkbookPackage(this, "XLSX", stream, leaveOpen, options.Compression);
             UseSharedStrings = options.UseSharedStrings;
             Date1904 = options.Date1904;
             _compression = options.Compression;
@@ -51,8 +41,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         public static XlsxWorkbookWriter Create(Stream stream, bool leaveOpen = false, XlsxWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            ZipPackageWriter zip = new(stream);
-            return new XlsxWorkbookWriter(zip, stream, leaveOpen, options ?? XlsxWriterOptions.Default);
+            return new XlsxWorkbookWriter(stream, leaveOpen, options ?? XlsxWriterOptions.Default);
         }
 
         /// <inheritdoc/>
@@ -74,12 +63,12 @@ namespace ExcelReader.Core.Writer.Xlsx
         public XlsxSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
         {
             WriterStateGuard.RequireCanAddSheet(
-                _ended, this, name, _sheetActive, nameof(XlsxSheetWriter), visibility);
+                _package.Ended, this, name, _package.ActiveSheet is not null, nameof(XlsxSheetWriter), visibility);
             WriterStateGuard.ClaimSheetName(_sheetNames, name);
-            _sheetActive = true;
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, visibility, _compression, _prefetchWrite);
-            return _activeSheet;
+            var sheet = new XlsxSheetWriter(this, _package.Zip, name, sheetId, visibility, _compression, _prefetchWrite);
+            _package.ActiveSheet = sheet;
+            return sheet;
         }
 
         internal void RegisterSheet(string name, int sheetId, ExcelSheetVisibility visibility)
@@ -97,39 +86,9 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
         }
 
-        private void WriteTables()
-        {
-            foreach ((int sheetId, IReadOnlyList<WrittenTable> tables) in _sheetTables)
-            {
-                WriteEntry($"xl/worksheets/_rels/sheet{sheetId}.xml.rels", TablePackage.SheetRelsXml(tables, "xml"));
-                foreach (WrittenTable table in tables)
-                {
-                    WriteEntry($"xl/tables/table{table.Id}.xml", XlsxTableXml.Table(table));
-                }
-            }
-        }
-
-        private async ValueTask WriteTablesAsync(CancellationToken ct)
-        {
-            foreach ((int sheetId, IReadOnlyList<WrittenTable> tables) in _sheetTables)
-            {
-                await WriteEntryAsync($"xl/worksheets/_rels/sheet{sheetId}.xml.rels", TablePackage.SheetRelsXml(tables, "xml"), ct).ConfigureAwait(false);
-                foreach (WrittenTable table in tables)
-                {
-                    await WriteEntryAsync($"xl/tables/table{table.Id}.xml", XlsxTableXml.Table(table), ct).ConfigureAwait(false);
-                }
-            }
-        }
-
         internal void NotifySheetEnded(bool faulted)
         {
-            _sheetActive = false;
-            _activeSheet = null;
-            if (faulted)
-            {
-                _ended = true;
-                _faulted = true;
-            }
+            _package.SheetEnded(faulted);
         }
 
         internal bool UseSharedStrings { get; }
@@ -170,130 +129,67 @@ namespace ExcelReader.Core.Writer.Xlsx
         /// <exception cref="InvalidOperationException">No sheet has been added yet.</exception>
         public void End()
         {
-            ObjectDisposedException.ThrowIf(_ended, this);
-            _ended = true;
-            try
-            {
-                _activeSheet?.Dispose();
-                if (_sheets.Count == 0)
-                {
-                    throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
-                }
-                WriteTables();
-                WriteEntry("_rels/.rels", BuildRootRelsXml());
-                WriteEntry("xl/styles.xml", BuildStylesXml());
-                if (_sharedStrings is not null)
-                {
-                    using var bytes = _sharedStrings.ToXlsxBytes();
-                    WriteEntry("xl/sharedStrings.xml", bytes.Memory.Span);
-                }
-                WriteEntry("xl/workbook.xml", BuildWorkbookXml());
-                WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
-                WriteEntry("[Content_Types].xml", BuildContentTypesXml());
-                CloseZip();
-            }
-            catch
-            {
-                AbandonZip();
-                throw;
-            }
+            _package.End();
         }
 
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
         /// <exception cref="InvalidOperationException">No sheet has been added yet.</exception>
-        public async ValueTask EndAsync(CancellationToken ct = default)
+        public ValueTask EndAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_ended, this);
-            ct.ThrowIfCancellationRequested();
-            _ended = true;
-            try
+            return _package.EndAsync(ct);
+        }
+
+        int IZipWorkbookParts.SheetCount
+        {
+            get
             {
-                if (_activeSheet is not null)
+                return _sheets.Count;
+            }
+        }
+
+        void IZipWorkbookParts.WriteParts()
+        {
+            foreach ((int sheetId, IReadOnlyList<WrittenTable> tables) in _sheetTables)
+            {
+                _package.WriteEntry($"xl/worksheets/_rels/sheet{sheetId}.xml.rels", TablePackage.SheetRelsXml(tables, "xml"));
+                foreach (WrittenTable table in tables)
                 {
-                    await _activeSheet.DisposeAsync().ConfigureAwait(false);
+                    _package.WriteEntry($"xl/tables/table{table.Id}.xml", XlsxTableXml.Table(table));
                 }
-                if (_sheets.Count == 0)
+            }
+            _package.WriteEntry("_rels/.rels", BuildRootRelsXml());
+            _package.WriteEntry("xl/styles.xml", BuildStylesXml());
+            if (_sharedStrings is not null)
+            {
+                using var bytes = _sharedStrings.ToXlsxBytes();
+                _package.WriteEntry("xl/sharedStrings.xml", bytes.Memory.Span);
+            }
+            _package.WriteEntry("xl/workbook.xml", BuildWorkbookXml());
+            _package.WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
+            _package.WriteEntry("[Content_Types].xml", BuildContentTypesXml());
+        }
+
+        async ValueTask IZipWorkbookParts.WritePartsAsync(CancellationToken ct)
+        {
+            foreach ((int sheetId, IReadOnlyList<WrittenTable> tables) in _sheetTables)
+            {
+                await _package.WriteEntryAsync($"xl/worksheets/_rels/sheet{sheetId}.xml.rels", TablePackage.SheetRelsXml(tables, "xml"), ct).ConfigureAwait(false);
+                foreach (WrittenTable table in tables)
                 {
-                    throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+                    await _package.WriteEntryAsync($"xl/tables/table{table.Id}.xml", XlsxTableXml.Table(table), ct).ConfigureAwait(false);
                 }
-                await WriteTablesAsync(ct).ConfigureAwait(false);
-                await WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
-                await WriteStylesAsync(ct).ConfigureAwait(false);
-                if (_sharedStrings is not null)
-                {
-                    await WriteSharedStringsAsync(ct).ConfigureAwait(false);
-                }
-                await WriteWorkbookAsync(ct).ConfigureAwait(false);
-                await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
-                await WriteContentTypesAsync(ct).ConfigureAwait(false);
-                await CloseZipAsync(ct).ConfigureAwait(false);
             }
-            catch
+            await _package.WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("xl/styles.xml", BuildStylesXml(), ct).ConfigureAwait(false);
+            if (_sharedStrings is not null)
             {
-                await AbandonZipAsync().ConfigureAwait(false);
-                throw;
+                using var bytes = _sharedStrings.ToXlsxBytes();
+                await _package.WriteEntryAsync("xl/sharedStrings.xml", bytes.Memory, ct).ConfigureAwait(false);
             }
-        }
-
-        private void CloseZip()
-        {
-            _zipClosed = true;
-            _zip.Finish();
-        }
-
-        private ValueTask CloseZipAsync(CancellationToken ct = default)
-        {
-            _zipClosed = true;
-            return _zip.FinishAsync(ct);
-        }
-
-        private void AbandonZip()
-        {
-            _faulted = true;
-            _activeSheet?.Abandon();
-            if (!_zipClosed)
-            {
-                _zipClosed = true;
-                _zip.Abandon();
-            }
-        }
-
-        private async ValueTask AbandonZipAsync()
-        {
-            _faulted = true;
-            if (_activeSheet is not null)
-            {
-                await _activeSheet.AbandonAsync().ConfigureAwait(false);
-            }
-            if (!_zipClosed)
-            {
-                _zipClosed = true;
-                await _zip.AbandonAsync().ConfigureAwait(false);
-            }
-        }
-
-        private void ReleaseStream()
-        {
-            if (_leaveOpen)
-            {
-                return;
-            }
-            if (_faulted)
-            {
-                FailureCleanup.Dispose(_stream);
-                return;
-            }
-            _stream.Dispose();
-        }
-
-        private ValueTask ReleaseStreamAsync()
-        {
-            if (_leaveOpen)
-            {
-                return ValueTask.CompletedTask;
-            }
-            return _faulted ? FailureCleanup.DisposeAsync(_stream) : _stream.DisposeAsync();
+            await _package.WriteEntryAsync("xl/workbook.xml", BuildWorkbookXml(), ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml(), ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("[Content_Types].xml", BuildContentTypesXml(), ct).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -302,13 +198,13 @@ namespace ExcelReader.Core.Writer.Xlsx
         /// </summary>
         public void Flush()
         {
-            _stream.Flush();
+            _package.Flush();
         }
 
         /// <inheritdoc/>
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
-            return ZipEntryWriter.FlushAsync(_stream, ct);
+            return _package.FlushAsync(ct);
         }
 
         /// <summary>
@@ -317,73 +213,13 @@ namespace ExcelReader.Core.Writer.Xlsx
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-            {
-                return;
-            }
-            _disposed = true;
-            try
-            {
-                if (!_ended)
-                {
-                    if (_sheets.Count == 0 && _activeSheet is null)
-                    {
-                        _ended = true;
-                        CloseZip();
-                    }
-                    else
-                    {
-                        End();
-                    }
-                }
-                else if (!_zipClosed)
-                {
-                    AbandonZip();
-                }
-            }
-            catch
-            {
-                _faulted = true;
-                ReleaseStream();
-                throw;
-            }
-            ReleaseStream();
+            _package.Dispose();
         }
 
         /// <inheritdoc/>
-        public async ValueTask DisposeAsync()
+        public ValueTask DisposeAsync()
         {
-            if (_disposed)
-            {
-                return;
-            }
-            _disposed = true;
-            try
-            {
-                if (!_ended)
-                {
-                    if (_sheets.Count == 0 && _activeSheet is null)
-                    {
-                        _ended = true;
-                        await CloseZipAsync().ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await EndAsync().ConfigureAwait(false);
-                    }
-                }
-                else if (!_zipClosed)
-                {
-                    await AbandonZipAsync().ConfigureAwait(false);
-                }
-            }
-            catch
-            {
-                _faulted = true;
-                await ReleaseStreamAsync().ConfigureAwait(false);
-                throw;
-            }
-            await ReleaseStreamAsync().ConfigureAwait(false);
+            return _package.DisposeAsync();
         }
 
         private static string BuildRootRelsXml()
@@ -392,11 +228,6 @@ namespace ExcelReader.Core.Writer.Xlsx
                 $"<Relationships xmlns=\"{XlsxConstants.PackageRelationshipsNs}\">" +
                 $"<Relationship Id=\"rId1\" Type=\"{XlsxConstants.WorkbookRelType}\" Target=\"xl/workbook.xml\"/>" +
                 "</Relationships>";
-        }
-
-        private ValueTask WriteStylesAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("xl/styles.xml", BuildStylesXml(), ct);
         }
 
         private string BuildStylesXml()
@@ -483,12 +314,6 @@ namespace ExcelReader.Core.Writer.Xlsx
             sb.Append("</cellXfs>");
         }
 
-        private async ValueTask WriteSharedStringsAsync(CancellationToken ct)
-        {
-            using var bytes = _sharedStrings!.ToXlsxBytes();
-            await WriteEntryAsync("xl/sharedStrings.xml", bytes.Memory, ct).ConfigureAwait(false);
-        }
-
         private static string StateAttribute(ExcelSheetVisibility visibility)
         {
             return visibility switch
@@ -521,11 +346,6 @@ namespace ExcelReader.Core.Writer.Xlsx
             return sb.ToString();
         }
 
-        private ValueTask WriteWorkbookAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("xl/workbook.xml", BuildWorkbookXml(), ct);
-        }
-
         private string BuildWorkbookRelsXml()
         {
             StringBuilder sb = new();
@@ -542,11 +362,6 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
             sb.Append("</Relationships>");
             return sb.ToString();
-        }
-
-        private ValueTask WriteWorkbookRelsAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml(), ct);
         }
 
         private string BuildContentTypesXml()
@@ -575,31 +390,6 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
             sb.Append("</Types>");
             return sb.ToString();
-        }
-
-        private ValueTask WriteContentTypesAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("[Content_Types].xml", BuildContentTypesXml(), ct);
-        }
-
-        private ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
-        {
-            return ZipEntryWriter.WriteTextAsync(_zip, entryName, content, _compression, ct);
-        }
-
-        private ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)
-        {
-            return ZipEntryWriter.WriteBytesAsync(_zip, entryName, content, _compression, ct);
-        }
-
-        private void WriteEntry(string entryName, string content)
-        {
-            ZipEntryWriter.WriteText(_zip, entryName, content, _compression);
-        }
-
-        private void WriteEntry(string entryName, ReadOnlySpan<byte> content)
-        {
-            ZipEntryWriter.WriteBytes(_zip, entryName, content, _compression);
         }
 
         private static string EscapeAttribute(string value)
