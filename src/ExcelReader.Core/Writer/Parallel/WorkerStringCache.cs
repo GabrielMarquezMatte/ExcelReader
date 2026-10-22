@@ -40,7 +40,15 @@ namespace ExcelReader.Core.Writer.Parallel
                 _localHits++;
                 return index;
             }
-            return Resolve(value.ToString());
+            lock (_gate)
+            {
+                index = _table.GetOrAdd(value);
+            }
+            if (_indexes.Count < MaxEntries)
+            {
+                _spanIndexes.TryAdd(value, index);
+            }
+            return index;
         }
 
         // The table counts every reference; ones answered locally are reported in bulk.
@@ -57,7 +65,7 @@ namespace ExcelReader.Core.Writer.Parallel
             _localHits = 0;
         }
 
-        private int Resolve(string value)
+        private int Resolve(ReadOnlySpan<char> value)
         {
             int index;
             lock (_gate)
@@ -66,7 +74,7 @@ namespace ExcelReader.Core.Writer.Parallel
             }
             if (_indexes.Count < MaxEntries)
             {
-                _indexes.Add(value, index);
+                _spanIndexes.TryAdd(value, index);
             }
             return index;
         }
