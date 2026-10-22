@@ -1,3 +1,4 @@
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer.Zip;
 
 namespace ExcelReader.Core.Reader.Zip
@@ -37,7 +38,7 @@ namespace ExcelReader.Core.Reader.Zip
         internal long Remaining => _limit <= 0 ? long.MaxValue : _limit - Interlocked.Read(ref _total);
     }
 
-    internal sealed class LimitedReadStream : Stream
+    internal sealed class LimitedReadStream : ReadOnlyStream
     {
         internal const string ChecksumMismatch = "The ZIP entry's data does not match its CRC-32.";
 
@@ -68,15 +69,6 @@ namespace ExcelReader.Core.Reader.Zip
         }
 
         public override bool CanRead => _inner.CanRead;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
 
         public override void Flush()
         {
@@ -101,21 +93,6 @@ namespace ExcelReader.Core.Reader.Zip
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
         }
 
         protected override void Dispose(bool disposing)

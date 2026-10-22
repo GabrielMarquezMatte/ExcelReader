@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Reader.Sources
 {
@@ -7,17 +8,13 @@ namespace ExcelReader.Core.Reader.Sources
     /// source back out, so the paths that open a workbook from a stream read the source positionally.
     /// </summary>
     [SuppressMessage("Usage", "CA2213", Justification = "The source is disposed through Interlocked.Exchange so a taken source is not.")]
-    internal sealed class SourceStream(ByteSource source) : Stream
+    internal sealed class SourceStream(ByteSource source) : ReadOnlyStream
     {
         private readonly ByteSource _source = source;
         private ByteSource? _owned = source;
         private long _position;
 
-        public override bool CanRead => true;
-
         public override bool CanSeek => true;
-
-        public override bool CanWrite => false;
 
         public override long Length => _source.Length;
 
@@ -71,20 +68,6 @@ namespace ExcelReader.Core.Reader.Sources
                 _ => throw new ArgumentOutOfRangeException(nameof(origin)),
             };
             return _position;
-        }
-
-        public override void Flush()
-        {
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
         }
 
         protected override void Dispose(bool disposing)

@@ -1,3 +1,5 @@
+using ExcelReader.Core.Reader.Internal;
+
 namespace ExcelReader.Core.Reader.Csv
 {
     /// <summary>
@@ -5,25 +7,11 @@ namespace ExcelReader.Core.Reader.Csv
     /// as everything read so far still fits in <c>limit</c> bytes. Disposing ends a pass;
     /// <see cref="Release"/> closes the stream underneath.
     /// </summary>
-    internal sealed class ReplayStream(Stream inner, bool leaveOpen, int limit) : Stream
+    internal sealed class ReplayStream(Stream inner, bool leaveOpen, int limit) : ReadOnlyStream
     {
         private MemoryStream? _recorded = new();
         private int _position;
         private int _busy;
-
-        public override bool CanRead => true;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => false;
-
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
 
         internal bool TryBeginPass()
         {
@@ -107,25 +95,6 @@ namespace ExcelReader.Core.Reader.Csv
             }
             recorded.Write(data);
             _position += data.Length;
-        }
-
-        public override void Flush()
-        {
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
         }
 
         protected override void Dispose(bool disposing)

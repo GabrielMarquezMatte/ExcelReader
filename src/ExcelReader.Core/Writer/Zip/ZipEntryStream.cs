@@ -9,7 +9,7 @@ namespace ExcelReader.Core.Writer.Zip
     /// what it is given; closing it completes the local header in place, by seeking back, or with a
     /// data descriptor.
     /// </summary>
-    internal sealed class ZipEntryStream : Stream
+    internal sealed class ZipEntryStream : WriteOnlyStream
     {
         private const int FlushThreshold = 64 * 1024;
         private const int MaxWriteSlice = 1 << 20;
@@ -63,47 +63,11 @@ namespace ExcelReader.Core.Writer.Zip
             PatchZip64,
         }
 
-        public override bool CanRead
-        {
-            get
-            {
-                return false;
-            }
-        }
-
-        public override bool CanSeek
-        {
-            get
-            {
-                return false;
-            }
-        }
-
         public override bool CanWrite
         {
             get
             {
                 return !_closed;
-            }
-        }
-
-        public override long Length
-        {
-            get
-            {
-                throw new NotSupportedException();
-            }
-        }
-
-        public override long Position
-        {
-            get
-            {
-                throw new NotSupportedException();
-            }
-            set
-            {
-                throw new NotSupportedException();
             }
         }
 
@@ -139,21 +103,6 @@ namespace ExcelReader.Core.Writer.Zip
                 Fail();
                 throw;
             }
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
         }
 
         public override void Write(byte[] buffer, int offset, int count)
