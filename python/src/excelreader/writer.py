@@ -78,6 +78,11 @@ def _copy(view: memoryview) -> Any:
     return (ctypes.c_char * len(blob)).from_buffer_copy(blob)
 
 
+def _byte_pointer(buffer: Any) -> Any:
+    # ctypes.cast(buffer, ...) puts buffer in a reference cycle, so the copy would outlive `keepalive` until a gc pass.
+    return ctypes.cast(ctypes.addressof(buffer), ctypes.POINTER(ctypes.c_uint8))
+
+
 def _native_column(column: Any, column_type: ColumnType, validity: bytes | None, row_count: int, keepalive: list[Any]) -> _native.NativeColumn:
     if isinstance(column, StringColumn):
         offsets = _copy(_checked_view(column.offsets, _SIGNED_FORMATS, 4, row_count + 1, "a STRING column's offsets"))
@@ -88,9 +93,9 @@ def _native_column(column: Any, column_type: ColumnType, validity: bytes | None,
         return _native.NativeColumn(
             type=int(ColumnType.STRING),
             length=row_count,
-            values=ctypes.cast(offsets, ctypes.c_void_p),
+            values=ctypes.addressof(offsets),
             validity=_validity_pointer(validity, row_count, keepalive),
-            data=ctypes.cast(data, ctypes.POINTER(ctypes.c_uint8)) if data_len else None,
+            data=_byte_pointer(data) if data_len else None,
             data_len=data_len,
         )
 
@@ -102,7 +107,7 @@ def _native_column(column: Any, column_type: ColumnType, validity: bytes | None,
     return _native.NativeColumn(
         type=int(column_type),
         length=row_count,
-        values=ctypes.cast(values, ctypes.c_void_p),
+        values=ctypes.addressof(values),
         validity=_validity_pointer(validity, row_count, keepalive),
         data=None,
         data_len=0,
@@ -118,7 +123,7 @@ def _validity_pointer(validity: bytes | None, row_count: int, keepalive: list[An
         )
     buffer = (ctypes.c_uint8 * len(validity)).from_buffer_copy(validity)
     keepalive.append(buffer)
-    return ctypes.cast(buffer, ctypes.POINTER(ctypes.c_uint8))
+    return _byte_pointer(buffer)
 
 
 def _marshal(
