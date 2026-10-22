@@ -113,6 +113,25 @@ int main()
             check(decoded.has_value() && decoded->size() == 3, "read_all reads the whole named sheet");
             auto schema = workbook->sheet(1).infer_schema(0, 10);
             check(schema.has_value() && schema->size() == 1, "infer_schema samples the named sheet");
+
+            const xl::Sheet beyond = workbook->sheet(2);
+            check(!beyond.name().has_value(), "a sheet past the end has no name");
+            check(!beyond.visibility().has_value(), "a sheet past the end has no visibility");
+            check(!beyond.read_all().has_value(), "read_all fails on a sheet past the end");
+            check(!beyond.infer_schema().has_value(), "infer_schema fails on a sheet past the end");
+        }
+    }
+
+    {
+        auto workbook = xl::Workbook::open(two);
+        check(workbook.has_value(), "open for the moved-from workbook");
+        if (workbook.has_value())
+        {
+            xl::Workbook moved = std::move(*workbook);
+            check(!workbook->sheets().has_value(), "a moved-from workbook lists no sheets");
+            check(!workbook->sheet_by_name("sheet0").has_value(), "a moved-from workbook finds no sheet by name");
+            check(!workbook->is_date1904().has_value(), "a moved-from workbook has no date system");
+            check(moved.is_date1904().has_value(), "the moved-to workbook still answers");
         }
     }
 

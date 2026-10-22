@@ -8,6 +8,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <string>
 
 namespace
@@ -61,6 +62,8 @@ int main()
     check(xl::CellView{0, xl::CellType::Number, {}, 0.0125}.text() == "0.0125", "a fraction places its point");
     check(xl::CellView{0, xl::CellType::Number, {}, -2.5}.text() == "-2.5", "a negative keeps its sign");
     check(xl::CellView{0, xl::CellType::Number, {}, 0.0}.text() == "0", "zero is 0");
+    check(xl::CellView{0, xl::CellType::Number, {}, std::numeric_limits<double>::infinity()}.text() == "inf",
+          "infinity has no exponent to place");
     round_trips(0.1);
     round_trips(1.0 / 3.0);
     round_trips(1e21);
