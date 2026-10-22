@@ -201,12 +201,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Two steps: dotnet-quality applies to every version a step installs, and global.json needs a GA SDK.
+      - name: Setup .NET 11 (preview)
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-          dotnet-version: 11.0.x
-          dotnet-quality: preview
           cache: true
           cache-dependency-path: '**/*.csproj'
 
