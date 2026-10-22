@@ -83,6 +83,26 @@ namespace xl
         return result;
     }
 
+    /// @brief to_arrow over a schema chosen at run time, such as one Sheet::infer_schema returned.
+    /// @param sheet The sheet to read.
+    /// @param columns One per output column: matched by `name` when it has one, else by `index`.
+    /// Must not be empty.
+    /// @param options Header row and parallelism.
+    inline std::expected<ArrowTable, Error> to_arrow(Sheet sheet, std::span<const InferredColumn> columns,
+                                                     const ReadOptions &options = {})
+    {
+        ArrowTable result;
+        const int32_t status = detail::with_specs(
+            sheet, columns, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
+            { return xl_parse_arrow(handle, index, specs, count, options.header_row, options.parallelism,
+                                    &result.array, &result.schema); });
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return result;
+    }
+
     /// @brief parse_batches's Arrow counterpart: record batches pulled one at a time.
     ///
     /// Use from one thread at a time.
@@ -192,6 +212,29 @@ namespace xl
         ArrowArrayStream stream{};
         const int32_t status = detail::with_specs<T>(
             sheet, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
+            { return xl_parse_arrow_stream(handle, index, specs, count, options.header_row, options.batch_size, &stream); });
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return detail::Access::make<ArrowStream>(stream);
+    }
+
+    /// @brief to_arrow_stream over a schema chosen at run time, as for the to_arrow overload.
+    /// @param sheet The sheet to read.
+    /// @param columns One per output column: matched by `name` when it has one, else by `index`.
+    /// Must not be empty.
+    /// @param options Header row and batch size.
+    inline std::expected<ArrowStream, Error> to_arrow_stream(Sheet sheet, std::span<const InferredColumn> columns,
+                                                             const ReadOptions &options = {})
+    {
+        if (std::optional<Error> problem = detail::check_batch_size(options.batch_size))
+        {
+            return std::unexpected(std::move(*problem));
+        }
+        ArrowArrayStream stream{};
+        const int32_t status = detail::with_specs(
+            sheet, columns, [&](xl_workbook *handle, int32_t index, const xl_column_spec *specs, int32_t count)
             { return xl_parse_arrow_stream(handle, index, specs, count, options.header_row, options.batch_size, &stream); });
         if (status != XL_OK)
         {

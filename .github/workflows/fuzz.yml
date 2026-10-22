@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [xlsx, xlsx-memory, xlsx-differential, xlsx-pipeline, xlsb, xlsb-memory, xlsb-differential, xlsb-pipeline, xls, encrypted, csv, csv-sniff, csv-parallel, inflate]
+        target: [xlsx, xlsx-memory, xlsx-differential, xlsx-pipeline, xlsb, xlsb-memory, xlsb-differential, xlsb-pipeline, xls, encrypted, csv, csv-sniff, csv-parallel, inflate, deflate, deflate-segments]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -111,11 +111,12 @@ jobs:
             encrypted) dict=encrypted ;;
             csv*)      dict=csv ;;
             inflate)   dict=inflate ;;
+            deflate*)  dict= ;;
           esac
           ./libfuzzer-dotnet \
             --target_path=fuzz-out/ExcelReader.Fuzz \
             corpus/${{ matrix.target }} \
-            -dict="tests/ExcelReader.Fuzz/dictionaries/$dict.dict" \
+            ${dict:+-dict="tests/ExcelReader.Fuzz/dictionaries/$dict.dict"} \
             -max_total_time=${{ github.event.inputs.seconds || '600' }} \
             -max_len=131072 \
             -timeout=25 \

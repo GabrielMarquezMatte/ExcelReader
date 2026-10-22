@@ -83,6 +83,39 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public void XlsxSheetWithUnresolvedRelationshipThrows()
+        {
+            var ms = new MemoryStream();
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                WriteEntry(zip, "xl/worksheets/sheet1.xml",
+                    $"""<worksheet xmlns="{Main}"><sheetData/></worksheet>""");
+                WriteEntry(zip, "xl/workbook.xml",
+                    $"""<workbook xmlns="{Main}" xmlns:r="{Rel}"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/><sheet name="Lost" sheetId="2" r:id="rId2"/></sheets></workbook>""");
+                WriteEntry(zip, "xl/_rels/workbook.xml.rels",
+                    $"""<Relationships xmlns="{PkgRel}"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>""");
+            }
+            ms.Position = 0;
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(ms));
+            Assert.Contains("Lost", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void XlsbSheetWithUnresolvedRelationshipThrows()
+        {
+            byte[] workbookBin =
+            [
+                .. B.Record(Brt.BundleSh, [.. B.U32(0), .. B.U32(0), .. B.WideString("rId1"), .. B.WideString("Data")]),
+                .. B.Record(Brt.BundleSh, [.. B.U32(0), .. B.U32(0), .. B.WideString("rId2"), .. B.WideString("Lost")]),
+            ];
+            byte[] rels = Encoding.UTF8.GetBytes("""<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.bin"/></Relationships>""");
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(() => XlsbWorkbookParts.ParseSheets(workbookBin, rels));
+            Assert.Contains("Lost", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void SingleQuotedStyleAttributesDetectDate()
         {
             using MemoryStream ms = WorkbookBuilder.Build(

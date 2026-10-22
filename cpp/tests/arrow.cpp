@@ -93,6 +93,20 @@ int main()
 
         auto second = xl::to_arrow_stream<Record>(stream_workbook->sheet(0), {.batch_size = 8});
         CHECK(second.has_value(), "a second stream on one workbook opens");
+
+        xl::ArrowStream moved = std::move(*second);
+        CHECK(!second->schema().has_value(), "a moved-from stream has no schema");
+        CHECK(!second->next().has_value(), "a moved-from stream reads nothing");
+        CHECK(moved.schema().has_value(), "the moved-to stream still reports its schema");
+
+        const xl::InferredColumn columns[] = {{"Coluna3", 0, XL_T_I64, false}};
+        CHECK(!xl::to_arrow_stream<Record>(stream_workbook->sheet(99)).has_value(),
+              "a stream over a sheet past the end fails to open");
+        CHECK(!xl::to_arrow_stream(stream_workbook->sheet(99), columns).has_value(),
+              "a runtime-schema stream over a sheet past the end fails to open");
+        auto zero_batch = xl::to_arrow_stream(stream_workbook->sheet(0), columns, {.batch_size = 0});
+        CHECK(!zero_batch.has_value() && zero_batch.error().code == XL_INVALID_ARGUMENT,
+              "a runtime-schema stream rejects a batch size below 1");
     }
 
     {
@@ -197,6 +211,43 @@ int main()
         CHECK(stream.has_value(), "the Arrow stream opens first");
         auto reader = xl::parse_batches<Record>(wb->sheet(0), {.batch_size = 8});
         CHECK(reader.has_value(), "a typed reader opens while an Arrow stream is live");
+    }
+
+    {
+        auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, options);
+        CHECK(wb.has_value(), "opening a workbook for the inferred-schema test must succeed");
+        auto schema = wb->sheet(0).infer_schema();
+        CHECK(schema.has_value() && !schema->empty(), "infer_schema must find columns");
+
+        auto inferred = xl::to_arrow(wb->sheet(0), *schema);
+        CHECK(inferred.has_value(), "to_arrow over an inferred schema must succeed");
+        CHECK(inferred->schema.n_children == static_cast<int64_t>(schema->size()), "one Arrow column per inferred column");
+        CHECK(inferred->array.length == 100, "the inferred read holds every data row");
+        CHECK(std::strcmp(inferred->schema.children[0]->name, "Coluna1") == 0, "columns keep their header names");
+
+        auto by_index = wb->sheet(0).infer_schema(0);
+        CHECK(by_index.has_value() && !(*by_index)[0].name.has_value(), "a schema without a header has no names");
+        auto unnamed = xl::to_arrow(wb->sheet(0), *by_index, {.header_row = 0});
+        CHECK(unnamed.has_value(), "to_arrow resolves unnamed columns by index");
+        CHECK(unnamed->array.length == 101, "with no header the header row is data");
+
+        auto empty = xl::to_arrow(wb->sheet(0), std::span<const xl::InferredColumn>{});
+        CHECK(!empty.has_value() && empty.error().code == XL_INVALID_ARGUMENT, "an empty schema is rejected");
+
+        auto stream = xl::to_arrow_stream(wb->sheet(0), *schema, {.batch_size = 8});
+        CHECK(stream.has_value(), "to_arrow_stream over an inferred schema must open");
+        int64_t rows = 0;
+        while (true)
+        {
+            auto batch = stream->next();
+            CHECK(batch.has_value(), "an inferred-schema batch must read without error");
+            if (!batch->has_value())
+            {
+                break;
+            }
+            rows += (*batch)->array.length;
+        }
+        CHECK(rows == 100, "the inferred stream delivers every data row");
     }
 
     std::printf("OK: C++ arrow test passed\n");

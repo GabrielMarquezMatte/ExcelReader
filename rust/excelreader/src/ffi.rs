@@ -148,8 +148,8 @@ pub struct XlColumnSpec {
     pub nullable: i32,
 }
 
-/// One column of a native table. Reachable from `__private` because the derive's generated
-/// bindings read it through the `column_*` accessors.
+/// One column of a native table. Crate-private: the derive's generated bindings only ever see it
+/// wrapped in a `ColumnRef`, which nothing outside this crate can construct.
 #[repr(C)]
 pub struct XlColumn {
     pub r#type: i32,

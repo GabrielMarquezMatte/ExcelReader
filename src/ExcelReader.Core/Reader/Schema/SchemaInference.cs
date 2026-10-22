@@ -159,7 +159,9 @@ namespace ExcelReader.Core.Reader.Schema
                         SawNonBinaryNumber |= !IsBinaryDigit(cell.Value);
                         break;
                     case CellType.Date:
-                        SawDate = true;
+                        bool hasTime = cell.TryGetDateTime(isDate1904, out DateTime date) && date.TimeOfDay != TimeSpan.Zero;
+                        SawTimestamp |= hasTime;
+                        SawDate |= !hasTime;
                         break;
                     case CellType.Boolean:
                         SawBool = true;

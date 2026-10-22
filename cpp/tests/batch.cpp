@@ -189,6 +189,194 @@ namespace
         auto after = reader->next();
         check(after.has_value() && after->has_value(), "the reader keeps reading after a whole-sheet read");
     }
+
+    const xl::ColumnRef *find_column(const xl::Table &table, std::string_view name)
+    {
+        for (const xl::ColumnRef &column : table.columns())
+        {
+            if (column.name == name)
+            {
+                return &column;
+            }
+        }
+        return nullptr;
+    }
+
+    void test_runtime_schema_matches_the_typed_parse(const std::vector<OwnedRow> &expected)
+    {
+        auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
+        check(workbook.has_value(), "open the fixture for the runtime-schema parse");
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        auto schema = workbook->sheet(0).infer_schema();
+        check(schema.has_value() && !schema->empty(), "infer_schema finds columns");
+        if (!schema.has_value())
+        {
+            return;
+        }
+
+        auto table = xl::parse(workbook->sheet(0), *schema);
+        check(table.has_value(), "parse over an inferred schema succeeds");
+        if (!table.has_value())
+        {
+            return;
+        }
+        check(table->size() == static_cast<int64_t>(expected.size()), "the runtime-schema parse reads every row");
+        check(table->columns().size() == schema->size(), "one column per inferred column");
+
+        const xl::ColumnRef *coluna1 = find_column(*table, "Coluna1");
+        const xl::ColumnRef *coluna3 = find_column(*table, "Coluna3");
+        check(coluna1 != nullptr && coluna1->type == XL_T_STRING, "Coluna1 is a string column");
+        check(coluna3 != nullptr && coluna3->type == XL_T_I64, "Coluna3 is an i64 column");
+        if (coluna1 == nullptr || coluna3 == nullptr || coluna1->type != XL_T_STRING || coluna3->type != XL_T_I64)
+        {
+            return;
+        }
+        const auto *offsets = static_cast<const int32_t *>(coluna1->values);
+        const auto *text = reinterpret_cast<const char *>(coluna1->data);
+        const auto *numbers = static_cast<const int64_t *>(coluna3->values);
+        bool same = true;
+        for (size_t row = 0; row < expected.size(); ++row)
+        {
+            const std::string_view cell(text + offsets[row], static_cast<size_t>(offsets[row + 1] - offsets[row]));
+            same = same && cell == expected[row].first && numbers[row] == expected[row].second;
+        }
+        check(same, "the runtime-schema parse matches the typed parse cell for cell");
+
+        std::vector<uint8_t> bytes;
+        check(xl::write_columns(bytes, table->columns(), {.format = XL_FORMAT_XLSX}).has_value(),
+              "a runtime-schema table writes back as it was read");
+        auto reopened = xl::Workbook::open(bytes);
+        check(reopened.has_value(), "the written workbook opens");
+        if (!reopened.has_value())
+        {
+            return;
+        }
+        auto again = xl::parse(reopened->sheet(0), *schema);
+        check(again.has_value() && again->size() == table->size(), "the written workbook parses with the same schema");
+
+        auto by_index = workbook->sheet(0).infer_schema(0);
+        check(by_index.has_value() && !(*by_index)[0].name.has_value(), "a schema without a header has no names");
+        if (by_index.has_value())
+        {
+            auto unnamed = xl::parse(workbook->sheet(0), *by_index, {.header_row = 0});
+            check(unnamed.has_value() && unnamed->size() == static_cast<int64_t>(expected.size()) + 1,
+                  "unnamed columns resolve by index, and with no header the header row is data");
+        }
+
+        auto empty = xl::parse(workbook->sheet(0), std::span<const xl::InferredColumn>{});
+        check(!empty.has_value() && empty.error().code == XL_INVALID_ARGUMENT, "an empty schema is rejected");
+
+        xl::Table moved = std::move(*table);
+        check(find_column(moved, "Coluna3") != nullptr, "a moved table keeps its column names");
+
+        auto replacement = xl::parse(workbook->sheet(0), *schema);
+        check(replacement.has_value(), "parse a second table to move-assign");
+        if (replacement.has_value())
+        {
+            moved = std::move(*replacement);
+            check(moved.size() == static_cast<int64_t>(expected.size()) && find_column(moved, "Coluna1") != nullptr,
+                  "a move-assigned table holds the other table's rows and names");
+        }
+    }
+
+    void test_move_assigned_view_holds_the_other_rows(const std::vector<OwnedRow> &expected)
+    {
+        auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
+        check(workbook.has_value(), "open the fixture for the move-assigned view");
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        auto whole = xl::parse<Row>(workbook->sheet(0));
+        auto reader = xl::parse_batches<Row>(workbook->sheet(0), {.batch_size = 8});
+        check(whole.has_value() && reader.has_value(), "parse a view and open a reader to move-assign from");
+        if (!whole.has_value() || !reader.has_value())
+        {
+            return;
+        }
+        auto batch = reader->next();
+        check(batch.has_value() && batch->has_value(), "read a batch to move-assign over the whole view");
+        if (!batch.has_value() || !batch->has_value())
+        {
+            return;
+        }
+        *whole = std::move(**batch);
+        check(whole->size() == 8 && std::string((*whole)[0].Coluna1) == expected[0].first,
+              "a move-assigned view holds the batch's rows");
+    }
+
+    void test_a_sheet_past_the_end_fails_every_read()
+    {
+        auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
+        check(workbook.has_value(), "open the fixture for the past-the-end sheet");
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        const xl::Sheet missing = workbook->sheet(99);
+        const xl::InferredColumn schema[] = {{"Coluna3", 0, XL_T_I64, false}};
+        check(!xl::parse<Row>(missing).has_value(), "parse fails on a sheet past the end");
+        check(!xl::parse_batches<Row>(missing).has_value(), "parse_batches fails on a sheet past the end");
+        check(!xl::parse_batches(missing, schema).has_value(), "a runtime-schema parse_batches fails on a sheet past the end");
+    }
+
+    void test_runtime_schema_batches_equal_whole_sheet(const std::vector<OwnedRow> &expected)
+    {
+        auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);
+        check(workbook.has_value(), "open the fixture for the runtime-schema batched read");
+        if (!workbook.has_value())
+        {
+            return;
+        }
+        auto schema = workbook->sheet(0).infer_schema();
+        check(schema.has_value(), "infer_schema succeeds for the batched read");
+        if (!schema.has_value())
+        {
+            return;
+        }
+
+        auto reader = xl::parse_batches(workbook->sheet(0), *schema, {.batch_size = 8});
+        check(reader.has_value(), "parse_batches over an inferred schema opens");
+        if (!reader.has_value())
+        {
+            return;
+        }
+        schema->clear();
+
+        std::vector<int64_t> coluna3;
+        int batches = 0;
+        for (auto &batch : *reader)
+        {
+            check(batch.has_value(), "a runtime-schema batch reads without error");
+            if (!batch.has_value())
+            {
+                return;
+            }
+            ++batches;
+            check(batch->size() <= 8, "no batch exceeds the requested batch size");
+            const xl::ColumnRef *column = find_column(*batch, "Coluna3");
+            check(column != nullptr && column->type == XL_T_I64, "every batch keeps the schema's names and types");
+            if (column == nullptr || column->type != XL_T_I64)
+            {
+                return;
+            }
+            const auto *values = static_cast<const int64_t *>(column->values);
+            coluna3.insert(coluna3.end(), values, values + column->length);
+        }
+        check(batches == 13, "100 rows at batch size 8 is 13 batches");
+        bool same = coluna3.size() == expected.size();
+        for (size_t row = 0; same && row < expected.size(); ++row)
+        {
+            same = coluna3[row] == expected[row].second;
+        }
+        check(same, "the batches concatenate to the whole-sheet read");
+
+        auto rejected = xl::parse_batches(workbook->sheet(0), *schema, {.batch_size = 0});
+        check(!rejected.has_value() && rejected.error().code == XL_INVALID_ARGUMENT, "a batch size below 1 is rejected");
+    }
 }
 
 int main()
@@ -200,6 +388,10 @@ int main()
     test_second_reader_is_allowed();
     test_non_positive_batch_size_is_rejected();
     test_foreign_read_leaves_the_reader_alone();
+    test_runtime_schema_matches_the_typed_parse(expected);
+    test_runtime_schema_batches_equal_whole_sheet(expected);
+    test_move_assigned_view_holds_the_other_rows(expected);
+    test_a_sheet_past_the_end_fails_every_read();
 
     if (failures != 0)
     {

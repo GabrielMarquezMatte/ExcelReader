@@ -26,8 +26,8 @@ pub use rows::{AllRows, CellIter, CellRef, CellType, RowCursor, RowRef};
 pub use source::Source;
 pub use temporal::{Date, Time, Timestamp};
 pub use workbook::{
-    ColumnType, ExcelMapper, InferredColumn, Sheet, SheetVisibility, TableView, TableViewIter,
-    TypedBatches, Workbook,
+    ColumnType, ExcelMapper, InferredColumn, Sheet, SheetVisibility, Table, TableBatches,
+    TableView, TableViewIter, TypedBatches, Workbook,
 };
 pub use writer::{
     encrypt_package, write_columns, write_columns_to, write_sheet, write_sheet_to, Column,
@@ -42,10 +42,9 @@ pub use self::arrow::ArrowBatches;
 /// follows semver.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::ffi::XlColumn;
     pub use crate::workbook::{
         column_bool, column_date, column_f64, column_i64, column_str, column_time,
-        column_timestamp, ColumnBinding,
+        column_timestamp, ColumnBinding, ColumnRef,
     };
     pub use crate::writer::{push_str, set_valid, OwnedColumn, OwnedColumnData};
 

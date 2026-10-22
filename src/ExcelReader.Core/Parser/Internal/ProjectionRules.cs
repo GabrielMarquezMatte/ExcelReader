@@ -20,5 +20,12 @@ namespace ExcelReader.Core.Parser.Internal
         {
             return new ExcelParseException(row, name);
         }
+
+        internal static ExcelParseException AtRow(ExcelParseException original, long row)
+        {
+            return original.RawValue.Length == 0
+                ? MissingRequiredValue(original.ColumnName, (int)row)
+                : new ExcelParseException((int)row, original.ColumnName, original.RawValue);
+        }
     }
 }

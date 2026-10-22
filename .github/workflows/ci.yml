@@ -135,7 +135,22 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./TestResults/*.cobertura.xml
           flags: csharp
-          fail_ci_if_error: false
+          fail_ci_if_error: true
+
+      # The codecov/project checks are required on master, and Codecov posts them only for a commit it
+      # has heard about; when nothing here ran, an empty upload passes them on carried-forward coverage.
+      - name: Checkout for empty Codecov upload
+        if: env.RUN != 'true' && matrix.os == 'ubuntu-latest'
+        uses: actions/checkout@v7
+
+      - name: Empty Codecov upload
+        if: env.RUN != 'true' && matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          run_command: empty-upload
+          force: true
+          fail_ci_if_error: true
 
   isa-fallback:
     name: Test ISA fallback (${{ matrix.isa }})

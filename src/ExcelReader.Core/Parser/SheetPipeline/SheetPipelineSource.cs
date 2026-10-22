@@ -43,7 +43,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
             ReadOnlyMemory<byte> chunk, bool first, RowAggregation<TState> aggregation, CancellationToken ct);
 
         // Reads the sheet again from its start: skipRows counts data rows, after the header.
-        internal abstract TState ParseTail<TState>(int headerRow, long skipRows, RowAggregation<TState> aggregation, CancellationToken ct);
+        internal abstract ChunkOutcome<TState> ParseTail<TState>(int headerRow, long skipRows, RowAggregation<TState> aggregation, CancellationToken ct);
 
         internal static SheetPipelineSource? Create(IExcelSheet sheet)
         {

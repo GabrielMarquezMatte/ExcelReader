@@ -249,7 +249,7 @@ class Sheet:
                     buffer = ctypes.create_string_buffer(capacity)
                     continue
                 _check(status)
-                yield _decode_row(buffer.raw, written.value, date1904)
+                yield _decode_row(buffer[: written.value], written.value, date1904)
         finally:
             self._close_rows(cursor)
 

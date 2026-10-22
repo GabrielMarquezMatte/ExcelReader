@@ -9,8 +9,9 @@ namespace ExcelReader.Core.Reader
     /// <remarks>
     /// <para>
     /// <see cref="Add"/> runs concurrently across instances on worker threads, and must mutate only the
-    /// instance it is called on. For CSV, a partition that started at a misguessed row boundary is read again
-    /// into a new instance and the first one is discarded, so an instance may see rows that are later
+    /// instance it is called on. For CSV, a partition that started at a misguessed row boundary, which takes a
+    /// quote outside RFC 4180 rules or a quoted field longer than 64 KB, is read again into a new instance and
+    /// the first one is discarded, so an instance may see rows that are later
     /// thrown away — including rows whose parse or <see cref="Add"/> threw, and rows misparsed from
     /// the wrong start that appear nowhere in the sheet. A side effect outside the instance is not undone.
     /// XLSX and XLSB never re-read a partition.

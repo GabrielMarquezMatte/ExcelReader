@@ -1,3 +1,4 @@
+using System.Text;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Reader;
 using OfficeIMO.Excel;
@@ -18,6 +19,7 @@ namespace ExcelReader.Benchmarks
         [GlobalSetup]
         public async Task SetupAsync()
         {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             _workbook = await WorkbookGenerator.BuildAsync(Rows);
             _xlsbWorkbook = await WorkbookGenerator.BuildXlsbAsync(Rows);
         }
@@ -80,6 +82,22 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = global::Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new global::Sylvan.Data.Excel.ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        [Benchmark]
+        public long ExcelDataReader()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = global::ExcelDataReader.ExcelReaderFactory.CreateReader(ms);
+            return AccumulateDataReader(reader);
+        }
+
+        [Benchmark]
+        public long ExcelDataReaderXlsb()
+        {
+            using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
+            using var reader = global::ExcelDataReader.ExcelReaderFactory.CreateReader(ms);
+            return AccumulateDataReader(reader);
         }
 
         [Benchmark]

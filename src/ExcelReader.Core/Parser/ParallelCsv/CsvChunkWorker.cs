@@ -105,6 +105,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
     internal static class CsvChunkWorker
     {
         private const int InitialBoundaryWindow = 4 * 1024;
+        private const int InferenceWindow = 64 * 1024;
+        private const int InferenceLookBehind = 64;
         private const int BoundaryWindowGrowth = 8;
 
         internal static ValueTask<CsvChunkResult<T>> ParseAsync<T>(
@@ -119,7 +121,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             Utf8StringCache? contentCache,
             CancellationToken ct)
         {
-            long start = confirmedStart ?? GuessStart(source, chunk, readerOptions.Quote);
+            long start = confirmedStart ?? GuessStart(source, chunk, readerOptions.Quote, readerOptions.Delimiter);
             if (start >= source.Length)
             {
                 return new ValueTask<CsvChunkResult<T>>(new CsvChunkResult<T>(chunk.Index, models, start, long.MaxValue));
@@ -213,15 +215,16 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             return (resolvedNextStart, failure, records);
         }
 
-        internal static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote)
+        // long.MaxValue when the chunk holds no record start, or when its quote state cannot be told from its
+        // own bytes; either way the merge reads it from the confirmed start.
+        internal static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote, byte delimiter)
         {
             long chunkLength = chunk.End - chunk.Start;
-            if (chunkLength <= 0)
+            if (chunkLength <= 0 || InferParity(source, chunk.Start, quote, delimiter) is not CsvQuoteParity parity)
             {
                 return long.MaxValue;
             }
-
-            if (chunk.Start > 0 && AlreadyAtRecordStart(source, chunk.Start))
+            if (parity == CsvQuoteParity.Outside && AlreadyAtRecordStart(source, chunk.Start))
             {
                 return chunk.Start;
             }
@@ -229,8 +232,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             if (source.IsMemory)
             {
                 int cap = (int)Math.Min(chunkLength, int.MaxValue - 1);
-                int found = CsvBoundaryResolver.FindRecordStart(
-                    source.WindowSpan(chunk.Start, cap), quote, CsvQuoteParity.Outside);
+                int found = CsvBoundaryResolver.FindRecordStart(source.WindowSpan(chunk.Start, cap), quote, parity);
                 return found < 0 ? long.MaxValue : chunk.Start + found;
             }
 
@@ -247,8 +249,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                     {
                         return long.MaxValue;
                     }
-                    int found = CsvBoundaryResolver.FindRecordStart(
-                        buffer.AsSpan(0, read), quote, CsvQuoteParity.Outside);
+                    int found = CsvBoundaryResolver.FindRecordStart(buffer.AsSpan(0, read), quote, parity);
                     if (found >= 0)
                     {
                         return chunk.Start + found;
@@ -266,8 +267,42 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             }
         }
 
+        // The window reaches back over a run of quotes the start may cut, and past the chunk's end when it has to:
+        // it only serves to find the first run of quotes.
+        private static CsvQuoteParity? InferParity(CsvChunkSource source, long start, byte quote, byte delimiter)
+        {
+            if (start <= 0)
+            {
+                return CsvQuoteParity.Outside;
+            }
+            int back = (int)Math.Min(InferenceLookBehind, start);
+            int size = back + (int)Math.Min(InferenceWindow, source.Length - start);
+            bool startsAtSource = start == back;
+            if (source.IsMemory)
+            {
+                ReadOnlySpan<byte> window = source.WindowSpan(start - back, size)[..size];
+                return CsvBoundaryResolver.InferParity(window, back, startsAtSource, start - back + size == source.Length, quote, delimiter);
+            }
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(size);
+            try
+            {
+                int read = source.ReadWindow(start - back, buffer.AsSpan(0, size));
+                return read <= back
+                    ? CsvQuoteParity.Outside
+                    : CsvBoundaryResolver.InferParity(buffer.AsSpan(0, read), back, startsAtSource, start - back + read == source.Length, quote, delimiter);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
         private static bool AlreadyAtRecordStart(CsvChunkSource source, long start)
         {
+            if (start <= 0)
+            {
+                return true;
+            }
             Span<byte> pair = stackalloc byte[2];
             return source.ReadWindow(start - 1, pair) == pair.Length && CsvBoundaryResolver.StartsRecord(pair);
         }

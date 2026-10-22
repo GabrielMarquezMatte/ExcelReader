@@ -23,16 +23,16 @@ namespace ExcelReader.Core.Reader
     /// or a non-UTF-8 encoding).
     /// </para>
     /// <para>
-    /// Delivery guarantees. The general contract is the weaker CSV one: <c>ForEachAsync</c> is at-least-once,
-    /// and a partition whose start was guessed wrongly is discarded and read again. XLSB delivers every row
-    /// exactly once, in <c>ForEachAsync</c> too. XLSX delivers exactly once for a well-formed sheet; a
-    /// malformed one can make <c>ForEachAsync</c> deliver a row twice. <c>ParseAsync</c> yields the same items in
+    /// Delivery guarantees. XLSB delivers every row exactly once, in <c>ForEachAsync</c> too. XLSX does for a
+    /// well-formed sheet, and CSV for one that follows RFC 4180 quoting with no quoted field longer than 64 KB;
+    /// outside those, <c>ForEachAsync</c> is at-least-once, since a partition whose start was guessed wrongly
+    /// is discarded and read again. <c>ParseAsync</c> yields the same items in
     /// the same order as the sequential <see cref="ExcelParser{T}"/> on every format, and
     /// <c>AggregateAsync</c> and <c>ForEachAsync</c> equal their own single-thread run.
     /// </para>
     /// <para>
     /// <see cref="ExcelParseException.Row"/>: <c>ParseAsync</c> renumbers it from the count emitted at the
-    /// merge; <c>ForEachAsync</c> and <c>AggregateAsync</c> report the exact row when sequential and 0 when partitioned.
+    /// merge; <c>ForEachAsync</c> and <c>AggregateAsync</c> report the row a sequential read reports, partitioned or not.
     /// </para>
     /// </remarks>
     public static class SheetParallel
@@ -54,9 +54,10 @@ namespace ExcelReader.Core.Reader
         /// Parsing and type conversion run in parallel; whatever the caller does per row does not. A caller
         /// whose per-row work dominates will see little gain from raising <see cref="SheetParallelOptions.DegreeOfParallelism"/>.
         /// For CSV, <see cref="CsvReaderOptions.InternStrings"/> yields substantially less here than sequentially,
-        /// since each partition keeps its own dedup cache. A partition read from a wrongly guessed start is
-        /// discarded before any of its rows are yielded, but its cells have already passed through the parser's
-        /// converters and property setters, which must therefore be free of side effects.
+        /// since each partition keeps its own dedup cache. A partition read from a wrongly guessed start, which
+        /// takes a CSV outside the exactly-once conditions of <c>ForEachAsync</c>, is discarded before any of its
+        /// rows are yielded, but its cells have already passed through the parser's converters and property
+        /// setters, which must therefore be free of side effects.
         /// </remarks>
         public static IAsyncEnumerable<T> ParseAsync<T>(
             IExcelSheet sheet, ExcelParser<T> parser, SheetParallelOptions? options = null, CancellationToken ct = default)
@@ -91,21 +92,30 @@ namespace ExcelReader.Core.Reader
         /// several at once; the caller owns any synchronization. Records arrive in no particular order.
         /// </para>
         /// <para>
-        /// Delivery is at least once in general: <paramref name="body"/> may be invoked more than once for the
+        /// XLSB delivers every row exactly once. CSV does when every quote opens or closes a quoted field or is
+        /// doubled inside one, as RFC 4180 has it, and no quoted field runs past 64 KB: a partition's start is then
+        /// read off the quotes around it, and one whose quotes could open or close a field waits for its confirmed
+        /// start. XLSX delivers exactly once for a well-formed sheet.
+        /// </para>
+        /// <para>
+        /// Outside those, delivery is at least once: <paramref name="body"/> may be invoked more than once for the
         /// same record. On CSV, a partition whose start was guessed wrongly is read again from the confirmed
         /// offset, and the discarded speculative pass may already have delivered a whole partition's worth of
         /// records, which may also be misparsed: a wrong start shifts every field boundary. An exception
-        /// <paramref name="body"/> throws during a discarded pass is discarded with it. A start is only guessed
-        /// wrongly inside a quoted field, so a CSV in which the quote character never appears delivers every
-        /// record exactly once. XLSB delivers every row exactly once. XLSX does too for a well-formed sheet; on
-        /// a malformed one, workers may already have called <paramref name="body"/> for rows that are then
-        /// dropped, so a row can be delivered twice or be one the sequential reader would not produce.
+        /// <paramref name="body"/> throws during a discarded pass is discarded with it. On a malformed XLSX sheet,
+        /// workers may already have called <paramref name="body"/> for rows that are then dropped, so a row can be
+        /// delivered twice or be one the sequential reader would not produce.
         /// </para>
         /// <para>
-        /// A <paramref name="body"/> with side effects must therefore be idempotent and tolerate records that
-        /// do not exist. For exactly-once on any source, use
+        /// A <paramref name="body"/> with side effects on such a source must therefore be idempotent and tolerate
+        /// records that do not exist. For exactly-once on any source, use
         /// <see cref="AggregateAsync{TAccumulator, TRecord}(IExcelSheet, SheetParallelOptions?, CancellationToken)"/>, where the
         /// discarded partition's accumulator is thrown away, and apply the side effects once it returns.
+        /// </para>
+        /// <para>
+        /// When <paramref name="body"/> or a parse throws, partitions further into the sheet stop: on CSV at their
+        /// next record, on XLSX and XLSB within the few chunks already in flight. Partitions before it run to the
+        /// end, so every record a sequential read would deliver before the failure is delivered.
         /// </para>
         /// <para>
         /// A <see cref="ReadOnlySpan{T}"/> column points into a pooled buffer the worker reuses once
@@ -145,8 +155,8 @@ namespace ExcelReader.Core.Reader
         /// value throws <see cref="ExcelParseException"/>; empty rows are skipped.
         /// </para>
         /// <para>
-        /// <see cref="ExcelParseException.Row"/> is exact when the sheet is read sequentially and
-        /// 0 when it is partitioned, since a partition does not know how many rows precede it.
+        /// <see cref="ExcelParseException.Row"/> is the row a sequential read reports, partitioned or not: the
+        /// partitions merge in sheet order, so the first failure in that order is the one thrown.
         /// </para>
         /// </remarks>
         public static Task ForEachAsync<TModel>(
@@ -212,8 +222,8 @@ namespace ExcelReader.Core.Reader
         /// <c>[ExcelRequired]</c> column or value throws <see cref="ExcelParseException"/>; empty rows are skipped.
         /// </para>
         /// <para>
-        /// <see cref="ExcelParseException.Row"/> is exact when the sheet is read sequentially and 0 when it is
-        /// partitioned, since a partition does not know how many rows precede it.
+        /// <see cref="ExcelParseException.Row"/> is the row a sequential read reports, partitioned or not: the
+        /// partitions merge in sheet order, so the first failure in that order is the one thrown.
         /// </para>
         /// <para>Otherwise carries the same contract and fallbacks as the <see cref="IRowRecord{TSelf}"/> overload.</para>
         /// </remarks>

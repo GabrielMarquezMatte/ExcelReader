@@ -351,3 +351,24 @@ jobs:
 
       - name: Run the consumer
         run: ctest --test-dir build/consumer --output-on-failure -C Release
+
+      - name: Test with coverage and sanitizers (Linux)
+        if: runner.os == 'Linux'
+        env:
+          EXCELREADER_NATIVE_LIB: ${{ steps.lib.outputs.path }}
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: |
+          cmake -S cpp -B build/cpp-coverage -DEXCELREADER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_CXX_FLAGS=--coverage -fprofile-update=atomic -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+          cmake --build build/cpp-coverage
+          ctest --test-dir build/cpp-coverage --output-on-failure
+          pipx run gcovr --root . --filter 'src/ExcelReader.Native/include/' --exclude-throw-branches --merge-lines --cobertura coverage-cpp.xml --txt
+
+      - name: Upload C++ coverage to Codecov
+        if: runner.os == 'Linux'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-cpp.xml
+          flags: cpp
+          fail_ci_if_error: false

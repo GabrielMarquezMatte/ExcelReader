@@ -24,11 +24,12 @@ namespace ExcelReader.Core.Reader.Xlsx
             foreach (var tag in Tags(wbBytes, sheetTag))
             {
                 var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " r:id="u8));
-                if (rels.TryGetValue(rid, out var target))
+                var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " name="u8));
+                if (!rels.TryGetValue(rid, out var target))
                 {
-                    var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " name="u8));
-                    sheets.Add((name, XlsxXml.NormalizePart(target), ParseVisibility(XlsxXml.Attr(tag, " state="u8))));
+                    throw new InvalidDataException($"The workbook's sheet '{name}' refers to relationship '{rid}', which xl/_rels/workbook.xml.rels does not define.");
                 }
+                sheets.Add((name, XlsxXml.NormalizePart(target), ParseVisibility(XlsxXml.Attr(tag, " state="u8))));
             }
             return [.. sheets];
         }

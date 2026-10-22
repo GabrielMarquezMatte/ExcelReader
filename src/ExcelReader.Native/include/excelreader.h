@@ -18,6 +18,10 @@ extern "C" {
 
 #define XL_ABI_VERSION 6
 
+/* Threads: calls on one workbook handle may run on several threads at once. A row cursor, typed
+   reader, Arrow stream or writer handle is used by one thread at a time. A closed or unknown handle
+   returns XL_INVALID_HANDLE. xl_last_error reports the calling thread's last failure. */
+
 #define XL_FORMAT_AUTO  0  /* sniffs XLS/XLSX/XLSB; does NOT detect CSV */
 #define XL_FORMAT_XLS   1
 #define XL_FORMAT_XLSX  2

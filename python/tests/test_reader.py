@@ -361,6 +361,16 @@ def test_open_options_rejects_an_out_of_range_value(csv_path):
         open_workbook(csv_path, format="csv", options=OpenOptions(csv_delimiter=999))
 
 
+def test_rows_after_one_that_grew_the_buffer_decode_only_their_own_bytes(tmp_path):
+    path = tmp_path / "grown.csv"
+    path.write_text("value\n" + ("x" * 200_000) + "\nação\n\n7\n", encoding="utf-8")
+
+    with open_workbook(path, format="csv") as workbook:
+        rows = [[cell.value for cell in row] for row in workbook.sheets[0].rows()]
+
+    assert rows[2:] == [["ação"], [""], ["7"]]
+
+
 def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
     path = tmp_path / "wide-cell.csv"
     path.write_text("value\n" + ("x" * 200_000) + "\n", encoding="utf-8")

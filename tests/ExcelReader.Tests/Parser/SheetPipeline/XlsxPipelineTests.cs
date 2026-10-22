@@ -229,6 +229,19 @@ namespace ExcelReader.Tests.Parser.SheetPipeline
         }
 
         [Fact]
+        public async Task ALongReadAfterRecoveryMatchesSequential()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(Rows(5000, r => r <= 100 && r % 10 == 0 ? "<![CDATA[ <row r=\"9\"> ]]>" : "n"));
+            using XlsxWorkbook workbook = Excel.FromXlsx(ms);
+            List<string> expected = Sequential(workbook, 0);
+
+            foreach (int chunkBytes in new[] { 64, 90, 150, 400 })
+            {
+                Assert.Equal(expected, await PipelineAsync(workbook, 0, 4, chunkBytes));
+            }
+        }
+
+        [Fact]
         public async Task RowsAfterTheEndOfSheetDataAreIgnored()
         {
             string rows = Rows(60) + "</sheetData><extLst>" + Rows(60) + "</extLst><sheetData>";
