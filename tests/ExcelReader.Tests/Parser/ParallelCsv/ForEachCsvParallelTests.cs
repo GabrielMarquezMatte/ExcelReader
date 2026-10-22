@@ -166,23 +166,32 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             const int rows = 20_000;
             byte[] csv = SalesCsv(rows);
-            int delivered = 0;
+            int failed = 0;
+            int afterFailure = 0;
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => ChunkedRecord(
                 csv,
                 sale =>
                 {
+                    if (Volatile.Read(ref failed) == 1)
+                    {
+                        if (Interlocked.Increment(ref afterFailure) == 1)
+                        {
+                            Thread.Sleep(100);
+                        }
+                        return;
+                    }
                     if (sale.Units == 1)
                     {
+                        Volatile.Write(ref failed, 1);
                         throw new InvalidOperationException("boom");
                     }
-                    Interlocked.Increment(ref delivered);
                 },
                 new ChunkProbe(),
                 dop: 2,
                 chunkSize: 2048));
 
-            Assert.True(delivered < rows / 4, $"{delivered} of {rows} records were delivered after the first one failed");
+            Assert.True(afterFailure <= 1, $"{afterFailure} records were delivered after the first one failed");
         }
 
         [Fact]
