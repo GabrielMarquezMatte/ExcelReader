@@ -9,29 +9,20 @@ using ExcelReader.Core.Writer.Zip;
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes an .xlsb workbook (BIFF12 binary format) to a stream, one sheet at a time.</summary>
-    public sealed class XlsbWorkbookWriter : IWorkbookWriter<XlsbSheetWriter>
+    public sealed class XlsbWorkbookWriter : IWorkbookWriter<XlsbSheetWriter>, IZipWorkbookParts
     {
-        private readonly ZipPackageWriter _zip;
-        private readonly Stream _stream;
-        private readonly bool _leaveOpen;
+        private readonly ZipWorkbookPackage _package;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
         private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
         private readonly StyleTable _styles = new();
         private readonly List<XlsbSheetWriter> _sheets = [];
-        private bool _ended;
-        private XlsbSheetWriter? _activeSheet;
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
-        private bool _faulted;
-        private bool _zipClosed;
-        private bool _disposed;
 
-        private XlsbWorkbookWriter(ZipPackageWriter zip, Stream stream, bool leaveOpen, XlsbWriterOptions options)
+        private XlsbWorkbookWriter(Stream stream, bool leaveOpen, XlsbWriterOptions options)
         {
-            _zip = zip;
-            _stream = stream;
-            _leaveOpen = leaveOpen;
+            _package = new ZipWorkbookPackage(this, "XLSB", stream, leaveOpen, options.Compression);
             _date1904 = options.Date1904;
             UseSharedStrings = options.UseSharedStrings;
             _compression = options.Compression;
@@ -47,8 +38,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         public static XlsbWorkbookWriter Create(Stream stream, bool leaveOpen = false, XlsbWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            ZipPackageWriter zip = new(stream);
-            return new XlsbWorkbookWriter(zip, stream, leaveOpen, options ?? XlsbWriterOptions.Default);
+            return new XlsbWorkbookWriter(stream, leaveOpen, options ?? XlsbWriterOptions.Default);
         }
 
         /// <inheritdoc/>
@@ -61,11 +51,12 @@ namespace ExcelReader.Core.Writer.Xlsb
         public XlsbSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
         {
             WriterStateGuard.RequireCanAddSheet(
-                _ended, this, name, _activeSheet is not null, nameof(XlsbSheetWriter), visibility);
+                _package.Ended, this, name, _package.ActiveSheet is not null, nameof(XlsbSheetWriter), visibility);
             WriterStateGuard.ClaimSheetName(_sheetNames, name);
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, visibility, _date1904, _compression, _prefetchWrite);
-            return _activeSheet;
+            var sheet = new XlsbSheetWriter(this, _package.Zip, name, sheetId, visibility, _date1904, _compression, _prefetchWrite);
+            _package.ActiveSheet = sheet;
+            return sheet;
         }
 
         internal void RegisterSheet(XlsbSheetWriter sheet)
@@ -75,12 +66,7 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         internal void NotifySheetEnded(bool faulted)
         {
-            _activeSheet = null;
-            if (faulted)
-            {
-                _ended = true;
-                _faulted = true;
-            }
+            _package.SheetEnded(faulted);
         }
 
         internal bool UseSharedStrings { get; }
@@ -119,125 +105,45 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// </summary>
         public void End()
         {
-            ObjectDisposedException.ThrowIf(_ended, this);
-            _ended = true;
-            try
-            {
-                _activeSheet?.Dispose();
-                if (_sheets.Count == 0)
-                {
-                    throw new InvalidOperationException("A workbook must contain at least one sheet.");
-                }
-
-                WriteRootRels();
-                WriteWorkbook();
-                WriteWorkbookRels();
-                WriteStyles();
-                WriteSharedStrings();
-                WriteAppProperties();
-                WriteTables();
-                WriteContentTypes();
-                CloseZip();
-            }
-            catch
-            {
-                AbandonZip();
-                throw;
-            }
+            _package.End();
         }
 
         /// <inheritdoc/>
-        public async ValueTask EndAsync(CancellationToken ct = default)
+        public ValueTask EndAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_ended, this);
-            ct.ThrowIfCancellationRequested();
-            _ended = true;
-            try
-            {
-                if (_activeSheet is not null)
-                {
-                    await _activeSheet.DisposeAsync().ConfigureAwait(false);
-                }
-                if (_sheets.Count == 0)
-                {
-                    throw new InvalidOperationException("A workbook must contain at least one sheet.");
-                }
+            return _package.EndAsync(ct);
+        }
 
-                await WriteRootRelsAsync(ct).ConfigureAwait(false);
-                await WriteWorkbookAsync(ct).ConfigureAwait(false);
-                await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
-                await WriteStylesAsync(ct).ConfigureAwait(false);
-                await WriteSharedStringsAsync(ct).ConfigureAwait(false);
-                await WriteAppPropertiesAsync(ct).ConfigureAwait(false);
-                await WriteTablesAsync(ct).ConfigureAwait(false);
-                await WriteContentTypesAsync(ct).ConfigureAwait(false);
-                await CloseZipAsync(ct).ConfigureAwait(false);
-            }
-            catch
+        int IZipWorkbookParts.SheetCount
+        {
+            get
             {
-                await AbandonZipAsync().ConfigureAwait(false);
-                throw;
+                return _sheets.Count;
             }
         }
 
-        private void CloseZip()
+        void IZipWorkbookParts.WriteParts()
         {
-            _zipClosed = true;
-            _zip.Finish();
+            _package.WriteEntry("_rels/.rels", BuildRootRelsXml());
+            WriteWorkbook();
+            _package.WriteEntry("xl/_rels/workbook.bin.rels", BuildWorkbookRelsXml());
+            WriteStyles();
+            WriteSharedStrings();
+            _package.WriteEntry("docProps/app.xml", AppPropertiesXml);
+            WriteTables();
+            _package.WriteEntry("[Content_Types].xml", BuildContentTypesXml());
         }
 
-        private ValueTask CloseZipAsync(CancellationToken ct = default)
+        async ValueTask IZipWorkbookParts.WritePartsAsync(CancellationToken ct)
         {
-            _zipClosed = true;
-            return _zip.FinishAsync(ct);
-        }
-
-        private void AbandonZip()
-        {
-            _faulted = true;
-            _activeSheet?.Abandon();
-            if (!_zipClosed)
-            {
-                _zipClosed = true;
-                _zip.Abandon();
-            }
-        }
-
-        private async ValueTask AbandonZipAsync()
-        {
-            _faulted = true;
-            if (_activeSheet is not null)
-            {
-                await _activeSheet.AbandonAsync().ConfigureAwait(false);
-            }
-            if (!_zipClosed)
-            {
-                _zipClosed = true;
-                await _zip.AbandonAsync().ConfigureAwait(false);
-            }
-        }
-
-        private void ReleaseStream()
-        {
-            if (_leaveOpen)
-            {
-                return;
-            }
-            if (_faulted)
-            {
-                FailureCleanup.Dispose(_stream);
-                return;
-            }
-            _stream.Dispose();
-        }
-
-        private ValueTask ReleaseStreamAsync()
-        {
-            if (_leaveOpen)
-            {
-                return ValueTask.CompletedTask;
-            }
-            return _faulted ? FailureCleanup.DisposeAsync(_stream) : _stream.DisposeAsync();
+            await _package.WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
+            await WriteWorkbookAsync(ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("xl/_rels/workbook.bin.rels", BuildWorkbookRelsXml(), ct).ConfigureAwait(false);
+            await WriteStylesAsync(ct).ConfigureAwait(false);
+            await WriteSharedStringsAsync(ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("docProps/app.xml", AppPropertiesXml, ct).ConfigureAwait(false);
+            await WriteTablesAsync(ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("[Content_Types].xml", BuildContentTypesXml(), ct).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -246,13 +152,13 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// </summary>
         public void Flush()
         {
-            _stream.Flush();
+            _package.Flush();
         }
 
         /// <inheritdoc/>
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
-            return ZipEntryWriter.FlushAsync(_stream, ct);
+            return _package.FlushAsync(ct);
         }
 
         /// <summary>
@@ -261,73 +167,13 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-            {
-                return;
-            }
-            _disposed = true;
-            try
-            {
-                if (!_ended)
-                {
-                    if (_sheets.Count == 0 && _activeSheet is null)
-                    {
-                        _ended = true;
-                        CloseZip();
-                    }
-                    else
-                    {
-                        End();
-                    }
-                }
-                else if (!_zipClosed)
-                {
-                    AbandonZip();
-                }
-            }
-            catch
-            {
-                _faulted = true;
-                ReleaseStream();
-                throw;
-            }
-            ReleaseStream();
+            _package.Dispose();
         }
 
         /// <inheritdoc/>
-        public async ValueTask DisposeAsync()
+        public ValueTask DisposeAsync()
         {
-            if (_disposed)
-            {
-                return;
-            }
-            _disposed = true;
-            try
-            {
-                if (!_ended)
-                {
-                    if (_sheets.Count == 0 && _activeSheet is null)
-                    {
-                        _ended = true;
-                        await CloseZipAsync().ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await EndAsync().ConfigureAwait(false);
-                    }
-                }
-                else if (!_zipClosed)
-                {
-                    await AbandonZipAsync().ConfigureAwait(false);
-                }
-            }
-            catch
-            {
-                _faulted = true;
-                await ReleaseStreamAsync().ConfigureAwait(false);
-                throw;
-            }
-            await ReleaseStreamAsync().ConfigureAwait(false);
+            return _package.DisposeAsync();
         }
 
         private static string BuildRootRelsXml()
@@ -337,16 +183,6 @@ namespace ExcelReader.Core.Writer.Xlsb
                 "<Relationship Id=\"app\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"docProps/app.xml\"/>" +
                 $"<Relationship Id=\"wb\" Type=\"{XlsxConstants.WorkbookRelType}\" Target=\"xl/workbook.bin\"/>" +
                 "</Relationships>";
-        }
-
-        private void WriteRootRels()
-        {
-            WriteEntry("_rels/.rels", BuildRootRelsXml());
-        }
-
-        private ValueTask WriteRootRelsAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct);
         }
 
         private void BuildWorkbookBin(BiffBuffer payload, BiffBuffer data)
@@ -379,7 +215,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             using BiffBuffer payload = new(256);
             using BiffBuffer data = new(1024);
             BuildWorkbookBin(payload, data);
-            WriteEntry("xl/workbook.bin", data.Span);
+            _package.WriteEntry("xl/workbook.bin", data.Span);
         }
 
         private async ValueTask WriteWorkbookAsync(CancellationToken ct)
@@ -387,7 +223,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             using BiffBuffer payload = new(256);
             using BiffBuffer data = new(1024);
             BuildWorkbookBin(payload, data);
-            await WriteEntryAsync("xl/workbook.bin", data.Memory, ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("xl/workbook.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
         private string BuildWorkbookRelsXml()
@@ -403,16 +239,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             }
             sb.Append("</Relationships>");
             return sb.ToString();
-        }
-
-        private void WriteWorkbookRels()
-        {
-            WriteEntry("xl/_rels/workbook.bin.rels", BuildWorkbookRelsXml());
-        }
-
-        private ValueTask WriteWorkbookRelsAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("xl/_rels/workbook.bin.rels", BuildWorkbookRelsXml(), ct);
         }
 
         private void BuildStylesBin(BiffBuffer payload, BiffBuffer data)
@@ -457,7 +283,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             using BiffBuffer payload = new(96);
             using BiffBuffer data = new(512);
             BuildStylesBin(payload, data);
-            WriteEntry("xl/styles.bin", data.Span);
+            _package.WriteEntry("xl/styles.bin", data.Span);
         }
 
         private async ValueTask WriteStylesAsync(CancellationToken ct)
@@ -465,7 +291,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             using BiffBuffer payload = new(96);
             using BiffBuffer data = new(512);
             BuildStylesBin(payload, data);
-            await WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
         private static void WriteStyles(BiffBuffer data, BiffBuffer payload)
@@ -494,13 +320,13 @@ namespace ExcelReader.Core.Writer.Xlsb
         private void WriteSharedStrings()
         {
             using var data = _sharedStrings is null ? EmptySharedStrings() : _sharedStrings.ToXlsbBytes();
-            WriteEntry("xl/sharedStrings.bin", data.Span);
+            _package.WriteEntry("xl/sharedStrings.bin", data.Span);
         }
 
         private async ValueTask WriteSharedStringsAsync(CancellationToken ct)
         {
             using var data = _sharedStrings is null ? EmptySharedStrings() : _sharedStrings.ToXlsbBytes();
-            await WriteEntryAsync("xl/sharedStrings.bin", data.Memory, ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync("xl/sharedStrings.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
         private static BiffBuffer EmptySharedStrings()
@@ -570,16 +396,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\">" +
             "<Application>ExcelReader</Application><AppVersion>1.0000</AppVersion></Properties>";
 
-        private void WriteAppProperties()
-        {
-            WriteEntry("docProps/app.xml", AppPropertiesXml);
-        }
-
-        private ValueTask WriteAppPropertiesAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("docProps/app.xml", AppPropertiesXml, ct);
-        }
-
         private void WriteTables()
         {
             foreach (XlsbSheetWriter sheet in _sheets)
@@ -588,13 +404,13 @@ namespace ExcelReader.Core.Writer.Xlsb
                 {
                     continue;
                 }
-                WriteEntry($"xl/worksheets/_rels/sheet{sheet.SheetId}.bin.rels", TablePackage.SheetRelsXml(sheet.Tables, "bin"));
+                _package.WriteEntry($"xl/worksheets/_rels/sheet{sheet.SheetId}.bin.rels", TablePackage.SheetRelsXml(sheet.Tables, "bin"));
                 foreach (WrittenTable table in sheet.Tables)
                 {
                     using BiffBuffer data = new(256);
                     using BiffBuffer payload = new(128);
                     XlsbTableRecords.WriteTable(data, payload, table);
-                    WriteEntry($"xl/tables/table{table.Id}.bin", data.Span);
+                    _package.WriteEntry($"xl/tables/table{table.Id}.bin", data.Span);
                 }
             }
         }
@@ -607,7 +423,7 @@ namespace ExcelReader.Core.Writer.Xlsb
                 {
                     continue;
                 }
-                await WriteEntryAsync($"xl/worksheets/_rels/sheet{sheet.SheetId}.bin.rels", TablePackage.SheetRelsXml(sheet.Tables, "bin"), ct).ConfigureAwait(false);
+                await _package.WriteEntryAsync($"xl/worksheets/_rels/sheet{sheet.SheetId}.bin.rels", TablePackage.SheetRelsXml(sheet.Tables, "bin"), ct).ConfigureAwait(false);
                 foreach (WrittenTable table in sheet.Tables)
                 {
                     await WriteTablePartAsync(table, ct).ConfigureAwait(false);
@@ -620,7 +436,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             using BiffBuffer data = new(256);
             using BiffBuffer payload = new(128);
             XlsbTableRecords.WriteTable(data, payload, table);
-            await WriteEntryAsync($"xl/tables/table{table.Id}.bin", data.Memory, ct).ConfigureAwait(false);
+            await _package.WriteEntryAsync($"xl/tables/table{table.Id}.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
         private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId, bool isStyleXf = false)
@@ -668,34 +484,5 @@ namespace ExcelReader.Core.Writer.Xlsb
             return sb.ToString();
         }
 
-        private void WriteContentTypes()
-        {
-            WriteEntry("[Content_Types].xml", BuildContentTypesXml());
-        }
-
-        private ValueTask WriteContentTypesAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("[Content_Types].xml", BuildContentTypesXml(), ct);
-        }
-
-        private ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
-        {
-            return ZipEntryWriter.WriteTextAsync(_zip, entryName, content, _compression, ct);
-        }
-
-        private ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)
-        {
-            return ZipEntryWriter.WriteBytesAsync(_zip, entryName, content, _compression, ct);
-        }
-
-        private void WriteEntry(string entryName, string content)
-        {
-            ZipEntryWriter.WriteText(_zip, entryName, content, _compression);
-        }
-
-        private void WriteEntry(string entryName, ReadOnlySpan<byte> content)
-        {
-            ZipEntryWriter.WriteBytes(_zip, entryName, content, _compression);
-        }
     }
 }
