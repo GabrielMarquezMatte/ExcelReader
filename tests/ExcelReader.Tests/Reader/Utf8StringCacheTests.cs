@@ -44,36 +44,55 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
-        public void BucketCollisionEvictsOlderEntryWithoutCorruptingEither()
+        public void ValuesSharingABucketStayCachedTogether()
         {
-            const int bucketCount = 1024;
-            byte[] keyA = Encoding.UTF8.GetBytes("v0");
-            int bucketOfA = BucketOf(keyA, bucketCount);
-            byte[] keyB = keyA;
-            int i = 1;
-            while (true)
-            {
-                byte[] candidate = Encoding.UTF8.GetBytes("v" + i.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                if (BucketOf(candidate, bucketCount) == bucketOfA && !candidate.AsSpan().SequenceEqual(keyA))
-                {
-                    keyB = candidate;
-                    break;
-                }
-                i++;
-            }
+            byte[][] keys = KeysInOneBucket(2);
             var cache = new Utf8StringCache();
-            string a = Encoding.UTF8.GetString(keyA);
-            string b = Encoding.UTF8.GetString(keyB);
-            Assert.Equal(a, cache.GetOrAdd(keyA));
-            Assert.Equal(b, cache.GetOrAdd(keyB));
-            Assert.Equal(a, cache.GetOrAdd(keyA));
+            string a = cache.GetOrAdd(keys[0]);
+            string b = cache.GetOrAdd(keys[1]);
+            Assert.Same(a, cache.GetOrAdd(keys[0]));
+            Assert.Same(b, cache.GetOrAdd(keys[1]));
         }
 
-        private static int BucketOf(ReadOnlySpan<byte> utf8, int bucketCount)
+        [Fact]
+        public void OverfullBucketEvictsOldestEntryWithoutCorruptingAny()
+        {
+            byte[][] keys = KeysInOneBucket(5);
+            var cache = new Utf8StringCache();
+            string first = cache.GetOrAdd(keys[0]);
+            foreach (byte[] key in keys[1..])
+            {
+                Assert.Equal(Encoding.UTF8.GetString(key), cache.GetOrAdd(key));
+            }
+            string again = cache.GetOrAdd(keys[0]);
+            Assert.Equal(first, again);
+            Assert.NotSame(first, again);
+            foreach (byte[] key in keys)
+            {
+                Assert.Equal(Encoding.UTF8.GetString(key), cache.GetOrAdd(key));
+            }
+        }
+
+        private static byte[][] KeysInOneBucket(int count)
+        {
+            var keys = new List<byte[]> { Encoding.UTF8.GetBytes("v0") };
+            int bucket = BucketOf(keys[0]);
+            for (int i = 1; keys.Count < count; i++)
+            {
+                byte[] candidate = Encoding.UTF8.GetBytes("v" + i.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                if (BucketOf(candidate) == bucket)
+                {
+                    keys.Add(candidate);
+                }
+            }
+            return [.. keys];
+        }
+
+        private static int BucketOf(ReadOnlySpan<byte> utf8)
         {
             HashCode hash = default;
             hash.AddBytes(utf8);
-            return hash.ToHashCode() & (bucketCount - 1);
+            return hash.ToHashCode() & 1023;
         }
 
         [Fact]
