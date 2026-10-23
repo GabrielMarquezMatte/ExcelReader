@@ -195,7 +195,7 @@ await SheetParallel.ForEachAsync(
 </ul>
 <p>A callback that writes to a database or sends messages must be idempotent on a CSV that may break those rules, and on XLSX if the sheet may be malformed, and must also tolerate records that do not exist: deduplicating on a key does not filter those out.</p>
 <p><a class="xref" href="../../api/ExcelReader.Core.Parser.ExcelParseException.html#ExcelReader_Core_Parser_ExcelParseException_Row"><code>ExcelParseException.Row</code></a> on <code>ParseAsync</code> counts the rows emitted so far. On <code>ForEachAsync</code> and <code>AggregateAsync</code> it is the row a sequential read reports, whether or not the read was partitioned.</p>
-<p>See the <a href="../performance/benchmarks.html#parallel-sheet-reading">parallel sheet benchmarks</a> and the <a href="../performance/benchmarks.html#parallel-csv">parallel CSV benchmarks</a> for what this buys. On a real-data XLSX the sheet stage drops from 28 ms (prefetched, sequential) to about 17 ms, and on XLSB from 17 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its <code>AggregateAsync</code> at dop 4 is ~1.8x faster than the typed path while allocating ~450x less, with zero garbage collections.</p>
+<p>See the <a href="../performance/benchmarks.html#parallel-sheet-reading">parallel sheet benchmarks</a> and the <a href="../performance/benchmarks.html#parallel-csv">parallel CSV benchmarks</a> for what this buys. On a real-data XLSX the sheet stage drops from 24 ms (prefetched, sequential) to about 17 ms, and on XLSB from 17 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its <code>AggregateAsync</code> at dop 4 is ~2.0x faster than the typed path while allocating ~630x less, with zero garbage collections.</p>
 <p>Properties need setters. A get-only property is skipped during binding and silently receives nothing.</p>
 <h3 id="apache-arrow-conversion-opt-in">Apache Arrow conversion (opt-in)</h3>
 <pre><code class="lang-bash">dotnet add package ExcelReader.Arrow
@@ -379,39 +379,39 @@ foreach (var row in workbook.FirstSheet)
 <tbody>
 <tr>
 <td>XLSX, real data</td>
-<td style="text-align: right;">41.2 ms</td>
-<td style="text-align: right;">27.8 ms</td>
-<td style="text-align: right;">32%</td>
+<td style="text-align: right;">37.2 ms</td>
+<td style="text-align: right;">23.7 ms</td>
+<td style="text-align: right;">36%</td>
 </tr>
 <tr>
 <td>XLSM, real data</td>
-<td style="text-align: right;">43.5 ms</td>
-<td style="text-align: right;">28.4 ms</td>
-<td style="text-align: right;">35%</td>
+<td style="text-align: right;">38.0 ms</td>
+<td style="text-align: right;">23.1 ms</td>
+<td style="text-align: right;">39%</td>
 </tr>
 <tr>
 <td>XLSB, real data</td>
-<td style="text-align: right;">25.8 ms</td>
-<td style="text-align: right;">16.7 ms</td>
-<td style="text-align: right;">35%</td>
+<td style="text-align: right;">24.7 ms</td>
+<td style="text-align: right;">16.6 ms</td>
+<td style="text-align: right;">33%</td>
 </tr>
 <tr>
 <td>XLSX, string-heavy</td>
-<td style="text-align: right;">33.1 ms</td>
-<td style="text-align: right;">23.0 ms</td>
-<td style="text-align: right;">31%</td>
+<td style="text-align: right;">30.0 ms</td>
+<td style="text-align: right;">20.0 ms</td>
+<td style="text-align: right;">33%</td>
 </tr>
 <tr>
 <td>XLSB, string-heavy</td>
-<td style="text-align: right;">32.6 ms</td>
-<td style="text-align: right;">19.7 ms</td>
-<td style="text-align: right;">40%</td>
+<td style="text-align: right;">33.6 ms</td>
+<td style="text-align: right;">19.5 ms</td>
+<td style="text-align: right;">42%</td>
 </tr>
 </tbody>
 </table>
 <p>The gain tracks how much of a read is decompression rather than parsing, so it is smallest
-on XLSX real data (about a third) and largest on string-heavy XLSB (40%). Allocations rise from the producer task and the
-pooled decompression buffers — on the real-data corpus, roughly 7 KB to 24 KB for XLSX
+on XLSB real data and string-heavy XLSX (about a third) and largest on string-heavy XLSB (42%). Allocations rise from the producer task and the
+pooled decompression buffers — on the real-data corpus, roughly 7 KB to 23 KB for XLSX
 and 7 KB to 15 KB for XLSB — and neither path triggers a garbage collection.</p>
 <p>Do <strong>not</strong> enable it for concurrent server workloads: a caller already reading many files
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread

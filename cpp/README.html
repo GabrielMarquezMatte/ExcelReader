@@ -208,6 +208,22 @@ for (std::thread &amp;thread : threads)
 </code></pre>
 <p>A cursor, a typed reader and an Arrow stream are each used by one thread at a time, and keep
 working after the workbook is destroyed. A <code>Sheet</code> does not: take what you need from it first.</p>
+<h3 id="tables">Tables</h3>
+<p><code>tables()</code> lists the workbook's Excel tables (&quot;Format as Table&quot; ranges) as <code>xl::TableInfo</code>: name, the
+sheet holding it, and its 0-based range, header and totals rows included. <code>table(index)</code> and
+<code>table_by_name(name)</code> (ignoring case) return an <code>xl::Sheet</code> bounded to the table, so every read works
+on it and starts at the table's header row:</p>
+<pre><code class="lang-cpp">for (const xl::TableInfo &amp;table : *workbook-&gt;tables())
+{
+    std::println(&quot;{} on sheet {}: rows {}..{}&quot;, table.name, table.sheet, table.first_row, table.last_row);
+}
+if (auto sales = workbook-&gt;table_by_name(&quot;Sales&quot;).value())
+{
+    auto rows = xl::parse&lt;Row&gt;(*sales);
+}
+</code></pre>
+<p>Cells keep the column indexes of the sheet holding the table, and the table's <code>name()</code> is that
+sheet's. A table is read on one thread whatever the degree of parallelism asks for.</p>
 <h2 id="reading-rows-one-at-a-time">Reading rows one at a time</h2>
 <p><code>Sheet::rows()</code> returns a cursor over that sheet. Each row borrows a buffer the cursor
 reuses, so iterating allocates nothing per row. A clean end of sheet arrives as an error carrying
@@ -369,7 +385,7 @@ destination, fails the write rather than silently choosing a format.</p>
 several threads: <code>0</code> uses every processor, <code>1</code> (the default) writes serially, and <code>batch_rows = 0</code>
 keeps the library default of 8,192. The columns must not change while the write runs. With
 <code>use_shared_strings</code> on, two parallel runs give the same content in files that differ byte for byte.
-XLS, CSV and <code>xl::WriterHandle</code> ignore both fields.</p>
+XLS, CSV and <code>xl::WriterHandle</code>'s per-cell writes ignore both fields.</p>
 <pre><code class="lang-cpp">xl::write_columns(&quot;big.xlsx&quot;, columns, {.degree_of_parallelism = 0});
 </code></pre>
 <p><code>write_sheet</code> walks the range once and appends each field to its own column buffer, with the
@@ -391,6 +407,20 @@ if (auto done = writer.finish(); !done) { /* done.error().message */ }
 </code></pre>
 <p>Every call returns <code>std::expected&lt;void, xl::Error&gt;</code>; one out of order fails instead of corrupting the
 file.</p>
+<p>To write several sheets from whole tables, call the handle's <code>write_sheet</code> or <code>write_columns</code> once
+per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
+instead of one per cell, using the handle's <code>degree_of_parallelism</code> and <code>batch_rows</code>. Between sheets
+they mix with <code>start_sheet</code>..<code>end_sheet</code>; while a sheet is open they fail.</p>
+<pre><code class="lang-cpp">auto writer = xl::WriterHandle::open(&quot;report.xlsx&quot;, {.degree_of_parallelism = 0}).value();
+writer.write_sheet(&quot;Sales&quot;, sales);        // a range of ExcelMapper rows
+writer.write_columns(&quot;Stock&quot;, columns);    // xl::ColumnRefs, such as an xl::Table's
+if (auto done = writer.finish(); !done) { /* done.error().message */ }
+</code></pre>
+<p>An <code>xl::TableOptions</code> as the last argument writes the sheet as an Excel table, with filter buttons and
+a table style (XLSX and XLSB only, every column named). The name must be unique in the workbook; the
+style defaults to <code>TableStyleMedium2</code>, and <code>.style = std::nullopt</code> leaves the table unstyled:</p>
+<pre><code class="lang-cpp">writer.write_sheet(&quot;Sales&quot;, sales, xl::TableOptions{.name = &quot;Sales&quot;, .style = &quot;TableStyleLight9&quot;});
+</code></pre>
 <h2 id="aggregating-a-csv-in-parallel">Aggregating a CSV in parallel</h2>
 <p><code>xl::aggregate_csv&lt;Acc&gt;</code> folds a CSV file or buffer across worker threads. Each partition starts from
 a copy of the seed, <code>accumulate</code> sees each record, and <code>combine</code> merges partitions:</p>

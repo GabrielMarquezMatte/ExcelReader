@@ -146,6 +146,58 @@
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;std::optional&lt;<a href="Sheet.html">Sheet</a>&gt;, <a href="Error.html">Error</a>&gt;: The sheet, or empty when no sheet matches.</p>
+<h3 id="tables">tables</h3>
+<pre><code class="lang-cpp">std::expected&lt;std::vector&lt;TableInfo&gt;, Error&gt; tables() const
+</code></pre>
+<p>Every Excel table, in workbook order.</p>
+<p><strong>Returns</strong> std::expected&lt;std::vector&lt;<a href="TableInfo.html">TableInfo</a>&gt;, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="table">table</h3>
+<pre><code class="lang-cpp">Sheet table(int32_t index) const noexcept
+</code></pre>
+<p>Table <code>index</code> read as a sheet.</p>
+<p>Every Sheet read covers only the table's range, header row first, with the column indexes of the sheet holding it; its name and visibility are that sheet's. Makes no native call: an index outside the workbook is reported by the first read.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index</code></td>
+<td>int32_t</td>
+<td></td>
+<td>0-based table position.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> <a href="Sheet.html">Sheet</a></p>
+<h3 id="table_by_name">table_by_name</h3>
+<pre><code class="lang-cpp">std::expected&lt;std::optional&lt;Sheet&gt;, Error&gt; table_by_name(std::string_view name) const
+</code></pre>
+<p>The table called <code>name</code>, compared without regard to case, read as table() reads it.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;std::optional&lt;<a href="Sheet.html">Sheet</a>&gt;, <a href="Error.html">Error</a>&gt;: The table's sheet, or empty when no table matches.</p>
 <h3 id="is_date1904">is_date1904</h3>
 <pre><code class="lang-cpp">std::expected&lt;bool, Error&gt; is_date1904() const
 </code></pre>

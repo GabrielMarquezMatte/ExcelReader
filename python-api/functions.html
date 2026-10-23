@@ -256,7 +256,7 @@ with <code>write()</code> has no extension, so it needs <code>format</code>. The
 handed to <code>write()</code> at the object's current position, again for the rest whenever <code>write()</code>
 returns that it took only part; the object is not closed.</p>
 <p>The column names become the header row. <code>options</code> sets the sheet name and CSV dialect; see
-<code>WriteOptions</code>.</p>
+<code>WriteOptions</code>. For several sheets, use <code>SheetWriter.write_sheet</code>.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>

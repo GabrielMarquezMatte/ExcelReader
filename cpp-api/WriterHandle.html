@@ -88,7 +88,7 @@
 <h1 id="class-writerhandle">Class WriterHandle</h1>
 
 <p>Writes a workbook as calls arrive instead of building it in memory first.</p>
-<p>Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and end_row; then end_sheet. A call out of order returns an error rather than corrupting the output. Finish with finish(); destruction finishes too, but cannot report a failure.</p>
+<p>Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and end_row; then end_sheet. Or one write_columns or write_sheet per whole sheet. A call out of order returns an error rather than corrupting the output. Finish with finish(); destruction finishes too, but cannot report a failure.</p>
 <pre><code class="lang-cpp">class xl::WriterHandle
 </code></pre>
 <h2 id="methods">Methods</h2>
@@ -130,6 +130,86 @@
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; end_sheet()
 </code></pre>
 <p>Ends the current sheet.</p>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="write_columns">write_columns</h3>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; write_columns(
+    std::string_view name,
+    std::span&lt;const ColumnRef&gt; columns,
+    const std::optional&lt;TableOptions&gt; &amp; table = std::nullopt)
+</code></pre>
+<p>Writes columns as a whole sheet, as write_columns does, in one call instead of one per cell.</p>
+<p>Uses the parallelism of the options the handle was opened with; their sheet name does not apply. Fails while a sheet started with start_sheet is open.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>The sheet's name.</td>
+</tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
+<td></td>
+<td>As for write_columns.</td>
+</tr>
+<tr>
+<td><code>table</code></td>
+<td>const std::optional&lt;<a href="TableOptions.html">TableOptions</a>&gt; &amp;</td>
+<td><code>std::nullopt</code></td>
+<td>Writes the sheet as an Excel table (XLSX/XLSB only, every column named).</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="write_sheet">write_sheet</h3>
+<pre><code class="lang-cpp">template &lt;std::ranges::input_range R&gt;
+std::expected&lt;void, Error&gt; write_sheet(
+    std::string_view name,
+    R &amp;&amp; rows,
+    const std::optional&lt;TableOptions&gt; &amp; table = std::nullopt)
+</code></pre>
+<p>Writes rows as a whole sheet, as write_sheet does, on top of write_columns.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>The sheet's name.</td>
+</tr>
+<tr>
+<td><code>rows</code></td>
+<td>R &amp;&amp;</td>
+<td></td>
+<td>As for write_sheet.</td>
+</tr>
+<tr>
+<td><code>table</code></td>
+<td>const std::optional&lt;<a href="TableOptions.html">TableOptions</a>&gt; &amp;</td>
+<td><code>std::nullopt</code></td>
+<td>As for write_columns.</td>
+</tr>
+</tbody>
+</table>
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
 <h3 id="write">write</h3>
 <pre><code class="lang-cpp">template &lt;typename T&gt;

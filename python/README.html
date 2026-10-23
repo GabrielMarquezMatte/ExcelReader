@@ -123,6 +123,19 @@ with excelreader.open_workbook(&quot;report.xlsx&quot;) as workbook, ThreadPoolE
 generator that has already started keeps working after <code>workbook.close()</code>; one that has not started
 raises at its first <code>next()</code>. <code>to_arrow_stream()</code> opens its stream at the call, so it works after
 <code>close()</code> even if never started.</p>
+<h3 id="tables">Tables</h3>
+<p><code>workbook.tables</code> lists the workbook's Excel tables (&quot;Format as Table&quot; ranges), with the same
+lookups as <code>sheets</code>: index, slice or name, ignoring case. A <code>Table</code> is a <code>Sheet</code> bounded to the
+table's range, so every read works on it and starts at the table's header row:</p>
+<pre><code class="lang-python">with excelreader.open_workbook(&quot;report.xlsx&quot;) as workbook:
+    sales = workbook.tables[&quot;Sales&quot;]
+    print(sales.name, sales.sheet.name, sales.first_row, sales.last_row)
+    frame = sales.to_pandas(sales.infer_schema())
+</code></pre>
+<p>Rows and columns are zero-based and include the header and totals rows; cells keep the column
+indexes of the sheet holding the table. <code>header_row_count</code> is 0 for a table whose header row is
+turned off, and <code>totals_row_count</code> is 1 when it shows a totals row. A table is read on one thread
+whatever <code>parallelism</code> asks for.</p>
 <h3 id="formats">Formats</h3>
 <p><code>open_workbook</code> sniffs XLS/XLSX/XLSB by file signature. CSV has no signature, so it is chosen by the
 <code>.csv</code> extension — or explicitly:</p>
@@ -344,10 +357,32 @@ of <code>None</code> keeps the library default of 8,192. With shared strings on,
 content in files that differ byte for byte. xls and csv ignore both fields.</p>
 <pre><code class="lang-python">write_workbook(&quot;big.xlsx&quot;, table, types, options=WriteOptions(degree_of_parallelism=0))
 </code></pre>
-<p><strong>Phase-1 limits, stated plainly:</strong> a single sheet only (no multi-sheet workbooks); the whole table
-must already be in memory (no streaming/chunked writes); no styling beyond the temporal number
-formats <code>xl_write_typed</code> applies to DATE/TIME/TIMESTAMP columns. <code>format=&quot;auto&quot;</code> is not accepted —
-sniffing reads a file's existing signature bytes, and a file being created has none.</p>
+<p><strong>Phase-1 limits, stated plainly:</strong> <code>write_workbook</code> writes a single sheet (for several, see
+<code>write_sheet</code> below); the whole table must already be in memory (no streaming/chunked writes); no
+styling beyond the temporal number formats <code>xl_write_typed</code> applies to DATE/TIME/TIMESTAMP columns.
+<code>format=&quot;auto&quot;</code> is not accepted — sniffing reads a file's existing signature bytes, and a file being
+created has none.</p>
+<h3 id="several-sheets">Several sheets</h3>
+<p><code>open_writer</code> returns a <code>SheetWriter</code>, whose <code>write_sheet</code> writes a whole table as one sheet in a
+single native call. It takes the same <code>data</code> and <code>types</code> as <code>write_workbook</code>, so each sheet can be a
+<code>TypedTable</code> or a pandas, polars or pyarrow frame:</p>
+<pre><code class="lang-python">from excelreader import WriteOptions, open_writer
+
+with open_writer(&quot;report.xlsx&quot;, options=WriteOptions(degree_of_parallelism=0)) as writer:
+    writer.write_sheet(&quot;Sales&quot;, sales_df)
+    writer.write_sheet(&quot;Stock&quot;, table, types)
+</code></pre>
+<p>Parallelism and the other options come from <code>open_writer</code> and apply to every sheet;
+<code>WriteOptions.sheet_name</code> does not apply, since each call names its sheet. <code>write_sheet</code> raises
+<code>ExcelReaderError</code> while a sheet started with <code>start_sheet</code> is open; between sheets, the two styles
+mix freely.</p>
+<p><code>table=TableOptions(...)</code> writes the sheet as an Excel table, with filter buttons and a table style
+(xlsx and xlsb only). The name must be unique in the workbook; the style defaults to
+<code>TableStyleMedium2</code>, and <code>style=None</code> leaves the table unstyled:</p>
+<pre><code class="lang-python">from excelreader import TableOptions
+
+writer.write_sheet(&quot;Sales&quot;, sales_df, table=TableOptions(&quot;Sales&quot;, style=&quot;TableStyleLight9&quot;, column_stripes=True))
+</code></pre>
 <h2 id="writing-a-sheet-row-by-row">Writing a sheet row by row</h2>
 <p><code>open_workbook</code>'s counterpart for writing one row at a time, instead of building a whole table
 first:</p>

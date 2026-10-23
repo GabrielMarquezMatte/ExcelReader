@@ -287,7 +287,7 @@ await sheet.EndAsync();
 </code></pre>
 <p><a class="xref" href="../../api/ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.html"><code>XlsbWriterOptions</code></a> has the same property. XLS and CSV are uncompressed, so
 they have nothing to overlap and do not offer it.</p>
-<p>Writing a 50,000-row workbook (<code>WriteBenchmark</code>, both figures from one run):</p>
+<p>Writing a 50,000-row workbook (<code>WriteBenchmark</code>):</p>
 <table>
 <thead>
 <tr>
@@ -300,15 +300,15 @@ they have nothing to overlap and do not offer it.</p>
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">8.527 ms</td>
-<td style="text-align: right;">5.245 ms</td>
-<td style="text-align: right;">38%</td>
+<td style="text-align: right;">8.191 ms</td>
+<td style="text-align: right;">5.351 ms</td>
+<td style="text-align: right;">35%</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">5.786 ms</td>
-<td style="text-align: right;">3.234 ms</td>
-<td style="text-align: right;">44%</td>
+<td style="text-align: right;">5.462 ms</td>
+<td style="text-align: right;">3.282 ms</td>
+<td style="text-align: right;">40%</td>
 </tr>
 </tbody>
 </table>
@@ -375,38 +375,38 @@ compressed result), whatever the size of the sheet.</p>
 <tbody>
 <tr>
 <td>Serial</td>
-<td style="text-align: right;">171.57 ms</td>
-<td style="text-align: right;">115.39 ms</td>
+<td style="text-align: right;">165.08 ms</td>
+<td style="text-align: right;">113.61 ms</td>
 </tr>
 <tr>
 <td>Serial, <code>PrefetchWrite</code></td>
-<td style="text-align: right;">104.92 ms</td>
-<td style="text-align: right;">60.02 ms</td>
+<td style="text-align: right;">102.18 ms</td>
+<td style="text-align: right;">62.39 ms</td>
 </tr>
 <tr>
 <td>Parallel, 1 batch in flight</td>
-<td style="text-align: right;">165.22 ms</td>
-<td style="text-align: right;">107.81 ms</td>
+<td style="text-align: right;">164.23 ms</td>
+<td style="text-align: right;">114.03 ms</td>
 </tr>
 <tr>
 <td>Parallel, 2</td>
-<td style="text-align: right;">89.69 ms</td>
-<td style="text-align: right;">57.94 ms</td>
+<td style="text-align: right;">84.48 ms</td>
+<td style="text-align: right;">58.53 ms</td>
 </tr>
 <tr>
 <td>Parallel, 4</td>
-<td style="text-align: right;">46.29 ms</td>
-<td style="text-align: right;">30.62 ms</td>
+<td style="text-align: right;">44.27 ms</td>
+<td style="text-align: right;">30.04 ms</td>
 </tr>
 <tr>
 <td>Parallel, 8</td>
-<td style="text-align: right;">30.56 ms</td>
-<td style="text-align: right;">21.04 ms</td>
+<td style="text-align: right;">27.54 ms</td>
+<td style="text-align: right;">19.48 ms</td>
 </tr>
 <tr>
 <td>Parallel, 16</td>
-<td style="text-align: right;">27.93 ms</td>
-<td style="text-align: right;">18.25 ms</td>
+<td style="text-align: right;">21.64 ms</td>
+<td style="text-align: right;">15.37 ms</td>
 </tr>
 </tbody>
 </table>

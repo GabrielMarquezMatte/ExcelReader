@@ -89,9 +89,9 @@
 
 <p>A streaming workbook writer. Use as a context manager; closing finalizes the workbook, and for
 a destination with <code>write()</code> hands it the finished bytes.</p>
-<p>The required call order is <code>start_sheet</code> -&gt; <code>write_row</code> per row -&gt; <code>end_sheet</code>. Calling out of
-order raises <code>ExcelReaderError</code>, and the writer stays usable: fix the order and continue, or
-close to discard.</p>
+<p>The required call order is <code>start_sheet</code> -&gt; <code>write_row</code> per row -&gt; <code>end_sheet</code>, or one
+<code>write_sheet</code> per whole table. Calling out of order raises <code>ExcelReaderError</code>, and the writer
+stays usable: fix the order and continue, or close to discard.</p>
 <pre><code class="lang-python">class SheetWriter
 </code></pre>
 <p>Supports <code>with</code>.</p>
@@ -119,6 +119,53 @@ close to discard.</p>
 <h3 id="end_sheet">end_sheet</h3>
 <pre><code class="lang-python">def end_sheet() -&gt; None
 </code></pre>
+<h3 id="write_sheet">write_sheet</h3>
+<pre><code class="lang-python">def write_sheet(
+    name: str,
+    data: Any,
+    types: list[ColumnType] | None = None,
+    *,
+    table: TableOptions | None = None,
+) -&gt; None
+</code></pre>
+<p>Writes <code>data</code> as a whole sheet named <code>name</code>, in one native call instead of one per cell.</p>
+<p><code>data</code> and <code>types</code> follow <code>write_workbook</code>'s rules: a <code>TypedTable</code> with one <code>ColumnType</code> per
+column, or Arrow-compatible data (pyarrow, pandas, polars) with <code>types</code> None. The column names
+become the header row. With <code>table</code>, the sheet is written as an Excel table (xlsx/xlsb only).
+Parallelism and the other options come from <code>open_writer</code>; <code>WriteOptions.sheet_name</code> does not
+apply. Raises <code>ExcelReaderError</code> while a sheet started with <code>start_sheet</code> is open.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>str</td>
+<td></td>
+</tr>
+<tr>
+<td><code>data</code></td>
+<td>Any</td>
+<td></td>
+</tr>
+<tr>
+<td><code>types</code></td>
+<td>list[<a href="ColumnType.html">ColumnType</a>] | None</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td><code>table</code></td>
+<td><a href="TableOptions.html">TableOptions</a> | None</td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
 <h3 id="write_row">write_row</h3>
 <pre><code class="lang-python">def write_row(values: Sequence[Any]) -&gt; None
 </code></pre>
