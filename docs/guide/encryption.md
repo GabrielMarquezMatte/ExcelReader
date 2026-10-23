@@ -60,7 +60,7 @@ by the time it returns, so it always verifies regardless of this setting. Standa
 HMAC field, so the setting does not apply to it.
 
 Opening an encrypted workbook costs a fixed ~25 ms for key derivation, whatever the file size. After
-that, reading is ~5% slower than reading the same workbook unencrypted — see
+that, reading is ~3% slower than reading the same workbook unencrypted — see
 [Encrypted workbooks](../performance/benchmarks.md#encrypted-workbooks) in the benchmarks.
 
 Writing an encrypted workbook is a second step: build the package with any writer, then wrap it with
