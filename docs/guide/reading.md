@@ -128,7 +128,7 @@ A callback that writes to a database or sends messages must be idempotent on a C
 
 [`ExcelParseException.Row`](xref:ExcelReader.Core.Parser.ExcelParseException.Row) on `ParseAsync` counts the rows emitted so far. On `ForEachAsync` and `AggregateAsync` it is the row a sequential read reports, whether or not the read was partitioned.
 
-See the [parallel sheet benchmarks](../performance/benchmarks.md#parallel-sheet-reading) and the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. On a real-data XLSX the sheet stage drops from 24 ms (prefetched, sequential) to about 16 ms, and on XLSB from 17 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its `AggregateAsync` at dop 4 is ~1.9x faster than the typed path while allocating ~630x less, with zero garbage collections.
+See the [parallel sheet benchmarks](../performance/benchmarks.md#parallel-sheet-reading) and the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. On a real-data XLSX the sheet stage drops from 24 ms (prefetched, sequential) to about 17 ms, and on XLSB from 17 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its `AggregateAsync` at dop 4 is ~2.0x faster than the typed path while allocating ~630x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.
 
