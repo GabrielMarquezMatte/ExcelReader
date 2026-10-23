@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace ExcelReader.Core.Parser.Internal
 {
@@ -84,8 +86,17 @@ namespace ExcelReader.Core.Parser.Internal
             }
 
             bool useDefault = typeof(T).IsValueType && typeof(T).GetConstructor(Type.EmptyTypes) is null;
-            Func<T>? factory = useDefault ? null : static () => Activator.CreateInstance<T>();
+            Func<T>? factory = useDefault ? null : BuildFactory();
             return new TypeMapInfo<T>([.. propertyMaps], factory, useDefault);
+        }
+
+        private static Func<T> BuildFactory()
+        {
+            if (RuntimeFeature.IsDynamicCodeCompiled)
+            {
+                return Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
+            }
+            return static () => Activator.CreateInstance<T>();
         }
     }
 }

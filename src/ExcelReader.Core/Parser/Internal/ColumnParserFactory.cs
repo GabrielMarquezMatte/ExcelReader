@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -573,6 +574,13 @@ namespace ExcelReader.Core.Parser.Internal
             if (typeof(T).IsValueType)
             {
                 return setter.CreateDelegate<RefAction<T, TProp>>();
+            }
+            if (RuntimeFeature.IsDynamicCodeCompiled)
+            {
+                // One compiled call per cell instead of this wrapper plus the open setter delegate inside it.
+                ParameterExpression model = Expression.Parameter(typeof(T).MakeByRefType());
+                ParameterExpression value = Expression.Parameter(typeof(TProp));
+                return Expression.Lambda<RefAction<T, TProp>>(Expression.Assign(Expression.Property(model, prop), value), model, value).Compile();
             }
             Action<T, TProp> act = setter.CreateDelegate<Action<T, TProp>>();
             return (ref model, value) => act(model, value);
