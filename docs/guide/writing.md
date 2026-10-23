@@ -259,12 +259,12 @@ await sheet.EndAsync();
 [`XlsbWriterOptions`](xref:ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions) has the same property. XLS and CSV are uncompressed, so
 they have nothing to overlap and do not offer it.
 
-Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):
+Writing a 50,000-row workbook (`WriteBenchmark`):
 
 | Workload | Default | `PrefetchWrite = true` | Gain |
 |---|---:|---:|---:|
-| XLSX | 8.527 ms | 5.245 ms | 38% |
-| XLSB | 5.786 ms | 3.234 ms | 44% |
+| XLSX | 8.191 ms | 5.351 ms | 35% |
+| XLSB | 5.462 ms | 3.282 ms | 40% |
 
 Allocations are unchanged (4.02 MB either way) — the background writer hands over buffers the row
 writer already owns rather than copying them.
@@ -328,13 +328,13 @@ Writing 1,000,000 rows of four columns (text, integer, date, number) to a `Memor
 
 | Write | XLSX | XLSB |
 |---|---:|---:|
-| Serial | 171.57 ms | 115.39 ms |
-| Serial, `PrefetchWrite` | 104.92 ms | 60.02 ms |
-| Parallel, 1 batch in flight | 165.22 ms | 107.81 ms |
-| Parallel, 2 | 89.69 ms | 57.94 ms |
-| Parallel, 4 | 46.29 ms | 30.62 ms |
-| Parallel, 8 | 30.56 ms | 21.04 ms |
-| Parallel, 16 | 27.93 ms | 18.25 ms |
+| Serial | 165.08 ms | 113.61 ms |
+| Serial, `PrefetchWrite` | 102.18 ms | 62.39 ms |
+| Parallel, 1 batch in flight | 164.23 ms | 114.03 ms |
+| Parallel, 2 | 84.48 ms | 58.53 ms |
+| Parallel, 4 | 44.27 ms | 30.04 ms |
+| Parallel, 8 | 27.54 ms | 19.48 ms |
+| Parallel, 16 | 21.64 ms | 15.37 ms |
 
 The file comes out 0.18% (XLSX) or 0.04% (XLSB) larger, because each batch is compressed on its own.
 As with `PrefetchWrite`, this is for single-file batch work: a server already writing many files at
