@@ -100,6 +100,12 @@ cursor, so reads on one workbook never disturb one another.</p>
 <p><strong>Type</strong> <a href="Sheets.html">Sheets</a></p>
 <p>The workbook's sheets: <code>len()</code>, iteration, and lookup by index, slice or name.</p>
 <p><code>[sheet.name for sheet in workbook.sheets]</code> lists every sheet's name.</p>
+<h3 id="tables">tables</h3>
+<pre><code class="lang-python">tables: Tables
+</code></pre>
+<p><strong>Type</strong> <a href="Tables.html">Tables</a></p>
+<p>The workbook's Excel tables: <code>len()</code>, iteration, and lookup by index, slice or name
+(ignoring case). Each reads like a <code>Sheet</code>, bounded to the table's range.</p>
 <h3 id="is_date1904">is_date1904</h3>
 <pre><code class="lang-python">is_date1904: bool
 </code></pre>

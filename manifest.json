@@ -1954,6 +1954,26 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/TableInfo.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/TableInfo.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/TableOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/TableOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/cpp-api/TableReader.md",
       "output": {
         ".html": {
@@ -2301,6 +2321,36 @@
       "output": {
         ".html": {
           "relative_path": "python-api/StringColumn.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Table.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Table.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/TableOptions.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/TableOptions.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Tables.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Tables.html"
         }
       },
       "version": ""

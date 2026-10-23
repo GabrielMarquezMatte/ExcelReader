@@ -219,6 +219,26 @@ let tables = std::thread::scope(|scope| {
 })?;
 # Ok::&lt;(), excelreader::Error&gt;(())
 </code></pre>
+<h3 id="tables">Tables</h3>
+<p><code>Workbook::tables</code> lists the workbook's Excel tables (&quot;Format as Table&quot; ranges) as <code>TableInfo</code>:
+name, the sheet holding it, and its zero-based range, header and totals rows included.
+<code>Workbook::table(index)</code> and <code>table_by_name(name)</code> (ignoring case) return a <code>Sheet</code> bounded to the
+table, so every read works on it and starts at the table's header row:</p>
+<pre><code class="lang-rust,no_run"># use excelreader::{ReadOptions, Workbook};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Sale { #[excel(name = &quot;Units&quot;)] units: i64 }
+let workbook = Workbook::open(&quot;report.xlsx&quot;)?;
+for table in workbook.tables()? {
+    println!(&quot;{} on sheet {}: rows {}..={}&quot;, table.name, table.sheet, table.first_row, table.last_row);
+}
+if let Some(sales) = workbook.table_by_name(&quot;Sales&quot;)? {
+    let rows = sales.parse::&lt;Sale&gt;(&amp;ReadOptions::new())?;
+    println!(&quot;{} sales&quot;, rows.len());
+}
+# Ok::&lt;(), excelreader::Error&gt;(())
+</code></pre>
+<p>Cells keep the column indexes of the sheet holding the table, and the table's <code>Sheet::name</code> is that
+sheet's. A table is read on one thread whatever the degree of parallelism asks for.</p>
 <h3 id="encrypted-workbooks">Encrypted workbooks</h3>
 <p><code>OpenOptions::password</code> unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm):</p>
 <pre><code class="lang-rust,no_run">use excelreader::{ErrorKind, OpenOptions};
@@ -372,7 +392,8 @@ does not recognize is an error - a file being created has no signature bytes to 
 <p>For XLSX and XLSB, <code>degree_of_parallelism</code> formats and compresses batches of <code>batch_rows</code> rows on
 several threads: <code>0</code> uses every processor, <code>1</code> writes serially, and leaving it unset is serial.
 Unset <code>batch_rows</code> keeps the library default of 8,192. With shared strings on, two parallel runs
-give the same content in files that differ byte for byte. XLS, CSV and <code>WriterHandle</code> ignore both.</p>
+give the same content in files that differ byte for byte. XLS, CSV and <code>WriterHandle</code>'s per-cell
+writes ignore both.</p>
 <pre><code class="lang-rust,no_run">use excelreader::{write_columns, Column, ColumnData, WriteOptions};
 # let ids = [1i64, 2, 3];
 # let columns = [Column::new(Some(&quot;id&quot;), ColumnData::I64(&amp;ids))];
@@ -415,6 +436,25 @@ call per cell (<code>None</code> writes a blank cell), left to right, then <code
 returns <code>Err</code> rather than corrupting output. A handle from <code>new</code> writes the whole workbook to its
 writer once, in <code>finish</code>. Dropping a handle without finishing it closes it on a best-effort basis,
 discarding any error, and writes nothing to a writer.</p>
+<p>To write several sheets from whole tables, call the handle's <code>write_sheet</code> or <code>write_columns</code> once
+per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
+instead of one per cell, using the handle's <code>degree_of_parallelism</code> and <code>batch_rows</code>. Between sheets
+they mix with <code>start_sheet..end_sheet</code>; while a sheet is open they return <code>Err</code>.</p>
+<pre><code class="lang-rust,no_run">use excelreader::{WriteOptions, WriterHandle};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Row { #[excel(name = &quot;Name&quot;)] name: String }
+# let sales = vec![Row::default()];
+# let stock = vec![Row::default()];
+
+let mut handle = WriterHandle::create(&quot;report.xlsx&quot;, &amp;WriteOptions::new().degree_of_parallelism(0))?;
+handle.write_sheet(&quot;Sales&quot;, &amp;sales, None)?;
+handle.write_sheet(&quot;Stock&quot;, &amp;stock, None)?;
+handle.finish()?;
+# Ok::&lt;(), excelreader::Error&gt;(())
+</code></pre>
+<p>Passing <code>Some(&amp;TableOptions::new(&quot;Sales&quot;))</code> writes the sheet as an Excel table, with filter buttons
+and a table style (XLSX and XLSB only, every column named). The name must be unique in the
+workbook; the style defaults to <code>TableStyleMedium2</code>, and <code>.style(None)</code> leaves the table unstyled.</p>
 <h2 id="reading-rows-one-at-a-time">Reading rows one at a time</h2>
 <p><code>Sheet::rows</code> returns a cursor over that sheet. Each row borrows a buffer the cursor
 reuses, so iterating a sheet allocates nothing per row:</p>
