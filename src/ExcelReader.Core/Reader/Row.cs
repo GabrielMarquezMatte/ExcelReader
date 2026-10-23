@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Reader
@@ -33,6 +34,12 @@ namespace ExcelReader.Core.Reader
         public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
 
         internal ReadOnlySpan<CellDesc> Descriptors => _cells;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Cell CellAt(int index)
+        {
+            return _cells[index].ToCell(_rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
+        }
 
         internal ReadOnlySpan<byte> RowValues => _rowValues;
 

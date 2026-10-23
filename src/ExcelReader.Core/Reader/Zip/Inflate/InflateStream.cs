@@ -1,12 +1,13 @@
 using System.Buffers;
 using System.Diagnostics;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Reader.Zip.Inflate
 {
     /// <summary>
     /// Read-only stream that inflates a raw DEFLATE stream. Owns <c>inner</c> and disposes it.
     /// </summary>
-    internal sealed class InflateStream : Stream
+    internal sealed class InflateStream : ReadOnlyStream
     {
         private const int InputSize = 64 * 1024;
         private const int History = 32 * 1024;
@@ -35,15 +36,6 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         }
 
         public override bool CanRead => !_disposed;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
 
         public override int Read(byte[] buffer, int offset, int count)
         {
@@ -101,25 +93,6 @@ namespace ExcelReader.Core.Reader.Zip.Inflate
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
-        }
-
-        public override void Flush()
-        {
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
         }
 
         protected override void Dispose(bool disposing)

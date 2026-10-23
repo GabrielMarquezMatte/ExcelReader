@@ -852,24 +852,6 @@ namespace ExcelReader.Tests.Reader.Zip
         }
 
         [Fact]
-        public void ZipArchiveEntryOpenSilentlyTruncatesAtDeclaredLengthUnderOverDelivery()
-        {
-            using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
-            byte[] zipBytes = built.ToArray();
-            uint realLength = ReadDeclaredUncompressedSize(zipBytes, "xl/workbook.xml");
-            Assert.True(realLength > 0);
-            PatchCentralDirectoryUInt32(zipBytes, "xl/workbook.xml", fieldOffset: 24, realLength - 1);
-
-            using var ms = new MemoryStream(zipBytes);
-            using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
-            ZipArchiveEntry entry = zip.GetEntry("xl/workbook.xml")!;
-            using Stream stream = entry.Open();
-            byte[] buffer = new byte[(int)entry.Length];
-            stream.ReadExactly(buffer);
-            Assert.Equal(-1, stream.ReadByte());
-        }
-
-        [Fact]
         public void DeflatedEntryCutShortIsRejectedWhenOpenedAsAPart()
         {
             byte[] zipBytes = BuildZipWithCutDeflatedEntry("data.xml");
@@ -950,12 +932,6 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.True(compressedSize > 8);
             PatchCentralDirectoryUInt32(zipBytes, entryName, fieldOffset: 20, compressedSize / 2);
             return zipBytes;
-        }
-
-        private static uint ReadDeclaredUncompressedSize(byte[] zipBytes, string entryName)
-        {
-            int cdOffset = FindCentralDirectoryOffset(zipBytes, entryName);
-            return BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(cdOffset + 24, 4));
         }
 
         private static byte[] ReadViaZipArchive(byte[] zipBytes, string entryName)

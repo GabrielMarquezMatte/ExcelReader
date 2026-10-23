@@ -149,6 +149,15 @@ impl<A, F> Shared<'_, A, F> {
         }
         PANIC_STATUS
     }
+
+    /// Runs one user callback: its error code passes through and a panic is stored as above.
+    fn guard(&self, body: impl FnOnce() -> Result<(), i32>) -> i32 {
+        match catch_unwind(AssertUnwindSafe(body)) {
+            Ok(Ok(())) => XL_OK,
+            Ok(Err(code)) => code,
+            Err(payload) => self.store_panic(payload),
+        }
+    }
 }
 
 /// # Safety
@@ -187,13 +196,9 @@ where
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
     let accumulator = unsafe { &mut (*(state as *mut State<A>)).value };
     let row = unsafe { &*row };
-    match catch_unwind(AssertUnwindSafe(|| {
+    shared.guard(|| {
         accumulator.accumulate(unsafe { RowRef::from_decoded(row.cells, row.cell_count) })
-    })) {
-        Ok(Ok(())) => XL_OK,
-        Ok(Err(code)) => code,
-        Err(payload) => shared.store_panic(payload),
-    }
+    })
 }
 
 /// # Safety
@@ -210,11 +215,7 @@ where
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
     let accumulator = unsafe { &mut (*(acc as *mut State<A>)).value };
     let other = unsafe { &mut (*(next as *mut State<A>)).value };
-    match catch_unwind(AssertUnwindSafe(|| accumulator.combine(other))) {
-        Ok(Ok(())) => XL_OK,
-        Ok(Err(code)) => code,
-        Err(payload) => shared.store_panic(payload),
-    }
+    shared.guard(|| accumulator.combine(other))
 }
 
 /// # Safety
@@ -246,13 +247,7 @@ where
 {
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
     let accumulator = unsafe { &mut (*(state as *mut State<A>)).value };
-    match catch_unwind(AssertUnwindSafe(|| {
-        accumulator.accumulate(unsafe { RowRef::from_views(cells, count) })
-    })) {
-        Ok(Ok(())) => XL_OK,
-        Ok(Err(code)) => code,
-        Err(payload) => shared.store_panic(payload),
-    }
+    shared.guard(|| accumulator.accumulate(unsafe { RowRef::from_views(cells, count) }))
 }
 
 /// # Safety
@@ -269,11 +264,7 @@ where
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
     let accumulator = unsafe { &mut (*(acc as *mut State<A>)).value };
     let other = unsafe { &mut (*(next as *mut State<A>)).value };
-    match catch_unwind(AssertUnwindSafe(|| accumulator.combine(other))) {
-        Ok(Ok(())) => XL_OK,
-        Ok(Err(code)) => code,
-        Err(payload) => shared.store_panic(payload),
-    }
+    shared.guard(|| accumulator.combine(other))
 }
 
 fn raw_view_aggregation<A, F>(shared: &Shared<'_, A, F>) -> XlAggregation

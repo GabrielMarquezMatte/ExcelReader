@@ -1087,6 +1087,87 @@ namespace ExcelReader.Tests.Native
             }
         }
 
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, 1)]
+        [InlineData(NativeFormat.Xlsb, 1)]
+        [InlineData(NativeFormat.Xlsx, 4)]
+        [InlineData(NativeFormat.Xlsb, 4)]
+        public void WriteTable_Should_Write_Each_Table_As_A_Sheet_Beside_Streamed_Ones(int format, int degreeOfParallelism)
+        {
+            NativeTable sales = BuildQtyNameTable([3L, 7L], ["widget", "gadget"]);
+            NativeTable stock = BuildQtyNameTable([10L, 20L, 30L, 40L, 50L], ["a", "b", "c", "d", "e"]);
+            try
+            {
+                NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+                raw.DegreeOfParallelism = degreeOfParallelism;
+                raw.BatchRows = 2;
+                Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+                Assert.Equal(NativeStatus.Ok, WriteApi.OpenWriteHandleToMemory(format, options, out NativeWriterHandle? handle));
+                Assert.NotNull(handle);
+
+                handle.WriteSheet("Vendas", QtyNameSpecs(), sales, hasHeader: true, excelTable: null);
+                handle.StartSheet("Resumo");
+                handle.StartRow();
+                handle.WriteString("total");
+                handle.EndRow();
+                handle.EndSheet();
+                handle.WriteSheet("Estoque", QtyNameSpecs(), stock, hasHeader: false, excelTable: null);
+
+                Assert.Equal(NativeStatus.Ok, WriteApi.GetWriteHandleBytes(handle, out byte[]? bytes));
+                handle.Dispose();
+
+                using IExcelWorkbook workbook = Excel.Open(bytes.AsMemory());
+                Assert.Equal(["Vendas", "Resumo", "Estoque"], Enumerable.Range(0, workbook.SheetCount).Select(i => workbook.SheetAt(i).Name), StringComparer.Ordinal);
+                Assert.Equal(["qty|name", "3|widget", "7|gadget"], ReadCells(workbook.SheetAt(0)), StringComparer.Ordinal);
+                Assert.Equal(["total"], ReadCells(workbook.SheetAt(1)), StringComparer.Ordinal);
+                Assert.Equal(["10|a", "20|b", "30|c", "40|d", "50|e"], ReadCells(workbook.SheetAt(2)), StringComparer.Ordinal);
+            }
+            finally
+            {
+                FreeBuiltTable(ref sales);
+                FreeBuiltTable(ref stock);
+            }
+        }
+
+        [Fact]
+        public void WriteTable_Should_Throw_While_A_Streamed_Sheet_Is_Open()
+        {
+            NativeTable table = BuildQtyNameTable([3L], ["widget"]);
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, WriteApi.OpenWriteHandleToMemory(NativeFormat.Xlsx, DefaultWriteOptions(), out NativeWriterHandle? handle));
+                Assert.NotNull(handle);
+                using (handle)
+                {
+                    handle.StartSheet("Open");
+                    Assert.Throws<InvalidOperationException>(() => handle.WriteSheet("Table", QtyNameSpecs(), table, hasHeader: true, excelTable: null));
+                    handle.EndSheet();
+                    handle.WriteSheet("Table", QtyNameSpecs(), table, hasHeader: true, excelTable: null);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        private static List<string> ReadCells(IExcelSheet sheet)
+        {
+            List<string> rows = [];
+            using IExcelRowEnumerator enumerator = sheet.GetEnumerator();
+            while (enumerator.MoveNext())
+            {
+                Row row = enumerator.Current;
+                string[] cells = new string[row.ColumnCount];
+                for (int column = 0; column < cells.Length; column++)
+                {
+                    cells[column] = row[column].GetString();
+                }
+                rows.Add(string.Join('|', cells));
+            }
+            return rows;
+        }
+
         [Fact]
         public void WriteTyped_Should_Apply_The_Csv_Delimiter_Override()
         {

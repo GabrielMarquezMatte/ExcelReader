@@ -12,7 +12,7 @@ using ExcelReader.Core.Writer.Zip;
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
-    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>, IBatchSheet<XlsbSheetWriter, XlsbRowWriter>
+    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>, IBatchSheet<XlsbSheetWriter, XlsbRowWriter>, IZipSheet
     {
         private const int SpillThreshold = 64 * 1024;
 
@@ -86,7 +86,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             _state = WriterState.Started;
             if (_owner.UseSharedStrings)
             {
-                _workerStrings = new WorkerStringCache(_owner.SharedStrings!, _owner.SharedStringsGate);
+                _workerStrings = new WorkerStringCache(_owner.SharedStrings!);
             }
         }
 
@@ -165,16 +165,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return;
             }
-            var columns = new SortedSet<int>();
-            if (_columnStyles is not null)
-            {
-                columns.UnionWith(_columnStyles.Keys);
-            }
-            if (_columnWidths is not null)
-            {
-                columns.UnionWith(_columnWidths.Keys);
-            }
-            foreach (int columnIndex in columns)
+            foreach (int columnIndex in SheetColumnValidation.Columns(_columnStyles, _columnWidths))
             {
                 int styleId = _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int s) ? s : 0;
                 bool hasWidth = false;
@@ -387,12 +378,12 @@ namespace ExcelReader.Core.Writer.Xlsb
             Release(faulted: true);
         }
 
-        internal void Abandon()
+        void IZipSheet.Abandon()
         {
             Fault();
         }
 
-        internal ValueTask AbandonAsync()
+        ValueTask IZipSheet.AbandonAsync()
         {
             return FaultAsync();
         }

@@ -451,7 +451,7 @@ namespace ExcelReader.Core.Reader.Zip
         {
             ThrowIfEntryDataInvalid(dataOffset, entry);
             Stream raw = HasMemory
-                ? ToReadableMemoryStream(CompressedSlice(dataOffset, entry.CompressedSize))
+                ? new ReadOnlyMemoryStream(CompressedSlice(dataOffset, entry.CompressedSize))
                 : new ByteSourceStream(_source, dataOffset, entry.CompressedSize);
             Stream opened = entry.Method == 0 ? raw : new InflateStream(raw);
             return WorkbookLookups.Wrap(
@@ -850,7 +850,7 @@ namespace ExcelReader.Core.Reader.Zip
             byte[] rented = ArrayPool<byte>.Shared.Rent(size);
             try
             {
-                using MemoryStream source = ToReadableMemoryStream(compressed);
+                using var source = new ReadOnlyMemoryStream(compressed);
                 using var inflate = new InflateStream(source);
                 try
                 {
@@ -877,15 +877,6 @@ namespace ExcelReader.Core.Reader.Zip
         private static void ThrowChecksumMismatch()
         {
             throw new InvalidDataException(LimitedReadStream.ChecksumMismatch);
-        }
-
-        private static MemoryStream ToReadableMemoryStream(ReadOnlyMemory<byte> compressed)
-        {
-            if (MemoryMarshal.TryGetArray(compressed, out ArraySegment<byte> segment))
-            {
-                return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
-            }
-            return new MemoryStream(compressed.ToArray(), writable: false);
         }
     }
 }
