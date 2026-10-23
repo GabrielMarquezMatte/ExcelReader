@@ -1,4 +1,5 @@
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 
 
 namespace ExcelReader.Core.Parser.Internal
@@ -84,9 +85,10 @@ namespace ExcelReader.Core.Parser.Internal
                 seen[..bindings.Length].Clear();
             }
             int bindingIndex = 0;
-            foreach (RowCell rowCell in row.Cells)
+            ReadOnlySpan<CellDesc> cells = row.Descriptors;
+            for (int i = 0; i < cells.Length; i++)
             {
-                int column = rowCell.ColumnIndex;
+                int column = cells[i].Column;
                 while (bindingIndex < bindings.Length && bindings[bindingIndex].Column < column)
                 {
                     bindingIndex++;
@@ -100,12 +102,12 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     continue;
                 }
-                Cell cell = rowCell.Value;
-                if (cell.Type == CellType.Empty)
+                if (cells[i].Type == CellType.Empty)
                 {
                     bindingIndex++;
                     continue;
                 }
+                Cell cell = row.CellAt(i);
                 if (binding.Parser(ref model, in cell, in context))
                 {
                     if (track && binding.RequireValue)
