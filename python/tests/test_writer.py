@@ -487,3 +487,30 @@ def test_write_workbook_takes_numpy_columns():
     assert list(result.columns[0]) == [3, 7]
     assert list(result.columns[1]) == [1.5, 2.5]
     assert list(result.columns[3]) == [1, 0]
+
+
+def test_write_workbook_frees_its_column_copies_without_a_gc_pass():
+    import ctypes
+    import gc
+
+    rows = 4096
+    names = b"".join(b"name%05d" % i for i in range(rows))
+    table = TypedTable(
+        row_count=rows,
+        names=["qty", "name"],
+        columns=[array("q", range(rows)), StringColumn(array("i", range(0, 9 * rows + 1, 9)), names)],
+        validity=[b"\xff" * (rows // 8), None],
+    )
+    gc.collect()
+    gc.disable()
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        write_workbook(io.BytesIO(), table, [ColumnType.I64, ColumnType.STRING], format="xlsx")
+        gc.collect()
+        leaked = [o for o in gc.garbage if isinstance(o, ctypes.Array) and ctypes.sizeof(o) >= rows // 8]
+    finally:
+        gc.set_debug(0)
+        gc.garbage.clear()
+        gc.enable()
+
+    assert leaked == []

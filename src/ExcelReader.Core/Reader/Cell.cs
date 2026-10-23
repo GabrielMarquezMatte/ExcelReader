@@ -100,10 +100,11 @@ namespace ExcelReader.Core.Reader
                     result = Unsafe.As<double, T>(ref fast);
                     return true;
                 }
-                if (typeof(T) == typeof(decimal) && UsesDotDecimalSeparator(provider) && FastDecimal.TryParse(Value, out decimal fastDecimal))
+                if (typeof(T) == typeof(decimal))
                 {
-                    result = Unsafe.As<decimal, T>(ref fastDecimal);
-                    return true;
+                    bool parsed = TryParseDecimalText(Value, provider, out decimal text);
+                    result = Unsafe.As<decimal, T>(ref text);
+                    return parsed;
                 }
                 if (TryParseAsciiDigits(Value, provider, out result))
                 {
@@ -125,15 +126,12 @@ namespace ExcelReader.Core.Reader
             }
             if (typeof(T) == typeof(decimal))
             {
-                if (double.IsNaN(_number) || double.IsInfinity(_number)
-                    || _number < (double)decimal.MinValue || _number > (double)decimal.MaxValue)
-                {
-                    result = default;
-                    return false;
-                }
-                decimal m = (decimal)_number;
+                ReadOnlySpan<byte> text = Value;
+                bool converted = text.IsEmpty
+                    ? TryNumberToDecimal(_number, out decimal m)
+                    : TryParseDecimalText(text, CultureInfo.InvariantCulture, out m);
                 result = Unsafe.As<decimal, T>(ref m);
-                return true;
+                return converted;
             }
             if (TryParseIntegral(out result))
             {
@@ -143,6 +141,62 @@ namespace ExcelReader.Core.Reader
             return CellFormatter.TryFormatDouble(_number, buffer, out int written)
                 ? T.TryParse(buffer[..written], CultureInfo.InvariantCulture, out result)
                 : T.TryParse(Value, provider, out result);
+        }
+
+        private static bool TryParseDecimalText(ReadOnlySpan<byte> utf8, IFormatProvider provider, out decimal value)
+        {
+            return (UsesDotDecimalSeparator(provider) && FastDecimal.TryParse(utf8, out value))
+                || decimal.TryParse(utf8, NumberStyles.Number | NumberStyles.AllowExponent, provider, out value);
+        }
+
+        // A binary cell keeps no text, so this goes through the shortest text that round-trips the double, the
+        // text XLSX stores: the (decimal)double cast rounds to 15 digits on .NET 10 but exactly from .NET 11.
+        [SkipLocalsInit]
+        private static bool TryNumberToDecimal(double number, out decimal value)
+        {
+            if (double.IsNaN(number) || double.IsInfinity(number)
+                || number < (double)decimal.MinValue || number > (double)decimal.MaxValue)
+            {
+                value = default;
+                return false;
+            }
+            if (Math.Abs(number) < 9007199254740992.0 && number == Math.Truncate(number))
+            {
+                value = (long)number;
+                return true;
+            }
+            if (TryShortDecimal(number, out value))
+            {
+                return true;
+            }
+            Span<byte> buffer = stackalloc byte[32];
+            if (!CellFormatter.TryFormatDouble(number, buffer, out int written))
+            {
+                value = default;
+                return false;
+            }
+            return TryParseDecimalText(buffer[..written], CultureInfo.InvariantCulture, out value);
+        }
+
+        // The fewest decimal places whose integer mantissa (at most 15 digits) divides back to the same
+        // double: the decimal its shortest round-trip text would parse to, without formatting that text.
+        private static bool TryShortDecimal(double number, out decimal value)
+        {
+            const double MaxMantissa = 1e15;
+            double magnitude = Math.Abs(number);
+            double pow10 = 1;
+            for (int scale = 0; scale <= 15 && magnitude * pow10 < MaxMantissa; scale++, pow10 *= 10)
+            {
+                double scaled = Math.Round(magnitude * pow10);
+                if (scaled / pow10 == magnitude)
+                {
+                    ulong mantissa = (ulong)scaled;
+                    value = new decimal((int)mantissa, (int)(mantissa >> 32), 0, number < 0, (byte)scale);
+                    return true;
+                }
+            }
+            value = default;
+            return false;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

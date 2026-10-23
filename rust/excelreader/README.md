@@ -148,6 +148,31 @@ let tables = std::thread::scope(|scope| {
 # Ok::<(), excelreader::Error>(())
 ```
 
+### Tables
+
+`Workbook::tables` lists the workbook's Excel tables ("Format as Table" ranges) as `TableInfo`:
+name, the sheet holding it, and its zero-based range, header and totals rows included.
+`Workbook::table(index)` and `table_by_name(name)` (ignoring case) return a `Sheet` bounded to the
+table, so every read works on it and starts at the table's header row:
+
+```rust,no_run
+# use excelreader::{ReadOptions, Workbook};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Sale { #[excel(name = "Units")] units: i64 }
+let workbook = Workbook::open("report.xlsx")?;
+for table in workbook.tables()? {
+    println!("{} on sheet {}: rows {}..={}", table.name, table.sheet, table.first_row, table.last_row);
+}
+if let Some(sales) = workbook.table_by_name("Sales")? {
+    let rows = sales.parse::<Sale>(&ReadOptions::new())?;
+    println!("{} sales", rows.len());
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+Cells keep the column indexes of the sheet holding the table, and the table's `Sheet::name` is that
+sheet's. A table is read on one thread whatever the degree of parallelism asks for.
+
 ### Encrypted workbooks
 
 `OpenOptions::password` unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm):
@@ -342,7 +367,8 @@ does not recognize is an error - a file being created has no signature bytes to 
 For XLSX and XLSB, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
 several threads: `0` uses every processor, `1` writes serially, and leaving it unset is serial.
 Unset `batch_rows` keeps the library default of 8,192. With shared strings on, two parallel runs
-give the same content in files that differ byte for byte. XLS, CSV and `WriterHandle` ignore both.
+give the same content in files that differ byte for byte. XLS, CSV and `WriterHandle`'s per-cell
+writes ignore both.
 
 ```rust,no_run
 use excelreader::{write_columns, Column, ColumnData, WriteOptions};
@@ -396,6 +422,29 @@ call per cell (`None` writes a blank cell), left to right, then `finish`. A call
 returns `Err` rather than corrupting output. A handle from `new` writes the whole workbook to its
 writer once, in `finish`. Dropping a handle without finishing it closes it on a best-effort basis,
 discarding any error, and writes nothing to a writer.
+
+To write several sheets from whole tables, call the handle's `write_sheet` or `write_columns` once
+per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
+instead of one per cell, using the handle's `degree_of_parallelism` and `batch_rows`. Between sheets
+they mix with `start_sheet..end_sheet`; while a sheet is open they return `Err`.
+
+```rust,no_run
+use excelreader::{WriteOptions, WriterHandle};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
+# let sales = vec![Row::default()];
+# let stock = vec![Row::default()];
+
+let mut handle = WriterHandle::create("report.xlsx", &WriteOptions::new().degree_of_parallelism(0))?;
+handle.write_sheet("Sales", &sales, None)?;
+handle.write_sheet("Stock", &stock, None)?;
+handle.finish()?;
+# Ok::<(), excelreader::Error>(())
+```
+
+Passing `Some(&TableOptions::new("Sales"))` writes the sheet as an Excel table, with filter buttons
+and a table style (XLSX and XLSB only, every column named). The name must be unique in the
+workbook; the style defaults to `TableStyleMedium2`, and `.style(None)` leaves the table unstyled.
 
 ## Reading rows one at a time
 

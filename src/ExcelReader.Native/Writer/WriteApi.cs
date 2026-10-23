@@ -223,25 +223,7 @@ namespace ExcelReader.Native.Writer
             try
             {
                 TSheet sheet = workbook.AddSheet(sheetName);
-                ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
-
-                if (hasHeader)
-                {
-                    WriteHeaderRow<TSheet, TRow>(sheet, specs);
-                }
-                if (parallel is not null && writeParallel is not null)
-                {
-                    writeParallel(sheet, RowIndices(table.RowCount), (row, index) => WriteDataCells(row, table, index), parallel)
-                        .AsTask().GetAwaiter().GetResult();
-                }
-                else
-                {
-                    for (long row = 0; row < table.RowCount; row++)
-                    {
-                        WriteDataRow<TSheet, TRow>(sheet, table, row);
-                    }
-                }
-
+                WriteSheetBody<TSheet, TRow>(workbook, sheet, specs, table, hasHeader, null, parallel, writeParallel);
                 sheet.End();
                 sheet.Dispose();
                 workbook.End();
@@ -249,6 +231,45 @@ namespace ExcelReader.Native.Writer
             finally
             {
                 workbook.Dispose();
+            }
+        }
+
+        internal static void WriteSheetBody<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeColumnSpec[] specs, NativeTable table, bool hasHeader,
+            NativeExcelTable? excelTable, ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
+
+            if (excelTable is not null)
+            {
+                var tables = (ITableSheetWriter<TRow>)sheet;
+                tables.BeginTable(excelTable.Name, [.. specs.Select(spec => spec.Names[0])], excelTable.Options);
+                WriteDataRows(sheet, table, parallel, writeParallel);
+                tables.EndTable();
+                return;
+            }
+            if (hasHeader)
+            {
+                WriteHeaderRow<TSheet, TRow>(sheet, specs);
+            }
+            WriteDataRows(sheet, table, parallel, writeParallel);
+        }
+
+        private static void WriteDataRows<TSheet, TRow>(TSheet sheet, NativeTable table,
+            ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            if (parallel is not null && writeParallel is not null)
+            {
+                writeParallel(sheet, RowIndices(table.RowCount), (row, index) => WriteDataCells(row, table, index), parallel)
+                    .AsTask().GetAwaiter().GetResult();
+                return;
+            }
+            for (long row = 0; row < table.RowCount; row++)
+            {
+                WriteDataRow<TSheet, TRow>(sheet, table, row);
             }
         }
 

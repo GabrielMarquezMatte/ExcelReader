@@ -6,7 +6,7 @@ using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Crypto
 {
-    internal sealed class DecryptedPackageStream : Stream
+    internal sealed class DecryptedPackageStream : ReadOnlyStream
     {
         private const int SegmentSize = 4096;
         private const int PrefixSize = 8;
@@ -94,11 +94,7 @@ namespace ExcelReader.Core.Crypto
             return declared;
         }
 
-        public override bool CanRead => true;
-
         public override bool CanSeek => true;
-
-        public override bool CanWrite => false;
 
         public override long Length => _length;
 
@@ -110,10 +106,6 @@ namespace ExcelReader.Core.Crypto
                 ArgumentOutOfRangeException.ThrowIfNegative(value);
                 _position = value;
             }
-        }
-
-        public override void Flush()
-        {
         }
 
         public override int Read(byte[] buffer, int offset, int count)
@@ -194,16 +186,6 @@ namespace ExcelReader.Core.Crypto
             }
             _position = newPosition;
             return _position;
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
         }
 
         private void EnsureSegment(int index)

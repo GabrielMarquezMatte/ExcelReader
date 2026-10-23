@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Sources;
@@ -32,7 +31,7 @@ namespace ExcelReader.Core.Reader.Xls
 
         internal static WorkbookStream OpenWorkbook(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            using MemoryStream metadata = AsStream(data);
+            using var metadata = new ReadOnlyMemoryStream(data);
             return BuildWorkbook(metadata, ownsSource: false, options ?? ExcelReaderOptions.Default, memory: data);
         }
 
@@ -86,15 +85,6 @@ namespace ExcelReader.Core.Reader.Xls
             }
             ms.Position = 0;
             return (ms, true);
-        }
-
-        internal static MemoryStream AsStream(ReadOnlyMemory<byte> data)
-        {
-            if (MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment))
-            {
-                return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
-            }
-            return new MemoryStream(data.ToArray(), writable: false);
         }
 
         private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource, ExcelReaderOptions options, ReadOnlyMemory<byte> memory = default)

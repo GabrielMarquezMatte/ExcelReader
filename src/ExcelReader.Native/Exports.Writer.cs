@@ -256,6 +256,52 @@ namespace ExcelReader.Native
             return RunWriterOp(handle, static writerHandle => writerHandle.EndSheet());
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_sheet")]
+        public static int WriteSheet(nint handle, byte* name, int nameLength, NativeColumnSpecRaw* specs, NativeTable* table, NativeSheetOptionsRaw* options)
+        {
+            if (name is null || !TypedApi.IsValidNameLength(nameLength) || specs is null || table is null
+                || !TypedApi.IsValidSpecCount(table->ColumnCount))
+            {
+                NativeApi.SetLastError("xl_write_sheet needs a name, specs and a table with 1..max columns.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                if (!NativeExcelTable.TryRead(options, out NativeExcelTable? excelTable, out string? optionsError))
+                {
+                    NativeApi.SetLastError(optionsError);
+                    return NativeStatus.InvalidArgument;
+                }
+                if (!TryDecodeColumnSpecs(specs, table->ColumnCount, out NativeColumnSpec[] decoded))
+                {
+                    NativeApi.SetLastError("xl_write_sheet got a column spec with an invalid name.");
+                    return NativeStatus.InvalidArgument;
+                }
+                if (!WriteApi.TryValidateWriteTable(decoded, *table, out bool hasHeader, out string? validationError))
+                {
+                    NativeApi.SetLastError(validationError);
+                    return NativeStatus.InvalidArgument;
+                }
+                if (excelTable is not null && !hasHeader)
+                {
+                    NativeApi.SetLastError("an Excel table needs every column named: its header row holds the column names.");
+                    return NativeStatus.InvalidArgument;
+                }
+                writerHandle.WriteSheet(Encoding.UTF8.GetString(name, nameLength), decoded, *table, hasHeader, excelTable);
+                NativeApi.ClearLastError();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_close_write_handle")]
         public static int CloseWriteHandle(nint handle)
         {

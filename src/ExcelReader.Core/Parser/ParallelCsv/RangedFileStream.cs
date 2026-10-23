@@ -1,9 +1,10 @@
 using System.Runtime.CompilerServices;
+using ExcelReader.Core.Reader.Internal;
 using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.ParallelCsv
 {
-    internal sealed class RangedFileStream : Stream
+    internal sealed class RangedFileStream : ReadOnlyStream
     {
         private readonly SafeFileHandle _handle;
         private long _offset;
@@ -14,20 +15,6 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             ArgumentOutOfRangeException.ThrowIfNegative(start);
             _handle = handle;
             _offset = start;
-        }
-
-        public override bool CanRead => true;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => false;
-
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
         }
 
         public override int Read(Span<byte> buffer)
@@ -56,25 +43,6 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             ValidateBufferArguments(buffer, offset, count);
             return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
-        }
-
-        public override void Flush()
-        {
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
         }
     }
 }

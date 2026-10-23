@@ -71,6 +71,24 @@ generator that has already started keeps working after `workbook.close()`; one t
 raises at its first `next()`. `to_arrow_stream()` opens its stream at the call, so it works after
 `close()` even if never started.
 
+### Tables
+
+`workbook.tables` lists the workbook's Excel tables ("Format as Table" ranges), with the same
+lookups as `sheets`: index, slice or name, ignoring case. A `Table` is a `Sheet` bounded to the
+table's range, so every read works on it and starts at the table's header row:
+
+```python
+with excelreader.open_workbook("report.xlsx") as workbook:
+    sales = workbook.tables["Sales"]
+    print(sales.name, sales.sheet.name, sales.first_row, sales.last_row)
+    frame = sales.to_pandas(sales.infer_schema())
+```
+
+Rows and columns are zero-based and include the header and totals rows; cells keep the column
+indexes of the sheet holding the table. `header_row_count` is 0 for a table whose header row is
+turned off, and `totals_row_count` is 1 when it shows a totals row. A table is read on one thread
+whatever `parallelism` asks for.
+
 ### Formats
 
 `open_workbook` sniffs XLS/XLSX/XLSB by file signature. CSV has no signature, so it is chosen by the
@@ -291,10 +309,40 @@ content in files that differ byte for byte. xls and csv ignore both fields.
 write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallelism=0))
 ```
 
-**Phase-1 limits, stated plainly:** a single sheet only (no multi-sheet workbooks); the whole table
-must already be in memory (no streaming/chunked writes); no styling beyond the temporal number
-formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns. `format="auto"` is not accepted —
-sniffing reads a file's existing signature bytes, and a file being created has none.
+**Phase-1 limits, stated plainly:** `write_workbook` writes a single sheet (for several, see
+`write_sheet` below); the whole table must already be in memory (no streaming/chunked writes); no
+styling beyond the temporal number formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns.
+`format="auto"` is not accepted — sniffing reads a file's existing signature bytes, and a file being
+created has none.
+
+### Several sheets
+
+`open_writer` returns a `SheetWriter`, whose `write_sheet` writes a whole table as one sheet in a
+single native call. It takes the same `data` and `types` as `write_workbook`, so each sheet can be a
+`TypedTable` or a pandas, polars or pyarrow frame:
+
+```python
+from excelreader import WriteOptions, open_writer
+
+with open_writer("report.xlsx", options=WriteOptions(degree_of_parallelism=0)) as writer:
+    writer.write_sheet("Sales", sales_df)
+    writer.write_sheet("Stock", table, types)
+```
+
+Parallelism and the other options come from `open_writer` and apply to every sheet;
+`WriteOptions.sheet_name` does not apply, since each call names its sheet. `write_sheet` raises
+`ExcelReaderError` while a sheet started with `start_sheet` is open; between sheets, the two styles
+mix freely.
+
+`table=TableOptions(...)` writes the sheet as an Excel table, with filter buttons and a table style
+(xlsx and xlsb only). The name must be unique in the workbook; the style defaults to
+`TableStyleMedium2`, and `style=None` leaves the table unstyled:
+
+```python
+from excelreader import TableOptions
+
+writer.write_sheet("Sales", sales_df, table=TableOptions("Sales", style="TableStyleLight9", column_stripes=True))
+```
 
 ## Writing a sheet row by row
 

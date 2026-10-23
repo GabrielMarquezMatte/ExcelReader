@@ -175,6 +175,24 @@ class WriteOptions:
     batch_rows: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TableOptions:
+    """Writes a sheet as an Excel table ("Format as Table"), for `SheetWriter.write_sheet`. xlsx/xlsb only.
+
+    `name` must be unique in the workbook, ignoring case, and valid as an Excel name. `style` is a
+    built-in table style such as "TableStyleLight9", or None for no style. The flags turn on the
+    style's banded rows and columns and its first- and last-column emphasis.
+    """
+
+    name: str
+    _: KW_ONLY
+    style: str | None = "TableStyleMedium2"
+    row_stripes: bool = True
+    column_stripes: bool = False
+    first_column: bool = False
+    last_column: bool = False
+
+
 class StringColumn:
     """A `ColumnType.STRING` column, held as UTF-8 bytes plus offsets rather than one `str` per row.
 

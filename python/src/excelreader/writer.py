@@ -78,6 +78,11 @@ def _copy(view: memoryview) -> Any:
     return (ctypes.c_char * len(blob)).from_buffer_copy(blob)
 
 
+def _byte_pointer(buffer: Any) -> Any:
+    # ctypes.cast(buffer, ...) puts buffer in a reference cycle, so the copy would outlive `keepalive` until a gc pass.
+    return ctypes.cast(ctypes.addressof(buffer), ctypes.POINTER(ctypes.c_uint8))
+
+
 def _native_column(column: Any, column_type: ColumnType, validity: bytes | None, row_count: int, keepalive: list[Any]) -> _native.NativeColumn:
     if isinstance(column, StringColumn):
         offsets = _copy(_checked_view(column.offsets, _SIGNED_FORMATS, 4, row_count + 1, "a STRING column's offsets"))
@@ -88,9 +93,9 @@ def _native_column(column: Any, column_type: ColumnType, validity: bytes | None,
         return _native.NativeColumn(
             type=int(ColumnType.STRING),
             length=row_count,
-            values=ctypes.cast(offsets, ctypes.c_void_p),
+            values=ctypes.addressof(offsets),
             validity=_validity_pointer(validity, row_count, keepalive),
-            data=ctypes.cast(data, ctypes.POINTER(ctypes.c_uint8)) if data_len else None,
+            data=_byte_pointer(data) if data_len else None,
             data_len=data_len,
         )
 
@@ -102,7 +107,7 @@ def _native_column(column: Any, column_type: ColumnType, validity: bytes | None,
     return _native.NativeColumn(
         type=int(column_type),
         length=row_count,
-        values=ctypes.cast(values, ctypes.c_void_p),
+        values=ctypes.addressof(values),
         validity=_validity_pointer(validity, row_count, keepalive),
         data=None,
         data_len=0,
@@ -118,7 +123,7 @@ def _validity_pointer(validity: bytes | None, row_count: int, keepalive: list[An
         )
     buffer = (ctypes.c_uint8 * len(validity)).from_buffer_copy(validity)
     keepalive.append(buffer)
-    return ctypes.cast(buffer, ctypes.POINTER(ctypes.c_uint8))
+    return _byte_pointer(buffer)
 
 
 def _marshal(
@@ -181,16 +186,9 @@ def write_workbook(
     returns that it took only part; the object is not closed.
 
     The column names become the header row. `options` sets the sheet name and CSV dialect; see
-    `WriteOptions`.
+    `WriteOptions`. For several sheets, use `SheetWriter.write_sheet`.
     """
-    if isinstance(data, TypedTable):
-        if types is None:
-            raise TypeError("types is required when data is a TypedTable: one ColumnType per column")
-        table = data
-    else:
-        if types is not None:
-            raise TypeError("types must be None unless data is a TypedTable; Arrow data carries its own types")
-        table, types = _table_from_arrow(_arrow_table(data))
+    table, types = _typed_table(data, types)
     if isinstance(destination, (str, os.PathLike)):
         _write_file(Path(destination), table, types, format, options)
         return
@@ -203,6 +201,16 @@ def write_workbook(
             f"format= is required when writing to an object with write(); one of {sorted(_FORMAT_NAMES)}"
         )
     _write_all(destination, _write_memory(table, types, format, options))
+
+
+def _typed_table(data: Any, types: list[ColumnType] | None) -> tuple[TypedTable, list[ColumnType]]:
+    if isinstance(data, TypedTable):
+        if types is None:
+            raise TypeError("types is required when data is a TypedTable: one ColumnType per column")
+        return data, types
+    if types is not None:
+        raise TypeError("types must be None unless data is a TypedTable; Arrow data carries its own types")
+    return _table_from_arrow(_arrow_table(data))
 
 
 def _write_all(destination: IO[bytes], data: bytes) -> None:

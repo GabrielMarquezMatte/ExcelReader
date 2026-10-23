@@ -3,6 +3,18 @@
 
 use std::os::raw::{c_int, c_void};
 
+/// Native memory as a slice; empty when `ptr` is null or `len` is zero or negative.
+///
+/// # Safety
+/// `ptr` must be null or point to `len` live `E`s that outlive `'a`.
+pub(crate) unsafe fn native_slice<'a, E>(ptr: *const E, len: impl TryInto<usize>) -> &'a [E] {
+    let len = len.try_into().unwrap_or(0);
+    if ptr.is_null() || len == 0 {
+        return &[];
+    }
+    std::slice::from_raw_parts(ptr, len)
+}
+
 pub const XL_OK: i32 = 0;
 pub const XL_EOF: i32 = -1;
 pub const XL_BUFFER_TOO_SMALL: i32 = -2;
@@ -41,6 +53,18 @@ pub const XL_INFER_PARSE_TEXT: i32 = 1;
 pub const XL_SHEET_VISIBLE: i32 = 0;
 pub const XL_SHEET_HIDDEN: i32 = 1;
 pub const XL_SHEET_VERY_HIDDEN: i32 = 2;
+
+/// `XL_TABLE_SHEET`: the `sheet` value that makes a read call read table `table`.
+#[must_use]
+pub const fn xl_table_sheet(table: i32) -> i32 {
+    -2 - table
+}
+
+pub const XL_TABLE_NO_STYLE: i32 = 1;
+pub const XL_TABLE_NO_ROW_STRIPES: i32 = 2;
+pub const XL_TABLE_COLUMN_STRIPES: i32 = 4;
+pub const XL_TABLE_FIRST_COLUMN: i32 = 8;
+pub const XL_TABLE_LAST_COLUMN: i32 = 16;
 
 pub const XL_FORMAT_AUTO: i32 = 0;
 pub const XL_FORMAT_XLS: i32 = 1;
@@ -136,6 +160,31 @@ pub struct XlWriteOptions {
     pub use_shared_strings: i32,
     pub degree_of_parallelism: i32,
     pub batch_rows: i32,
+}
+
+/// Mirrors `xl_table_info`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct XlTableInfo {
+    pub sheet: i32,
+    pub first_row: i32,
+    pub last_row: i32,
+    pub first_column: i32,
+    pub last_column: i32,
+    pub header_row_count: i32,
+    pub totals_row_count: i32,
+}
+
+/// Mirrors `xl_sheet_options`; field order is the C struct's, padding included.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct XlSheetOptions {
+    pub struct_size: i32,
+    pub table_name_len: i32,
+    pub table_name: *const u8,
+    pub table_style_len: i32,
+    pub table_style: *const u8,
+    pub table_flags: i32,
 }
 
 #[repr(C)]
@@ -325,6 +374,23 @@ extern "C" {
 
     pub fn xl_is_date1904(handle: *mut XlWorkbook, out_flag: *mut i32) -> c_int;
 
+    pub fn xl_table_count(handle: *mut XlWorkbook, out_count: *mut i32) -> c_int;
+    pub fn xl_table_info_at(handle: *mut XlWorkbook, index: i32, out_info: *mut XlTableInfo) -> c_int;
+    pub fn xl_table_name_at(
+        handle: *mut XlWorkbook,
+        index: i32,
+        buffer: *mut u8,
+        capacity: i32,
+        out_len: *mut i32,
+    ) -> c_int;
+    /// Matches ignoring case; a name that matches no table is `XL_OK` with `-1`.
+    pub fn xl_table_index(
+        handle: *mut XlWorkbook,
+        name: *const u8,
+        name_len: i32,
+        out_index: *mut i32,
+    ) -> c_int;
+
     pub fn xl_parse_typed(
         handle: *mut XlWorkbook,
         sheet: i32,
@@ -461,6 +527,14 @@ extern "C" {
 
     pub fn xl_end_row(handle: *mut XlWriterHandle) -> c_int;
     pub fn xl_end_sheet(handle: *mut XlWriterHandle) -> c_int;
+    pub fn xl_write_sheet(
+        handle: *mut XlWriterHandle,
+        name: *const u8,
+        name_len: i32,
+        specs: *const XlColumnSpec,
+        table: *const XlTable,
+        options: *const XlSheetOptions,
+    ) -> c_int;
     pub fn xl_close_write_handle(handle: *mut XlWriterHandle) -> c_int;
 
     /// Reads back everything written so far to a handle opened by `xl_open_write_handle_to_memory`.

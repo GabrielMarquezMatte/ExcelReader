@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 
 use crate::ffi::{
-    self, XlCellView, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY, XL_CELL_ERROR,
-    XL_CELL_FORMULA, XL_CELL_NUMBER, XL_CELL_STRING,
+    self, native_slice, XlCellView, XlRowCell, XL_CELL_BOOL, XL_CELL_DATE, XL_CELL_EMPTY,
+    XL_CELL_ERROR, XL_CELL_FORMULA, XL_CELL_NUMBER, XL_CELL_STRING,
 };
 use crate::{Error, ErrorKind};
 
@@ -125,15 +125,10 @@ impl<'a> RowRef<'a> {
     /// `cells` must point to `count` initialized `XlRowCell` values whose `value` pointers stay
     /// valid for `'a`.
     pub(crate) unsafe fn from_decoded(cells: *const XlRowCell, count: i32) -> RowRef<'a> {
-        let len = if count > 0 { count as usize } else { 0 };
-        let slice = if len == 0 || cells.is_null() {
-            &[][..]
-        } else {
-            unsafe { std::slice::from_raw_parts(cells, len) }
-        };
+        let slice = unsafe { native_slice(cells, count) };
         RowRef {
             backing: RowBacking::Decoded(slice),
-            len,
+            len: slice.len(),
         }
     }
 
@@ -143,12 +138,7 @@ impl<'a> RowRef<'a> {
     /// `cells` must point to `count` initialized `XlCellView` values whose `value` pointers stay
     /// valid for `'a`.
     pub(crate) unsafe fn from_views(cells: *const XlCellView, count: i32) -> RowRef<'a> {
-        let len = if count > 0 { count as usize } else { 0 };
-        let slice = if len == 0 || cells.is_null() {
-            &[][..]
-        } else {
-            unsafe { std::slice::from_raw_parts(cells, len) }
-        };
+        let slice = unsafe { native_slice(cells, count) };
         RowRef {
             backing: RowBacking::Views(slice),
             len: slice.len(),
@@ -274,11 +264,7 @@ fn cell_from_blob(blob: &[u8], offset: usize) -> Option<(CellRef<'_>, usize)> {
 
 fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
     let cell_type = CellType::from_raw(raw.cell_type)?;
-    let value = if raw.value.is_null() || raw.value_len <= 0 {
-        &[][..]
-    } else {
-        unsafe { std::slice::from_raw_parts(raw.value, raw.value_len as usize) }
-    };
+    let value = unsafe { native_slice(raw.value, raw.value_len) };
     Some(CellRef {
         column: raw.column,
         cell_type,
@@ -289,11 +275,7 @@ fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
 
 fn cell_from_view(raw: &XlCellView) -> Option<CellRef<'_>> {
     let cell_type = CellType::from_raw(raw.cell_type)?;
-    let value = if raw.value.is_null() || raw.value_len <= 0 {
-        &[][..]
-    } else {
-        unsafe { std::slice::from_raw_parts(raw.value, raw.value_len as usize) }
-    };
+    let value = unsafe { native_slice(raw.value, raw.value_len) };
     Some(CellRef {
         column: raw.column,
         cell_type,
