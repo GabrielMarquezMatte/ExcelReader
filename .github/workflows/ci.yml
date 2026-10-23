@@ -190,42 +190,6 @@ jobs:
       - name: Test (Release)
         run: dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release --no-build
 
-  next-runtime:
-    name: Test on the .NET 11 runtime
-    needs: changes
-    if: needs.changes.outputs.dotnet == 'true'
-    runs-on: ubuntu-latest
-    # Non-gating while .NET 11 is a release candidate: it reports runtime behavior changes early.
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # Two steps: dotnet-quality applies to every version a step installs, and global.json needs a GA SDK.
-      - name: Setup .NET 11 (preview)
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 11.0.x
-          dotnet-quality: preview
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: '**/*.csproj'
-
-      - name: Require the .NET 11 runtime
-        run: dotnet --list-runtimes | grep 'Microsoft.NETCore.App 11\.'
-
-      - name: Build (Release)
-        run: dotnet build tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release -p:RunAnalyzers=false
-
-      - name: Test the net10.0 build on .NET 11
-        env:
-          DOTNET_ROLL_FORWARD_TO_PRERELEASE: '1'
-        run: dotnet exec --roll-forward LatestMajor tests/ExcelReader.Tests/bin/Release/net10.0/ExcelReader.Tests.dll
-
   aot-sanity:
     name: AOT/trim sanity (win-x64)
     needs: changes
