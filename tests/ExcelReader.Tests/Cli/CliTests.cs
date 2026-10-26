@@ -1,4 +1,5 @@
 using ExcelReader.Cli;
+using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Xlsx;
 using ExcelReader.Tests.Crypto;
@@ -354,6 +355,209 @@ namespace ExcelReader.Tests.Cli
 
             Assert.Equal(1, code);
             Assert.Contains("pdf", error, StringComparison.Ordinal);
+        }
+
+        private string TemporaryPath(string extension)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-cli-{Guid.NewGuid():N}.{extension}");
+            _temporaryFiles.Add(path);
+            return path;
+        }
+
+        private string WriteXlsx(Action<XlsxRowWriter> writeRow)
+        {
+            string path = TemporaryPath("xlsx");
+            using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create(path));
+            using XlsxSheetWriter sheet = workbook.AddSheet("Data");
+            using (XlsxRowWriter row = sheet.StartRow())
+            {
+                writeRow(row);
+            }
+            sheet.End();
+            workbook.End();
+            return path;
+        }
+
+        private string WriteRawXlsx(string rows)
+        {
+            string path = TemporaryPath("xlsx");
+            using MemoryStream built = WorkbookBuilder.Build(rows);
+            File.WriteAllBytes(path, built.ToArray());
+            return path;
+        }
+
+        private static string FirstCsvLine(string csv)
+        {
+            return csv.Split('\n')[0].TrimEnd('\r');
+        }
+
+        [Fact]
+        public void Should_KeepTheExistingOutput_When_ConversionFails()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-cli-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            try
+            {
+                string target = Path.Combine(directory, "out.xlsx");
+                File.WriteAllText(target, "ORIGINAL");
+                string source = WriteRawXlsx("""<row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2" t="b"><v>maybe</v></c></row>""");
+
+                (int code, _, string error) = Convert(source, output: target);
+
+                Assert.Equal(1, code);
+                Assert.NotEmpty(error);
+                Assert.Equal("ORIGINAL", File.ReadAllText(target));
+                Assert.Equal([target], Directory.GetFiles(directory));
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void Should_ReplaceTheExistingOutput_When_ConversionSucceeds()
+        {
+            string target = TemporaryPath("csv");
+            File.WriteAllText(target, "ORIGINAL");
+
+            (int code, _, string error) = Convert(WriteXlsx(row => row.Write("new")), output: target);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal("new", FirstCsvLine(File.ReadAllText(target)));
+        }
+
+        [Fact]
+        public void Should_KeepColumnGaps_When_ConvertingSparseRowsToCsv()
+        {
+            string source = WriteXlsx(row =>
+            {
+                row.Skip();
+                row.Write("B");
+                row.Skip();
+                row.Write("D");
+            });
+
+            (int code, string output, string error) = Convert(source);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal(",B,,D", FirstCsvLine(output));
+        }
+
+        [Theory]
+        [InlineData("xlsx")]
+        [InlineData("xlsb")]
+        [InlineData("xls")]
+        public void Should_KeepColumnGaps_When_ConvertingSparseRowsToASpreadsheet(string extension)
+        {
+            string source = WriteXlsx(row =>
+            {
+                row.Write("A");
+                row.Skip();
+                row.Write("C");
+            });
+            string target = TemporaryPath(extension);
+
+            (int code, _, string error) = Convert(source, output: target);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            using IExcelWorkbook written = Excel.Open(target);
+            using IExcelRowEnumerator rows = written.FirstSheet.GetEnumerator();
+            Assert.True(rows.MoveNext());
+            Assert.Equal("A", rows.Current[0].GetString());
+            Assert.Equal(string.Empty, rows.Current[1].GetString());
+            Assert.Equal("C", rows.Current[2].GetString());
+        }
+
+        [Fact]
+        public void Should_ConvertEveryBooleanSpelling_When_WritingCsv()
+        {
+            string source = WriteRawXlsx("""<row r="1"><c r="A1" t="b"><v>false</v></c><c r="B1" t="b"><v>true</v></c><c r="C1" t="b"><v>0</v></c><c r="D1" t="b"><v>1</v></c></row>""");
+
+            (int code, string output, string error) = Convert(source);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal("false,true,false,true", FirstCsvLine(output));
+        }
+
+        [Theory]
+        [InlineData("xlsx")]
+        [InlineData("xlsb")]
+        [InlineData("xls")]
+        public void Should_ConvertEveryBooleanSpelling_When_WritingASpreadsheet(string extension)
+        {
+            string source = WriteRawXlsx("""<row r="1"><c r="A1" t="b"><v>false</v></c><c r="B1" t="b"><v>true</v></c><c r="C1" t="b"><v>0</v></c><c r="D1" t="b"><v>1</v></c></row>""");
+            string target = TemporaryPath(extension);
+
+            (int code, _, string error) = Convert(source, output: target);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            using IExcelWorkbook written = Excel.Open(target);
+            using IExcelRowEnumerator rows = written.FirstSheet.GetEnumerator();
+            Assert.True(rows.MoveNext());
+            bool[] expected = [false, true, false, true];
+            for (int column = 0; column < expected.Length; column++)
+            {
+                Core.Reader.Cell cell = rows.Current[column];
+                Assert.True(ExcelCellReaders.Bool(in cell, default, out bool value));
+                Assert.Equal(expected[column], value);
+            }
+        }
+
+        [Fact]
+        public void Should_KeepExactIntegers_When_ConvertingNumbersAbove2Pow53()
+        {
+            string source = WriteXlsx(row =>
+            {
+                row.Write(9007199254740993L);
+                row.Write(12345678901234567890.5m);
+                row.Write(0.1);
+                row.Write(1e-30);
+            });
+            string target = TemporaryPath("xlsx");
+
+            (int code, string output, string error) = Convert(source);
+            (int xlsxCode, _, _) = Convert(source, output: target);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal("9007199254740993,12345678901234567890.5,0.1,1E-30", FirstCsvLine(output));
+            Assert.Equal(0, xlsxCode);
+            using IExcelWorkbook written = Excel.Open(target);
+            using IExcelRowEnumerator rows = written.FirstSheet.GetEnumerator();
+            Assert.True(rows.MoveNext());
+            Assert.True(rows.Current[0].TryParse(null, out long integer));
+            Assert.Equal(9007199254740993L, integer);
+        }
+
+        [Theory]
+        [InlineData("xlsx")]
+        [InlineData("xlsb")]
+        [InlineData("xls")]
+        public void Should_ConvertCsvToASpreadsheet_When_TheSourceSheetHasNoName(string extension)
+        {
+            string source = TemporaryPath("csv");
+            File.WriteAllText(source, "a,b\n1,2\n");
+            string target = TemporaryPath(extension);
+
+            (int code, _, string error) = Convert(source, output: target);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            using IExcelWorkbook written = Excel.Open(target);
+            Assert.Equal("Sheet1", written.FirstSheet.Name);
+            using IExcelRowEnumerator rows = written.FirstSheet.GetEnumerator();
+            Assert.True(rows.MoveNext());
+            Assert.Equal("a", rows.Current[0].GetString());
+            Assert.Equal("b", rows.Current[1].GetString());
+            Assert.True(rows.MoveNext());
+            Assert.Equal("1", rows.Current[0].GetString());
+            Assert.Equal("2", rows.Current[1].GetString());
         }
 
         private static (int Code, string Out, string Err) Schema(

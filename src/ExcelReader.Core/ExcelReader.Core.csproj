@@ -53,6 +53,8 @@
     <!-- Reading/ReadApi.Schema.cs / Typed/TypedApi.cs drive SchemaInference directly, so the C ABI and
          Excel.InferSchema answer identically by construction rather than by two parallel copies. -->
     <InternalsVisibleTo Include="ExcelReader.Native" />
+    <!-- Cli replaces its output file through the same StagedFile as Excel.EncryptPackage. -->
+    <InternalsVisibleTo Include="ExcelReader.Cli" />
     <!-- The CsvParallel fuzz target drives ParallelCsvFactory.CreateWithChunkSize<T> directly (the
          Task 9 test seam) to compare it against the sequential parser over arbitrary bytes. -->
     <InternalsVisibleTo Include="ExcelReader.Fuzz" />
