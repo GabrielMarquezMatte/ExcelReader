@@ -627,17 +627,17 @@ threads](#reading-a-large-sheet-on-several-threads).
 | `write_workbook()` → xlsb | 51.7 ms | 4.5 MB |
 | `write_workbook()` → xls | 59.2 ms | 13.4 MB |
 | `write_workbook()` → xlsx | 68.5 ms | 5.1 MB |
-| `write_workbook(polars_df)` → xlsx | 456.9 ms | 5.1 MB |
-| `write_workbook(pandas_df)` → xlsx | 465.5 ms | 5.1 MB |
-| `polars.DataFrame.write_excel()` | 4,663.7 ms | 5.6 MB |
-| `pandas.DataFrame.to_excel()` | 7,173.6 ms | 5.5 MB |
+| `write_workbook(polars_df)` → xlsx | 76.6 ms | 5.1 MB |
+| `write_workbook(pandas_df)` → xlsx | 82.5 ms | 5.1 MB |
+| `polars.DataFrame.write_excel()` | 4,714.9 ms | 5.6 MB |
+| `pandas.DataFrame.to_excel()` | 7,371.4 ms | 5.5 MB |
 
 The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
-`write_workbook(polars_df)` is ~10.2x faster than polars' own `write_excel()`, and
-`write_workbook(pandas_df)` ~15.4x faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
-through Arrow and then a Python list before reaching the native columns, which is most of the gap
-between the ~460 ms rows and the 68.5 ms one. Handing `write_workbook()` buffers that are already
-columnar — what `parse()` returns — skips all of it.
+`write_workbook(polars_df)` is ~62x faster than polars' own `write_excel()`, and
+`write_workbook(pandas_df)` ~89x faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
+through Arrow, and each column is cast to the layout the native side reads and copied out of Arrow's
+buffers, which is the gap between those rows and the 68.5 ms one. Handing `write_workbook()` buffers
+that are already columnar — what `parse()` returns — skips it.
 
 `write_workbook(xlsx)` at 68.5 ms lands within ~4 ms of the C++ binding's
 `xl::write_columns` on the same 14 columns (64.2 ms), which is the expected result: both are thin wrappers
