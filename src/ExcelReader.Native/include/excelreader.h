@@ -333,6 +333,8 @@ typedef struct xl_sheet_options {
 int32_t xl_write_sheet(xl_writer_handle* handle, const uint8_t* name, int32_t name_len,
                        const xl_column_spec* specs, const xl_table* table, const xl_sheet_options* options);
 
+/* A path handle writes beside its path and replaces the file only when this returns XL_OK; on failure
+   any existing file is left as it was. */
 int32_t xl_close_write_handle(xl_writer_handle* handle);
 
 int32_t xl_write_handle_bytes(xl_writer_handle* handle, xl_buffer* out_buffer);
