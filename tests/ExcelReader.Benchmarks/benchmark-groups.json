@@ -19,7 +19,7 @@
   },
   {
     "name": "write",
-    "filter": "ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.* ExcelReader.Benchmarks.WritePathBenchmark.* ExcelReader.Benchmarks.ParallelRecordWriteBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.* ExcelReader.Benchmarks.WritePathBenchmark.* ExcelReader.Benchmarks.ParallelRecordWriteBenchmark.* ExcelReader.Benchmarks.SharedStringWriteBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },
@@ -31,7 +31,7 @@
   },
   {
     "name": "native",
-    "filter": "ExcelReader.Benchmarks.NativeRowReadBenchmark.* ExcelReader.Benchmarks.NativeTypedParseBenchmark.* ExcelReader.Benchmarks.ChunkedParseBenchmark.* ExcelReader.Benchmarks.NativeOpenBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.NativeRowReadBenchmark.* ExcelReader.Benchmarks.NativeTypedParseBenchmark.* ExcelReader.Benchmarks.ChunkedParseBenchmark.* ExcelReader.Benchmarks.NativeOpenBenchmark.* ExcelReader.Benchmarks.NativeWideHeaderBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },
