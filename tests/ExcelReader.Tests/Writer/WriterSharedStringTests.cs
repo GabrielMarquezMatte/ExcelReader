@@ -210,6 +210,71 @@ namespace ExcelReader.Tests.Writer
             Assert.False(rows.MoveNext());
         }
 
+        private static string ManyText(int i)
+        {
+            string lead = i % 3 == 0 ? " " : "";
+            string trail = i % 5 == 0 ? "\t" : "";
+            return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{lead}value {i} & <tag> \"q\" ✓{trail}");
+        }
+
+        private static void WriteManyTexts<TSheet, TRow>(Core.Writer.IWorkbookWriter<TSheet> workbook, int texts)
+            where TSheet : Core.Writer.ISheetWriter<TRow>
+            where TRow : Core.Writer.IRowWriter
+        {
+            using TSheet sheet = workbook.AddSheet("S");
+            for (int i = 0; i < texts; i++)
+            {
+                using TRow row = sheet.StartRow();
+                row.Write(ManyText(i));
+                row.Write(ManyText(i / 2));
+            }
+            sheet.End();
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task SharedStringsSpanningManyFlushesRoundTrip(bool xlsb, bool endAsync)
+        {
+            const int Texts = 30_000;
+            using MemoryStream ms = new();
+            if (xlsb)
+            {
+                await using XlsbWorkbookWriter writer = XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { UseSharedStrings = true });
+                WriteManyTexts<XlsbSheetWriter, XlsbRowWriter>(writer, Texts);
+                await EndAsync(writer, endAsync);
+            }
+            if (!xlsb)
+            {
+                await using XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = true });
+                WriteManyTexts<XlsxSheetWriter, XlsxRowWriter>(writer, Texts);
+                await EndAsync(writer, endAsync);
+            }
+            ms.Position = 0;
+
+            using IExcelWorkbook reader = Excel.Open(ms, ExcelFileFormat.Unknown);
+            using IExcelRowEnumerator rows = reader.FirstSheet.GetEnumerator();
+            for (int i = 0; i < Texts; i++)
+            {
+                Assert.True(rows.MoveNext());
+                Assert.Equal(ManyText(i), rows.Current[0].GetString());
+                Assert.Equal(ManyText(i / 2), rows.Current[1].GetString());
+            }
+            Assert.False(rows.MoveNext());
+        }
+
+        private static ValueTask EndAsync<TSheet>(Core.Writer.IWorkbookWriter<TSheet> writer, bool endAsync)
+        {
+            if (endAsync)
+            {
+                return writer.EndAsync(TestContext.Current.CancellationToken);
+            }
+            writer.End();
+            return ValueTask.CompletedTask;
+        }
+
         private static async Task<MemoryStream> WriteXlsxAsync(bool useSharedStrings, Func<XlsxWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
