@@ -29,7 +29,18 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     return false;
                 }
-                int end = _remaining[start..].IndexOf((byte)'>');
+                int comment = _remaining[..start].IndexOf("<!--"u8);
+                if (comment >= 0)
+                {
+                    int commentEnd = _remaining[(comment + 4)..].IndexOf("-->"u8);
+                    if (commentEnd < 0)
+                    {
+                        return false;
+                    }
+                    _remaining = _remaining[(comment + 4 + commentEnd + 3)..];
+                    continue;
+                }
+                int end = XlsxXml.TagEnd(_remaining[start..]);
                 if (end < 0)
                 {
                     return false;

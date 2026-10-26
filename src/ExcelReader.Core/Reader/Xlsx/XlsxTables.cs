@@ -13,14 +13,14 @@ namespace ExcelReader.Core.Reader.Xlsx
             {
                 throw new InvalidDataException("A table part has no <table> element.");
             }
-            string name = XlsxXml.DecodeToString(XlsxXml.Attr(table, " displayName="u8));
-            if (!TablePart.TryParseRange(XlsxXml.Attr(table, " ref="u8), out int firstRow, out int firstColumn, out int lastRow, out int lastColumn))
+            string name = XlsxXml.DecodeToString(XlsxXml.Attr(table, "displayName"u8));
+            if (!TablePart.TryParseRange(XlsxXml.Attr(table, "ref"u8), out int firstRow, out int firstColumn, out int lastRow, out int lastColumn))
             {
                 throw new InvalidDataException($"Table '{name}' has an unreadable ref.");
             }
-            int id = XlsxXml.ParseIntOr(XlsxXml.Attr(table, " id="u8), 0);
-            int headerRowCount = ParseRowCount(table, " headerRowCount="u8, 1, name);
-            int totalsRowCount = ParseRowCount(table, " totalsRowCount="u8, 0, name);
+            int id = XlsxXml.ParseIntOr(XlsxXml.Attr(table, "id"u8), 0);
+            int headerRowCount = ParseRowCount(table, "headerRowCount"u8, 1, name);
+            int totalsRowCount = ParseRowCount(table, "totalsRowCount"u8, 0, name);
             return TablePart.Create(sheetIndex, id, name, firstRow, firstColumn, lastRow, lastColumn,
                 headerRowCount, totalsRowCount, ColumnNames(xml, prefix), StyleName(xml, prefix));
         }
@@ -44,14 +44,14 @@ namespace ExcelReader.Core.Reader.Xlsx
             List<string> names = [];
             foreach (ReadOnlySpan<byte> column in new TagSpanEnumerable(xml, XlsxXml.Token("<"u8, prefix, "tableColumn"u8)))
             {
-                names.Add(XlsxXml.DecodeXStringToString(XlsxXml.Attr(column, " name="u8)));
+                names.Add(XlsxXml.DecodeXStringToString(XlsxXml.Attr(column, "name"u8)));
             }
             return [.. names];
         }
 
         private static string? StyleName(ReadOnlySpan<byte> xml, ReadOnlySpan<byte> prefix)
         {
-            ReadOnlySpan<byte> style = XlsxXml.Attr(FirstTag(xml, XlsxXml.Token("<"u8, prefix, "tableStyleInfo"u8)), " name="u8);
+            ReadOnlySpan<byte> style = XlsxXml.Attr(FirstTag(xml, XlsxXml.Token("<"u8, prefix, "tableStyleInfo"u8)), "name"u8);
             if (style.IsEmpty)
             {
                 return null;
