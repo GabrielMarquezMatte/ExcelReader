@@ -88,6 +88,10 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                 {
                     await cts.CancelAsync().ConfigureAwait(false);
                     await Task.WhenAll(tasks).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                    while (work.Reader.TryRead(out Work<TState> unparsed))
+                    {
+                        ArrayPool<byte>.Shared.Return(unparsed.Chunk.Buffer);
+                    }
                 }
 
                 if (recover)
