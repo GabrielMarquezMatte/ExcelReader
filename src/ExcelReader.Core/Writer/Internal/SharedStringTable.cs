@@ -89,49 +89,95 @@ namespace ExcelReader.Core.Writer.Internal
             Interlocked.Add(ref _count, count);
         }
 
-        internal BiffBuffer ToXlsxBytes()
+        // The part is written to its entry in pieces of about this size, not built whole first.
+        internal const int FlushBytes = 64 * 1024;
+
+        internal void WriteTo(Stream entry, bool binary)
         {
             string[] values = Values();
-            BiffBuffer xml = new(Math.Max(256, values.Length * 32));
-            xml.WriteUtf8(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                $"<sst xmlns=\"{XlsxConstants.MainNs}\" count=\"");
-            xml.WriteUtf8(Count.ToString(CultureInfo.InvariantCulture));
-            xml.Write("\" uniqueCount=\""u8);
-            xml.WriteUtf8(UniqueCount.ToString(CultureInfo.InvariantCulture));
-            xml.Write("\">"u8);
-            foreach (string value in values)
+            using BiffBuffer buffer = new(FlushBytes + 4096);
+            using BiffBuffer payload = new(128);
+            int next = WriteStart(buffer, payload, binary);
+            while (next <= values.Length)
             {
-                xml.Write("<si><t"u8);
-                if (NeedsPreserveSpace(value))
-                {
-                    xml.Write(" xml:space=\"preserve\""u8);
-                }
-                xml.WriteByte((byte)'>');
-                CellFormatter.WriteEscaped(xml, value);
-                xml.Write("</t></si>"u8);
+                next = Fill(buffer, payload, values, next, binary);
+                entry.Write(buffer.Span);
+                buffer.Reset();
             }
-            xml.Write("</sst>"u8);
-            return xml;
         }
 
-        internal BiffBuffer ToXlsbBytes()
+        internal async ValueTask WriteToAsync(Stream entry, bool binary, CancellationToken ct)
         {
             string[] values = Values();
-            var data = new BiffBuffer(Math.Max(128, values.Length * 24));
-            using var payload = new BiffBuffer(128);
-            payload.WriteU32((uint)Count);
-            payload.WriteU32((uint)UniqueCount);
-            Biff12RecordWriter.WriteRecord(data, Brt.BeginSst, payload.Span);
-            foreach (string value in values)
+            using BiffBuffer buffer = new(FlushBytes + 4096);
+            using BiffBuffer payload = new(128);
+            int next = WriteStart(buffer, payload, binary);
+            while (next <= values.Length)
+            {
+                next = Fill(buffer, payload, values, next, binary);
+                await entry.WriteAsync(buffer.Memory, ct).ConfigureAwait(false);
+                buffer.Reset();
+            }
+        }
+
+        private int WriteStart(BiffBuffer buffer, BiffBuffer payload, bool binary)
+        {
+            if (binary)
+            {
+                payload.WriteU32((uint)Count);
+                payload.WriteU32((uint)UniqueCount);
+                Biff12RecordWriter.WriteRecord(buffer, Brt.BeginSst, payload.Span);
+                return 0;
+            }
+            buffer.WriteUtf8(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                $"<sst xmlns=\"{XlsxConstants.MainNs}\" count=\"");
+            buffer.WriteUtf8(Count.ToString(CultureInfo.InvariantCulture));
+            buffer.Write("\" uniqueCount=\""u8);
+            buffer.WriteUtf8(UniqueCount.ToString(CultureInfo.InvariantCulture));
+            buffer.Write("\">"u8);
+            return 0;
+        }
+
+        // Appends items from next until the buffer reaches FlushBytes, and the closing record after the
+        // last one; returns where to resume, past values.Length once the part is complete.
+        private static int Fill(BiffBuffer buffer, BiffBuffer payload, string[] values, int next, bool binary)
+        {
+            while (next < values.Length && buffer.Length < FlushBytes)
+            {
+                WriteItem(buffer, payload, values[next++], binary);
+            }
+            if (next < values.Length)
+            {
+                return next;
+            }
+            if (binary)
+            {
+                Biff12RecordWriter.WriteRecord(buffer, Brt.EndSst);
+                return next + 1;
+            }
+            buffer.Write("</sst>"u8);
+            return next + 1;
+        }
+
+        private static void WriteItem(BiffBuffer buffer, BiffBuffer payload, string value, bool binary)
+        {
+            if (binary)
             {
                 payload.Reset();
                 payload.WriteByte(0);
                 Biff12RecordWriter.WriteWideString(payload, value);
-                Biff12RecordWriter.WriteRecord(data, Brt.SSTItem, payload.Span);
+                Biff12RecordWriter.WriteRecord(buffer, Brt.SSTItem, payload.Span);
+                return;
             }
-            Biff12RecordWriter.WriteRecord(data, Brt.EndSst);
-            return data;
+            buffer.Write("<si><t"u8);
+            if (NeedsPreserveSpace(value))
+            {
+                buffer.Write(" xml:space=\"preserve\""u8);
+            }
+            buffer.WriteByte((byte)'>');
+            CellFormatter.WriteEscaped(buffer, value);
+            buffer.Write("</t></si>"u8);
         }
 
         private string[] Values()

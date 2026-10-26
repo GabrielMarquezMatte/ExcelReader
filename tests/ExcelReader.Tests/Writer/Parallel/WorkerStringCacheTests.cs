@@ -57,8 +57,9 @@ namespace ExcelReader.Tests.Writer.Parallel
 
             Assert.Equal([0, 0, 1, 1, 2], [serialA, concurrentA, concurrentB, serialB, serialC]);
             Assert.Equal(3, table.UniqueCount);
-            using BiffBuffer xml = table.ToXlsxBytes();
-            Assert.Contains("<si><t>a</t></si><si><t>b</t></si><si><t>c</t></si>", System.Text.Encoding.UTF8.GetString(xml.Span), StringComparison.Ordinal);
+            using MemoryStream xml = new();
+            table.WriteTo(xml, binary: false);
+            Assert.Contains("<si><t>a</t></si><si><t>b</t></si><si><t>c</t></si>", System.Text.Encoding.UTF8.GetString(xml.ToArray()), StringComparison.Ordinal);
         }
 
         [Fact]
