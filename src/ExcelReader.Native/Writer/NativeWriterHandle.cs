@@ -87,6 +87,7 @@ namespace ExcelReader.Native.Writer
         private TSheet? _sheet;
         private TRow? _row;
         private bool _closed;
+        private Exception? _closeFailure;
 
         internal NativeWriterHandle(IWorkbookWriter<TSheet> workbook, ParallelWriteOptions? parallel,
             Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
@@ -205,21 +206,32 @@ namespace ExcelReader.Native.Writer
 
         internal override void Close()
         {
+            if (_closeFailure is not null)
+            {
+                throw new InvalidOperationException($"The workbook failed to finish and has no output: {_closeFailure.Message}", _closeFailure);
+            }
             if (_closed)
             {
                 return;
             }
-            _closed = true;
-
-            _row?.Dispose();
-            _row = null;
-            if (_sheet is not null)
+            try
             {
-                _sheet.End();
-                _sheet.Dispose();
-                _sheet = null;
+                _row?.Dispose();
+                _row = null;
+                if (_sheet is not null)
+                {
+                    _sheet.End();
+                    _sheet.Dispose();
+                    _sheet = null;
+                }
+                _workbook.End();
+                _closed = true;
             }
-            _workbook.End();
+            catch (Exception exception)
+            {
+                _closeFailure = exception;
+                throw;
+            }
         }
 
         protected override void Dispose(bool disposing)
