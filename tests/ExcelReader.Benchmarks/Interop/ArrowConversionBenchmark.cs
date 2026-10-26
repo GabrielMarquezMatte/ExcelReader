@@ -1,3 +1,6 @@
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using Apache.Arrow;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Arrow;
@@ -13,6 +16,7 @@ namespace ExcelReader.Benchmarks
         public int Rows { get; set; }
 
         private byte[] _csvAllString = [];
+        private byte[] _csvLongText = [];
         private byte[] _csvTyped = [];
         private byte[] _xlsbTyped = [];
 
@@ -40,6 +44,7 @@ namespace ExcelReader.Benchmarks
         public async Task SetupAsync()
         {
             _csvAllString = CsvGenerator.BuildWide(Rows, AllStringSchema.Length);
+            _csvLongText = System.Text.Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(new string('x', 64 * 1024) + "\n", 500)));
             _csvTyped = CsvGenerator.BuildTyped(Rows);
             _xlsbTyped = await WorkbookGenerator.BuildTypedXlsbAsync(Rows);
         }
@@ -49,6 +54,15 @@ namespace ExcelReader.Benchmarks
         {
             using var reader = Excel.FromCsv(_csvAllString);
             using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = AllStringSchema, HeaderRow = 0 });
+            return batch.Length;
+        }
+
+        // A few long cells instead of many short ones: one 64 KiB text per row.
+        [Benchmark]
+        public long CsvLongText()
+        {
+            using var reader = Excel.FromCsv(_csvLongText);
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = AllStringSchema[..1], HeaderRow = 0 });
             return batch.Length;
         }
 
