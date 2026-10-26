@@ -180,6 +180,28 @@ namespace ExcelReader.Tests.Reader
             Assert.False(e.Current[0].TryGetDateTime(isDate1904: false, out _));
         }
 
+        [Theory]
+        [InlineData("2958465.9999999995", false)]
+        [InlineData("2957003.9999999995", true)]
+        public void TryGetDateTimeReturnsFalse_When_TheSerialRoundsPastTheMaximumDate(string serial, bool isDate1904)
+        {
+            Cell cell = new(CellType.Date, System.Text.Encoding.UTF8.GetBytes(serial));
+
+            Assert.False(cell.TryGetDateTime(isDate1904, out DateTime result));
+            Assert.Equal(default, result);
+        }
+
+        [Theory]
+        [InlineData("2958465.99999998", false)]
+        [InlineData("2957003.99999998", true)]
+        public void TryGetDateTimeReadsTheLastRepresentableMillisecond(string serial, bool isDate1904)
+        {
+            Cell cell = new(CellType.Date, System.Text.Encoding.UTF8.GetBytes(serial));
+
+            Assert.True(cell.TryGetDateTime(isDate1904, out DateTime result));
+            Assert.Equal(new DateTime(9999, 12, 31, 0, 0, 0, DateTimeKind.Unspecified), result.Date);
+        }
+
         [Fact]
         public async Task LeaveOpenFalseClosesStreamOnDispose()
         {
