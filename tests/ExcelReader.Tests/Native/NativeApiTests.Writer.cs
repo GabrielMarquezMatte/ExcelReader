@@ -1244,21 +1244,25 @@ namespace ExcelReader.Tests.Native
             }
         }
 
-        [Fact]
-        public void WriteTyped_Should_Keep_The_Existing_File_When_A_Cell_Is_Rejected()
+        [Theory]
+        [InlineData(NativeFormat.Xlsx)]
+        [InlineData(NativeFormat.Xlsb)]
+        [InlineData(NativeFormat.Xls)]
+        public void WriteTyped_Should_Keep_The_Existing_File_When_A_Cell_Is_Rejected(int format)
         {
             string directory = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}");
             Directory.CreateDirectory(directory);
-            string path = Path.Combine(directory, "out.xlsx");
+            string path = Path.Combine(directory, "out.dat");
             File.WriteAllText(path, "ORIGINAL");
-            NativeTable table = BuildFloat64Table([double.NaN]);
+            NativeTable table = BuildFloat64Table([1.5, double.NaN]);
             try
             {
                 NativeColumnSpec[] specs = [new() { Names = ["x"], Type = NativeColumnType.Float64 }];
 
                 Assert.Equal(NativeStatus.Error, WriteApi.WriteTyped(
-                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+                    Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
 
+                Assert.Contains("non-finite", NativeApi.LastErrorText(), StringComparison.Ordinal);
                 Assert.Equal("ORIGINAL", File.ReadAllText(path));
                 Assert.Equal([path], Directory.GetFiles(directory));
             }

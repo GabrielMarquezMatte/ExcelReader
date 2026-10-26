@@ -240,8 +240,10 @@ namespace ExcelReader.Native.Writer
             {
                 return;
             }
-            _row?.Dispose();
-            _sheet?.Dispose();
+            // A row or sheet still open here belongs to output that is being discarded; ending it must
+            // not replace the failure that left it open.
+            FailureCleanup.Dispose(_row);
+            FailureCleanup.Dispose(_sheet);
             _workbook.Dispose();
         }
     }

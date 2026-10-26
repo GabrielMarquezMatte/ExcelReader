@@ -1,11 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Writer;
-using ExcelReader.Core.Writer.Csv;
 using ExcelReader.Core.Writer.Internal;
-using ExcelReader.Core.Writer.Xls;
-using ExcelReader.Core.Writer.Xlsb;
-using ExcelReader.Core.Writer.Xlsx;
 using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native.Writer
@@ -193,49 +189,9 @@ namespace ExcelReader.Native.Writer
 
         private static void WriteToStream(Stream stream, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, string sheetName, bool hasHeader)
         {
-            bool date1904 = options.Date1904 ?? false;
-            bool sharedStrings = options.UseSharedStrings ?? false;
-            ParallelWriteOptions? parallel = options.ToParallelWriteOptions(format);
-            switch (format)
-            {
-                case NativeFormat.Xlsx:
-                    WriteWorkbook<XlsxSheetWriter, XlsxRowWriter>(
-                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader,
-                        parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
-                    return;
-                case NativeFormat.Xlsb:
-                    WriteWorkbook<XlsbSheetWriter, XlsbRowWriter>(
-                        XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader,
-                        parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
-                    return;
-                case NativeFormat.Xls:
-                    WriteWorkbook<XlsSheetWriter, XlsRowWriter>(
-                        XlsWorkbookWriter.Create(stream, options: new XlsWriterOptions { Date1904 = date1904 }), specs, table, sheetName, hasHeader, null, null);
-                    return;
-                default:
-                    WriteWorkbook<CsvSheetWriter, CsvRowWriter>(
-                        CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()), specs, table, sheetName, hasHeader, null, null);
-                    return;
-            }
-        }
-
-        private static void WriteWorkbook<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, NativeColumnSpec[] specs, NativeTable table, string sheetName, bool hasHeader,
-            ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
-            where TSheet : ISheetWriter<TRow>
-            where TRow : IRowWriter
-        {
-            try
-            {
-                TSheet sheet = workbook.AddSheet(sheetName);
-                WriteSheetBody<TSheet, TRow>(workbook, sheet, specs, table, hasHeader, null, parallel, writeParallel);
-                sheet.End();
-                sheet.Dispose();
-                workbook.End();
-            }
-            finally
-            {
-                workbook.Dispose();
-            }
+            using NativeWriterHandle handle = NativeWriterHandle.Create(stream, format, options);
+            handle.WriteSheet(sheetName, specs, table, hasHeader, excelTable: null);
+            handle.Close();
         }
 
         internal static void WriteSheetBody<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeColumnSpec[] specs, NativeTable table, bool hasHeader,
