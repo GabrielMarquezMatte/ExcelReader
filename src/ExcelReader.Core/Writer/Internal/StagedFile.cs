@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             _destination = Path.GetFullPath(destination);
             _temporary = Path.Combine(Path.GetDirectoryName(_destination) ?? string.Empty,
-                $".{Path.GetFileName(_destination)}.{Guid.NewGuid():N}.tmp");
+                $".excelreader-{Guid.NewGuid():N}.tmp");
             Stream = new FileStream(_temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None,
                 bufferSize: 4096, useAsync);
         }
