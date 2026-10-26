@@ -156,7 +156,7 @@ namespace ExcelReader.Core.Reader.Schema
                         {
                             SawNonIntegralNumber = true;
                         }
-                        SawNonBinaryNumber |= !IsBinaryDigit(cell.Value);
+                        SawNonBinaryNumber |= !IsBinaryNumber(in cell);
                         break;
                     case CellType.Date:
                         bool hasTime = cell.TryGetDateTime(isDate1904, out DateTime date) && date.TimeOfDay != TimeSpan.Zero;
@@ -221,6 +221,16 @@ namespace ExcelReader.Core.Reader.Schema
                 }
                 allDigits = end > start && end == text.Length;
                 return end - start <= 1 || text[start] != (byte)'0';
+            }
+
+            // XLS and XLSB numbers carry no text, only the stored double.
+            private static bool IsBinaryNumber(in Cell cell)
+            {
+                if (!cell.Value.IsEmpty)
+                {
+                    return IsBinaryDigit(cell.Value);
+                }
+                return cell.TryGetDouble(out double number) && number is 0.0 or 1.0;
             }
 
             private static bool IsBinaryDigit(ReadOnlySpan<byte> text)
