@@ -1,4 +1,5 @@
 using ExcelReader.Core.Crypto;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -43,8 +44,9 @@ namespace ExcelReader.Core.Reader
             ArgumentException.ThrowIfNullOrEmpty(packagePath);
             ArgumentException.ThrowIfNullOrEmpty(destinationPath);
             using FileStream package = File.OpenRead(packagePath);
-            using FileStream destination = new(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
-            PackageEncryptor.Encrypt(package, destination, password);
+            using StagedFile destination = new(destinationPath);
+            PackageEncryptor.Encrypt(package, destination.Stream, password);
+            destination.Commit();
         }
 
         /// <summary>Asynchronous counterpart to <see cref="EncryptPackage(Stream, Stream, ExcelPassword)"/>.</summary>
@@ -83,11 +85,11 @@ namespace ExcelReader.Core.Reader
                 bufferSize: 4096, useAsync: true);
             await using (package.ConfigureAwait(false))
             {
-                FileStream destination = new(destinationPath, FileMode.Create, FileAccess.Write,
-                    FileShare.None, bufferSize: 4096, useAsync: true);
+                StagedFile destination = new(destinationPath, useAsync: true);
                 await using (destination.ConfigureAwait(false))
                 {
-                    await PackageEncryptor.EncryptAsync(package, destination, password, ct).ConfigureAwait(false);
+                    await PackageEncryptor.EncryptAsync(package, destination.Stream, password, ct).ConfigureAwait(false);
+                    await destination.CommitAsync().ConfigureAwait(false);
                 }
             }
         }

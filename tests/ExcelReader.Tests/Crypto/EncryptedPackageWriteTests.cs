@@ -131,6 +131,52 @@ namespace ExcelReader.Tests.Crypto
         }
 
         [Fact]
+        public void EncryptPackage_PathOverload_Keeps_The_Existing_Output_When_The_Package_Is_Invalid()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-encrypt-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string packagePath = Path.Combine(directory, "plain.xlsx");
+            string outputPath = Path.Combine(directory, "out.xlsx");
+            File.WriteAllText(packagePath, "BAD");
+            File.WriteAllText(outputPath, "ORIGINAL");
+            try
+            {
+                Assert.Throws<ArgumentException>(() => Excel.EncryptPackage(packagePath, outputPath, Password));
+
+                Assert.Equal("ORIGINAL", File.ReadAllText(outputPath));
+                Assert.Equal(2, Directory.GetFiles(directory).Length);
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task EncryptPackageAsync_PathOverload_Keeps_The_Existing_Output_When_Canceled()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-encrypt-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string outputPath = Path.Combine(directory, "out.xlsx");
+            File.WriteAllText(outputPath, "ORIGINAL");
+            try
+            {
+                using CancellationTokenSource canceled = new();
+                await canceled.CancelAsync();
+
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                    await Excel.EncryptPackageAsync(EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx"), outputPath, Password, canceled.Token));
+
+                Assert.Equal("ORIGINAL", File.ReadAllText(outputPath));
+                Assert.Equal([outputPath], Directory.GetFiles(directory));
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
         public async Task EncryptPackageAsync_StreamOverload_RoundTrips()
         {
             string plainPath = EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx");

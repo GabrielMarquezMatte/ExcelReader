@@ -1,5 +1,6 @@
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xls;
 using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
@@ -36,9 +37,12 @@ namespace ExcelReader.Native.Writer
 
         internal MemoryStream? MemoryBuffer { get; set; }
 
+        internal StagedFile? StagedFile { get; set; }
+
         public void Dispose()
         {
             Dispose(true);
+            StagedFile?.Dispose();
             GC.SuppressFinalize(this);
         }
 

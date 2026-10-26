@@ -1245,6 +1245,31 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void WriteTyped_Should_Keep_The_Existing_File_When_A_Cell_Is_Rejected()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "out.xlsx");
+            File.WriteAllText(path, "ORIGINAL");
+            NativeTable table = BuildFloat64Table([double.NaN]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Names = ["x"], Type = NativeColumnType.Float64 }];
+
+                Assert.Equal(NativeStatus.Error, WriteApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal("ORIGINAL", File.ReadAllText(path));
+                Assert.Equal([path], Directory.GetFiles(directory));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
         public void WriteTyped_Should_Reject_Auto_Format_And_Create_No_File()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");

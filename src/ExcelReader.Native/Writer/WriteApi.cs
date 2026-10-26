@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xls;
 using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
@@ -38,8 +39,9 @@ namespace ExcelReader.Native.Writer
             {
                 string filePath = Encoding.UTF8.GetString(path);
                 string sheetName = options.SheetName ?? "Sheet1";
-                using FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-                WriteToStream(stream, format, specs, table, options, sheetName, hasHeader);
+                using StagedFile staged = new(filePath);
+                WriteToStream(staged.Stream, format, specs, table, options, sheetName, hasHeader);
+                staged.Commit();
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -94,16 +96,17 @@ namespace ExcelReader.Native.Writer
             }
             NativeApi.ClearLastError();
             string filePath = Encoding.UTF8.GetString(path);
-            FileStream? stream = null;
+            StagedFile? staged = null;
             try
             {
-                stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-                handle = NativeWriterHandle.Create(stream, format, options);
+                staged = new StagedFile(filePath);
+                handle = NativeWriterHandle.Create(staged.Stream, format, options);
+                handle.StagedFile = staged;
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
             {
-                stream?.Dispose();
+                staged?.Dispose();
                 NativeApi.SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
@@ -142,6 +145,7 @@ namespace ExcelReader.Native.Writer
             try
             {
                 handle.Close();
+                handle.StagedFile?.Commit();
                 NativeApi.ClearLastError();
                 return NativeStatus.Ok;
             }
