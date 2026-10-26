@@ -212,8 +212,7 @@ namespace ExcelReader.Generator
             string source = GenerateSource(symbol, plans);
             string hintName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .Replace("global::", "")
-                .Replace("@", "")
-                .Replace('.', '_');
+                .Replace("@", "");
             return new GeneratedResult(hintName, source, new EquatableArray<DiagnosticInfo>([.. diagnostics]));
         }
 

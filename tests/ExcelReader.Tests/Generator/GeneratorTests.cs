@@ -127,6 +127,45 @@ namespace ExcelReader.Tests.Generator
         }
 
         [Fact]
+        public void TypesWhoseNamesFlattenAlikeGetDistinctSourceFiles()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace A
+                {
+                    [ExcelSerializable]
+                    public partial class B_C
+                    {
+                        public int Value { get; set; }
+                    }
+
+                    public partial class B
+                    {
+                        [ExcelSerializable]
+                        public partial class C
+                        {
+                            public int Value { get; set; }
+                        }
+                    }
+                }
+
+                namespace A.B_
+                {
+                    [ExcelSerializable]
+                    public partial class C
+                    {
+                        public int Value { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+        }
+
+        [Fact]
         public void KeywordNamedPropertiesCompile()
         {
             const string source = """
