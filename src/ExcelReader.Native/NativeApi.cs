@@ -37,21 +37,13 @@ namespace ExcelReader.Native
 
         internal static int LastError(Span<byte> buffer, out int length)
         {
-            string? message = _lastError;
-            if (string.IsNullOrEmpty(message))
-            {
-                length = 0;
-                return NativeStatus.Ok;
-            }
-
-            int required = Encoding.UTF8.GetByteCount(message);
-            length = required;
-            if (buffer.Length < required)
+            length = _lastErrorUtf8Length;
+            if (buffer.Length < length)
             {
                 return NativeStatus.BufferTooSmall;
             }
 
-            Encoding.UTF8.GetBytes(message, buffer);
+            _lastErrorUtf8.AsSpan(0, length).CopyTo(buffer);
             return NativeStatus.Ok;
         }
 
