@@ -124,6 +124,41 @@ namespace ExcelReader.Tests.Arrow
             Assert.Equal(2.25, price.GetValue(1));
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ToArrowRecordBatch_Should_Convert_Text_Numbers_Empties_And_Long_Cells_To_A_String_Column(bool nullable)
+        {
+            string longText = new('é', 32_000);
+            using MemoryStream ms = new();
+            using (Core.Writer.Xlsb.XlsbWorkbookWriter workbook = Core.Writer.Xlsb.XlsbWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                using Core.Writer.Xlsb.XlsbSheetWriter sheet = workbook.AddSheet("S");
+                foreach (Action<Core.Writer.Xlsb.XlsbRowWriter> write in (Action<Core.Writer.Xlsb.XlsbRowWriter>[])
+                    [row => row.Write(1.5), row => row.Write("short"), row => row.Skip(), row => row.Write(longText), row => row.Write(42)])
+                {
+                    using Core.Writer.Xlsb.XlsbRowWriter row = sheet.StartRow();
+                    row.Write("key");
+                    write(row);
+                }
+                sheet.End();
+                workbook.End();
+            }
+            ms.Position = 0;
+            using var reader = Excel.FromXlsb(ms);
+            ExcelColumnSchema[] schema = [new() { Index = 1, Name = "text", Type = ExcelColumnType.StringColumn, IsNullable = nullable }];
+
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = schema, HeaderRow = 0 });
+
+            var text = Assert.IsType<StringArray>(batch.Column(0));
+            Assert.Equal("1.5", text.GetString(0));
+            Assert.Equal("short", text.GetString(1));
+            Assert.Equal(nullable, text.IsNull(2));
+            Assert.Equal(nullable ? null : "", text.GetString(2));
+            Assert.Equal(longText, text.GetString(3));
+            Assert.Equal("42", text.GetString(4));
+        }
+
         [Fact]
         public void ToArrowRecordBatch_Should_Convert_Bool_Column()
         {
