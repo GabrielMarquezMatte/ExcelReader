@@ -423,6 +423,22 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void GetWriteHandleBytes_Should_Keep_Failing_When_Finishing_The_Workbook_Failed()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenWriteHandleToMemory(NativeFormat.Xlsx, out NativeWriterHandle? handle));
+            Assert.NotNull(handle);
+
+            Assert.Equal(NativeStatus.Error, WriteApi.GetWriteHandleBytes(handle, out byte[]? first));
+            string firstError = NativeApi.LastErrorText();
+            Assert.Equal(NativeStatus.Error, WriteApi.GetWriteHandleBytes(handle, out byte[]? second));
+            Assert.Equal(NativeStatus.Error, WriteApi.CloseWriteHandle(handle));
+
+            Assert.Null(first);
+            Assert.Null(second);
+            Assert.Contains(firstError, NativeApi.LastErrorText(), StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void GetWriteHandleBytes_Should_Not_Require_EndSheet_First()
         {
             Assert.Equal(NativeStatus.Ok, OpenWriteHandleToMemory(NativeFormat.Xlsx, out NativeWriterHandle? handle));
