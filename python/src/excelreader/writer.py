@@ -215,12 +215,17 @@ def _typed_table(data: Any, types: list[ColumnType] | None) -> tuple[TypedTable,
 
 def _write_all(destination: IO[bytes], data: bytes) -> None:
     """Calls `write()` until it has taken all of `data`. A `write()` that returns None is taken to
-    have written everything, as files that predate the `int` return convention do.
+    have written everything, as files that predate the `int` return convention do, except on a raw
+    stream, where None means the write would block and nothing was written.
     """
     view = memoryview(data)
     offset = 0
     while offset < len(data):
         written = destination.write(data if offset == 0 else view[offset:])
+        if written is None and isinstance(destination, io.RawIOBase):
+            raise BlockingIOError(
+                f"write() would block with {len(data) - offset} bytes left to write; use a blocking stream"
+            )
         if written is None:
             return
         if not 0 < written <= len(data) - offset:

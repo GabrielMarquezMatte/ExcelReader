@@ -435,6 +435,48 @@ def test_encrypt_package_finishes_a_partial_write(source_csv):
     assert list(result.columns[0]) == ["widget", "gadget"]
 
 
+class _WouldBlockRaw(io.RawIOBase):
+    def writable(self):
+        return True
+
+    def write(self, data):
+        return None
+
+
+class _LegacySink:
+    def __init__(self):
+        self.data = bytearray()
+
+    def write(self, chunk):
+        self.data += chunk
+
+
+def test_write_workbook_raises_when_a_raw_stream_would_block(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+
+    with pytest.raises(BlockingIOError):
+        write_workbook(_WouldBlockRaw(), table, _TYPES, format="xlsx")
+
+
+def test_encrypt_package_raises_when_a_raw_stream_would_block(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+
+    with pytest.raises(BlockingIOError):
+        encrypt_package(_to_bytes(table), _WouldBlockRaw(), "hunter2")
+
+
+def test_write_workbook_accepts_a_sink_whose_write_returns_none(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.sheets[0].parse(_SCHEMA)
+    destination = _LegacySink()
+
+    write_workbook(destination, table, _TYPES, format="xlsx")
+
+    assert bytes(destination.data) == _to_bytes(table)
+
+
 def _one_column_table(column, rows=1, validity=None):
     return TypedTable(row_count=rows, names=["n"], columns=[column], validity=[validity])
 
