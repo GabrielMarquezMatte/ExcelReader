@@ -139,15 +139,7 @@ namespace ExcelReader.Native
             {
                 options = options with { DetectEncodingFromByteOrderMark = detectBom };
             }
-            if (CsvMaxCellBytes is int maxCellBytes)
-            {
-                options = options with { MaxCellBytes = maxCellBytes };
-            }
-            if (CsvInternStrings is bool internStrings)
-            {
-                options = options with { InternStrings = internStrings };
-            }
-            return options with { MaxCellBytesOverride = options.MaxCellBytes, InternStringsOverride = options.InternStrings };
+            return options with { MaxCellBytesOverride = CsvMaxCellBytes, InternStringsOverride = CsvInternStrings };
         }
 
         internal ExcelReaderOptions ToExcelReaderOptions()

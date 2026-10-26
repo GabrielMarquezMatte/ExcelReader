@@ -588,7 +588,7 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        private static CsvReaderOptions CsvOf(ExcelReaderOptions? options)
+        internal static CsvReaderOptions CsvOf(ExcelReaderOptions? options)
         {
             options ??= ExcelReaderOptions.Default;
             CsvReaderOptions csv = options.Csv ?? CsvReaderOptions.Default;

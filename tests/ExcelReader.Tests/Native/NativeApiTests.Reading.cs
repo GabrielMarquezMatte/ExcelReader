@@ -392,6 +392,32 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void OpenFile_Applies_The_Global_Max_Cell_Bytes_To_A_Csv()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\n" + new string('x', 100_000) + "\n");
+            try
+            {
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxCellBytes = 16 };
+                Assert.Equal(NativeStatus.Ok, ReadApi.OpenFile(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                try
+                {
+                    using NativeRowCursor cursor = OpenRows(handle);
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(cursor, new byte[128 * 1024], out _));
+                    Assert.Equal(NativeStatus.Error, ReadApi.NextRow(cursor, new byte[128 * 1024], out _));
+                }
+                finally
+                {
+                    ReadApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void Should_Open_When_Password_Passed_Across_Abi()
         {
             byte[] pw = Encoding.UTF8.GetBytes(EncryptedFixtures.Password);
