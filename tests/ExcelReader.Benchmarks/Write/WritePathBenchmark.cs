@@ -21,6 +21,7 @@ namespace ExcelReader.Benchmarks
 
         private readonly MemoryStream _output = new(32 * 1024 * 1024);
         private NativeColumn[] _columns = [];
+        private NativeColumnSpec[] _specs = [];
         private readonly List<IntPtr> _native = [];
         private RecordBatch _batch = null!;
 
@@ -55,6 +56,7 @@ namespace ExcelReader.Benchmarks
                 schema.Field(new Field($"c{c}", Apache.Arrow.Types.StringType.Default, nullable: false));
             }
             _batch = new RecordBatch(schema.Build(), arrays, Rows);
+            _specs = [.. Enumerable.Range(0, StringColumns).Select(static c => new NativeColumnSpec { Names = [$"c{c}"], Type = NativeColumnType.String })];
         }
 
         private IntPtr Pin(ReadOnlySpan<byte> bytes)
@@ -96,6 +98,40 @@ namespace ExcelReader.Benchmarks
                 workbook.End();
             }
             return _output.Length;
+        }
+
+        [Benchmark]
+        public long BulkTyped_Xlsx_Serial()
+        {
+            return BulkTyped(NativeFormat.Xlsx, degreeOfParallelism: 1);
+        }
+
+        [Benchmark]
+        public long BulkTyped_Xlsb_Serial()
+        {
+            return BulkTyped(NativeFormat.Xlsb, degreeOfParallelism: 1);
+        }
+
+        [Benchmark]
+        public long BulkTyped_Xlsx_Parallel()
+        {
+            return BulkTyped(NativeFormat.Xlsx, degreeOfParallelism: 0);
+        }
+
+        [Benchmark]
+        public long BulkTyped_Xlsb_Parallel()
+        {
+            return BulkTyped(NativeFormat.Xlsb, degreeOfParallelism: 0);
+        }
+
+        private long BulkTyped(int format, int degreeOfParallelism)
+        {
+            fixed (NativeColumn* columns = _columns)
+            {
+                NativeTable table = new() { ColumnCount = StringColumns, RowCount = Rows, Columns = (IntPtr)columns };
+                WriteApi.WriteTypedToMemory(format, _specs, table, new NativeWriteOptions { DegreeOfParallelism = degreeOfParallelism }, out byte[]? bytes);
+                return bytes!.Length;
+            }
         }
 
         [Benchmark]
