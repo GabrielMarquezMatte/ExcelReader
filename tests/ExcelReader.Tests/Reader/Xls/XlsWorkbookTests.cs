@@ -364,7 +364,7 @@ namespace ExcelReader.Tests.Reader.Xls
             try
             {
                 Assert.True(nongeneric.MoveNext());
-                Assert.Throws<NotSupportedException>(() => nongeneric.Current);
+                Assert.Equal("Lua", Assert.IsType<PersonRow>(nongeneric.Current).Name);
             }
             finally
             {
