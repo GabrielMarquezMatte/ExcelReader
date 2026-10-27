@@ -354,6 +354,9 @@ namespace ExcelReader.Core.Reader.Xls
                                 _acc.Add(col, start, _acc.ValueLength - start, CellType.ExcelString, style, CellValueSource.RowValues);
                             }
                             break;
+                        case 3:
+                            _acc.Add(col, _acc.ValueLength, 0, CellType.ExcelString, style, CellValueSource.RowValues);
+                            break;
                         default:
                             break;
                     }
