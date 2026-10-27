@@ -696,6 +696,8 @@ pub struct ColumnBinding<T> {
     pub names: &'static [&'static str],
     pub column_type: ColumnType,
     pub assign: fn(&mut T, ColumnRef<'_>, i64),
+    /// Set for integer fields: whether an `i64` column value fits the field's type.
+    pub fits: Option<fn(i64) -> bool>,
 }
 
 // Hand-written: `#[derive(Clone)]` would add a `T: Clone` bound the user's row struct need not meet.
@@ -846,6 +848,26 @@ fn empty_table() -> XlTable {
     }
 }
 
+fn out_of_range<T>(table: &XlTable, bindings: &[ColumnBinding<T>]) -> Option<String> {
+    let columns = unsafe { std::slice::from_raw_parts(table.columns, table.column_count as usize) };
+    for (col, binding) in columns.iter().zip(bindings) {
+        let Some(fits) = binding.fits else {
+            continue;
+        };
+        let values = col.values as *const i64;
+        for row in 0..table.row_count {
+            let value = unsafe { *values.offset(row as isize) };
+            if is_valid(col, row) && !fits(value) {
+                return Some(format!(
+                    "column '{}' holds {value} at row {row}, which its field's type cannot represent",
+                    binding.names[0]
+                ));
+            }
+        }
+    }
+    None
+}
+
 /// Owns a typed parse result. Frees the native table on `Drop`. `iter()` builds one `T` per call
 /// to `next()` from the columnar buffers - no upfront `Vec<T>` allocation beyond what the native
 /// parse itself already made.
@@ -873,6 +895,10 @@ impl<T: ExcelMapper> TableView<T> {
                     bindings.len()
                 ),
             ));
+        }
+        if let Some(message) = out_of_range(&table, &bindings) {
+            unsafe { ffi::xl_free_table(&mut table) };
+            return Err(Error::new(ErrorKind::InvalidArgument, message));
         }
         Ok(TableView {
             table,
