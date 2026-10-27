@@ -196,8 +196,8 @@ raises <code>PasswordRequiredError</code>, and a wrong one raises <code>Password
     options: WriteOptions | None = None,
 ) -&gt; SheetWriter
 </code></pre>
-<p>Opens a streaming writer for <code>destination</code>: a path, truncating any existing file, or a binary
-object with <code>write()</code> such as <code>io.BytesIO</code> or an open file.</p>
+<p>Opens a streaming writer for <code>destination</code>: a path, whose existing file is replaced when the
+writer closes, or a binary object with <code>write()</code> such as <code>io.BytesIO</code> or an open file.</p>
 <p><code>format</code> is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
 with <code>write()</code> needs it. Such an object receives the whole workbook in one <code>write()</code> call when the
 writer closes, and is not closed itself.</p>

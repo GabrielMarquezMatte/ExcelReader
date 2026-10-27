@@ -89,6 +89,9 @@
 
 <p>A streaming workbook writer. Use as a context manager; closing finalizes the workbook, and for
 a destination with <code>write()</code> hands it the finished bytes.</p>
+<p>Only <code>close()</code>, or leaving a <code>with</code> block normally, commits. Leaving it by an exception, <code>abort()</code>,
+or a writer collected without being closed discards what was written: an existing file at the
+path is left as it was, and a destination with <code>write()</code> gets nothing.</p>
 <p>The required call order is <code>start_sheet</code> -&gt; <code>write_row</code> per row -&gt; <code>end_sheet</code>, or one
 <code>write_sheet</code> per whole table. Calling out of order raises <code>ExcelReaderError</code>, and the writer
 stays usable: fix the order and continue, or close to discard.</p>
@@ -198,6 +201,12 @@ blank text cell; the tuple <code>(None, ColumnType.X)</code> is a blank cell typ
 <p>Finalizes and releases the writer. Safe to call more than once.</p>
 <p>For a destination with <code>write()</code>, the finished workbook is written to it, even when sheets
 or rows were left open; a <code>write()</code> that takes only part of it is called again for the rest.</p>
+<h3 id="abort">abort</h3>
+<pre><code class="lang-python">def abort() -&gt; None
+</code></pre>
+<p>Discards everything written and releases the writer, leaving an existing file at the path
+as it was and handing a destination with <code>write()</code> nothing. Safe to call more than once, and
+after <code>close()</code>.</p>
 
 </article>
 

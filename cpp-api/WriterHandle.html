@@ -88,7 +88,7 @@
 <h1 id="class-writerhandle">Class WriterHandle</h1>
 
 <p>Writes a workbook as calls arrive instead of building it in memory first.</p>
-<p>Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and end_row; then end_sheet. Or one write_columns or write_sheet per whole sheet. A call out of order returns an error rather than corrupting the output. Finish with finish(); destruction finishes too, but cannot report a failure.</p>
+<p>Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and end_row; then end_sheet. Or one write_columns or write_sheet per whole sheet. A call out of order returns an error rather than corrupting the output. Only finish() commits: destroying or overwriting a handle that was not finished discards what was written and leaves an existing file at the path as it was, as abort() does.</p>
 <pre><code class="lang-cpp">class xl::WriterHandle
 </code></pre>
 <h2 id="methods">Methods</h2>
@@ -266,6 +266,10 @@ std::expected&lt;void, Error&gt; write(const T &amp;value)
 <p>Completes the workbook and closes the handle; a handle opened over a vector fills it.</p>
 <p>Every call after the first does nothing.</p>
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="abort">abort</h3>
+<pre><code class="lang-cpp">void abort() noexcept
+</code></pre>
+<p>Discards what was written and closes the handle, leaving an existing file at the path, or the vector, as it was. Every call after finish() or abort() does nothing.</p>
 <h3 id="open">open</h3>
 <pre><code class="lang-cpp">static std::expected&lt;WriterHandle, Error&gt; open(
     std::string_view path,
