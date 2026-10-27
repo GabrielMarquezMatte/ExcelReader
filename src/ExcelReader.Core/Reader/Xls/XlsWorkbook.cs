@@ -37,14 +37,21 @@ namespace ExcelReader.Core.Reader.Xls
             Lifetime = new ReaderLifetime(ReleaseResources);
             _workbook = workbook;
             _options = options ?? ExcelReaderOptions.Default;
-            using (BiffCursor cursor = workbook.OpenCursor())
+            try
             {
-                ParseWorkbookGlobals(cursor, _options, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+                using (BiffCursor cursor = workbook.OpenCursor())
+                {
+                    ParseWorkbookGlobals(cursor, _options, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+                }
+                if (_sheets.Length == 0)
+                {
+                    throw new InvalidDataException("The workbook contains no sheets.");
+                }
             }
-            if (_sheets.Length == 0)
+            catch
             {
                 workbook.Dispose();
-                throw new InvalidDataException("The workbook contains no sheets.");
+                throw;
             }
             _sheetList = CreateSheetList();
         }
