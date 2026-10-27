@@ -105,6 +105,30 @@ namespace ExcelReader.Tests.Generator
             Assert.Empty(result.Emit().Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
         }
 
+        [Theory]
+        [InlineData("file partial class Model")]
+        [InlineData("file partial class Outer { [ExcelSerializable] public partial class Model")]
+        public void FileLocalModelReportsEXR010(string declaration)
+        {
+            string close = declaration.Contains("Outer", StringComparison.Ordinal) ? " }" : "";
+            string source = $$"""
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.FileLocal
+                {
+                    {{(declaration.Contains("Outer", StringComparison.Ordinal) ? "" : "[ExcelSerializable]")}}
+                    {{declaration}}
+                    {
+                        public string Name { get; set; } = "";
+                    }{{close}}
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Diagnostic diagnostic = Assert.Single(diagnostics);
+            Assert.Equal("EXR010", diagnostic.Id);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        }
+
         [Fact]
         public void NonPartialContainingTypeReportsEXR002()
         {
