@@ -95,6 +95,10 @@ jobs:
           case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; *) arch=x64 ;; esac
           mkdir -p release-assets
           cp "python/src/excelreader/_lib/${src}" "release-assets/excelreader-native-${os}-${arch}.${ext}"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            install_name_tool -id "@rpath/excelreader-native-${os}-${arch}.${ext}" "release-assets/excelreader-native-${os}-${arch}.${ext}"
+            otool -D "release-assets/excelreader-native-${os}-${arch}.${ext}"
+          fi
 
       - name: Upload release asset
         uses: actions/upload-artifact@v7
