@@ -178,13 +178,13 @@ namespace ExcelReader.Tests.Parser
         }
 
         [Fact]
-        public void NonGenericCurrentIsNoLongerSupported()
+        public void NonGenericCurrentYieldsTheModel()
         {
             using CsvReader reader = Excel.FromCsv(Csv);
             CsvEnumerable<SaleClass>.Enumerator e = ExcelParser.FromAttributes<SaleClass>().Parse(reader.FirstSheet).GetEnumerator();
             Assert.True(e.MoveNext());
             System.Collections.IEnumerator legacy = e;
-            Assert.Throws<NotSupportedException>(() => legacy.Current);
+            Assert.IsType<SaleClass>(legacy.Current);
         }
     }
 }

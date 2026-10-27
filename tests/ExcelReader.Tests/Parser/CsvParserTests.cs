@@ -411,7 +411,7 @@ namespace ExcelReader.Tests.Parser
             IEnumerator e = enumerable.GetEnumerator();
 
             Assert.True(e.MoveNext());
-            Assert.Throws<NotSupportedException>(() => e.Current);
+            Assert.Equal("Alice", Assert.IsType<PersonRow>(e.Current).Name);
         }
 
         [Fact]
