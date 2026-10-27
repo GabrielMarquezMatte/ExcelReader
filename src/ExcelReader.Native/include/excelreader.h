@@ -334,10 +334,14 @@ int32_t xl_write_sheet(xl_writer_handle* handle, const uint8_t* name, int32_t na
                        const xl_column_spec* specs, const xl_table* table, const xl_sheet_options* options);
 
 /* A path handle writes beside its path and replaces the file only when this returns XL_OK; on failure
-   any existing file is left as it was. */
+   any existing file is left as it was. After a failed xl_write_sheet the handle has no output: this and
+   xl_write_handle_bytes return XL_ERROR. */
 int32_t xl_close_write_handle(xl_writer_handle* handle);
 
 int32_t xl_write_handle_bytes(xl_writer_handle* handle, xl_buffer* out_buffer);
+
+/* Discards everything written and releases the handle; an existing file at the path is left as it was. */
+int32_t xl_abort_write_handle(xl_writer_handle* handle);
 
 typedef int32_t (*xl_csv_seed_fn)      (void** out_state, void* user_data);
 typedef int32_t (*xl_csv_accumulate_fn)(void* state, const xl_row* row, void* user_data);

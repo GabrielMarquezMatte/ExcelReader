@@ -316,6 +316,17 @@ namespace ExcelReader.Native
             return WriteApi.CloseWriteHandle(target);
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_abort_write_handle")]
+        public static int AbortWriteHandle(nint handle)
+        {
+            NativeApi.ClearLastError();
+            if (!NativeHandleTable.TryUnregister(handle, out NativeWriterHandle? target))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            return WriteApi.AbortWriteHandle(target);
+        }
+
         private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)
         {
             if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
