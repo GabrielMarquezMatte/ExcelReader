@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Tests.Reader.Xls;
 
 namespace ExcelReader.Tests.Crypto
@@ -22,6 +23,88 @@ namespace ExcelReader.Tests.Crypto
 
             Assert.Throws<InvalidDataException>(
                 () => CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default));
+        }
+
+        private static byte[] FormulaStringsXls()
+        {
+            return File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "data", "excel-formula-strings.xls"));
+        }
+
+        private static Span<byte> DirectoryEntryBytes(byte[] bytes, int index)
+        {
+            int sectorSize = 1 << BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(0x1E));
+            int directorySector = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(0x30));
+            return bytes.AsSpan(((directorySector + 1) * sectorSize) + (index * 128), 128);
+        }
+
+        private static void SetLinks(byte[] bytes, int index, int left, int right, int child)
+        {
+            Span<byte> entry = DirectoryEntryBytes(bytes, index);
+            BinaryPrimitives.WriteInt32LittleEndian(entry[68..], left);
+            BinaryPrimitives.WriteInt32LittleEndian(entry[72..], right);
+            BinaryPrimitives.WriteInt32LittleEndian(entry[76..], child);
+        }
+
+        [Fact]
+        public void Should_Ignore_Streams_Inside_Embedded_Storages_When_Looking_Up_By_Name()
+        {
+            byte[] bytes = FormulaStringsXls();
+            Span<byte> summary = DirectoryEntryBytes(bytes, 2);
+            summary[66] = 1;
+            SetLinks(bytes, 2, left: 1, right: -1, child: 3);
+            Span<byte> nested = DirectoryEntryBytes(bytes, 3);
+            nested[..64].Clear();
+            System.Text.Encoding.Unicode.GetBytes("EncryptedPackage").CopyTo(nested);
+            BinaryPrimitives.WriteUInt16LittleEndian(nested[64..], (ushort)(("EncryptedPackage".Length + 1) * 2));
+
+            using (CfbContainer cfb = CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default))
+            {
+                Assert.False(cfb.ContainsStream("EncryptedPackage"));
+                Assert.True(cfb.ContainsStream("Workbook"));
+            }
+            Assert.Equal(ExcelFileFormat.Xls, Excel.DetectFileFormat(bytes));
+            using IExcelWorkbook workbook = Excel.Open(new MemoryStream(bytes));
+            Assert.IsType<XlsWorkbook>(workbook);
+        }
+
+        [Fact]
+        public void Should_Throw_When_Directory_Sibling_Tree_Has_A_Cycle()
+        {
+            byte[] bytes = FormulaStringsXls();
+            SetLinks(bytes, 1, left: 2, right: -1, child: -1);
+
+            using CfbContainer cfb = CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default);
+            Assert.Throws<InvalidDataException>(() => cfb.ContainsStream("NoSuchStream"));
+        }
+
+        [Theory]
+        [InlineData(4)]
+        [InlineData(1_000_000)]
+        [InlineData(int.MinValue)]
+        public void Should_Not_Find_Streams_When_Root_Child_Is_Out_Of_Range(int child)
+        {
+            byte[] bytes = FormulaStringsXls();
+            SetLinks(bytes, 0, left: -1, right: -1, child: child);
+
+            using CfbContainer cfb = CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default);
+            Assert.False(cfb.ContainsStream("Workbook"));
+        }
+
+        [Fact]
+        public void Should_Ignore_Stream_Size_High_Dword_When_Version_3_Container()
+        {
+            byte[] bytes = FormulaStringsXls();
+            Span<byte> workbookEntry = DirectoryEntryBytes(bytes, 1);
+            long size = BinaryPrimitives.ReadInt64LittleEndian(workbookEntry[120..]);
+            BinaryPrimitives.WriteUInt32LittleEndian(workbookEntry[124..], 0xDEADBEEF);
+
+            using (CfbContainer cfb = CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default))
+            {
+                Assert.Equal(size, cfb.StreamLength("Workbook"));
+            }
+            using XlsWorkbook workbook = Excel.FromXls(new MemoryStream(bytes));
+            using XlsWorkbook.Enumerator e = workbook.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
         }
 
         [Fact]

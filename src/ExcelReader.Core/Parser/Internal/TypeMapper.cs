@@ -36,7 +36,7 @@ namespace ExcelReader.Core.Parser.Internal
             return typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).Any(static prop =>
             {
                 Type effective = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
-                return effective == typeof(DateTime) || effective == typeof(DateOnly);
+                return effective == typeof(DateTime) || effective == typeof(DateOnly) || effective == typeof(TimeOnly);
             });
         }
 

@@ -48,16 +48,27 @@ namespace ExcelReader.Core.Reader.Xls
             char[] rented = ArrayPool<char>.Shared.Rent(charCount);
             try
             {
-                for (int i = 0; i < charCount; i++)
-                {
-                    rented[i] = DecodeCp1252(compressed[i]);
-                }
-                return Encoding.UTF8.GetBytes(rented.AsSpan(0, charCount), dest);
+                int decoded = DecodeStringToChars(compressed, charCount, flags, rented);
+                return Encoding.UTF8.GetBytes(rented.AsSpan(0, decoded), dest);
             }
             finally
             {
                 ArrayPool<char>.Shared.Return(rented);
             }
+        }
+
+        private static int DecodeStringToChars(ReadOnlySpan<byte> src, int charCount, byte flags, Span<char> dest)
+        {
+            if ((flags & 1) != 0)
+            {
+                MemoryMarshal.Cast<byte, char>(src[..(charCount * 2)]).CopyTo(dest);
+                return charCount;
+            }
+            for (int i = 0; i < charCount; i++)
+            {
+                dest[i] = DecodeCp1252(src[i]);
+            }
+            return charCount;
         }
 
         private static char DecodeCp1252(byte value)

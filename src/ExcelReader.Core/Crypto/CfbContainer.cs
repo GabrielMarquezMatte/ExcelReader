@@ -108,7 +108,7 @@ namespace ExcelReader.Core.Crypto
             {
                 ReadOnlySpan<int> fat = fatArray.AsSpan(0, fatLength);
                 byte[] directory = ReadChainBytes(source, sectorSize, fat, firstDirectorySector, -1);
-                DirectoryEntry[] entries = ReadDirectory(directory);
+                DirectoryEntry[] entries = ReadDirectory(directory, sectorSize);
                 if (entries.Length == 0)
                 {
                     throw new InvalidDataException("The OLE directory is empty.");
@@ -217,13 +217,29 @@ namespace ExcelReader.Core.Crypto
 
         internal bool TryFindEntry(string name, out DirectoryEntry found)
         {
-            foreach (ref readonly var entry in Entries.AsSpan())
+            bool[] visited = new bool[Entries.Length];
+            visited[0] = true;
+            Stack<int> pending = new();
+            pending.Push(Entries[0].Child);
+            while (pending.TryPop(out int id))
             {
+                if ((uint)id >= (uint)Entries.Length)
+                {
+                    continue;
+                }
+                if (visited[id])
+                {
+                    throw new InvalidDataException("The OLE directory tree contains a cycle.");
+                }
+                visited[id] = true;
+                ref readonly DirectoryEntry entry = ref Entries[id];
                 if (entry.ObjectType == 2 && entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
                     found = entry;
                     return true;
                 }
+                pending.Push(entry.RightSibling);
+                pending.Push(entry.LeftSibling);
             }
             found = default;
             return false;
@@ -487,7 +503,7 @@ namespace ExcelReader.Core.Crypto
             return next;
         }
 
-        private static DirectoryEntry[] ReadDirectory(ReadOnlySpan<byte> bytes)
+        private static DirectoryEntry[] ReadDirectory(ReadOnlySpan<byte> bytes, int sectorSize)
         {
             int count = bytes.Length / 128;
             DirectoryEntry[] entries = new DirectoryEntry[count];
@@ -508,7 +524,10 @@ namespace ExcelReader.Core.Crypto
                     name,
                     entry[66],
                     ReadI32(entry, 116),
-                    BinaryPrimitives.ReadInt64LittleEndian(entry.Slice(120, 8)));
+                    sectorSize == HeaderSize ? (uint)ReadI32(entry, 120) : BinaryPrimitives.ReadInt64LittleEndian(entry.Slice(120, 8)),
+                    ReadI32(entry, 68),
+                    ReadI32(entry, 72),
+                    ReadI32(entry, 76));
             }
             return entries;
         }
@@ -522,7 +541,7 @@ namespace ExcelReader.Core.Crypto
             return ((long)sector + 1) * sectorSize;
         }
 
-        internal readonly record struct DirectoryEntry(string Name, byte ObjectType, int StartSector, long Size);
+        internal readonly record struct DirectoryEntry(string Name, byte ObjectType, int StartSector, long Size, int LeftSibling, int RightSibling, int Child);
 
         private sealed class CfbStreamView : ReadOnlyStream
         {

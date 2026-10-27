@@ -388,6 +388,11 @@ namespace ExcelReader.Core.Writer.Xlsb
             return FaultAsync();
         }
 
+        ValueTask IZipSheet.DrainAsync(CancellationToken ct)
+        {
+            return _stream is WriteOffloadStream offload ? offload.DrainAsync(ct) : ValueTask.CompletedTask;
+        }
+
         private void Release(bool faulted)
         {
             _state = WriterState.Ended;
@@ -721,7 +726,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         internal void WriteDateSerialCell(int columnIndex, double serial)
         {
             int styleId = EffectiveStyle(columnIndex);
-            WriteDoubleCellCore(columnIndex, ExcelEpoch.OADateToSerial(serial, _date1904), styleId == 0 ? 1 : styleId);
+            WriteDoubleCellCore(columnIndex, ExcelEpoch.OADateToSerial(serial, _date1904), styleId == 0 ? 1 : _owner.DateStyle(styleId));
         }
 
         internal void WriteDoubleCell(int columnIndex, double value)

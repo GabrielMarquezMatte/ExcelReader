@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.ExceptionServices;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
@@ -96,7 +97,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
         internal long ResolvedNextStart { get; }
 
-        internal ExcelParseException? Failure { get; set; }
+        internal ExceptionDispatchInfo? Failure { get; set; }
 
         /// <summary>Records read before the chunk ended or failed, blank ones included, so rows can be numbered.</summary>
         internal int Records { get; set; }
@@ -144,7 +145,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CancellationToken ct)
         {
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);
-            (long resolvedNextStart, ExcelParseException? failure, int records) outcome;
+            (long resolvedNextStart, ExceptionDispatchInfo? failure, int records) outcome;
 
             if (source.IsMemory)
             {
@@ -179,40 +180,36 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             };
         }
 
-        private static async ValueTask<(long resolvedNextStart, ExcelParseException? failure, int records)> ConsumeAsync<T>(
+        // A failure is kept, not thrown: from a misguessed start it is discarded with the chunk, which is re-read.
+        private static async ValueTask<(long resolvedNextStart, ExceptionDispatchInfo? failure, int records)> ConsumeAsync<T>(
             CsvReader.Enumerator rows,
             long start,
             CsvChunk chunk,
             CsvRowProjector<T> projector,
             List<T> models)
         {
-            long resolvedNextStart = long.MaxValue;
-            ExcelParseException? failure = null;
             int records = 0;
-            while (await rows.MoveNextAsync().ConfigureAwait(false))
+            try
             {
-                long absolute = start + rows.CurrentRecordStart;
-                if (absolute >= chunk.End)
+                while (await rows.MoveNextAsync().ConfigureAwait(false))
                 {
-                    resolvedNextStart = absolute;
-                    break;
-                }
-
-                try
-                {
+                    long absolute = start + rows.CurrentRecordStart;
+                    if (absolute >= chunk.End)
+                    {
+                        return (absolute, null, records);
+                    }
                     if (projector.Classify(rows) == ProjectionStep.Yield)
                     {
                         models.Add(projector.Project(rows));
                     }
+                    records++;
                 }
-                catch (ExcelParseException ex)
-                {
-                    failure = ex;
-                    break;
-                }
-                records++;
             }
-            return (resolvedNextStart, failure, records);
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return (long.MaxValue, ExceptionDispatchInfo.Capture(ex), records);
+            }
+            return (long.MaxValue, null, records);
         }
 
         // long.MaxValue when the chunk holds no record start, or when its quote state cannot be told from its

@@ -209,7 +209,7 @@ namespace ExcelReader.Core.Writer.Xls
             ValidateColumn(col);
             int abstractStyle = EffectiveStyle(col);
             double serial = ExcelEpoch.OADateToSerial(value.ToOADate(), _date1904);
-            WriteNumberCell(row, col, abstractStyle == 0 ? XlsGlobals.DateXf : XlsGlobals.CustomXf(abstractStyle), serial);
+            WriteNumberCell(row, col, abstractStyle == 0 ? XlsGlobals.DateXf : XlsGlobals.CustomXf(_owner.DateStyle(abstractStyle)), serial);
             Track(row, col);
         }
 
@@ -312,7 +312,11 @@ namespace ExcelReader.Core.Writer.Xls
                     break;
                 }
             }
-            var cont = new XlsSheetWriter(_owner, contName, _date1904, Visibility, isContinuation: true, baseName: _baseName);
+            var cont = new XlsSheetWriter(_owner, contName, _date1904, Visibility, isContinuation: true, baseName: _baseName)
+            {
+                _columnStyles = _columnStyles,
+                _columnWidths = _columnWidths,
+            };
             cont.EnsureStarted();
             return cont;
         }

@@ -44,6 +44,25 @@ namespace ExcelReader.Tests.Crypto
         }
 
         [Fact]
+        public void DeriveIntermediateKey_SaltSizeNotBlockMultiple_HashesOnlySaltSizeBytes()
+        {
+            byte[] pwSalt = RandomNumberGenerator.GetBytes(20);
+            byte[] packageKey = RandomNumberGenerator.GetBytes(32);
+            byte[] verifierInput = RandomNumberGenerator.GetBytes(32);
+
+            CryptoParameters seed = PasswordEncryptor(pwSalt, default) with { SaltSize = 20 };
+            PasswordEncryptorBlobs blobs = AgileKeyDerivation.DeriveWriteBlobs(seed, Password, packageKey, verifierInput);
+            AgileDescriptor descriptor = new(KeyData(RandomNumberGenerator.GetBytes(16)), seed with
+            {
+                EncryptedVerifierHashInput = blobs.EncryptedVerifierHashInput,
+                EncryptedVerifierHashValue = blobs.EncryptedVerifierHashValue,
+                EncryptedKeyValue = blobs.EncryptedKeyValue,
+            }, [], []);
+
+            Assert.Equal(packageKey, AgileKeyDerivation.DeriveIntermediateKey(descriptor, Password));
+        }
+
+        [Fact]
         public void DeriveIntermediateKey_WithWrongPassword_Throws_PasswordIncorrect()
         {
             byte[] pwSalt = RandomNumberGenerator.GetBytes(16);

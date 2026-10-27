@@ -175,7 +175,7 @@ class Sheets(Sequence["Sheet"]):
         if isinstance(key, str):
             encoded = key.encode("utf-8")
             index = ctypes.c_int32()
-            _check(workbook._lib.xl_sheet_index(workbook._require_handle(), encoded, len(encoded), ctypes.byref(index)))
+            _check(workbook._lib.xl_sheet_index(workbook._require_handle(), encoded, _native.int32_len(encoded), ctypes.byref(index)))
             if index.value < 0:
                 raise KeyError(key)
             return Sheet(workbook, index.value)
@@ -446,7 +446,7 @@ class Tables(Sequence["Table"]):
         if isinstance(key, str):
             encoded = key.encode("utf-8")
             index = ctypes.c_int32()
-            _check(workbook._lib.xl_table_index(workbook._require_handle(), encoded, len(encoded), ctypes.byref(index)))
+            _check(workbook._lib.xl_table_index(workbook._require_handle(), encoded, _native.int32_len(encoded), ctypes.byref(index)))
             if index.value < 0:
                 raise KeyError(key)
             return Table(workbook, index.value)
@@ -650,7 +650,7 @@ def _raw_options(
         encoded = password.encode("utf-8")
         password_buffer = ctypes.create_string_buffer(encoded, len(encoded))
         raw.password = ctypes.cast(password_buffer, ctypes.POINTER(ctypes.c_uint8))
-        raw.password_len = len(encoded)
+        raw.password_len = _native.int32_len(encoded)
     return ctypes.byref(raw), raw, password_buffer
 
 
@@ -706,7 +706,7 @@ def _open_path(path: Path, format: str | None, options: OpenOptions | None, pass
     handle = ctypes.c_void_p()
     lib = _native.load_library()
     raw_options, _raw, _password_buffer = _raw_options(options, password)
-    _check(lib.xl_open_file(encoded, len(encoded), _resolve_format(format, path), raw_options, ctypes.byref(handle)))
+    _check(lib.xl_open_file(encoded, _native.int32_len(encoded), _resolve_format(format, path), raw_options, ctypes.byref(handle)))
     return Workbook(handle)
 
 
@@ -718,5 +718,5 @@ def _open_memory(
     handle = ctypes.c_void_p()
     lib = _native.load_library()
     raw_options, _raw, _password_buffer = _raw_options(options, password)
-    _check(lib.xl_open_memory(data, len(data), _resolve_format(format, None), raw_options, ctypes.byref(handle)))
+    _check(lib.xl_open_memory(data, _native.int32_len(data), _resolve_format(format, None), raw_options, ctypes.byref(handle)))
     return Workbook(handle)

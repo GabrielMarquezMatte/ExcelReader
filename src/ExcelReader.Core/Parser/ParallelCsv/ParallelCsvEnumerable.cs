@@ -99,11 +99,17 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
         private long AdvanceOrThrow(CsvChunkResult<T> result, long recordsBefore)
         {
-            if (result.Failure is not null)
+            if (result.Failure is null)
             {
-                throw ProjectionRules.AtRow(result.Failure, _config.HeaderRow + recordsBefore + result.Records + 1);
+                return result.ResolvedNextStart;
             }
-            return result.ResolvedNextStart;
+            if (result.Failure.SourceException is ExcelParseException parse)
+            {
+                int headerRows = _info.IsIndexBased ? 0 : _config.HeaderRow;
+                throw ProjectionRules.AtRow(parse, headerRows + recordsBefore + result.Records + 1);
+            }
+            result.Failure.Throw();
+            return long.MaxValue;
         }
 
         private readonly record struct MergeState(

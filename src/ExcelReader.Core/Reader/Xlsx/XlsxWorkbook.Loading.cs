@@ -23,7 +23,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
             foreach (var tag in Tags(wbBytes, sheetTag))
             {
-                var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, "r:id"u8));
+                var rid = XlsxXml.DecodeToString(RelationshipId(tag));
                 var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, "name"u8));
                 if (!rels.TryGetValue(rid, out var target))
                 {
@@ -32,6 +32,19 @@ namespace ExcelReader.Core.Reader.Xlsx
                 sheets.Add((name, XlsxXml.NormalizePart(target), ParseVisibility(XlsxXml.Attr(tag, "state"u8))));
             }
             return [.. sheets];
+        }
+
+        private static ReadOnlySpan<byte> RelationshipId(ReadOnlySpan<byte> tag)
+        {
+            int pos = XlsxXml.ElementNameEnd(tag);
+            while (XlsxXml.NextAttribute(tag, ref pos, out ReadOnlySpan<byte> name, out ReadOnlySpan<byte> value))
+            {
+                if (name.EndsWith(":id"u8))
+                {
+                    return value;
+                }
+            }
+            return default;
         }
 
         private static ExcelSheetVisibility ParseVisibility(ReadOnlySpan<byte> state)
@@ -163,7 +176,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private int[] ParseSharedBody(BufferedStreamCursor io, Stream? stream, int partLength)
         {
             io.Ensure(stream, 256);
-            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(0, io.Len)));
+            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(io.Pos, io.Len - io.Pos)));
 
             int uniqueCount = 0;
             int sstPos = FindSeqGrowing(io, stream, tok.SstTag);
@@ -176,7 +189,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), "uniqueCount"u8), 0);
                 }
             }
-            LimitChecks.ThrowIfSharedStringCountImplausible(uniqueCount, partLength);
+            uniqueCount = LimitChecks.ClampSharedStringCount(uniqueCount, partLength);
 
             int[] offsets = new int[uniqueCount > 0 ? uniqueCount + 1 : Math.Max(16, partLength / 64)];
             int offsetCount = 1;
@@ -215,7 +228,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private async ValueTask<int[]> ParseSharedBodyAsync(BufferedStreamCursor io, Stream stream, int partLength, CancellationToken ct)
         {
             await io.EnsureAsync(stream, 256, ct).ConfigureAwait(false);
-            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(0, io.Len)));
+            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(io.Pos, io.Len - io.Pos)));
 
             int uniqueCount = 0;
             int sstPos = await FindSeqGrowingAsync(io, stream, tok.SstTag, ct).ConfigureAwait(false);
@@ -228,7 +241,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), "uniqueCount"u8), 0);
                 }
             }
-            LimitChecks.ThrowIfSharedStringCountImplausible(uniqueCount, partLength);
+            uniqueCount = LimitChecks.ClampSharedStringCount(uniqueCount, partLength);
 
             int[] offsets = new int[uniqueCount > 0 ? uniqueCount + 1 : Math.Max(16, partLength / 64)];
             int offsetCount = 1;

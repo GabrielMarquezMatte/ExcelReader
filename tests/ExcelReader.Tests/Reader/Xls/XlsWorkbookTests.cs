@@ -364,7 +364,7 @@ namespace ExcelReader.Tests.Reader.Xls
             try
             {
                 Assert.True(nongeneric.MoveNext());
-                Assert.Throws<NotSupportedException>(() => nongeneric.Current);
+                Assert.Equal("Lua", Assert.IsType<PersonRow>(nongeneric.Current).Name);
             }
             finally
             {
@@ -556,6 +556,22 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void FailedOpenDisposesOwnedStream()
+        {
+            var stream = new TrackingStream(XlsWorkbookBuilder.WithFilePassRecord());
+            Assert.Throws<NotSupportedException>(() => Excel.FromXls(stream, leaveOpen: false));
+            Assert.True(stream.Disposed);
+        }
+
+        [Fact]
+        public async Task FailedOpenAsyncDisposesOwnedStream()
+        {
+            var stream = new TrackingStream(XlsWorkbookBuilder.WithFilePassRecord());
+            await Assert.ThrowsAsync<NotSupportedException>(async () => await Excel.FromXlsAsync(stream, leaveOpen: false, ct: TestContext.Current.CancellationToken));
+            Assert.True(stream.Disposed);
+        }
+
+        [Fact]
         public void WorkbookWithoutSheetsThrows()
         {
             using var ms = XlsWorkbookBuilder.BuildNoSheets();
@@ -570,6 +586,88 @@ namespace ExcelReader.Tests.Reader.Xls
             using var e = reader.FirstSheet.GetEnumerator();
 
             Assert.Throws<NotSupportedException>(() => e.MoveNext());
+        }
+
+        [Fact]
+        public void EmbeddedChartSubstreamIsSkippedWithItsSeriesCache()
+        {
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(
+                includeEof: true,
+                (0x0204, XlsWorkbookBuilder.RawLabel(0, 0, "a")),
+                (0x0204, XlsWorkbookBuilder.RawLabel(1, 0, "b")),
+                (0x0809, XlsWorkbookBuilder.RawBof(0x0020)),
+                (0x0203, XlsWorkbookBuilder.RawNumber(0, 5, 99)),
+                (0x0809, XlsWorkbookBuilder.RawBof(0x0020)),
+                (0x0204, XlsWorkbookBuilder.RawLabel(1, 5, "nested")),
+                (0x000A, []),
+                (0x0201, [.. XlsWorkbookBuilder.LE16(2), .. XlsWorkbookBuilder.LE16(5), .. XlsWorkbookBuilder.LE16(0)]),
+                (0x000A, []),
+                (0x0203, XlsWorkbookBuilder.RawNumber(1, 1, 2.5)),
+                (0x0203, XlsWorkbookBuilder.RawNumber(2, 0, 7)));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(1, e.Current.ColumnCount);
+            Assert.Equal("a", e.Current[0].GetString());
+            Assert.True(e.MoveNext());
+            Assert.Equal(2, e.Current.ColumnCount);
+            Assert.Equal("b", e.Current[0].GetString());
+            Assert.True(e.Current[1].TryGetDouble(out double b1));
+            Assert.Equal(2.5, b1);
+            Assert.True(e.MoveNext());
+            Assert.Equal(1, e.Current.ColumnCount);
+            Assert.True(e.Current[0].TryGetDouble(out double a3));
+            Assert.Equal(7, a3);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public void LabelSurrogatePairSplitAcrossContinueDecodesAsOneCharacter()
+        {
+            const string value = "ab\U0001F600cd";
+            byte[] utf16 = System.Text.Encoding.Unicode.GetBytes(value);
+            byte[] label = [.. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(value.Length), 1, .. utf16.AsSpan(0, 6)];
+            byte[] continued = [1, .. utf16.AsSpan(6)];
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(includeEof: true, (0x0204, label), (0x003C, continued));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(value, e.Current[0].GetString());
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public void FormulaWithEmptyStringResultReadsAsEmptyString()
+        {
+            byte[] formula = [.. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), 3, 0, 0, 0, 0, 0, 0xFF, 0xFF, .. new byte[8]];
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(includeEof: true, (0x0006, formula));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(1, e.Current.ColumnCount);
+            Assert.Equal(CellType.ExcelString, e.Current[0].Type);
+            Assert.Equal("", e.Current[0].GetString());
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public void RichStringRecordReadsAsItsTextIgnoringFormattingRuns()
+        {
+            byte[] runs = [.. XlsWorkbookBuilder.LE16(1), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(5)];
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(
+                includeEof: true,
+                (0x00D6, [.. XlsWorkbookBuilder.RawLabel(0, 1, "rich"), .. runs]));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(2, e.Current.ColumnCount);
+            Assert.Equal(CellType.ExcelString, e.Current[1].Type);
+            Assert.Equal("rich", e.Current[1].GetString());
+            Assert.False(e.MoveNext());
         }
 
         [Fact]

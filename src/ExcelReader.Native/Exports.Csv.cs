@@ -10,6 +10,7 @@ namespace ExcelReader.Native
             byte* path, int pathLength, NativeCsvAggregationRaw* aggregation,
             NativeCsvParallelOptionsRaw* options, void** outState)
         {
+            NativeApi.ClearLastError();
             if (outState is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -35,6 +36,7 @@ namespace ExcelReader.Native
             byte* data, int dataLength, NativeCsvAggregationRaw* aggregation,
             NativeCsvParallelOptionsRaw* options, void** outState)
         {
+            NativeApi.ClearLastError();
             if (outState is null)
             {
                 return NativeStatus.InvalidArgument;

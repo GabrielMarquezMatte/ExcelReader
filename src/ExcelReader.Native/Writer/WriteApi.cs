@@ -156,6 +156,24 @@ namespace ExcelReader.Native.Writer
             }
         }
 
+        internal static int AbortWriteHandle(NativeWriterHandle? handle)
+        {
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                handle.Dispose();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
         internal static int GetWriteHandleBytes(NativeWriterHandle? handle, out byte[]? bytes)
         {
             bytes = null;

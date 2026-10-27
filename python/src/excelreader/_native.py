@@ -71,6 +71,13 @@ XL_T_TIME = 5
 XL_T_TIMESTAMP = 6
 
 
+def int32_len(buffer: bytes) -> int:
+    length = len(buffer)
+    if length > 0x7FFFFFFF:
+        raise ValueError(f"{length} bytes is past the ABI's int32 length limit")
+    return length
+
+
 class NativeColumnSpec(ctypes.Structure):
     """Mirrors xl_column_spec. `names`/`name_lens`/`name_count` may be left NULL/NULL/0 to resolve by
     `index` instead. Build one with `column_spec_by_name`/`column_spec_by_names`, never directly —
@@ -93,7 +100,7 @@ def column_spec_by_names(names: Sequence[str], type_: int, *, nullable: bool = F
     name_ptrs = (ctypes.POINTER(ctypes.c_uint8) * len(buffers))(
         *(ctypes.cast(b, ctypes.POINTER(ctypes.c_uint8)) for b in buffers)
     )
-    name_lens = (ctypes.c_int32 * len(encoded))(*(len(e) for e in encoded))
+    name_lens = (ctypes.c_int32 * len(encoded))(*(int32_len(e) for e in encoded))
     spec = NativeColumnSpec(
         names=ctypes.cast(name_ptrs, ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8))),
         name_lens=name_lens,
@@ -394,7 +401,7 @@ def to_native_sheet_options(table: TableOptions | None) -> NativeSheetOptions | 
         return None
     raw = NativeSheetOptions(struct_size=ctypes.sizeof(NativeSheetOptions))
     name = table.name.encode("utf-8")
-    raw.table_name, raw.table_name_len = name, len(name)
+    raw.table_name, raw.table_name_len = name, int32_len(name)
     flags = 0 if table.row_stripes else XL_TABLE_NO_ROW_STRIPES
     flags |= XL_TABLE_COLUMN_STRIPES if table.column_stripes else 0
     flags |= XL_TABLE_FIRST_COLUMN if table.first_column else 0
@@ -419,7 +426,7 @@ def to_native_write_options(options: WriteOptions) -> NativeWriteOptions:
     if options.sheet_name is not None:
         encoded = options.sheet_name.encode("utf-8")
         raw.sheet_name = encoded
-        raw.sheet_name_len = len(encoded)
+        raw.sheet_name_len = int32_len(encoded)
     raw.csv_delimiter = _opt_number(options.csv_delimiter)
     raw.csv_quote = _opt_number(options.csv_quote)
     raw.date1904 = _opt_state(options.date1904)
@@ -477,7 +484,7 @@ def load_library() -> ctypes.CDLL:
 def _warm_up(lib: ctypes.CDLL) -> None:
     data = b"a,b\n1,2\n3,4\n"
     workbook = ctypes.c_void_p()
-    if lib.xl_open_memory(data, len(data), XL_FORMAT_CSV, None, ctypes.byref(workbook)) != XL_OK:
+    if lib.xl_open_memory(data, int32_len(data), XL_FORMAT_CSV, None, ctypes.byref(workbook)) != XL_OK:
         return
     try:
         cursor = ctypes.c_void_p()
@@ -648,6 +655,9 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
 
     lib.xl_write_handle_bytes.argtypes = [ctypes.c_void_p, ctypes.POINTER(NativeBuffer)]
     lib.xl_write_handle_bytes.restype = ctypes.c_int32
+
+    lib.xl_abort_write_handle.argtypes = [ctypes.c_void_p]
+    lib.xl_abort_write_handle.restype = ctypes.c_int32
 
     lib.xl_free_buffer.argtypes = [ctypes.POINTER(NativeBuffer)]
     lib.xl_free_buffer.restype = None

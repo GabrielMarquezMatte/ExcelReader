@@ -11,3 +11,4 @@ EXR006 | ExcelReader.Generator | Warning | ExcelRowMapGenerator
 EXR007 | ExcelReader.Generator | Error | ExcelRowMapGenerator
 EXR008 | ExcelReader.Generator | Error | ExcelRowMapGenerator
 EXR009 | ExcelReader.Generator | Error | ExcelRowMapGenerator
+EXR010 | ExcelReader.Generator | Error | ExcelRowMapGenerator

@@ -17,8 +17,9 @@ namespace ExcelReader.Core.Reader
     /// The column shape is fixed once, at construction time, from the header row (or from the first data
     /// row when <see cref="SheetDataReaderOptions.HeaderRow"/> is 0) — it never grows as later, wider rows come in. There is no schema
     /// pass, so <see cref="GetFieldType"/>, <see cref="GetValue"/>, and the typed getters all read the
-    /// <em>current</em> row's own cell type; a consumer that builds a schema from the first
-    /// <see cref="Read"/> (e.g. <c>DataTable.Load</c>) locks in that row's types for the whole load.
+    /// <em>current</em> row's own cell type; a consumer that builds a schema (e.g. <c>DataTable.Load</c>,
+    /// which calls <see cref="GetSchemaTable"/> before the first <see cref="Read"/>) locks in the first data
+    /// row's types for the whole load; the constructor reads that row ahead for this.
     /// <para>
     /// One <see cref="SheetDataReader"/> reads one sheet: <see cref="NextResult"/> always returns
     /// <see langword="false"/>. To read every sheet, construct one per <see cref="IExcelWorkbook.SheetAt"/>.
@@ -36,6 +37,7 @@ namespace ExcelReader.Core.Reader
         private readonly int _firstColumn;
         private readonly string?[] _names;
         private readonly Dictionary<string, int> _ordinals;
+        private readonly Dictionary<string, int> _ignoreCaseOrdinals;
         private readonly bool _hasPendingRow;
         private bool _pendingConsumed;
         private bool _rowAvailable;
@@ -66,13 +68,15 @@ namespace ExcelReader.Core.Reader
             _pendingConsumed = true;
             try
             {
-                if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
+                if (headerRow > 0 && !SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
                 {
-                    _names = ReadHeaderNames(_rows.Current, _firstColumn);
+                    _names = [];
                 }
                 else if (headerRow > 0)
                 {
-                    _names = [];
+                    _names = ReadHeaderNames(_rows.Current, _firstColumn);
+                    _hasPendingRow = _rows.MoveNext();
+                    _pendingConsumed = false;
                 }
                 else
                 {
@@ -80,7 +84,8 @@ namespace ExcelReader.Core.Reader
                     _pendingConsumed = false;
                     _names = _hasPendingRow ? new string?[Math.Max(0, _rows.Current.ColumnCount - _firstColumn)] : [];
                 }
-                _ordinals = BuildOrdinals(_names);
+                _ordinals = BuildOrdinals(_names, StringComparer.Ordinal);
+                _ignoreCaseOrdinals = BuildOrdinals(_names, StringComparer.OrdinalIgnoreCase);
             }
             catch
             {
@@ -100,14 +105,14 @@ namespace ExcelReader.Core.Reader
             return names;
         }
 
-        private static Dictionary<string, int> BuildOrdinals(string?[] names)
+        private static Dictionary<string, int> BuildOrdinals(string?[] names, StringComparer comparer)
         {
-            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var map = new Dictionary<string, int>(comparer);
             for (int i = 0; i < names.Length; i++)
             {
                 if (names[i] is { } name)
                 {
-                    map[name] = i;
+                    map.TryAdd(name, i);
                 }
             }
             for (int i = 0; i < names.Length; i++)
@@ -141,6 +146,7 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public bool Read()
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_pendingConsumed)
             {
                 return _rowAvailable = _rows.MoveNext();
@@ -182,7 +188,11 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public int GetOrdinal(string name)
         {
-            return _ordinals.TryGetValue(name, out int i) ? i : throw new KeyNotFoundException($"Column '{name}' was not found.");
+            if (_ordinals.TryGetValue(name, out int exact))
+            {
+                return exact;
+            }
+            return _ignoreCaseOrdinals.TryGetValue(name, out int i) ? i : throw new KeyNotFoundException($"Column '{name}' was not found.");
         }
 
         /// <inheritdoc/>
@@ -195,7 +205,12 @@ namespace ExcelReader.Core.Reader
         [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
         public Type GetFieldType(int i)
         {
-            return CurrentCell(i).Type switch
+            return TypeOf(CurrentCell(i));
+        }
+
+        private static Type TypeOf(Cell cell)
+        {
+            return cell.Type switch
             {
                 CellType.Number => typeof(double),
                 CellType.Date => typeof(DateTime),
@@ -379,6 +394,7 @@ namespace ExcelReader.Core.Reader
             Justification = "typeof(Type) as the 'DataType' schema column's own type is a metadata literal, never reflected over.")]
         public DataTable GetSchemaTable()
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             var table = new DataTable();
             table.Columns.Add(SchemaTableColumn.ColumnName, typeof(string));
             table.Columns.Add(SchemaTableColumn.ColumnOrdinal, typeof(int));
@@ -400,9 +416,10 @@ namespace ExcelReader.Core.Reader
             table.Columns.Add(SchemaTableOptionalColumn.BaseCatalogName, typeof(string));
             table.Columns.Add(SchemaTableColumn.BaseTableName, typeof(string));
             table.Columns.Add(SchemaTableColumn.BaseColumnName, typeof(string));
+            bool hasRow = _rowAvailable || (_hasPendingRow && !_pendingConsumed);
             for (int i = 0; i < FieldCount; i++)
             {
-                Type type = _rowAvailable ? GetFieldType(i) : typeof(string);
+                Type type = hasRow ? TypeOf(_rows.Current[_firstColumn + i]) : typeof(string);
                 string name = GetName(i);
                 DataRow row = table.NewRow();
                 row[SchemaTableColumn.ColumnName] = name;
@@ -432,6 +449,7 @@ namespace ExcelReader.Core.Reader
 
         private Cell CurrentCell(int i)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             ArgumentOutOfRangeException.ThrowIfNegative(i);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(i, FieldCount);
             if (!_rowAvailable)

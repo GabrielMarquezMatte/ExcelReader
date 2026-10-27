@@ -251,8 +251,35 @@ namespace ExcelReader.Tests.Parser
 
             StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader.FirstSheet).ToList());
 
-            Assert.Equal(DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.None), row.At);
+            Assert.Equal(DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal), row.At);
             Assert.Equal(DateOnly.Parse(text[..Math.Min(10, text.Length)], CultureInfo.InvariantCulture, DateTimeStyles.None), row.Day);
+        }
+
+        [Theory]
+        [InlineData("2024-01-15T13:30:05Z", 13)]
+        [InlineData("2024-01-15T13:30:05+03:00", 10)]
+        [InlineData("2024-01-15T13:30:05-05:00", 18)]
+        public void ZonedTextDatesConvertToUtcWhateverTheMachineZone(string text, int utcHour)
+        {
+            using var ms = Csv($"At\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+
+            StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(new DateTime(2024, 1, 15, utcHour, 30, 5, DateTimeKind.Utc), row.At);
+            Assert.Equal(DateTimeKind.Utc, row.At.Kind);
+        }
+
+        [Fact]
+        public void UnzonedCultureTextDatesKeepTheirClockTimeUnconverted()
+        {
+            using var ms = Csv("At\n01/15/2024 13:30\n");
+            using var reader = Excel.FromCsv(ms);
+
+            StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(new DateTime(2024, 1, 15, 13, 30, 0), row.At);
+            Assert.Equal(DateTimeKind.Unspecified, row.At.Kind);
         }
 
         [Theory]
@@ -268,6 +295,33 @@ namespace ExcelReader.Tests.Parser
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(reader.FirstSheet).ToList());
             Assert.Equal("Start", ex.ColumnName);
+        }
+
+        [Theory]
+        [InlineData("1230")]
+        [InlineData("1")]
+        public void AnIntegerTimeOnlyCellFailsToParseInsteadOfBecomingMidnight(string text)
+        {
+            using var ms = Csv($"Start\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(reader.FirstSheet).ToList());
+            Assert.Equal("Start", ex.ColumnName);
+        }
+
+        [Theory]
+        [InlineData("12:30", 12, 30)]
+        [InlineData("0.5", 12, 0)]
+        public void ATimeOnlyCellReadsTimeTextOrAFractionalSerial(string text, int hour, int minute)
+        {
+            using var ms = Csv($"Start\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+
+            ShiftRow row = Assert.Single(ExcelParser.FromAttributes<ShiftRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(new TimeOnly(hour, minute), row.Start);
         }
 
         [Fact]
@@ -357,7 +411,7 @@ namespace ExcelReader.Tests.Parser
             IEnumerator e = enumerable.GetEnumerator();
 
             Assert.True(e.MoveNext());
-            Assert.Throws<NotSupportedException>(() => e.Current);
+            Assert.Equal("Alice", Assert.IsType<PersonRow>(e.Current).Name);
         }
 
         [Fact]

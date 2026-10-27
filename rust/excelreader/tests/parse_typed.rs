@@ -453,3 +453,42 @@ fn a_parsed_table_writes_back_unchanged() {
     };
     assert_eq!(before, after);
 }
+
+#[derive(Default, ExcelMapper)]
+struct NarrowRow {
+    #[excel(name = "small")]
+    small: u8,
+    #[excel(name = "maybe")]
+    maybe: Option<u32>,
+}
+
+fn parse_narrow(tag: &str, text: &str) -> Result<usize, excelreader::Error> {
+    let path = write_csv(tag, text);
+    let workbook = OpenOptions::new()
+        .format(Format::Csv)
+        .open(&path)
+        .expect("open must succeed");
+    let result = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<NarrowRow>(&ReadOptions::new())
+        .map(|table| table.iter().count());
+    drop(workbook);
+    let _ = std::fs::remove_file(path);
+    result
+}
+
+#[test]
+fn out_of_range_integer_is_an_error_not_a_panic() {
+    let error = parse_narrow("narrow-high", "small,maybe\n1,2\n300,3\n").expect_err("300 > u8::MAX");
+    assert_eq!(error.kind(), excelreader::ErrorKind::InvalidArgument);
+    assert!(error.to_string().contains("small"), "{error}");
+
+    let error = parse_narrow("narrow-neg", "small,maybe\n1,-1\n").expect_err("-1 in u32");
+    assert!(error.to_string().contains("maybe"), "{error}");
+}
+
+#[test]
+fn in_range_and_null_integers_still_parse() {
+    assert_eq!(parse_narrow("narrow-ok", "small,maybe\n255,\n0,4294967295\n").unwrap(), 2);
+}

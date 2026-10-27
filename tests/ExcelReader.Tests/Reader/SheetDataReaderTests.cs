@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Reader;
@@ -112,6 +113,39 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal("Column1", data.GetName(1));
             Assert.Equal(2, data.GetOrdinal("Column1"));
             Assert.Equal(3, data.GetOrdinal(data.GetName(3)));
+        }
+
+        [Fact]
+        public async Task GetOrdinalPrefersAnExactCaseMatchThenTheFirstCaseInsensitiveOne()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Id", "Id", "name", "Name"],
+                [1, 2, 3, 4]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new SheetDataReader(reader.FirstSheet);
+
+            Assert.Equal(0, data.GetOrdinal("Id"));
+            Assert.Equal(0, data.GetOrdinal("ID"));
+            Assert.Equal(2, data.GetOrdinal("name"));
+            Assert.Equal(3, data.GetOrdinal("Name"));
+            Assert.Equal(2, data.GetOrdinal("NAME"));
+        }
+
+        [Fact]
+        public async Task AccessorsAfterDisposeThrowObjectDisposed()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Id"], [1], [2]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            var data = new SheetDataReader(reader.FirstSheet);
+            Assert.True(data.Read());
+            data.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => data.GetValue(0));
+            Assert.Throws<ObjectDisposedException>(() => data.GetInt32(0));
+            Assert.Throws<ObjectDisposedException>(() => data.IsDBNull(0));
+            Assert.Throws<ObjectDisposedException>(() => data.GetFieldType(0));
+            Assert.Throws<ObjectDisposedException>(() => data.Read());
+            Assert.Throws<ObjectDisposedException>(() => data.GetSchemaTable());
         }
 
         [Fact]
@@ -353,6 +387,44 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal("alice", table.Rows[0]["Name"]);
             Assert.Equal(2.0, Convert.ToDouble(table.Rows[1]["Id"], CultureInfo.InvariantCulture));
             Assert.Equal("bob", table.Rows[1]["Name"]);
+        }
+
+        [Fact]
+        public async Task DataTableLoadKeepsNumericColumnsNumericUnderACommaDecimalCulture()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Price"], [1.5], [2.25]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new SheetDataReader(reader.FirstSheet);
+
+            CultureInfo previous = CultureInfo.CurrentCulture;
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+            try
+            {
+                var table = new DataTable();
+                table.Load(data);
+
+                Assert.Equal(typeof(double), table.Columns["Price"]!.DataType);
+                Assert.Equal([1.5, 2.25], table.Rows.Cast<DataRow>().Select(r => (double)r["Price"]));
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = previous;
+            }
+        }
+
+        [Fact]
+        public async Task GetSchemaTableBeforeTheFirstReadReportsTheFirstDataRowsTypes()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Text", "Number"], ["hi", 1.5]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new SheetDataReader(reader.FirstSheet);
+
+            DataTable schema = data.GetSchemaTable();
+
+            Assert.Equal(typeof(string), schema.Rows[0][SchemaTableColumn.DataType]);
+            Assert.Equal(typeof(double), schema.Rows[1][SchemaTableColumn.DataType]);
+            Assert.True(data.Read());
+            Assert.Equal("hi", data.GetString(0));
         }
 
         [Fact]

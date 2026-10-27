@@ -278,15 +278,14 @@ namespace ExcelReader.Core.Reader.Zip
                     ReadOnlySpan<byte> span = directory.Span;
                     ref readonly ZipEntryRef ea = ref entries[a];
                     ref readonly ZipEntryRef eb = ref entries[b];
-                    return span.Slice(ea.NameStart, ea.NameLength).SequenceCompareTo(span.Slice(eb.NameStart, eb.NameLength));
+                    return CompareIgnoringAsciiCase(span.Slice(ea.NameStart, ea.NameLength), span.Slice(eb.NameStart, eb.NameLength));
                 }));
                 ReadOnlySpan<byte> directorySpan = directory.Span;
                 for (int i = 1; i < count; i++)
                 {
                     ref readonly ZipEntryRef prev = ref entries[order[i - 1]];
                     ref readonly ZipEntryRef curr = ref entries[order[i]];
-                    if (prev.NameLength == curr.NameLength &&
-                        directorySpan.Slice(prev.NameStart, prev.NameLength).SequenceEqual(directorySpan.Slice(curr.NameStart, curr.NameLength)))
+                    if (EqualsIgnoringAsciiCase(directorySpan.Slice(prev.NameStart, prev.NameLength), directorySpan.Slice(curr.NameStart, curr.NameLength)))
                     {
                         throw new InvalidDataException("The ZIP central directory contains a duplicate entry name.");
                     }
@@ -305,12 +304,51 @@ namespace ExcelReader.Core.Reader.Zip
                 ReadOnlySpan<byte> name = directory.Slice(entries[i].NameStart, entries[i].NameLength);
                 for (int j = 0; j < i; j++)
                 {
-                    if (entries[j].NameLength == name.Length && directory.Slice(entries[j].NameStart, name.Length).SequenceEqual(name))
+                    if (EqualsIgnoringAsciiCase(directory.Slice(entries[j].NameStart, entries[j].NameLength), name))
                     {
                         throw new InvalidDataException("The ZIP central directory contains a duplicate entry name.");
                     }
                 }
             }
+        }
+
+        private static byte FoldAscii(byte value)
+        {
+            return (uint)(value - 'A') <= 'Z' - 'A' ? (byte)(value | 0x20) : value;
+        }
+
+        private static bool EqualsIgnoringAsciiCase(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)
+        {
+            if (left.Length != right.Length)
+            {
+                return false;
+            }
+            if (left.SequenceEqual(right))
+            {
+                return true;
+            }
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (FoldAscii(left[i]) != FoldAscii(right[i]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static int CompareIgnoringAsciiCase(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)
+        {
+            int common = Math.Min(left.Length, right.Length);
+            for (int i = 0; i < common; i++)
+            {
+                int difference = FoldAscii(left[i]) - FoldAscii(right[i]);
+                if (difference != 0)
+                {
+                    return difference;
+                }
+            }
+            return left.Length - right.Length;
         }
 
         private void ThrowIfDisposed()
@@ -324,7 +362,7 @@ namespace ExcelReader.Core.Reader.Zip
             ReadOnlySpan<byte> directory = _directory.Span;
             foreach (ref readonly ZipEntryRef candidate in _entries.AsSpan(0, Count))
             {
-                if (directory.Slice(candidate.NameStart, candidate.NameLength).SequenceEqual(utf8Name))
+                if (EqualsIgnoringAsciiCase(directory.Slice(candidate.NameStart, candidate.NameLength), utf8Name))
                 {
                     entry = candidate;
                     return true;

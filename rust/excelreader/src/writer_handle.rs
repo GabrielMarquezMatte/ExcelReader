@@ -11,7 +11,9 @@
 use crate::ffi::{self, XlWriterHandle};
 use crate::workbook::{buffer_to_vec, check, check_abi_version, len_i32, path_str};
 use crate::writer::{raw_table, OwnedColumn};
-use crate::{Column, ColumnType, Date, Error, ExcelWriter, TableOptions, Time, Timestamp, WriteOptions};
+use crate::{
+    Column, ColumnType, Date, Error, ExcelWriter, TableOptions, Time, Timestamp, WriteOptions,
+};
 use std::io::Write;
 use std::path::Path;
 
@@ -20,17 +22,18 @@ use std::path::Path;
 /// Not thread-safe - use one per thread, same contract as the C ABI. (The raw handle makes this
 /// type neither `Send` nor `Sync`, so the compiler enforces that for you.)
 ///
-/// Call [`finish`](Self::finish) to complete the workbook and observe any error. Dropping a handle
-/// without finishing it closes it on a best-effort basis, discarding any error, and writes nothing
-/// to an `io::Write` destination.
+/// Call [`finish`](Self::finish) to complete the workbook and observe any error. Only `finish`
+/// commits: dropping a handle without finishing it - an early `?` return, a panic - discards
+/// everything written, leaves an existing file at the path as it was, and writes nothing to an
+/// `io::Write` destination.
 pub struct WriterHandle<'w> {
     handle: *mut XlWriterHandle,
     writer: Option<Box<dyn Write + 'w>>,
 }
 
 impl WriterHandle<'static> {
-    /// Creates `path` (truncating it if it already exists). The format is
-    /// [`WriteOptions::format`], or inferred from the extension when that is
+    /// Writes `path`, replacing an existing file only when [`finish`](Self::finish) succeeds. The
+    /// format is [`WriteOptions::format`], or inferred from the extension when that is
     /// [`Format::Auto`](crate::Format::Auto).
     pub fn create(path: impl AsRef<Path>, options: &WriteOptions) -> Result<Self, Error> {
         check_abi_version()?;
@@ -68,7 +71,8 @@ impl<'w> WriterHandle<'w> {
     /// Starts a new sheet named `name`. Must not be called again before the current sheet, if
     /// any, has been ended with [`end_sheet`](Self::end_sheet).
     pub fn start_sheet(&mut self, name: &str) -> Result<(), Error> {
-        check(unsafe { ffi::xl_start_sheet(self.handle, name.as_ptr(), name.len() as i32) })
+        let name_len = len_i32(name.len(), "sheet name")?;
+        check(unsafe { ffi::xl_start_sheet(self.handle, name.as_ptr(), name_len) })
     }
 
     /// Starts a new row on the current sheet. Must not be called again before the current row, if
@@ -79,9 +83,10 @@ impl<'w> WriterHandle<'w> {
 
     /// Writes the next cell of the current row as text, or a blank cell for `None`.
     pub fn write_str(&mut self, value: Option<&str>) -> Result<(), Error> {
-        let (ptr, len) = value.map_or((std::ptr::null(), 0), |text| {
-            (text.as_ptr(), text.len() as i32)
-        });
+        let (ptr, len) = match value {
+            Some(text) => (text.as_ptr(), len_i32(text.len(), "text")?),
+            None => (std::ptr::null(), 0),
+        };
         check(unsafe { ffi::xl_write_string(self.handle, ptr, len) })
     }
 
@@ -219,7 +224,7 @@ impl Drop for WriterHandle<'_> {
             return;
         }
         unsafe {
-            ffi::xl_close_write_handle(self.handle);
+            ffi::xl_abort_write_handle(self.handle);
         }
         self.handle = std::ptr::null_mut();
     }
