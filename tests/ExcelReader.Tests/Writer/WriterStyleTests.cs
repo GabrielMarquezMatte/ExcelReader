@@ -127,6 +127,113 @@ namespace ExcelReader.Tests.Writer
         }
 
         [Fact]
+        public async Task DateUnderStyleWithoutNumberFormatReadsAsDateXlsx()
+        {
+            var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
+            await using MemoryStream ms = await WriteXlsxAsync(async wb =>
+            {
+                int bold = wb.AddStyle(new CellStyle { Bold = true });
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+                sheet.SetColumnStyle(0, bold);
+                sheet.SetColumnStyle(1, bold);
+                for (int i = 0; i < 2; i++)
+                {
+                    await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken);
+                    row.Write(date);
+                    row.Write(DateOnly.FromDateTime(date));
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+            using var reader = Excel.FromXlsx(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.Equal(CellType.Date, e.Current[1].Type);
+            Assert.Equal(3, e.Current[0].StyleIndex);
+            Assert.Equal(3, e.Current[1].StyleIndex);
+            Assert.True(e.MoveNext());
+            Assert.Equal(3, e.Current[0].StyleIndex);
+            string styles = ReadZipEntryText(ms, "xl/styles.xml");
+            Assert.Contains("<cellXfs count=\"4\">", styles, StringComparison.Ordinal);
+            Assert.Contains("<xf numFmtId=\"164\" fontId=\"1\"", styles, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task DateUnderStyleWithoutNumberFormatReadsAsDateXlsb()
+        {
+            var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
+            var ms = new MemoryStream();
+            int bold;
+            await using (var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                bold = wb.AddStyle(new CellStyle { Bold = true });
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(bold, TestContext.Current.CancellationToken))
+                {
+                    row.Write(date);
+                    row.Write(date);
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+                await wb.EndAsync(TestContext.Current.CancellationToken);
+            }
+            ms.Position = 0;
+            await using var reader = Excel.FromXlsb(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.Equal(bold + 1, e.Current[0].StyleIndex);
+            Assert.Equal(bold + 1, e.Current[1].StyleIndex);
+        }
+
+        [Fact]
+        public async Task DateUnderStyleWithoutNumberFormatReadsAsDateXls()
+        {
+            var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
+            var ms = new MemoryStream();
+            int bold;
+            await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                bold = wb.AddStyle(new CellStyle { Bold = true });
+                XlsSheetWriter sheet = wb.AddSheet("Sheet1");
+                using (var row = sheet.StartRow(bold))
+                {
+                    row.Write(date);
+                    row.Write(DateOnly.FromDateTime(date));
+                }
+                sheet.End();
+                await wb.EndAsync(TestContext.Current.CancellationToken);
+            }
+            ms.Position = 0;
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.Equal(CellType.Date, e.Current[1].Type);
+            Assert.Equal(XlsGlobals.CustomXf(bold + 1), e.Current[0].StyleIndex);
+            Assert.Equal(XlsGlobals.CustomXf(bold + 1), e.Current[1].StyleIndex);
+        }
+
+        [Fact]
+        public async Task DateUnderStyleWithNumberFormatKeepsThatStyleXlsx()
+        {
+            var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
+            await using MemoryStream ms = await WriteXlsxAsync(async wb =>
+            {
+                int style = wb.AddStyle(new CellStyle { NumberFormat = "yyyy-mm-dd", Bold = true });
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(style, TestContext.Current.CancellationToken))
+                {
+                    row.Write(date);
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+            using var reader = Excel.FromXlsx(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(2, e.Current[0].StyleIndex);
+        }
+
+        [Fact]
         public async Task ColumnStyleAfterFirstRowThrowsXlsx()
         {
             await using var ms = new MemoryStream();

@@ -15,6 +15,7 @@ namespace ExcelReader.Core.Writer.Internal
         private readonly Dictionary<CellStyle, int> _indices = [];
         private readonly List<CellStyle> _styles = [];
         private readonly HashSet<string> _customFormats = new(StringComparer.Ordinal);
+        private readonly Dictionary<int, int> _dateVariants = [];
 
         internal StyleTable()
         {
@@ -48,6 +49,22 @@ namespace ExcelReader.Core.Writer.Internal
             _styles.Add(style);
             _indices[style] = index;
             return index;
+        }
+
+        // Locked because parallel record writers call this from worker threads.
+        internal int DateVariant(int styleId)
+        {
+            lock (_dateVariants)
+            {
+                if (_dateVariants.TryGetValue(styleId, out int variant))
+                {
+                    return variant;
+                }
+                CellStyle style = _styles[styleId];
+                variant = style.NumberFormat is null ? Add(style with { NumberFormat = DateStyle.NumberFormat }) : styleId;
+                _dateVariants[styleId] = variant;
+                return variant;
+            }
         }
 
         private void ClaimNumberFormat(string? format)
