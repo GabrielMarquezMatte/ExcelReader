@@ -312,7 +312,11 @@ namespace ExcelReader.Core.Writer.Xls
                     break;
                 }
             }
-            var cont = new XlsSheetWriter(_owner, contName, _date1904, Visibility, isContinuation: true, baseName: _baseName);
+            var cont = new XlsSheetWriter(_owner, contName, _date1904, Visibility, isContinuation: true, baseName: _baseName)
+            {
+                _columnStyles = _columnStyles,
+                _columnWidths = _columnWidths,
+            };
             cont.EnsureStarted();
             return cont;
         }
