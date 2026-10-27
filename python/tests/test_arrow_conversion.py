@@ -118,6 +118,15 @@ def test_an_all_null_column_and_row_counts_past_a_byte_boundary_convert():
     _assert_round_trips(batch, [ColumnType.STRING, ColumnType.BOOL, ColumnType.F64])
 
 
+def test_a_validity_mask_off_a_byte_boundary_converts(monkeypatch):
+    import pyarrow.compute
+
+    is_valid = pyarrow.compute.is_valid
+    monkeypatch.setattr(pyarrow.compute, "is_valid", lambda column: pa.concat_arrays([pa.array([False] * 3), is_valid(column)]).slice(3))
+    batch = pa.record_batch({"n": pa.array([None if i % 3 == 0 else i for i in range(11)], pa.int64())})
+    _assert_round_trips(batch, [ColumnType.I64])
+
+
 def test_an_unsupported_arrow_type_is_rejected():
     with pytest.raises(ValueError, match="int8"):
         _table_from_arrow(pa.record_batch({"small": pa.array([1], pa.int8())}))
