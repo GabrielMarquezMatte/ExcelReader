@@ -11,6 +11,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_typed")]
         public static int WriteTyped(byte* path, int pathLength, int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options)
         {
+            NativeApi.ClearLastError();
             if (path is null || pathLength <= 0 || specs is null || table is null
                 || !TypedApi.IsValidSpecCount(table->ColumnCount))
             {
@@ -39,6 +40,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_typed_to_memory")]
         public static int WriteTypedToMemory(int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options, NativeBuffer* outBuffer)
         {
+            NativeApi.ClearLastError();
             if (specs is null || table is null || outBuffer is null || !TypedApi.IsValidSpecCount(table->ColumnCount))
             {
                 return NativeStatus.InvalidArgument;
@@ -95,6 +97,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle")]
         public static int OpenWriteHandle(byte* path, int pathLength, int format, NativeWriteOptionsRaw* options, nint* outHandle)
         {
+            NativeApi.ClearLastError();
             if (!IsValidOpenRequest(path, pathLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
@@ -115,6 +118,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle_to_memory")]
         public static int OpenWriteHandleToMemory(int format, NativeWriteOptionsRaw* options, nint* outHandle)
         {
+            NativeApi.ClearLastError();
             if (outHandle is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -135,6 +139,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_handle_bytes")]
         public static int WriteHandleBytes(nint handle, NativeBuffer* outBuffer)
         {
+            NativeApi.ClearLastError();
             if (outBuffer is null)
             {
                 return NativeStatus.InvalidArgument;
@@ -149,6 +154,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_start_sheet")]
         public static int StartSheet(nint handle, byte* name, int nameLength)
         {
+            NativeApi.ClearLastError();
             if (name is null || !TypedApi.IsValidNameLength(nameLength))
             {
                 NativeApi.SetLastError($"xl_start_sheet's name_len is out of range; got {nameLength}.");
@@ -180,6 +186,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_string")]
         public static int WriteString(nint handle, byte* value, int valueLength)
         {
+            NativeApi.ClearLastError();
             if (value is not null && !TypedApi.IsValidNameLength(valueLength))
             {
                 NativeApi.SetLastError($"xl_write_string's value_len is out of range; got {valueLength}.");
@@ -259,6 +266,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_sheet")]
         public static int WriteSheet(nint handle, byte* name, int nameLength, NativeColumnSpecRaw* specs, NativeTable* table, NativeSheetOptionsRaw* options)
         {
+            NativeApi.ClearLastError();
             if (name is null || !TypedApi.IsValidNameLength(nameLength) || specs is null || table is null
                 || !TypedApi.IsValidSpecCount(table->ColumnCount))
             {
@@ -305,6 +313,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_close_write_handle")]
         public static int CloseWriteHandle(nint handle)
         {
+            NativeApi.ClearLastError();
             if (handle == 0)
             {
                 return NativeStatus.InvalidHandle;
@@ -329,6 +338,7 @@ namespace ExcelReader.Native
 
         private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)
         {
+            NativeApi.ClearLastError();
             if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
             {
                 return NativeStatus.InvalidHandle;
