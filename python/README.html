@@ -691,32 +691,32 @@ threads</a>.</p>
 </tr>
 <tr>
 <td><code>write_workbook(polars_df)</code> → xlsx</td>
-<td style="text-align: right;">456.9 ms</td>
+<td style="text-align: right;">76.6 ms</td>
 <td>5.1 MB</td>
 </tr>
 <tr>
 <td><code>write_workbook(pandas_df)</code> → xlsx</td>
-<td style="text-align: right;">465.5 ms</td>
+<td style="text-align: right;">82.5 ms</td>
 <td>5.1 MB</td>
 </tr>
 <tr>
 <td><code>polars.DataFrame.write_excel()</code></td>
-<td style="text-align: right;">4,663.7 ms</td>
+<td style="text-align: right;">4,714.9 ms</td>
 <td>5.6 MB</td>
 </tr>
 <tr>
 <td><code>pandas.DataFrame.to_excel()</code></td>
-<td style="text-align: right;">7,173.6 ms</td>
+<td style="text-align: right;">7,371.4 ms</td>
 <td>5.5 MB</td>
 </tr>
 </tbody>
 </table>
 <p>The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
-<code>write_workbook(polars_df)</code> is ~10.2x faster than polars' own <code>write_excel()</code>, and
-<code>write_workbook(pandas_df)</code> ~15.4x faster than <code>to_excel()</code>. Both of ours pay a conversion the raw path does not: the DataFrame goes
-through Arrow and then a Python list before reaching the native columns, which is most of the gap
-between the ~460 ms rows and the 68.5 ms one. Handing <code>write_workbook()</code> buffers that are already
-columnar — what <code>parse()</code> returns — skips all of it.</p>
+<code>write_workbook(polars_df)</code> is ~62x faster than polars' own <code>write_excel()</code>, and
+<code>write_workbook(pandas_df)</code> ~89x faster than <code>to_excel()</code>. Both of ours pay a conversion the raw path does not: the DataFrame goes
+through Arrow, and each column is cast to the layout the native side reads and copied out of Arrow's
+buffers, which is the gap between those rows and the 68.5 ms one. Handing <code>write_workbook()</code> buffers
+that are already columnar — what <code>parse()</code> returns — skips it.</p>
 <p><code>write_workbook(xlsx)</code> at 68.5 ms lands within ~4 ms of the C++ binding's
 <code>xl::write_columns</code> on the same 14 columns (64.2 ms), which is the expected result: both are thin wrappers
 over the same <code>xl_write_typed</code> call, and neither adds work per cell.</p>
