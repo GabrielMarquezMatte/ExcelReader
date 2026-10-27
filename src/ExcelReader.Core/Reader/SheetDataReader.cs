@@ -37,6 +37,7 @@ namespace ExcelReader.Core.Reader
         private readonly int _firstColumn;
         private readonly string?[] _names;
         private readonly Dictionary<string, int> _ordinals;
+        private readonly Dictionary<string, int> _ignoreCaseOrdinals;
         private readonly bool _hasPendingRow;
         private bool _pendingConsumed;
         private bool _rowAvailable;
@@ -83,7 +84,8 @@ namespace ExcelReader.Core.Reader
                     _pendingConsumed = false;
                     _names = _hasPendingRow ? new string?[Math.Max(0, _rows.Current.ColumnCount - _firstColumn)] : [];
                 }
-                _ordinals = BuildOrdinals(_names);
+                _ordinals = BuildOrdinals(_names, StringComparer.Ordinal);
+                _ignoreCaseOrdinals = BuildOrdinals(_names, StringComparer.OrdinalIgnoreCase);
             }
             catch
             {
@@ -103,14 +105,14 @@ namespace ExcelReader.Core.Reader
             return names;
         }
 
-        private static Dictionary<string, int> BuildOrdinals(string?[] names)
+        private static Dictionary<string, int> BuildOrdinals(string?[] names, StringComparer comparer)
         {
-            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var map = new Dictionary<string, int>(comparer);
             for (int i = 0; i < names.Length; i++)
             {
                 if (names[i] is { } name)
                 {
-                    map[name] = i;
+                    map.TryAdd(name, i);
                 }
             }
             for (int i = 0; i < names.Length; i++)
@@ -185,7 +187,11 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public int GetOrdinal(string name)
         {
-            return _ordinals.TryGetValue(name, out int i) ? i : throw new KeyNotFoundException($"Column '{name}' was not found.");
+            if (_ordinals.TryGetValue(name, out int exact))
+            {
+                return exact;
+            }
+            return _ignoreCaseOrdinals.TryGetValue(name, out int i) ? i : throw new KeyNotFoundException($"Column '{name}' was not found.");
         }
 
         /// <inheritdoc/>
