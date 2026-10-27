@@ -164,7 +164,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteNumber(_row, value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
