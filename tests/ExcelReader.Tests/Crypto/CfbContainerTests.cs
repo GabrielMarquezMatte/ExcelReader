@@ -91,6 +91,23 @@ namespace ExcelReader.Tests.Crypto
         }
 
         [Fact]
+        public void Should_Ignore_Stream_Size_High_Dword_When_Version_3_Container()
+        {
+            byte[] bytes = FormulaStringsXls();
+            Span<byte> workbookEntry = DirectoryEntryBytes(bytes, 1);
+            long size = BinaryPrimitives.ReadInt64LittleEndian(workbookEntry[120..]);
+            BinaryPrimitives.WriteUInt32LittleEndian(workbookEntry[124..], 0xDEADBEEF);
+
+            using (CfbContainer cfb = CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default))
+            {
+                Assert.Equal(size, cfb.StreamLength("Workbook"));
+            }
+            using XlsWorkbook workbook = Excel.FromXls(new MemoryStream(bytes));
+            using XlsWorkbook.Enumerator e = workbook.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+        }
+
+        [Fact]
         public void Should_Find_Both_Encryption_Streams_When_Encrypted_Container()
         {
             using CfbContainer cfb = Open("agile-aes256-sha512.xlsx");
