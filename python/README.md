@@ -360,6 +360,10 @@ with open_writer("out.xlsx") as writer:
     writer.end_sheet()
 ```
 
+Only a clean exit from the `with` block, or `close()`, commits the workbook. An exception inside the
+block, `abort()`, or a writer collected without being closed discards what was written and leaves an
+existing file at the path as it was.
+
 `write_row` picks each cell's type from the Python value: `str`, `bool`, `int` (64-bit), `float`,
 `datetime.datetime` (an aware one is converted to UTC), `datetime.date` and `datetime.time`. A `None`
 becomes a blank string cell; the tuple `(None, ColumnType.I64)` writes a blank cell of that type:

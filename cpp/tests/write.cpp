@@ -5,6 +5,8 @@
 #include <string_view>
 #include <array>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 #include <chrono>
@@ -949,6 +951,40 @@ static int test_unsigned_values_past_int64_are_refused_on_write()
     return 0;
 }
 
+static int test_an_unfinished_writer_handle_keeps_the_existing_file()
+{
+    const std::filesystem::path directory = temp_path("writer_handle_abort");
+    std::filesystem::create_directory(directory);
+    const std::filesystem::path path = directory / "out.xlsx";
+    std::ofstream(path, std::ios::binary) << "ORIGINAL";
+    {
+        auto handle = xl::WriterHandle::open(path.string());
+        CHECK(handle.has_value(), "WriterHandle::open must succeed");
+        CHECK(handle->start_sheet("S").has_value() && handle->start_row().has_value(), "the sheet and row must start");
+        CHECK(handle->write(std::string_view("new")).has_value(), "the cell must be written");
+    }
+    std::ifstream original(path, std::ios::binary);
+    const std::string content((std::istreambuf_iterator<char>(original)), std::istreambuf_iterator<char>());
+    original.close();
+    CHECK(content == "ORIGINAL", "destroying an unfinished handle must leave the existing file as it was");
+    CHECK(std::distance(std::filesystem::directory_iterator(directory), std::filesystem::directory_iterator{}) == 1,
+          "destroying an unfinished handle must remove the staged file");
+
+    std::vector<uint8_t> bytes{1, 2, 3};
+    {
+        auto handle = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
+        CHECK(handle.has_value(), "WriterHandle::open over a vector must succeed");
+        CHECK(handle->start_sheet("S").has_value(), "start_sheet must succeed");
+        handle->abort();
+        CHECK(!handle->start_row().has_value(), "an aborted handle accepts no more writes");
+        CHECK(handle->finish().has_value(), "finish after abort does nothing");
+    }
+    CHECK((bytes == std::vector<uint8_t>{1, 2, 3}), "an aborted handle must leave its vector untouched");
+
+    std::filesystem::remove_all(directory);
+    return 0;
+}
+
 static int test_a_valid_empty_string_replaces_the_default()
 {
     const int32_t offsets[] = {0, 0};
@@ -986,6 +1022,10 @@ int main()
         return 1;
     }
     if (test_a_valid_empty_string_replaces_the_default() != 0)
+    {
+        return 1;
+    }
+    if (test_an_unfinished_writer_handle_keeps_the_existing_file() != 0)
     {
         return 1;
     }

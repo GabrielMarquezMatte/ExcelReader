@@ -420,8 +420,9 @@ Call order mirrors the C ABI's `xl_writer_handle`: `create` (a path) or `new` (a
 then per sheet `start_sheet..end_sheet`, each containing `start_row..end_row` with one `write_*`
 call per cell (`None` writes a blank cell), left to right, then `finish`. A call out of order
 returns `Err` rather than corrupting output. A handle from `new` writes the whole workbook to its
-writer once, in `finish`. Dropping a handle without finishing it closes it on a best-effort basis,
-discarding any error, and writes nothing to a writer.
+writer once, in `finish`. Only `finish` commits: dropping a handle without finishing it (an early
+`?` return, a panic) discards what was written, leaves an existing file at the path as it was, and
+writes nothing to a writer.
 
 To write several sheets from whole tables, call the handle's `write_sheet` or `write_columns` once
 per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
