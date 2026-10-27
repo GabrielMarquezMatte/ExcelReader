@@ -297,6 +297,33 @@ namespace ExcelReader.Tests.Parser
             Assert.Equal("Start", ex.ColumnName);
         }
 
+        [Theory]
+        [InlineData("1230")]
+        [InlineData("1")]
+        public void AnIntegerTimeOnlyCellFailsToParseInsteadOfBecomingMidnight(string text)
+        {
+            using var ms = Csv($"Start\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(reader.FirstSheet).ToList());
+            Assert.Equal("Start", ex.ColumnName);
+        }
+
+        [Theory]
+        [InlineData("12:30", 12, 30)]
+        [InlineData("0.5", 12, 0)]
+        public void ATimeOnlyCellReadsTimeTextOrAFractionalSerial(string text, int hour, int minute)
+        {
+            using var ms = Csv($"Start\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+
+            ShiftRow row = Assert.Single(ExcelParser.FromAttributes<ShiftRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(new TimeOnly(hour, minute), row.Start);
+        }
+
         [Fact]
         public void TerminalBlankLineDoesNotYieldPhantomModelOrRequiredFailure()
         {
