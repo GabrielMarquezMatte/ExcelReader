@@ -17,8 +17,9 @@ namespace ExcelReader.Core.Reader
     /// The column shape is fixed once, at construction time, from the header row (or from the first data
     /// row when <see cref="SheetDataReaderOptions.HeaderRow"/> is 0) — it never grows as later, wider rows come in. There is no schema
     /// pass, so <see cref="GetFieldType"/>, <see cref="GetValue"/>, and the typed getters all read the
-    /// <em>current</em> row's own cell type; a consumer that builds a schema from the first
-    /// <see cref="Read"/> (e.g. <c>DataTable.Load</c>) locks in that row's types for the whole load.
+    /// <em>current</em> row's own cell type; a consumer that builds a schema (e.g. <c>DataTable.Load</c>,
+    /// which calls <see cref="GetSchemaTable"/> before the first <see cref="Read"/>) locks in the first data
+    /// row's types for the whole load; the constructor reads that row ahead for this.
     /// <para>
     /// One <see cref="SheetDataReader"/> reads one sheet: <see cref="NextResult"/> always returns
     /// <see langword="false"/>. To read every sheet, construct one per <see cref="IExcelWorkbook.SheetAt"/>.
@@ -66,13 +67,15 @@ namespace ExcelReader.Core.Reader
             _pendingConsumed = true;
             try
             {
-                if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
+                if (headerRow > 0 && !SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
                 {
-                    _names = ReadHeaderNames(_rows.Current, _firstColumn);
+                    _names = [];
                 }
                 else if (headerRow > 0)
                 {
-                    _names = [];
+                    _names = ReadHeaderNames(_rows.Current, _firstColumn);
+                    _hasPendingRow = _rows.MoveNext();
+                    _pendingConsumed = false;
                 }
                 else
                 {
@@ -195,7 +198,12 @@ namespace ExcelReader.Core.Reader
         [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
         public Type GetFieldType(int i)
         {
-            return CurrentCell(i).Type switch
+            return TypeOf(CurrentCell(i));
+        }
+
+        private static Type TypeOf(Cell cell)
+        {
+            return cell.Type switch
             {
                 CellType.Number => typeof(double),
                 CellType.Date => typeof(DateTime),
@@ -400,9 +408,10 @@ namespace ExcelReader.Core.Reader
             table.Columns.Add(SchemaTableOptionalColumn.BaseCatalogName, typeof(string));
             table.Columns.Add(SchemaTableColumn.BaseTableName, typeof(string));
             table.Columns.Add(SchemaTableColumn.BaseColumnName, typeof(string));
+            bool hasRow = _rowAvailable || (_hasPendingRow && !_pendingConsumed);
             for (int i = 0; i < FieldCount; i++)
             {
-                Type type = _rowAvailable ? GetFieldType(i) : typeof(string);
+                Type type = hasRow ? TypeOf(_rows.Current[_firstColumn + i]) : typeof(string);
                 string name = GetName(i);
                 DataRow row = table.NewRow();
                 row[SchemaTableColumn.ColumnName] = name;
