@@ -163,7 +163,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private int[] ParseSharedBody(BufferedStreamCursor io, Stream? stream, int partLength)
         {
             io.Ensure(stream, 256);
-            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(0, io.Len)));
+            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(io.Pos, io.Len - io.Pos)));
 
             int uniqueCount = 0;
             int sstPos = FindSeqGrowing(io, stream, tok.SstTag);
@@ -215,7 +215,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private async ValueTask<int[]> ParseSharedBodyAsync(BufferedStreamCursor io, Stream stream, int partLength, CancellationToken ct)
         {
             await io.EnsureAsync(stream, 256, ct).ConfigureAwait(false);
-            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(0, io.Len)));
+            var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(io.Pos, io.Len - io.Pos)));
 
             int uniqueCount = 0;
             int sstPos = await FindSeqGrowingAsync(io, stream, tok.SstTag, ct).ConfigureAwait(false);
