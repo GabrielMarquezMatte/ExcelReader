@@ -208,6 +208,7 @@ namespace ExcelReader.Core.Reader
             return TypeOf(CurrentCell(i));
         }
 
+        [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
         private static Type TypeOf(Cell cell)
         {
             return cell.Type switch

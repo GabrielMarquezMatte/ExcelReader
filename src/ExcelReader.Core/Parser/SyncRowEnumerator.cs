@@ -45,11 +45,6 @@ namespace ExcelReader.Core.Parser
 
         object? IEnumerator.Current => typeof(T).IsByRefLike ? throw new NotSupportedException() : Box(Project());
 
-        private sealed class RawData
-        {
-            public byte Data;
-        }
-
         // T allows ref struct, so the language refuses (object)value; the byref-like case is excluded by the caller.
         private static object? Box(T value)
         {
@@ -57,9 +52,7 @@ namespace ExcelReader.Core.Parser
             {
                 return Unsafe.As<T, object>(ref value);
             }
-            object box = RuntimeHelpers.GetUninitializedObject(typeof(T));
-            Unsafe.As<byte, T>(ref Unsafe.As<RawData>(box).Data) = value;
-            return box;
+            return RuntimeHelpers.Box(ref Unsafe.As<T, byte>(ref value), typeof(T).TypeHandle);
         }
 
         /// <inheritdoc/>
