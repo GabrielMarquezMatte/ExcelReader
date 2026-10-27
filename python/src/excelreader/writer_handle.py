@@ -26,7 +26,7 @@ _INT64_MAX = 2**63 - 1
 
 def _encode(value: str) -> tuple[Any, int]:
     raw = value.encode("utf-8")
-    return (ctypes.cast(ctypes.c_char_p(raw), ctypes.POINTER(ctypes.c_uint8)), len(raw))
+    return (ctypes.cast(ctypes.c_char_p(raw), ctypes.POINTER(ctypes.c_uint8)), _native.int32_len(raw))
 
 
 def _is_writable(value: Any) -> bool:
@@ -207,7 +207,7 @@ def open_writer(
         pointer = ctypes.cast(ctypes.c_char_p(encoded), ctypes.POINTER(ctypes.c_uint8))
         _check(
             lib.xl_open_write_handle(
-                pointer, len(encoded), format_id, ctypes.byref(raw_options), ctypes.byref(handle)
+                pointer, _native.int32_len(encoded), format_id, ctypes.byref(raw_options), ctypes.byref(handle)
             )
         )
         return SheetWriter(handle, None)

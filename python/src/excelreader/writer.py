@@ -243,7 +243,7 @@ def _write_file(
     lib = _native.load_library()
     _check(
         lib.xl_write_typed(
-            encoded, len(encoded), format_id, specs, ctypes.byref(native_table), ctypes.byref(raw_options)
+            encoded, _native.int32_len(encoded), format_id, specs, ctypes.byref(native_table), ctypes.byref(raw_options)
         )
     )
     del keepalive
@@ -444,7 +444,7 @@ def encrypt_package(
             lib.xl_encrypt_package(
                 package_encoded, len(package_encoded),
                 destination_encoded, len(destination_encoded),
-                password_encoded, len(password_encoded),
+                password_encoded, _native.int32_len(password_encoded),
             )
         )
         return
@@ -465,7 +465,7 @@ def encrypt_package(
     buffer = _native.NativeBuffer()
     _check(
         lib.xl_encrypt_package_to_memory(
-            data, len(data), password_encoded, len(password_encoded), ctypes.byref(buffer)
+            data, _native.int32_len(data), password_encoded, _native.int32_len(password_encoded), ctypes.byref(buffer)
         )
     )
     try:
