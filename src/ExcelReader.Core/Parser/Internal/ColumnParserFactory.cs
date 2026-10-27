@@ -350,7 +350,7 @@ namespace ExcelReader.Core.Parser.Internal
             ReadOnlySpan<char> chars = Utf8Text.Decode(utf8, stack, out char[]? rented);
             try
             {
-                return DateTime.TryParse(chars, provider, DateTimeStyles.None, out value);
+                return DateTime.TryParse(chars, provider, DateTimeStyles.AdjustToUniversal, out value);
             }
             finally
             {

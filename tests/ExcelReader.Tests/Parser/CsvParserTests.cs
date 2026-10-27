@@ -251,8 +251,35 @@ namespace ExcelReader.Tests.Parser
 
             StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader.FirstSheet).ToList());
 
-            Assert.Equal(DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.None), row.At);
+            Assert.Equal(DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal), row.At);
             Assert.Equal(DateOnly.Parse(text[..Math.Min(10, text.Length)], CultureInfo.InvariantCulture, DateTimeStyles.None), row.Day);
+        }
+
+        [Theory]
+        [InlineData("2024-01-15T13:30:05Z", 13)]
+        [InlineData("2024-01-15T13:30:05+03:00", 10)]
+        [InlineData("2024-01-15T13:30:05-05:00", 18)]
+        public void ZonedTextDatesConvertToUtcWhateverTheMachineZone(string text, int utcHour)
+        {
+            using var ms = Csv($"At\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+
+            StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(new DateTime(2024, 1, 15, utcHour, 30, 5, DateTimeKind.Utc), row.At);
+            Assert.Equal(DateTimeKind.Utc, row.At.Kind);
+        }
+
+        [Fact]
+        public void UnzonedCultureTextDatesKeepTheirClockTimeUnconverted()
+        {
+            using var ms = Csv("At\n01/15/2024 13:30\n");
+            using var reader = Excel.FromCsv(ms);
+
+            StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(new DateTime(2024, 1, 15, 13, 30, 0), row.At);
+            Assert.Equal(DateTimeKind.Unspecified, row.At.Kind);
         }
 
         [Theory]
