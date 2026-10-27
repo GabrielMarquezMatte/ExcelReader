@@ -11,6 +11,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             TypeMapInfo<T> info,
             out long firstDataRecordOffset)
         {
+            if (info.IsIndexBased)
+            {
+                firstDataRecordOffset = 0;
+                return CsvRowProjector<T>.BuildIndexBoundMap(info);
+            }
             using CsvReader.Enumerator rows = reader.OpenSheet();
             int rowNumber = 0;
             while (rows.MoveNext())

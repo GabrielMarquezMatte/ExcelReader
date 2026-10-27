@@ -101,7 +101,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             if (result.Failure is not null)
             {
-                throw ProjectionRules.AtRow(result.Failure, _config.HeaderRow + recordsBefore + result.Records + 1);
+                int headerRows = _info.IsIndexBased ? 0 : _config.HeaderRow;
+                throw ProjectionRules.AtRow(result.Failure, headerRows + recordsBefore + result.Records + 1);
             }
             return result.ResolvedNextStart;
         }

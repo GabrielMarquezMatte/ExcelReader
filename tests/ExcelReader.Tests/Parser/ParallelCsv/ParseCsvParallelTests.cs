@@ -77,6 +77,57 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Assert.Equal(sequential.Row, parallel.Row);
         }
 
+        private static ExcelParser<Row> IndexParser(ExcelParserOptions? options = null)
+        {
+            return ExcelParser.Build<Row>(static b => b
+                .Factory(static () => new Row())
+                .PropertyAt(0, ExcelCellReaders.String, static (ref m, v) => m.Name = v)
+                .PropertyAt(1, ExcelCellReaders.Parsable, static (ref Row m, int v) => m.Age = v), options);
+        }
+
+        private static byte[] BuildHeaderlessCsv(int rows, int badRow = -1)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < rows; i++)
+            {
+                sb.Append(i == badRow ? "bad,x\n" : $"name{i:D5},{i}\n");
+            }
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+        [Fact]
+        public async Task AnIndexBasedMapReadsEveryRowAsDataLikeTheSequentialParser()
+        {
+            byte[] csv = BuildHeaderlessCsv(40_000);
+
+            using CsvReader source = Excel.FromCsv(csv);
+            List<Row> actual = await DrainAsync(SheetParallel.ParseAsync(source.FirstSheet, IndexParser(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(40_000, actual.Count);
+            for (int i = 0; i < actual.Count; i++)
+            {
+                Assert.Equal($"name{i:D5}", actual[i].Name);
+                Assert.Equal(i, actual[i].Age);
+            }
+        }
+
+        [Fact]
+        public async Task AnIndexBasedMapReportsAFailureAtTheSequentialRow()
+        {
+            byte[] csv = BuildHeaderlessCsv(40_000, badRow: 30_000);
+            var options = new ExcelParserOptions { ThrowOnParseFailure = true };
+
+            using CsvReader sequentialSource = Excel.FromCsv(csv);
+            ExcelParseException sequential = Assert.Throws<ExcelParseException>(
+                () => IndexParser(options).Parse(sequentialSource.FirstSheet).ToList());
+            using CsvReader parallelSource = Excel.FromCsv(csv);
+            ExcelParseException parallel = await Assert.ThrowsAsync<ExcelParseException>(
+                () => DrainAsync(SheetParallel.ParseAsync(parallelSource.FirstSheet, IndexParser(options), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken)));
+
+            Assert.Equal(30_001, sequential.Row);
+            Assert.Equal(sequential.Row, parallel.Row);
+        }
+
         [Fact]
         public async Task EnumeratingTheSameResultTwiceYieldsEveryRowBothTimes()
         {
