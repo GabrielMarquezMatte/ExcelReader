@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using ExcelReader.Core.Reader.Internal;
 using static ExcelReader.Core.Reader.Xlsb.Biff12;
 
@@ -252,22 +254,36 @@ namespace ExcelReader.Core.Reader.Xls
                 int firstChars = (flags & 1) == 0 ? firstByteLen : firstByteLen / 2;
                 firstChars = Math.Min(firstChars, chars);
                 int firstBytes = (flags & 1) == 0 ? firstChars : firstChars * 2;
-                Span<byte> dst = _acc.ReserveValueSpan((chars * 3) + 1);
-                int written = DecodeStringToUtf8(firstData[..firstBytes], firstChars, flags, dst);
-                _acc.Advance(written);
-                int charsDecoded = firstChars;
-                while (charsDecoded < chars && _cursor.PeekId() == Rec.Continue && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont) && cont.Length > 0)
+                if (firstChars == chars)
                 {
-                    byte contFlags = cont[0];
-                    int contByteLen = cont.Length - 1;
-                    int contChars = (contFlags & 1) == 0 ? contByteLen : contByteLen / 2;
-                    var remainingChars = chars - charsDecoded;
-                    contChars = Math.Min(contChars, remainingChars);
-                    int contBytes = (contFlags & 1) == 0 ? contChars : contChars * 2;
-                    dst = _acc.ReserveValueSpan((remainingChars * 3) + 1);
-                    written = DecodeStringToUtf8(cont.Slice(1, contBytes), contChars, contFlags, dst);
-                    _acc.Advance(written);
-                    charsDecoded += contChars;
+                    Span<byte> dst = _acc.ReserveValueSpan((chars * 3) + 1);
+                    _acc.Advance(DecodeStringToUtf8(firstData[..firstBytes], firstChars, flags, dst));
+                    return;
+                }
+                DecodeContinuedString(firstData[..firstBytes], firstChars, flags, chars);
+            }
+
+            /// <summary>Decodes every chunk to UTF-16 before encoding, so a surrogate pair split across CONTINUE records stays one character.</summary>
+            private void DecodeContinuedString(ReadOnlySpan<byte> firstData, int firstChars, byte flags, int chars)
+            {
+                char[] buffer = ArrayPool<char>.Shared.Rent(chars);
+                try
+                {
+                    int charsDecoded = DecodeStringToChars(firstData, firstChars, flags, buffer);
+                    while (charsDecoded < chars && _cursor.PeekId() == Rec.Continue && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont) && cont.Length > 0)
+                    {
+                        byte contFlags = cont[0];
+                        int contByteLen = cont.Length - 1;
+                        int contChars = Math.Min((contFlags & 1) == 0 ? contByteLen : contByteLen / 2, chars - charsDecoded);
+                        int contBytes = (contFlags & 1) == 0 ? contChars : contChars * 2;
+                        charsDecoded += DecodeStringToChars(cont.Slice(1, contBytes), contChars, contFlags, buffer.AsSpan(charsDecoded));
+                    }
+                    Span<byte> dst = _acc.ReserveValueSpan((charsDecoded * 3) + 1);
+                    _acc.Advance(Encoding.UTF8.GetBytes(buffer.AsSpan(0, charsDecoded), dst));
+                }
+                finally
+                {
+                    ArrayPool<char>.Shared.Return(buffer);
                 }
             }
 
