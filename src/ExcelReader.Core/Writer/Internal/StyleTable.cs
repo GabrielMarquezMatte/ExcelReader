@@ -15,7 +15,8 @@ namespace ExcelReader.Core.Writer.Internal
         private readonly Dictionary<CellStyle, int> _indices = [];
         private readonly List<CellStyle> _styles = [];
         private readonly HashSet<string> _customFormats = new(StringComparer.Ordinal);
-        private readonly Dictionary<int, int> _dateVariants = [];
+        private readonly Lock _dateVariantGate = new();
+        private int[] _dateVariants = [];
 
         internal StyleTable()
         {
@@ -51,18 +52,33 @@ namespace ExcelReader.Core.Writer.Internal
             return index;
         }
 
-        // Locked because parallel record writers call this from worker threads.
+        // Parallel record writers resolve this per date cell on every worker, so a known variant is read
+        // without the lock; entries hold variant + 1, leaving 0 for "not resolved yet".
         internal int DateVariant(int styleId)
         {
-            lock (_dateVariants)
+            int[] known = Volatile.Read(ref _dateVariants);
+            if ((uint)styleId < (uint)known.Length && known[styleId] != 0)
             {
-                if (_dateVariants.TryGetValue(styleId, out int variant))
+                return known[styleId] - 1;
+            }
+            return AddDateVariant(styleId);
+        }
+
+        private int AddDateVariant(int styleId)
+        {
+            lock (_dateVariantGate)
+            {
+                int[] known = _dateVariants;
+                if ((uint)styleId < (uint)known.Length && known[styleId] != 0)
                 {
-                    return variant;
+                    return known[styleId] - 1;
                 }
                 CellStyle style = _styles[styleId];
-                variant = style.NumberFormat is null ? Add(style with { NumberFormat = DateStyle.NumberFormat }) : styleId;
-                _dateVariants[styleId] = variant;
+                int variant = style.NumberFormat is null ? Add(style with { NumberFormat = DateStyle.NumberFormat }) : styleId;
+                int[] next = new int[Math.Max(known.Length, styleId + 1)];
+                known.CopyTo(next, 0);
+                next[styleId] = variant + 1;
+                Volatile.Write(ref _dateVariants, next);
                 return variant;
             }
         }
