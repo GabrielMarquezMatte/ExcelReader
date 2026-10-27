@@ -116,6 +116,22 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public async Task GetOrdinalPrefersAnExactCaseMatchThenTheFirstCaseInsensitiveOne()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Id", "Id", "name", "Name"],
+                [1, 2, 3, 4]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new SheetDataReader(reader.FirstSheet);
+
+            Assert.Equal(0, data.GetOrdinal("Id"));
+            Assert.Equal(0, data.GetOrdinal("ID"));
+            Assert.Equal(2, data.GetOrdinal("name"));
+            Assert.Equal(3, data.GetOrdinal("Name"));
+            Assert.Equal(2, data.GetOrdinal("NAME"));
+        }
+
+        [Fact]
         public async Task GetOrdinalForUnknownNameThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id"], [1]);
