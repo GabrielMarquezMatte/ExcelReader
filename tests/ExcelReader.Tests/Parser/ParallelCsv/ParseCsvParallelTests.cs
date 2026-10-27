@@ -14,6 +14,27 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             public int Age { get; set; }
         }
 
+        private sealed class StrictAgeConverter : IExcelCellConverter<int>
+        {
+            public bool TryConvert(in Cell cell, in ExcelRowContext context, out int value)
+            {
+                string text = cell.GetString();
+                if (string.Equals(text, "BOOM", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("The converter saw a value from inside a quoted field.");
+                }
+                return int.TryParse(text, CultureInfo.InvariantCulture, out value);
+            }
+        }
+
+        private sealed class StrictRow
+        {
+            public string? Name { get; set; }
+
+            [ExcelConverter(typeof(StrictAgeConverter))]
+            public int Age { get; set; }
+        }
+
         private static byte[] BuildCsv(int rows)
         {
             var sb = new StringBuilder("Name,Age\n");
@@ -126,6 +147,58 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             Assert.Equal(30_001, sequential.Row);
             Assert.Equal(sequential.Row, parallel.Row);
+        }
+
+        [Fact]
+        public async Task AConverterThrowingOnlyFromAMisguessedChunkStartDoesNotFailTheParse()
+        {
+            var sb = new StringBuilder("Name,Age\n");
+            for (int i = 0; i < 5_000; i++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"name{i:D5},{i}\n");
+            }
+            sb.Append('"');
+            for (int i = 0; i < 40_000; i++)
+            {
+                sb.Append("x,BOOM\n");
+            }
+            sb.Append("\",-1\n");
+            for (int i = 0; i < 5_000; i++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"tail{i:D5},{i}\n");
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+
+            using CsvReader source = Excel.FromCsv(csv);
+            List<StrictRow> actual = [];
+            await foreach (StrictRow row in SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<StrictRow>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken))
+            {
+                actual.Add(row);
+            }
+
+            Assert.Equal(10_001, actual.Count);
+            Assert.Equal(-1, actual[5_000].Age);
+            Assert.Equal("tail04999", actual[^1].Name);
+        }
+
+        [Fact]
+        public async Task AConverterThrowingOnARealRowStillFailsTheParallelParse()
+        {
+            var sb = new StringBuilder("Name,Age\n");
+            for (int i = 0; i < 40_000; i++)
+            {
+                sb.Append(i == 30_000 ? "bad,BOOM\n" : $"name{i:D5},{i}\n");
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+
+            using CsvReader source = Excel.FromCsv(csv);
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                await foreach (StrictRow row in SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<StrictRow>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken))
+                {
+                    _ = row;
+                }
+            });
         }
 
         [Fact]
