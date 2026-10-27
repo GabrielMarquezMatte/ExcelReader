@@ -108,7 +108,7 @@ namespace ExcelReader.Core.Crypto
             {
                 ReadOnlySpan<int> fat = fatArray.AsSpan(0, fatLength);
                 byte[] directory = ReadChainBytes(source, sectorSize, fat, firstDirectorySector, -1);
-                DirectoryEntry[] entries = ReadDirectory(directory);
+                DirectoryEntry[] entries = ReadDirectory(directory, sectorSize);
                 if (entries.Length == 0)
                 {
                     throw new InvalidDataException("The OLE directory is empty.");
@@ -503,7 +503,7 @@ namespace ExcelReader.Core.Crypto
             return next;
         }
 
-        private static DirectoryEntry[] ReadDirectory(ReadOnlySpan<byte> bytes)
+        private static DirectoryEntry[] ReadDirectory(ReadOnlySpan<byte> bytes, int sectorSize)
         {
             int count = bytes.Length / 128;
             DirectoryEntry[] entries = new DirectoryEntry[count];
@@ -524,7 +524,7 @@ namespace ExcelReader.Core.Crypto
                     name,
                     entry[66],
                     ReadI32(entry, 116),
-                    BinaryPrimitives.ReadInt64LittleEndian(entry.Slice(120, 8)),
+                    sectorSize == HeaderSize ? (uint)ReadI32(entry, 120) : BinaryPrimitives.ReadInt64LittleEndian(entry.Slice(120, 8)),
                     ReadI32(entry, 68),
                     ReadI32(entry, 72),
                     ReadI32(entry, 76));
