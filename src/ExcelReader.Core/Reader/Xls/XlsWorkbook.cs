@@ -504,6 +504,7 @@ namespace ExcelReader.Core.Reader.Xls
             internal const int Xf = 0x00E0;
             internal const int FilePass = 0x002F;
             internal const int Label = 0x0204;
+            internal const int RString = 0x00D6;
             internal const int LabelSst = 0x00FD;
             internal const int Number = 0x0203;
             internal const int Rk = 0x027E;

@@ -106,6 +106,7 @@ namespace ExcelReader.Core.Reader.Xls
                         DeclareRow(ReadU16(data, 0));
                         return true;
                     case Rec.Label:
+                    case Rec.RString:
                         if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
                         ParseLabel(data);
                         return true;

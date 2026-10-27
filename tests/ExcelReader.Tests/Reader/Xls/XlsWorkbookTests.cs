@@ -654,6 +654,23 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void RichStringRecordReadsAsItsTextIgnoringFormattingRuns()
+        {
+            byte[] runs = [.. XlsWorkbookBuilder.LE16(1), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(5)];
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(
+                includeEof: true,
+                (0x00D6, [.. XlsWorkbookBuilder.RawLabel(0, 1, "rich"), .. runs]));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(2, e.Current.ColumnCount);
+            Assert.Equal(CellType.ExcelString, e.Current[1].Type);
+            Assert.Equal("rich", e.Current[1].GetString());
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public void ShortAndUnknownSheetRecordsAreSkippedSafely()
         {
             using var ms = XlsWorkbookBuilder.BuildRawSheet(
