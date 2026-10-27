@@ -23,7 +23,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
             foreach (var tag in Tags(wbBytes, sheetTag))
             {
-                var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, "r:id"u8));
+                var rid = XlsxXml.DecodeToString(RelationshipId(tag));
                 var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, "name"u8));
                 if (!rels.TryGetValue(rid, out var target))
                 {
@@ -32,6 +32,19 @@ namespace ExcelReader.Core.Reader.Xlsx
                 sheets.Add((name, XlsxXml.NormalizePart(target), ParseVisibility(XlsxXml.Attr(tag, "state"u8))));
             }
             return [.. sheets];
+        }
+
+        private static ReadOnlySpan<byte> RelationshipId(ReadOnlySpan<byte> tag)
+        {
+            int pos = XlsxXml.ElementNameEnd(tag);
+            while (XlsxXml.NextAttribute(tag, ref pos, out ReadOnlySpan<byte> name, out ReadOnlySpan<byte> value))
+            {
+                if (name.EndsWith(":id"u8))
+                {
+                    return value;
+                }
+            }
+            return default;
         }
 
         private static ExcelSheetVisibility ParseVisibility(ReadOnlySpan<byte> state)
