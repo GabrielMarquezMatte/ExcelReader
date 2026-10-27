@@ -81,6 +81,38 @@ namespace ExcelReader.Tests.Reader.Zip
         }
 
         [Fact]
+        public void TryGetEntryMatchesNamesAsciiCaseInsensitively()
+        {
+            byte[] zipBytes = BuildZipWithOneEntry("xl/worksheets/Sheet1.xml", "x"u8.ToArray(), CompressionLevel.NoCompression);
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("xl/worksheets/sheet1.xml"u8, out _));
+            Assert.False(index.TryGetEntry("xl/worksheets/sheet2.xml"u8, out _));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(100)]
+        public void CreateThrowsOnCaseOnlyDuplicateEntryNames(int otherEntries)
+        {
+            using var ms = new MemoryStream();
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                for (int i = 0; i < otherEntries; i++)
+                {
+                    zip.CreateEntry(string.Create(CultureInfo.InvariantCulture, $"part{i}.txt"), CompressionLevel.NoCompression);
+                }
+                zip.CreateEntry("Dup.txt", CompressionLevel.NoCompression);
+                zip.CreateEntry("dup.TXT", CompressionLevel.NoCompression);
+            }
+            byte[] zipBytes = ms.ToArray();
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipIndex.Create(zipBytes, ExcelReaderOptions.Default));
+            Assert.Contains("duplicate", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public void OpenPartThrowsWhenLocalHeaderNameDoesNotMatchCentralDirectory()
         {
             byte[] payload = Encoding.UTF8.GetBytes("hello world, stored and not deflated");
