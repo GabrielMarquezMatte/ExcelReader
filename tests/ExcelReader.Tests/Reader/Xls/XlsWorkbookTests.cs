@@ -556,6 +556,22 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void FailedOpenDisposesOwnedStream()
+        {
+            var stream = new TrackingStream(XlsWorkbookBuilder.WithFilePassRecord());
+            Assert.Throws<NotSupportedException>(() => Excel.FromXls(stream, leaveOpen: false));
+            Assert.True(stream.Disposed);
+        }
+
+        [Fact]
+        public async Task FailedOpenAsyncDisposesOwnedStream()
+        {
+            var stream = new TrackingStream(XlsWorkbookBuilder.WithFilePassRecord());
+            await Assert.ThrowsAsync<NotSupportedException>(async () => await Excel.FromXlsAsync(stream, leaveOpen: false, ct: TestContext.Current.CancellationToken));
+            Assert.True(stream.Disposed);
+        }
+
+        [Fact]
         public void WorkbookWithoutSheetsThrows()
         {
             using var ms = XlsWorkbookBuilder.BuildNoSheets();
