@@ -19,6 +19,7 @@ namespace ExcelReader.Core.Reader.Xls
             private readonly Utf8StringCache? _contentCache;
             private readonly Queue<int> _declaredRows = new();
             private bool _ended;
+            private bool _sawBof;
             private bool _emptyRow;
             private int _row;
             private int _rowFloor = -1;
@@ -85,10 +86,7 @@ namespace ExcelReader.Core.Reader.Xls
             {
                 if (id == Rec.Bof)
                 {
-                    if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
-                    {
-                        throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
-                    }
+                    ReadBof(cursor, data);
                     return true;
                 }
                 if (id == Rec.Eof)
@@ -150,6 +148,37 @@ namespace ExcelReader.Core.Reader.Xls
                         return AdvanceRow(cursor, recordStart, ReadU16(data, 0));
                     default:
                         return true;
+                }
+            }
+
+            private void ReadBof(BiffCursor cursor, ReadOnlySpan<byte> data)
+            {
+                if (_sawBof)
+                {
+                    SkipSubstream(cursor);
+                    return;
+                }
+                if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
+                {
+                    throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
+                }
+                _sawBof = true;
+            }
+
+            /// <summary>Skips an embedded substream, such as a chart, through its matching EOF.</summary>
+            private static void SkipSubstream(BiffCursor cursor)
+            {
+                int depth = 1;
+                while (depth > 0 && cursor.TryReadRecord(out int id, out _))
+                {
+                    if (id == Rec.Bof)
+                    {
+                        depth++;
+                    }
+                    if (id == Rec.Eof)
+                    {
+                        depth--;
+                    }
                 }
             }
 

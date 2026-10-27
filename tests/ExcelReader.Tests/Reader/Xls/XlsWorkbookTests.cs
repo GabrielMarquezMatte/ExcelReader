@@ -573,6 +573,40 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void EmbeddedChartSubstreamIsSkippedWithItsSeriesCache()
+        {
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(
+                includeEof: true,
+                (0x0204, XlsWorkbookBuilder.RawLabel(0, 0, "a")),
+                (0x0204, XlsWorkbookBuilder.RawLabel(1, 0, "b")),
+                (0x0809, XlsWorkbookBuilder.RawBof(0x0020)),
+                (0x0203, XlsWorkbookBuilder.RawNumber(0, 5, 99)),
+                (0x0809, XlsWorkbookBuilder.RawBof(0x0020)),
+                (0x0204, XlsWorkbookBuilder.RawLabel(1, 5, "nested")),
+                (0x000A, []),
+                (0x0201, [.. XlsWorkbookBuilder.LE16(2), .. XlsWorkbookBuilder.LE16(5), .. XlsWorkbookBuilder.LE16(0)]),
+                (0x000A, []),
+                (0x0203, XlsWorkbookBuilder.RawNumber(1, 1, 2.5)),
+                (0x0203, XlsWorkbookBuilder.RawNumber(2, 0, 7)));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(1, e.Current.ColumnCount);
+            Assert.Equal("a", e.Current[0].GetString());
+            Assert.True(e.MoveNext());
+            Assert.Equal(2, e.Current.ColumnCount);
+            Assert.Equal("b", e.Current[0].GetString());
+            Assert.True(e.Current[1].TryGetDouble(out double b1));
+            Assert.Equal(2.5, b1);
+            Assert.True(e.MoveNext());
+            Assert.Equal(1, e.Current.ColumnCount);
+            Assert.True(e.Current[0].TryGetDouble(out double a3));
+            Assert.Equal(7, a3);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public void ShortAndUnknownSheetRecordsAreSkippedSafely()
         {
             using var ms = XlsWorkbookBuilder.BuildRawSheet(
