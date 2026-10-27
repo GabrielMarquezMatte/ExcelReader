@@ -196,6 +196,33 @@ namespace ExcelReader.Tests.Writer
         }
 
         [Fact]
+        public async Task TimeOnlyCellsTakeColumnAndRowStyleXlsx()
+        {
+            await using MemoryStream ms = await WriteXlsxAsync(async wb =>
+            {
+                int timeStyle = wb.AddStyle(new CellStyle { NumberFormat = "hh:mm" });
+                int boldStyle = wb.AddStyle(new CellStyle { Bold = true });
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+                sheet.SetColumnStyle(0, timeStyle);
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
+                {
+                    row.Write(new TimeOnly(12, 30));
+                }
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(boldStyle, TestContext.Current.CancellationToken))
+                {
+                    row.Write(new TimeOnly(12, 30));
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+            using var reader = Excel.FromXlsx(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(2, e.Current[0].StyleIndex);
+            Assert.True(e.MoveNext());
+            Assert.Equal(3, e.Current[0].StyleIndex);
+        }
+
+        [Fact]
         public async Task ColumnStyleRoundTripsThroughReaderXlsb()
         {
             var ms = new MemoryStream();
