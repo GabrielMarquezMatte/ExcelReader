@@ -477,7 +477,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
                 else if (kind == Kind.Inline)
                 {
-                    int end = TryEmitPlainInline(buf, len, p, col, style);
+                    int end = TryEmitPlainInline(buf.AsSpan(0, len), p, col, style);
                     if (end >= 0)
                     {
                         return end;
@@ -537,10 +537,6 @@ namespace ExcelReader.Core.Reader.Xlsx
                     nextCol = col + 1;
                     return i + 2;
                 }
-                if (kind == Kind.Inline)
-                {
-                    return -1;
-                }
                 if (!buf.Slice(i, 4).SequenceEqual("><v>"u8))
                 {
                     int end = TryParseCanonicalCellBody(buf, i, col, style, kind);
@@ -567,6 +563,10 @@ namespace ExcelReader.Core.Reader.Xlsx
                 if (buf[i] != (byte)'>')
                 {
                     return -1;
+                }
+                if (kind == Kind.Inline)
+                {
+                    return TryEmitPlainInline(buf, i + 1, col, style);
                 }
                 int start = SkipFormula(buf, i + 1);
                 if (start < 0 || !buf[start..].StartsWith("<v>"u8))
@@ -748,20 +748,20 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return i + 8;
             }
 
-            private int TryEmitPlainInline(byte[] buf, int len, int p, int col, int style)
+            private int TryEmitPlainInline(ReadOnlySpan<byte> buf, int p, int col, int style)
             {
-                if (!buf.AsSpan(p, Math.Min(7, len - p)).StartsWith("<is><t>"u8))
+                if (!buf[p..].StartsWith("<is><t>"u8))
                 {
                     return -1;
                 }
                 int textStart = p + 7;
-                int rel = XlsxXml.IndexOfMarkup(buf.AsSpan(textStart, len - textStart), out bool mayEscape);
+                int rel = XlsxXml.IndexOfMarkup(buf[textStart..], out bool mayEscape);
                 if (rel < 0)
                 {
                     return -1;
                 }
                 int lt = textStart + rel;
-                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8) || (mayEscape && buf.AsSpan(textStart, rel).IndexOf("_x"u8) >= 0))
+                if (!buf[lt..].StartsWith("</t></is></c>"u8) || (mayEscape && buf.Slice(textStart, rel).IndexOf("_x"u8) >= 0))
                 {
                     return -1;
                 }

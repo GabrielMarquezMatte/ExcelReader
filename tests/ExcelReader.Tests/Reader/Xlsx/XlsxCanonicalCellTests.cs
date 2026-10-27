@@ -80,6 +80,55 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal("no ref", row[19].GetString());
         }
 
+        private static readonly string[] InlineCells =
+        [
+            """<c r="A{r}" t="inlineStr"><is><t>plain {r}</t></is></c>""",
+            """<c r="B{r}" t="inlineStr"><is><r><t>rich</t></r><r><rPr><b/></rPr><t xml:space="preserve"> text</t></r></is></c>""",
+            """<c r="C{r}" t="inlineStr"><is><t xml:space="preserve">  spaced  </t></is></c>""",
+            """<c r="D{r}" t="inlineStr"><is><t>A_x0042_C</t></is></c>""",
+            """<c r="E{r}" t="inlineStr"><is><t>under_score</t></is></c>""",
+            """<c r="F{r}" t="inlineStr"><is/></c>""",
+            """<c r="G{r}" t="inlineStr"><is><t/></is></c>""",
+            """<c r="H{r}" t="inlineStr"><is><t>a&amp;b</t></is></c>""",
+            """<c r="I{r}" t="inlineStr"><is><t>x</t><rPh sb="0" eb="1"><t>ph</t></rPh></is></c>""",
+            """<c r="J{r}" t="inlineStr" s="1"><is><t>styled</t></is></c>""",
+            """<c t="inlineStr"><is><t>no ref</t></is></c>""",
+            """<c r="L{r}" t="inlineStr"><is><t></t></is></c>""",
+            """<c r="M{r}" t="inlineStr"/>""",
+            """<c r="N{r}" t="inlineStr"><is><t>a_x000D_b</t></is></c>""",
+        ];
+
+        [Fact]
+        public void InlineCellsReadTheSameOnTheCanonicalPathAsOnTheGeneralPath()
+        {
+            AssertPathsAgree(InlineCells, prefixedAgrees: true);
+        }
+
+        [Fact]
+        public void AnInlineCellWithAValueReadsTheSameOnTheCanonicalPath()
+        {
+            AssertPathsAgree(["""<c r="A{r}" t="inlineStr"><v>5</v></c>""", """<c r="B{r}" t="inlineStr"><v>x</v><is><t>y</t></is></c>"""], prefixedAgrees: false);
+        }
+
+        [Fact]
+        public void InlineCellsReadTheirText()
+        {
+            using XlsxWorkbook reader = Excel.FromXlsx(new MemoryStream(Workbook(Rows(InlineCells, 1))));
+            using XlsxWorkbook.Enumerator rows = reader.FirstSheet.GetEnumerator();
+            Assert.True(rows.MoveNext());
+            Row row = rows.Current;
+
+            Assert.Equal("plain 1", row[0].GetString());
+            Assert.Equal("rich text", row[1].GetString());
+            Assert.Equal("  spaced  ", row[2].GetString());
+            Assert.Equal("ABC", row[3].GetString());
+            Assert.Equal("under_score", row[4].GetString());
+            Assert.Equal("a&b", row[7].GetString());
+            Assert.Equal("x", row[8].GetString());
+            Assert.Equal(1, row[9].StyleIndex);
+            Assert.Equal("no ref", row[10].GetString());
+        }
+
         private static void AssertPathsAgree(string[] cells, bool prefixedAgrees)
         {
             const int RowCount = 300;
