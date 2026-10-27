@@ -19,6 +19,8 @@ namespace ExcelReader.Core.Writer.Zip
         void Abandon();
 
         ValueTask AbandonAsync();
+
+        ValueTask DrainAsync(CancellationToken ct);
     }
 
     /// <summary>
@@ -139,12 +141,17 @@ namespace ExcelReader.Core.Writer.Zip
 
         internal void Flush()
         {
+            ActiveSheet?.DrainAsync(CancellationToken.None).AsTask().GetAwaiter().GetResult();
             _stream.Flush();
         }
 
-        internal ValueTask FlushAsync(CancellationToken ct)
+        internal async ValueTask FlushAsync(CancellationToken ct)
         {
-            return ZipEntryWriter.FlushAsync(_stream, ct);
+            if (ActiveSheet is not null)
+            {
+                await ActiveSheet.DrainAsync(ct).ConfigureAwait(false);
+            }
+            await ZipEntryWriter.FlushAsync(_stream, ct).ConfigureAwait(false);
         }
 
         internal void Dispose()
