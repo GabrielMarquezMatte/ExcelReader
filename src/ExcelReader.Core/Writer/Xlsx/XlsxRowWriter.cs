@@ -112,7 +112,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             ThrowIfDisposed();
             int styleId = EffectiveStyle();
-            CellFormatter.WriteDateTime(_row, value, _owner.Date1904, _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : styleId);
+            CellFormatter.WriteDateTime(_row, value, _owner.Date1904, _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : _owner.DateStyle(styleId));
             _columnIndex++;
         }
 
@@ -138,7 +138,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             ThrowIfDisposed();
             int styleId = EffectiveStyle();
-            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _owner.Date1904, _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : styleId);
+            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _owner.Date1904, _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : _owner.DateStyle(styleId));
             _columnIndex++;
         }
 
