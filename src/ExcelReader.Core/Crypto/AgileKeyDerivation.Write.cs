@@ -21,7 +21,7 @@ namespace ExcelReader.Core.Crypto
             try
             {
                 byte[] ivSalt = NormalizeToLength(passwordEncryptor.SaltValue, passwordEncryptor.BlockSize);
-                byte[] verifierHash = HashOne(passwordEncryptor.Hash, verifierInput);
+                byte[] verifierHash = HashOne(passwordEncryptor.Hash, verifierInput.AsSpan(0, passwordEncryptor.SaltSize));
                 return new PasswordEncryptorBlobs(
                     EncryptNoPadding(verifierInput, keyVerifierInput, ivSalt),
                     EncryptNoPadding(verifierHash, keyVerifierValue, ivSalt),

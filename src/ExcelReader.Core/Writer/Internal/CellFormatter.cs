@@ -260,7 +260,7 @@ namespace ExcelReader.Core.Writer.Internal
                 {
                     if (i > start)
                     {
-                        xml.WriteUtf8(value[start..i]);
+                        WriteUtf8Text(xml, value[start..i]);
                     }
                     xml.Write(entity);
                     start = i + 1;
@@ -271,7 +271,7 @@ namespace ExcelReader.Core.Writer.Internal
                     {
                         if (i > start)
                         {
-                            xml.WriteUtf8(value[start..i]);
+                            WriteUtf8Text(xml, value[start..i]);
                         }
                         xml.Write("_x005F_"u8);
                         start = i + 1;
@@ -291,7 +291,7 @@ namespace ExcelReader.Core.Writer.Internal
                 {
                     if (i > start)
                     {
-                        xml.WriteUtf8(value[start..i]);
+                        WriteUtf8Text(xml, value[start..i]);
                     }
                     WriteHexEscape(xml, c);
                     start = i + 1;
@@ -300,7 +300,23 @@ namespace ExcelReader.Core.Writer.Internal
             }
             if (start < value.Length)
             {
-                xml.WriteUtf8(value[start..]);
+                WriteUtf8Text(xml, value[start..]);
+            }
+        }
+
+        private static void WriteUtf8Text(BiffBuffer xml, ReadOnlySpan<char> chars)
+        {
+            while (true)
+            {
+                Span<byte> dest = xml.GetSpan(checked(chars.Length * 3));
+                OperationStatus status = Utf8.FromUtf16(chars, dest, out int read, out int written, replaceInvalidSequences: false);
+                xml.Advance(written);
+                if (status == OperationStatus.Done)
+                {
+                    return;
+                }
+                WriteHexEscape(xml, chars[read]);
+                chars = chars[(read + 1)..];
             }
         }
 

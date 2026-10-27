@@ -12,6 +12,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_encrypt_package")]
         public static int EncryptPackage(byte* packagePath, int packagePathLength, byte* destinationPath, int destinationPathLength, byte* password, int passwordLength)
         {
+            NativeApi.ClearLastError();
             if (packagePath is null || packagePathLength <= 0
                 || destinationPath is null || destinationPathLength <= 0
                 || password is null || passwordLength <= 0)
@@ -28,6 +29,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_encrypt_package_to_memory")]
         public static int EncryptPackageToMemory(byte* package, int packageLength, byte* password, int passwordLength, NativeBuffer* outBuffer)
         {
+            NativeApi.ClearLastError();
             if (package is null || packageLength <= 0 || password is null || passwordLength <= 0 || outBuffer is null)
             {
                 return NativeStatus.InvalidArgument;

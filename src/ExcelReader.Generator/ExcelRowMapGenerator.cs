@@ -100,6 +100,14 @@ namespace ExcelReader.Generator
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor FileLocalTypeDescriptor = new(
+            "EXR010",
+            "[ExcelSerializable] type is file-local",
+            "Type '{0}' is file-local (or nested in a file-local type), so the generated partial in another file would declare a different type; make it non-file-local",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         private enum ReadKind
         {
             None,
@@ -155,6 +163,14 @@ namespace ExcelReader.Generator
             {
                 diagnostics.Add(DiagnosticInfo.Create(NotPartialDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
                 return NoSource(diagnostics);
+            }
+            for (INamedTypeSymbol? local = symbol; local is not null; local = local.ContainingType)
+            {
+                if (local.IsFileLocal)
+                {
+                    diagnostics.Add(DiagnosticInfo.Create(FileLocalTypeDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+                    return NoSource(diagnostics);
+                }
             }
             for (INamedTypeSymbol? outer = symbol.ContainingType; outer is not null; outer = outer.ContainingType)
             {
@@ -550,6 +566,10 @@ namespace ExcelReader.Generator
                     return "ref partial struct";
                 }
                 return symbol.IsRecord ? "partial record struct" : "partial struct";
+            }
+            if (symbol.TypeKind == TypeKind.Interface)
+            {
+                return "partial interface";
             }
             return symbol.IsRecord ? "partial record" : "partial class";
         }

@@ -37,14 +37,21 @@ namespace ExcelReader.Core.Reader.Xls
             Lifetime = new ReaderLifetime(ReleaseResources);
             _workbook = workbook;
             _options = options ?? ExcelReaderOptions.Default;
-            using (BiffCursor cursor = workbook.OpenCursor())
+            try
             {
-                ParseWorkbookGlobals(cursor, _options, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+                using (BiffCursor cursor = workbook.OpenCursor())
+                {
+                    ParseWorkbookGlobals(cursor, _options, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+                }
+                if (_sheets.Length == 0)
+                {
+                    throw new InvalidDataException("The workbook contains no sheets.");
+                }
             }
-            if (_sheets.Length == 0)
+            catch
             {
                 workbook.Dispose();
-                throw new InvalidDataException("The workbook contains no sheets.");
+                throw;
             }
             _sheetList = CreateSheetList();
         }
@@ -497,6 +504,7 @@ namespace ExcelReader.Core.Reader.Xls
             internal const int Xf = 0x00E0;
             internal const int FilePass = 0x002F;
             internal const int Label = 0x0204;
+            internal const int RString = 0x00D6;
             internal const int LabelSst = 0x00FD;
             internal const int Number = 0x0203;
             internal const int Rk = 0x027E;

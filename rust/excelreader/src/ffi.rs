@@ -543,6 +543,10 @@ extern "C" {
     /// no-op.
     pub fn xl_write_handle_bytes(handle: *mut XlWriterHandle, out_buffer: *mut XlBuffer) -> c_int;
 
+    /// Releases a writer handle and discards its output; an existing file at its path is left as
+    /// it was.
+    pub fn xl_abort_write_handle(handle: *mut XlWriterHandle) -> c_int;
+
     pub fn xl_rows_open(handle: *mut XlWorkbook, sheet: i32, out_rows: *mut *mut XlRows) -> c_int;
     pub fn xl_rows_close(rows: *mut XlRows) -> c_int;
     pub fn xl_rows_next(

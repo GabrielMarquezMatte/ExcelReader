@@ -184,7 +184,7 @@ namespace ExcelReader.Tests.Native
                 Assert.True(rows.MoveNext());
                 Assert.Equal(CellType.Date, rows.Current[0].Type);
                 Assert.Equal(CellType.Date, rows.Current[2].Type);
-                Assert.Equal(CellType.Number, rows.Current[1].Type);
+                Assert.Equal(CellType.Date, rows.Current[1].Type);
             }
 
             using ZipArchive archive = ZipFile.OpenRead(path);
@@ -1537,6 +1537,98 @@ namespace ExcelReader.Tests.Native
             {
                 FreeBuiltTable(ref table);
             }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, 1)]
+        [InlineData(NativeFormat.Xlsx, 4)]
+        [InlineData(NativeFormat.Xlsb, 4)]
+        [InlineData(NativeFormat.Xls, 1)]
+        [InlineData(NativeFormat.Csv, 1)]
+        public void CloseWriteHandle_Should_Keep_The_Existing_File_After_A_Failed_WriteSheet(int format, int degreeOfParallelism)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "out.dat");
+            File.WriteAllText(path, "ORIGINAL");
+            NativeTable table = BuildEveryTypeTable(7, [0, 0, 0, -1, 0, 0, 0]);
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, WriteApi.OpenWriteHandle(Encoding.UTF8.GetBytes(path), format, ParallelWriteOptionsFor(degreeOfParallelism, 2), out NativeWriterHandle? handle));
+                Assert.NotNull(handle);
+
+                Assert.ThrowsAny<Exception>(() => handle.WriteSheet("S", EveryTypeSpecs(), table, hasHeader: true, excelTable: null));
+
+                Assert.Equal(NativeStatus.Error, WriteApi.CloseWriteHandle(handle));
+                Assert.Equal("ORIGINAL", File.ReadAllText(path));
+                Assert.Equal([path], Directory.GetFiles(directory));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void GetWriteHandleBytes_Should_Fail_After_A_Failed_WriteSheet()
+        {
+            NativeTable table = BuildEveryTypeTable(7, [0, 0, 0, -1, 0, 0, 0]);
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, WriteApi.OpenWriteHandleToMemory(NativeFormat.Xlsx, ParallelWriteOptionsFor(1), out NativeWriterHandle? handle));
+                Assert.NotNull(handle);
+
+                Assert.ThrowsAny<Exception>(() => handle.WriteSheet("S", EveryTypeSpecs(), table, hasHeader: true, excelTable: null));
+
+                Assert.Equal(NativeStatus.Error, WriteApi.GetWriteHandleBytes(handle, out byte[]? bytes));
+                Assert.Null(bytes);
+                Assert.Equal(NativeStatus.Error, WriteApi.CloseWriteHandle(handle));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public unsafe void AbortWriteHandle_Should_Discard_The_Output_And_Release_The_Handle()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "out.xlsx");
+            File.WriteAllText(path, "ORIGINAL");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, WriteApi.OpenWriteHandle(Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, DefaultWriteOptions(), out NativeWriterHandle? handle));
+                handle!.StartSheet("S");
+                handle.StartRow();
+                handle.WriteString("new");
+                handle.EndRow();
+                nint id = NativeHandleTable.Register(handle);
+
+                delegate* unmanaged<nint, int> abort = &Exports.AbortWriteHandle;
+                Assert.Equal(NativeStatus.Ok, abort(id));
+
+                Assert.Equal("ORIGINAL", File.ReadAllText(path));
+                Assert.Equal([path], Directory.GetFiles(directory));
+                Assert.Equal(NativeStatus.InvalidHandle, abort(id));
+                Assert.Equal(NativeStatus.InvalidHandle, abort(0));
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void AbortWriteHandle_Should_Discard_A_Memory_Handle()
+        {
+            Assert.Equal(NativeStatus.Ok, WriteApi.OpenWriteHandleToMemory(NativeFormat.Xlsx, DefaultWriteOptions(), out NativeWriterHandle? handle));
+            handle!.StartSheet("S");
+
+            Assert.Equal(NativeStatus.Ok, WriteApi.AbortWriteHandle(handle));
+            Assert.Equal(NativeStatus.InvalidHandle, WriteApi.AbortWriteHandle(null));
         }
     }
 }

@@ -26,7 +26,7 @@ _INT64_MAX = 2**63 - 1
 
 def _encode(value: str) -> tuple[Any, int]:
     raw = value.encode("utf-8")
-    return (ctypes.cast(ctypes.c_char_p(raw), ctypes.POINTER(ctypes.c_uint8)), len(raw))
+    return (ctypes.cast(ctypes.c_char_p(raw), ctypes.POINTER(ctypes.c_uint8)), _native.int32_len(raw))
 
 
 def _is_writable(value: Any) -> bool:
@@ -42,6 +42,10 @@ def _is_typed_blank(value: Any) -> bool:
 class SheetWriter:
     """A streaming workbook writer. Use as a context manager; closing finalizes the workbook, and for
     a destination with `write()` hands it the finished bytes.
+
+    Only `close()`, or leaving a `with` block normally, commits. Leaving it by an exception, `abort()`,
+    or a writer collected without being closed discards what was written: an existing file at the
+    path is left as it was, and a destination with `write()` gets nothing.
 
     The required call order is `start_sheet` -> `write_row` per row -> `end_sheet`, or one
     `write_sheet` per whole table. Calling out of order raises `ExcelReaderError`, and the writer
@@ -168,15 +172,29 @@ class SheetWriter:
         finally:
             _check(self._lib.xl_close_write_handle(handle))
 
+    def abort(self) -> None:
+        """Discards everything written and releases the writer, leaving an existing file at the path
+        as it was and handing a destination with `write()` nothing. Safe to call more than once, and
+        after `close()`.
+        """
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        self._destination = None
+        self._lib.xl_abort_write_handle(handle)
+
     def __enter__(self) -> "SheetWriter":
         return self
 
-    def __exit__(self, *exc: object) -> None:
+    def __exit__(self, exc_type: object, *exc: object) -> None:
+        if exc_type is not None:
+            self.abort()
+            return
         self.close()
 
     def __del__(self) -> None:
         try:
-            self.close()
+            self.abort()
         except Exception:  # noqa: BLE001, S110
             pass
 
@@ -187,8 +205,8 @@ def open_writer(
     *,
     options: WriteOptions | None = None,
 ) -> SheetWriter:
-    """Opens a streaming writer for `destination`: a path, truncating any existing file, or a binary
-    object with `write()` such as `io.BytesIO` or an open file.
+    """Opens a streaming writer for `destination`: a path, whose existing file is replaced when the
+    writer closes, or a binary object with `write()` such as `io.BytesIO` or an open file.
 
     `format` is one of xlsx/xlsb/xls/csv. For a path, None infers it from the extension; an object
     with `write()` needs it. Such an object receives the whole workbook in one `write()` call when the
@@ -207,7 +225,7 @@ def open_writer(
         pointer = ctypes.cast(ctypes.c_char_p(encoded), ctypes.POINTER(ctypes.c_uint8))
         _check(
             lib.xl_open_write_handle(
-                pointer, len(encoded), format_id, ctypes.byref(raw_options), ctypes.byref(handle)
+                pointer, _native.int32_len(encoded), format_id, ctypes.byref(raw_options), ctypes.byref(handle)
             )
         )
         return SheetWriter(handle, None)

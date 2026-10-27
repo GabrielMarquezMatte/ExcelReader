@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer.Internal;
 
@@ -18,6 +19,14 @@ namespace ExcelReader.Core.Reader
         private readonly int _sharedIndex;
         private readonly string?[]? _sharedCache;
         private readonly Utf8StringCache? _contentCache;
+
+        private static readonly string[] ZonedIsoFormats =
+        [
+            "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFK",
+            "yyyy-MM-dd HH:mm:ss.FFFFFFFK",
+            "yyyy-MM-dd'T'HH:mmK",
+            "yyyy-MM-dd HH:mmK",
+        ];
 
         /// <summary>The kind of value this cell holds.</summary>
         public CellType Type { get; }
@@ -110,6 +119,24 @@ namespace ExcelReader.Core.Reader
                 {
                     return true;
                 }
+                if (typeof(T) == typeof(double))
+                {
+                    bool parsedDouble = double.TryParse(Value, TextStyles(provider), provider, out double d);
+                    result = Unsafe.As<double, T>(ref d);
+                    return parsedDouble;
+                }
+                if (typeof(T) == typeof(float))
+                {
+                    bool parsedFloat = float.TryParse(Value, TextStyles(provider), provider, out float f);
+                    result = Unsafe.As<float, T>(ref f);
+                    return parsedFloat;
+                }
+                if (typeof(T) == typeof(Half))
+                {
+                    bool parsedHalf = Half.TryParse(Value, TextStyles(provider), provider, out Half h);
+                    result = Unsafe.As<Half, T>(ref h);
+                    return parsedHalf;
+                }
                 return T.TryParse(Value, provider, out result);
             }
             if (typeof(T) == typeof(double))
@@ -146,7 +173,12 @@ namespace ExcelReader.Core.Reader
         private static bool TryParseDecimalText(ReadOnlySpan<byte> utf8, IFormatProvider provider, out decimal value)
         {
             return (UsesDotDecimalSeparator(provider) && FastDecimal.TryParse(utf8, out value))
-                || decimal.TryParse(utf8, NumberStyles.Number | NumberStyles.AllowExponent, provider, out value);
+                || decimal.TryParse(utf8, TextStyles(provider), provider, out value);
+        }
+
+        private static NumberStyles TextStyles(IFormatProvider provider)
+        {
+            return ReferenceEquals(provider, CultureInfo.InvariantCulture) ? NumberStyles.Float : NumberStyles.Float | NumberStyles.AllowThousands;
         }
 
         // A binary cell keeps no text, so this goes through the shortest text that round-trips the double, the
@@ -333,8 +365,9 @@ namespace ExcelReader.Core.Reader
         /// <summary>
         /// Interprets the cell's numeric value as an Excel serial date, falling back to an ISO-8601
         /// text date (<c>yyyy-MM-dd</c>, optionally followed by <c>T</c> or a space, a time, and up to
-        /// seven fractional-second digits) when the value is not numeric. A trailing zone designator is
-        /// not accepted.
+        /// seven fractional-second digits) when the value is not numeric. A trailing zone designator
+        /// (<c>Z</c> or <c>±hh:mm</c>) is accepted and converts the result to UTC (<see cref="DateTimeKind.Utc"/>);
+        /// without one the clock time is kept as written (<see cref="DateTimeKind.Unspecified"/>).
         /// </summary>
         /// <param name="isDate1904">
         /// Pass true for workbooks using the 1904 date system (e.g. when the reader's IsDate1904 is true)
@@ -350,7 +383,7 @@ namespace ExcelReader.Core.Reader
             if (!TryGetDouble(out double serial))
             {
                 result = default;
-                return false;
+                return !_hasNumber && TryParseZonedIsoText(Value, out result);
             }
             double oadate = ExcelEpoch.SerialToOADate(serial, isDate1904);
             if (oadate is > -657435.0 and < 2958466.0)
@@ -359,6 +392,21 @@ namespace ExcelReader.Core.Reader
             }
             result = default;
             return false;
+        }
+
+        [SkipLocalsInit]
+        private static bool TryParseZonedIsoText(ReadOnlySpan<byte> utf8, out DateTime result)
+        {
+            Span<char> stack = stackalloc char[Utf8Text.StackChars];
+            ReadOnlySpan<char> chars = Utf8Text.Decode(utf8, stack, out char[]? rented);
+            try
+            {
+                return DateTime.TryParseExact(chars, ZonedIsoFormats, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out result);
+            }
+            finally
+            {
+                Utf8Text.Release(rented);
+            }
         }
 
         // FromOADate rounds to the millisecond, which can carry a serial just under the upper bound past DateTime.MaxValue.

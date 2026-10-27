@@ -84,6 +84,111 @@ namespace ExcelReader.Tests.Writer
             Assert.Equal(Rows, rowIndex);
         }
 
+        private sealed class OverlapDetectingStream : MemoryStream
+        {
+            private int _active;
+
+            public bool Overlapped { get; private set; }
+
+            private void Enter()
+            {
+                if (Interlocked.Increment(ref _active) > 1)
+                {
+                    Overlapped = true;
+                }
+                Thread.SpinWait(20_000);
+            }
+
+            private void Exit()
+            {
+                Interlocked.Decrement(ref _active);
+            }
+
+            public override void Write(ReadOnlySpan<byte> buffer)
+            {
+                Write(buffer.ToArray(), 0, buffer.Length);
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                Enter();
+                base.Write(buffer, offset, count);
+                Exit();
+            }
+
+            public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                Write(buffer.Span);
+                return ValueTask.CompletedTask;
+            }
+
+            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                Write(buffer.AsSpan(offset, count));
+                return Task.CompletedTask;
+            }
+
+            public override void Flush()
+            {
+                Enter();
+                Exit();
+            }
+
+            public override Task FlushAsync(CancellationToken cancellationToken)
+            {
+                Flush();
+                return Task.CompletedTask;
+            }
+        }
+
+        [Fact]
+        public async Task XlsxSyncFlushDoesNotRaceThePrefetchWriter()
+        {
+            var dest = new OverlapDetectingStream();
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(dest, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true }))
+            {
+                XlsxSheetWriter sheet = wb.AddSheet("S1");
+                for (int r = 0; r < Rows * 5; r++)
+                {
+                    using (XlsxRowWriter row = sheet.StartRow())
+                    {
+                        row.Write(r);
+                        row.Write(Guid.NewGuid().ToString());
+                    }
+                    if (r % 50 == 0)
+                    {
+                        wb.Flush();
+                    }
+                }
+                sheet.End();
+            }
+            Assert.False(dest.Overlapped);
+        }
+
+        [Fact]
+        public async Task XlsbSyncFlushDoesNotRaceThePrefetchWriter()
+        {
+            var dest = new OverlapDetectingStream();
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(dest, leaveOpen: true, options: new XlsbWriterOptions { PrefetchWrite = true }))
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("S1");
+                for (int r = 0; r < Rows * 5; r++)
+                {
+                    using (XlsbRowWriter row = sheet.StartRow())
+                    {
+                        row.Write(r);
+                        row.Write(Guid.NewGuid().ToString());
+                    }
+                    if (r % 50 == 0)
+                    {
+                        wb.Flush();
+                    }
+                }
+                sheet.End();
+            }
+            Assert.False(dest.Overlapped);
+        }
+
         [Fact]
         public async Task XlsbPrefetchWriteRoundTripsASmallSheetThatNeverSpills()
         {

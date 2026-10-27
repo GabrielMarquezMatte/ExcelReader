@@ -167,6 +167,16 @@ namespace ExcelReader.Tests.Reader.Xls
             return U16(row);
         }
 
+        internal static byte[] RawNumber(int row, int col, double value)
+        {
+            return [.. U16(row), .. U16(col), .. U16(0), .. Double(value)];
+        }
+
+        internal static byte[] RawBof(int substreamType)
+        {
+            return [.. U16(0x0600), .. U16(substreamType), .. new byte[12]];
+        }
+
         internal static MemoryStream BuildRawSst(byte[] framedSst, int labelSstCount)
         {
             using MemoryStream sheet = new();

@@ -203,6 +203,10 @@ namespace
                 }
                 (void)writer->end_sheet();
             }
+            if (!writer->finish().has_value())
+            {
+                return {};
+            }
         }
         std::vector<std::byte> bytes(written.size());
         std::memcpy(bytes.data(), written.data(), written.size());

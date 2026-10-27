@@ -12,23 +12,30 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
 
             ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(src);
-            ReadOnlySpan<byte> numFmtTag = "<numFmt"u8, cellXfsTag = "<cellXfs"u8;
+            ReadOnlySpan<byte> numFmtTag = "<numFmt"u8, numFmtsTag = "<numFmts"u8, numFmtsClose = "</numFmts>"u8, cellXfsTag = "<cellXfs"u8;
             ReadOnlySpan<byte> cellXfsClose = "</cellXfs>"u8, xfTag = "<xf"u8;
             if (!prefix.IsEmpty)
             {
                 numFmtTag = XlsxXml.Token("<"u8, prefix, "numFmt"u8);
+                numFmtsTag = XlsxXml.Token("<"u8, prefix, "numFmts"u8);
+                numFmtsClose = XlsxXml.Token("</"u8, prefix, "numFmts>"u8);
                 cellXfsTag = XlsxXml.Token("<"u8, prefix, "cellXfs"u8);
                 cellXfsClose = XlsxXml.Token("</"u8, prefix, "cellXfs>"u8);
                 xfTag = XlsxXml.Token("<"u8, prefix, "xf"u8);
             }
 
             Dictionary<int, bool> custom = new(capacity: 16);
-            foreach (var tag in Tags(src, numFmtTag))
+            int fmtsStart = IdxOf(src, 0, numFmtsTag);
+            int fmtsEnd = fmtsStart < 0 ? -1 : IdxOf(src, fmtsStart, numFmtsClose);
+            if (fmtsEnd > fmtsStart)
             {
-                int id = XlsxXml.ParseIntOr(XlsxXml.Attr(tag, "numFmtId"u8), -1);
-                if (id >= 0)
+                foreach (var tag in Tags(src[fmtsStart..fmtsEnd], numFmtTag))
                 {
-                    custom[id] = NumberFormat.LooksLikeDate(XlsxXml.DecodeToString(XlsxXml.Attr(tag, "formatCode"u8)));
+                    int id = XlsxXml.ParseIntOr(XlsxXml.Attr(tag, "numFmtId"u8), -1);
+                    if (id >= 0)
+                    {
+                        custom[id] = NumberFormat.LooksLikeDate(XlsxXml.DecodeToString(XlsxXml.Attr(tag, "formatCode"u8)));
+                    }
                 }
             }
 

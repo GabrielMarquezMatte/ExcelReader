@@ -60,6 +60,39 @@ namespace ExcelReader.Tests.Parser
         }
 
         [Fact]
+        public async Task NonGenericEnumerationYieldsTheProjectedModels()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            await using MemoryStream ms = await TypedWorkbook.BuildAsync(["Name", "Age"], ["Bob", 42], ["Eve", 7]);
+
+            var parser = ExcelParser.Build<SharedModel>(static b => b
+                .Factory(static () => new SharedModel())
+                .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v)
+                .Property(["Age"], ExcelCellReaders.Parsable, static (ref SharedModel m, int v) => m.Age = v));
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
+
+            List<SharedModel> viaOfType = ((System.Collections.IEnumerable)parser.Parse(reader.FirstSheet)).OfType<SharedModel>().ToList();
+
+            Assert.Equal(["Bob", "Eve"], viaOfType.Select(m => m.Name), StringComparer.Ordinal);
+            Assert.Equal([42, 7], viaOfType.Select(m => m.Age));
+        }
+
+        [Fact]
+        public async Task NonGenericEnumerationBoxesStructModels()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            await using MemoryStream ms = await TypedWorkbook.BuildAsync(["Age"], [42]);
+
+            var parser = ExcelParser.Build<StructModel>(static b => b
+                .Property(["Age"], ExcelCellReaders.Parsable, static (ref StructModel m, int v) => m.Age = v));
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
+
+            StructModel boxed = Assert.Single(((System.Collections.IEnumerable)parser.Parse(reader.FirstSheet)).OfType<StructModel>());
+
+            Assert.Equal(42, boxed.Age);
+        }
+
+        [Fact]
         public async Task ModelWithNoAttributesIsFullyMappable()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;

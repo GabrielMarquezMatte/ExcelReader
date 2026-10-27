@@ -28,13 +28,9 @@ namespace ExcelReader.Core.Reader.Internal
 
         private const int MinBytesPerSharedStringEntry = 5;
 
-        internal static void ThrowIfSharedStringCountImplausible(int uniqueCount, int partLength)
+        internal static int ClampSharedStringCount(int uniqueCount, int partLength)
         {
-            long maxPlausibleCount = (long)partLength / MinBytesPerSharedStringEntry;
-            if (uniqueCount > maxPlausibleCount)
-            {
-                throw new ExcelLimitExceededException(nameof(ExcelReaderOptions.MaxSharedStringBytes), maxPlausibleCount, uniqueCount);
-            }
+            return Math.Min(uniqueCount, partLength / MinBytesPerSharedStringEntry);
         }
 
         internal static int NextBufferSize(int maxCellBytes, string limitName, int current, int needed, int elementSize = 1)

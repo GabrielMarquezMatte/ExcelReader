@@ -100,7 +100,9 @@ call per cell, then `xl_close_write_handle`. Between sheets, `xl_write_sheet` wr
 `struct_size` contract) can write the sheet as an Excel table: `table_name`, `table_style` (NULL keeps
 `TableStyleMedium2`) and `XL_TABLE_*` flags for no style, row and column stripes and first- and
 last-column emphasis. A table needs every column named and an XLSX or XLSB handle. `xl_write_handle_bytes` reads back a memory-backed
-handle's bytes so far without releasing it. Both write paths release their buffers with
+handle's bytes so far without releasing it. `xl_abort_write_handle` releases a handle and discards its
+output instead, leaving an existing file at the path as it was. A failed `xl_write_sheet` leaves the
+handle with no output: closing it or reading its bytes then fails, so abort it. Both write paths release their buffers with
 `xl_free_buffer` (`xl_table`/`xl_inferred_schema` keep their own `xl_free_table`/`xl_free_schema`).
 
 ## Callback reads

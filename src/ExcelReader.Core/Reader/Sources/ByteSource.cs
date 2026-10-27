@@ -72,7 +72,17 @@ namespace ExcelReader.Core.Reader.Sources
 
         internal static ByteSource FromStream(Stream stream, bool leaveOpen)
         {
-            if (TryWrapSeekable(stream, leaveOpen, out ByteSource? source))
+            return Open(stream, leaveOpen, fromPosition: false);
+        }
+
+        internal static ByteSource FromStreamAtPosition(Stream stream, bool leaveOpen)
+        {
+            return Open(stream, leaveOpen, fromPosition: true);
+        }
+
+        private static ByteSource Open(Stream stream, bool leaveOpen, bool fromPosition)
+        {
+            if (TryWrapSeekable(stream, leaveOpen, fromPosition, out ByteSource? source))
             {
                 return source;
             }
@@ -91,9 +101,14 @@ namespace ExcelReader.Core.Reader.Sources
             }
         }
 
-        internal static async ValueTask<ByteSource> FromStreamAsync(Stream stream, bool leaveOpen, CancellationToken ct)
+        internal static ValueTask<ByteSource> FromStreamAsync(Stream stream, bool leaveOpen, CancellationToken ct)
         {
-            if (TryWrapSeekable(stream, leaveOpen, out ByteSource? source))
+            return OpenAsync(stream, leaveOpen, fromPosition: false, ct);
+        }
+
+        private static async ValueTask<ByteSource> OpenAsync(Stream stream, bool leaveOpen, bool fromPosition, CancellationToken ct)
+        {
+            if (TryWrapSeekable(stream, leaveOpen, fromPosition, out ByteSource? source))
             {
                 return source;
             }
@@ -112,26 +127,28 @@ namespace ExcelReader.Core.Reader.Sources
             }
         }
 
-        private static bool TryWrapSeekable(Stream stream, bool leaveOpen, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ByteSource? source)
+        private static bool TryWrapSeekable(Stream stream, bool leaveOpen, bool fromPosition, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ByteSource? source)
         {
-            if (!leaveOpen && stream is SourceStream view && view.TryTakeSource(out source))
+            long start = fromPosition && stream.CanSeek ? stream.Position : 0;
+            if (!leaveOpen && start == 0 && stream is SourceStream view && view.TryTakeSource(out source))
             {
                 return true;
             }
             IDisposable? owner = leaveOpen ? null : stream;
             if (stream.GetType() == typeof(MemoryStream) && ((MemoryStream)stream).TryGetBuffer(out ArraySegment<byte> segment))
             {
-                source = new MemoryByteSource(segment, owner);
+                ReadOnlyMemory<byte> memory = segment;
+                source = new MemoryByteSource(memory[(int)Math.Min(start, memory.Length)..], owner);
                 return true;
             }
             if (stream.GetType() == typeof(FileStream) && stream.CanSeek)
             {
-                source = new FileByteSource(((FileStream)stream).SafeFileHandle, stream.Length, owner);
+                source = new FileByteSource(((FileStream)stream).SafeFileHandle, Math.Max(0, stream.Length - start), owner, start);
                 return true;
             }
             if (stream.CanSeek)
             {
-                source = new StreamByteSource(stream, leaveOpen);
+                source = new StreamByteSource(stream, leaveOpen, start);
                 return true;
             }
             source = null;

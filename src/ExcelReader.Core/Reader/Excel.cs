@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Opens an XLSX workbook from an existing stream.</summary>
-        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="stream">The stream containing the XLSX data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsxWorkbook FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
@@ -40,7 +40,8 @@ namespace ExcelReader.Core.Reader
             {
                 return new XlsxWorkbook(decrypted, leaveOpen: false, options);
             }
-            return new XlsxWorkbook(stream, leaveOpen, options);
+            Stream rebased = RebaseToPosition(stream, ref leaveOpen);
+            return new XlsxWorkbook(rebased, leaveOpen, options);
         }
 
         /// <summary>
@@ -72,12 +73,13 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from an existing stream.</summary>
-        /// <param name="stream">The stream containing the XLS data.</param>
+        /// <param name="stream">The stream containing the XLS data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsWorkbook FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
-            return new XlsWorkbook(stream, leaveOpen, options);
+            Stream rebased = RebaseToPosition(stream, ref leaveOpen);
+            return new XlsWorkbook(rebased, leaveOpen, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook directly from an in-memory buffer.</summary>
@@ -97,7 +99,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Opens an XLSB (Excel binary) workbook from an existing stream.</summary>
-        /// <param name="stream">The stream containing the XLSB data.</param>
+        /// <param name="stream">The stream containing the XLSB data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsbWorkbook FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
@@ -106,7 +108,8 @@ namespace ExcelReader.Core.Reader
             {
                 return new XlsbWorkbook(decrypted, leaveOpen: false, options);
             }
-            return new XlsbWorkbook(stream, leaveOpen, options);
+            Stream rebased = RebaseToPosition(stream, ref leaveOpen);
+            return new XlsbWorkbook(rebased, leaveOpen, options);
         }
 
         /// <summary>
@@ -140,7 +143,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
-        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="stream">The stream containing the XLSX data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
@@ -150,7 +153,8 @@ namespace ExcelReader.Core.Reader
             {
                 return XlsxWorkbook.CreateAsync(decrypted, leaveOpen: false, options, ct);
             }
-            return XlsxWorkbook.CreateAsync(stream, leaveOpen, options, ct);
+            Stream rebased = RebaseToPosition(stream, ref leaveOpen);
+            return XlsxWorkbook.CreateAsync(rebased, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
@@ -164,13 +168,14 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from an existing stream.</summary>
-        /// <param name="stream">The stream containing the XLS data.</param>
+        /// <param name="stream">The stream containing the XLS data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsWorkbook> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
-            return XlsWorkbook.CreateAsync(stream, leaveOpen, options, ct);
+            Stream rebased = RebaseToPosition(stream, ref leaveOpen);
+            return XlsWorkbook.CreateAsync(rebased, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
@@ -184,7 +189,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</summary>
-        /// <param name="stream">The stream containing the XLSB data.</param>
+        /// <param name="stream">The stream containing the XLSB data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
@@ -194,7 +199,8 @@ namespace ExcelReader.Core.Reader
             {
                 return XlsbWorkbook.CreateAsync(decrypted, leaveOpen: false, options, ct);
             }
-            return XlsbWorkbook.CreateAsync(stream, leaveOpen, options, ct);
+            Stream rebased = RebaseToPosition(stream, ref leaveOpen);
+            return XlsbWorkbook.CreateAsync(rebased, leaveOpen, options, ct);
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
@@ -215,7 +221,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
-        /// <param name="stream">The stream containing the CSV data.</param>
+        /// <param name="stream">The stream containing the CSV data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
@@ -267,7 +273,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
-        /// <param name="stream">The stream containing the CSV data.</param>
+        /// <param name="stream">The stream containing the CSV data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Size limits and interning, plus the delimiter, quote and encoding in <see cref="ExcelReaderOptions.Csv"/>; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
@@ -329,7 +335,7 @@ namespace ExcelReader.Core.Reader
         /// Opens a workbook from an existing seekable stream, auto-detecting its format (XLSX/XLSB/XLS) from the
         /// stream's signature.
         /// </summary>
-        /// <param name="stream">A seekable stream containing the workbook data.</param>
+        /// <param name="stream">A seekable stream containing the workbook data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
@@ -407,7 +413,13 @@ namespace ExcelReader.Core.Reader
                     : ExcelFileFormat.Xls;
             }
             memZip = ZipIndex.Create(data, options);
-            return ClassifyZip(memZip);
+            ExcelFileFormat zipFormat = ClassifyZip(memZip);
+            if (zipFormat is ExcelFileFormat.Unknown)
+            {
+                memZip.Dispose();
+                memZip = null;
+            }
+            return zipFormat;
         }
 
         /// <summary>
@@ -431,7 +443,7 @@ namespace ExcelReader.Core.Reader
         /// Asynchronously opens a workbook from an existing seekable stream, auto-detecting its format
         /// (XLSX/XLSB/XLS) from the stream's signature.
         /// </summary>
-        /// <param name="stream">A seekable stream containing the workbook data.</param>
+        /// <param name="stream">A seekable stream containing the workbook data. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
@@ -478,7 +490,8 @@ namespace ExcelReader.Core.Reader
         /// Opens a workbook of a known format from an existing stream.
         /// </summary>
         /// <param name="stream">The stream containing the workbook data. Must be seekable when
-        /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
+        /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>. Reading starts at the stream's current <see cref="Stream.Position"/>,
+        /// which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
@@ -561,7 +574,8 @@ namespace ExcelReader.Core.Reader
         /// Asynchronously opens a workbook of a known format from an existing stream.
         /// </summary>
         /// <param name="stream">The stream containing the workbook data. Must be seekable when
-        /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
+        /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>. Reading starts at the stream's current <see cref="Stream.Position"/>,
+        /// which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
@@ -621,45 +635,89 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
-        /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static ExcelFileFormat DetectFileFormat(Stream stream)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            ExcelFileFormat format = DetectSeekable(stream, leaveOpen: true, ExcelReaderOptions.Default, out ZipIndex? zip);
-            zip?.Dispose();
-            return format;
+            long start = stream.CanSeek ? stream.Position : 0;
+            bool leaveOpen = true;
+            Stream view = RebaseToPosition(stream, ref leaveOpen);
+            try
+            {
+                ExcelFileFormat format = DetectSeekable(view, leaveOpen: true, ExcelReaderOptions.Default, out ZipIndex? zip);
+                zip?.Dispose();
+                return format;
+            }
+            catch (InvalidDataException)
+            {
+                return ExcelFileFormat.Unknown;
+            }
+            finally
+            {
+                if (!ReferenceEquals(view, stream))
+                {
+                    view.Dispose();
+                    stream.Position = start;
+                }
+            }
         }
         /// <summary>
         /// Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from an in-memory buffer's signature, without consuming it.
         /// </summary>
         /// <param name="data">A buffer containing the workbook data.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
         public static ExcelFileFormat DetectFileFormat(ReadOnlyMemory<byte> data)
         {
-            var format = ClassifyMemory(data, ExcelReaderOptions.Default, out ZipIndex? memZip);
-            memZip?.Dispose();
-            return format;
+            try
+            {
+                var format = ClassifyMemory(data, ExcelReaderOptions.Default, out ZipIndex? memZip);
+                memZip?.Dispose();
+                return format;
+            }
+            catch (InvalidDataException)
+            {
+                return ExcelFileFormat.Unknown;
+            }
         }
 
         /// <summary>Asynchronously detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
-        /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection.</param>
+        /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="ct">A token to cancel the detection operation.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static async ValueTask<ExcelFileFormat> DetectFileFormatAsync(Stream stream, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            (ExcelFileFormat format, ZipIndex? zip) = await DetectSeekableAsync(stream, leaveOpen: true, ExcelReaderOptions.Default, ct).ConfigureAwait(false);
-            zip?.Dispose();
-            return format;
+            long start = stream.CanSeek ? stream.Position : 0;
+            bool leaveOpen = true;
+            Stream view = RebaseToPosition(stream, ref leaveOpen);
+            try
+            {
+                (ExcelFileFormat format, ZipIndex? zip) = await DetectSeekableAsync(view, leaveOpen: true, ExcelReaderOptions.Default, ct).ConfigureAwait(false);
+                zip?.Dispose();
+                return format;
+            }
+            catch (InvalidDataException)
+            {
+                return ExcelFileFormat.Unknown;
+            }
+            finally
+            {
+                if (!ReferenceEquals(view, stream))
+                {
+                    await view.DisposeAsync().ConfigureAwait(false);
+                    stream.Position = start;
+                }
+            }
         }
 
         private static IExcelWorkbook OpenSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions? options)
         {
+            stream = RebaseToPosition(stream, ref leaveOpen);
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             ExcelFileFormat format;
             ZipIndex? zip;
@@ -700,6 +758,7 @@ namespace ExcelReader.Core.Reader
 
         private static async ValueTask<IExcelWorkbook> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
+            stream = RebaseToPosition(stream, ref leaveOpen);
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             ExcelFileFormat format;
             ZipIndex? zip;
@@ -779,7 +838,11 @@ namespace ExcelReader.Core.Reader
 
         private static ExcelFileFormat ClassifyZip(ZipIndex zip)
         {
-            return zip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
+            if (zip.TryGetEntry("xl/workbook.bin"u8, out _))
+            {
+                return ExcelFileFormat.Xlsb;
+            }
+            return zip.TryGetEntry("xl/workbook.xml"u8, out _) ? ExcelFileFormat.Xlsx : ExcelFileFormat.Unknown;
         }
 
         [SkipLocalsInit]
@@ -813,7 +876,13 @@ namespace ExcelReader.Core.Reader
                     stream.Position = start;
                 }
             }
-            return ClassifyZip(zip);
+            ExcelFileFormat zipFormat = ClassifyZip(zip);
+            if (zipFormat is ExcelFileFormat.Unknown)
+            {
+                zip.Dispose();
+                zip = null;
+            }
+            return zipFormat;
         }
 
         private static async ValueTask<(ExcelFileFormat Format, ZipIndex? Zip)> DetectSeekableAsync(
@@ -859,18 +928,37 @@ namespace ExcelReader.Core.Reader
                     stream.Position = start;
                 }
             }
-            return (ClassifyZip(zip), zip);
+            ExcelFileFormat zipFormat = ClassifyZip(zip);
+            if (zipFormat is ExcelFileFormat.Unknown)
+            {
+                zip.Dispose();
+                return (zipFormat, null);
+            }
+            return (zipFormat, zip);
         }
 
         private static bool TryDecryptCfbStream(Stream stream, bool leaveOpen, ExcelReaderOptions? options, out Stream decrypted)
         {
             if (options?.Password is not null && stream.CanSeek && HasCfbSignature(stream))
             {
-                decrypted = EncryptedPackageOpener.Decrypt(stream, leaveOpen, options);
+                Stream rebased = RebaseToPosition(stream, ref leaveOpen);
+                decrypted = EncryptedPackageOpener.Decrypt(rebased, leaveOpen, options);
                 return true;
             }
             decrypted = stream;
             return false;
+        }
+
+        private static Stream RebaseToPosition(Stream stream, ref bool leaveOpen)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            if (!stream.CanSeek || stream.Position == 0)
+            {
+                return stream;
+            }
+            Stream view = new SourceStream(ByteSource.FromStreamAtPosition(stream, leaveOpen));
+            leaveOpen = false;
+            return view;
         }
 
         private static bool HasCfbSignature(Stream stream)

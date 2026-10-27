@@ -18,6 +18,10 @@ namespace ExcelReader.Tests.Native
             internal string? Error;
             internal long ShortAt = -1;
             internal int FailOffThread;
+            internal ManualResetEventSlim? Gate;
+            internal ManualResetEventSlim? Blocked;
+            internal int InFlight;
+            internal int ReleasedDuringRead;
         }
 
         private sealed class Pinned(TestSource source) : IDisposable
@@ -47,6 +51,24 @@ namespace ExcelReader.Tests.Native
         {
             TestSource source = (TestSource)GCHandle.FromIntPtr((nint)userData).Target!;
             Interlocked.Increment(ref source.Reads);
+            Interlocked.Increment(ref source.InFlight);
+            try
+            {
+                if (source.Gate is { } gate)
+                {
+                    source.Blocked?.Set();
+                    gate.Wait();
+                }
+                return CopyAt(source, offset, buffer, length);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref source.InFlight);
+            }
+        }
+
+        private static long CopyAt(TestSource source, long offset, byte* buffer, long length)
+        {
             if (source.Error is string message && Environment.CurrentManagedThreadId != source.FailOffThread)
             {
                 SourceErrors.Set(message);
@@ -65,6 +87,10 @@ namespace ExcelReader.Tests.Native
         private static void Release(void* userData)
         {
             TestSource source = (TestSource)GCHandle.FromIntPtr((nint)userData).Target!;
+            if (Volatile.Read(ref source.InFlight) != 0)
+            {
+                Interlocked.Increment(ref source.ReleasedDuringRead);
+            }
             Interlocked.Increment(ref source.Releases);
         }
 
@@ -177,6 +203,77 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(0, test.Releases);
             cursor!.Dispose();
             Assert.Equal(1, test.Releases);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Closing_The_Workbook_Mid_Read_Never_Releases_The_Source_Under_A_Read(bool prefetch)
+        {
+            byte[] bytes = BuildPrefetchedXlsx();
+            using ManualResetEventSlim gate = new(false);
+            using ManualResetEventSlim blocked = new(false);
+            TestSource test = new(bytes);
+            using Pinned pinned = new(test);
+            NativeOpenOptionsRaw options = Options() with { PrefetchDecompression = prefetch ? 2 : 1, SourceBlockSize = -1 };
+            Assert.Equal(NativeStatus.Ok, Open(pinned, NativeFormat.Xlsx, out NativeHandle? handle, options));
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenRows(handle, 0, out NativeRowCursor? cursor));
+            test.Gate = gate;
+            test.Blocked = blocked;
+
+            Thread reader = new(() =>
+            {
+                while (ReadApi.NextRowView(cursor, out _) == NativeStatus.Ok)
+                {
+                }
+            });
+            reader.Start();
+            Assert.True(blocked.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+            Assert.Equal(NativeStatus.Ok, ReadApi.Close(handle));
+            Thread.Sleep(200);
+            Assert.Equal(0, Volatile.Read(ref test.Releases));
+
+            test.Gate = null;
+            gate.Set();
+            Assert.True(reader.Join(TimeSpan.FromSeconds(30)));
+            ReadApi.CloseRows(cursor);
+            Assert.Equal(1, test.Releases);
+            Assert.Equal(0, test.ReleasedDuringRead);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(4)]
+        public void Closing_The_Workbook_Mid_Parse_Never_Releases_The_Source_Under_A_Read(int degreeOfParallelism)
+        {
+            byte[] bytes = BuildPrefetchedXlsx();
+            using ManualResetEventSlim gate = new(false);
+            using ManualResetEventSlim blocked = new(false);
+            TestSource test = new(bytes);
+            using Pinned pinned = new(test);
+            Assert.Equal(NativeStatus.Ok, Open(pinned, NativeFormat.Xlsx, out NativeHandle? handle, Options() with { SourceBlockSize = -1 }));
+            test.Gate = gate;
+            test.Blocked = blocked;
+            NativeColumnSpec[] specs = [new() { Names = [], Index = 0, Type = NativeColumnType.String }];
+
+            int status = int.MinValue;
+            Thread parser = new(() =>
+            {
+                status = ExcelReader.Native.Typed.TypedApi.ParseTypedTable(handle, 0, specs, 0, degreeOfParallelism, out NativeTable table);
+                ExcelReader.Native.Typed.TypedApi.FreeTable(ref table);
+            });
+            parser.Start();
+            Assert.True(blocked.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+            Assert.Equal(NativeStatus.Ok, ReadApi.Close(handle));
+            Thread.Sleep(200);
+            Assert.Equal(0, Volatile.Read(ref test.Releases));
+
+            test.Gate = null;
+            gate.Set();
+            Assert.True(parser.Join(TimeSpan.FromSeconds(30)));
+            Assert.True(status is NativeStatus.Ok or NativeStatus.Error, $"status {status}");
+            Assert.Equal(1, test.Releases);
+            Assert.Equal(0, test.ReleasedDuringRead);
         }
 
         [Fact]

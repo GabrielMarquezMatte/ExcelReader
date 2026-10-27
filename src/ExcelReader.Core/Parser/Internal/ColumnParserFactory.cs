@@ -120,7 +120,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (propType == typeof(TimeOnly))
             {
-                return BuildValue<T, TimeOnly>(prop, ReadTimeOnlyAuto);
+                return BuildValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
             }
             if (propType.IsEnum)
             {
@@ -162,7 +162,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (innerType == typeof(TimeOnly))
             {
-                return BuildNullableValue<T, TimeOnly>(prop, ReadTimeOnlyAuto);
+                return BuildNullableValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
             }
             if (innerType.IsEnum)
             {
@@ -278,6 +278,17 @@ namespace ExcelReader.Core.Parser.Internal
             return ReadTimeOnly(in cell, in context, out value) || ReadTextTimeOnly(in cell, in context, out value);
         }
 
+        // CSV text has no serial form: digits alone are not a time, so a serial counts only with a fraction.
+        private static bool ReadCsvTimeOnly(in Cell cell, in ExcelRowContext context, out TimeOnly value)
+        {
+            if (cell.TryGetDouble(out double serial) && double.IsFinite(serial) && serial != Math.Floor(serial))
+            {
+                value = TimeOnlyFromSerial(serial);
+                return true;
+            }
+            return ReadTextTimeOnly(in cell, in context, out value);
+        }
+
         internal static bool ReadTextDateTime(in Cell cell, in ExcelRowContext context, out DateTime value)
         {
             return TryParseDateTimeText(in cell, context.FormatProvider, out value);
@@ -331,6 +342,11 @@ namespace ExcelReader.Core.Parser.Internal
             return textDates ? ReadTextDateOnly : ReadDateOnly;
         }
 
+        private static CellReader<TimeOnly> TimeOnlyReader(bool textDates)
+        {
+            return textDates ? ReadCsvTimeOnly : ReadTimeOnlyAuto;
+        }
+
         private static TimeOnly TimeOnlyFromSerial(double serial)
         {
             double fraction = serial - Math.Floor(serial);
@@ -350,7 +366,7 @@ namespace ExcelReader.Core.Parser.Internal
             ReadOnlySpan<char> chars = Utf8Text.Decode(utf8, stack, out char[]? rented);
             try
             {
-                return DateTime.TryParse(chars, provider, DateTimeStyles.None, out value);
+                return DateTime.TryParse(chars, provider, DateTimeStyles.AdjustToUniversal, out value);
             }
             finally
             {

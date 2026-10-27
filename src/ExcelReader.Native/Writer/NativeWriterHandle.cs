@@ -41,8 +41,14 @@ namespace ExcelReader.Native.Writer
 
         public void Dispose()
         {
-            Dispose(true);
-            StagedFile?.Dispose();
+            try
+            {
+                Dispose(true);
+            }
+            finally
+            {
+                StagedFile?.Dispose();
+            }
             GC.SuppressFinalize(this);
         }
 
@@ -87,7 +93,7 @@ namespace ExcelReader.Native.Writer
         private TSheet? _sheet;
         private TRow? _row;
         private bool _closed;
-        private Exception? _closeFailure;
+        private Exception? _failure;
 
         internal NativeWriterHandle(IWorkbookWriter<TSheet> workbook, ParallelWriteOptions? parallel,
             Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
@@ -200,15 +206,23 @@ namespace ExcelReader.Native.Writer
                 throw new NotSupportedException("Excel tables can only be written to XLSX or XLSB.");
             }
             _sheet = _workbook.AddSheet(name);
-            WriteApi.WriteSheetBody(_workbook, _sheet, specs, table, hasHeader, excelTable, _parallel, _writeParallel);
-            EndSheet();
+            try
+            {
+                WriteApi.WriteSheetBody(_workbook, _sheet, specs, table, hasHeader, excelTable, _parallel, _writeParallel);
+                EndSheet();
+            }
+            catch (Exception exception)
+            {
+                _failure = exception;
+                throw;
+            }
         }
 
         internal override void Close()
         {
-            if (_closeFailure is not null)
+            if (_failure is not null)
             {
-                throw new InvalidOperationException($"The workbook failed to finish and has no output: {_closeFailure.Message}", _closeFailure);
+                throw new InvalidOperationException($"The workbook has no output because an earlier call failed: {_failure.Message}", _failure);
             }
             if (_closed)
             {
@@ -229,7 +243,7 @@ namespace ExcelReader.Native.Writer
             }
             catch (Exception exception)
             {
-                _closeFailure = exception;
+                _failure = exception;
                 throw;
             }
         }

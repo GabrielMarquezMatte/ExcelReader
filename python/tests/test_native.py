@@ -1,3 +1,4 @@
+import pytest
 import ctypes
 import re
 from pathlib import Path
@@ -46,6 +47,7 @@ def test_exported_functions_are_present():
         "xl_typed_reader_close",
         "xl_parse_arrow_stream",
         "xl_write_typed",
+        "xl_abort_write_handle",
         "xl_last_error",
         "xl_last_error_ptr",
         "xl_abi_version",
@@ -282,3 +284,14 @@ def test_abi_version_matches_the_header():
 
     assert _native.XL_ABI_VERSION == header_version
     assert _native.load_library().xl_abi_version() == header_version
+
+
+class _Oversized:
+    def __len__(self):
+        return 2**31
+
+
+def test_int32_len_rejects_a_length_the_abi_would_wrap():
+    assert _native.int32_len(b"abc") == 3
+    with pytest.raises(ValueError, match="int32"):
+        _native.int32_len(_Oversized())

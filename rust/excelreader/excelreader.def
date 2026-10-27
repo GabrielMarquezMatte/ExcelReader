@@ -54,6 +54,7 @@ EXPORTS
     xl_write_sheet
     xl_close_write_handle
     xl_write_handle_bytes
+    xl_abort_write_handle
     xl_csv_aggregate_file
     xl_csv_aggregate_memory
     xl_aggregate

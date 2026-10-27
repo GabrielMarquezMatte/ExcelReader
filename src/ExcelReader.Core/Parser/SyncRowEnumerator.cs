@@ -1,6 +1,7 @@
 using System.Collections;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 
@@ -42,7 +43,24 @@ namespace ExcelReader.Core.Parser
         /// </remarks>
         public T Current => Project();
 
-        object? IEnumerator.Current => throw new NotSupportedException();
+        object? IEnumerator.Current => typeof(T).IsByRefLike ? throw new NotSupportedException() : Box(Project());
+
+        private sealed class RawData
+        {
+            public byte Data;
+        }
+
+        // T allows ref struct, so the language refuses (object)value; the byref-like case is excluded by the caller.
+        private static object? Box(T value)
+        {
+            if (!typeof(T).IsValueType)
+            {
+                return Unsafe.As<T, object>(ref value);
+            }
+            object box = RuntimeHelpers.GetUninitializedObject(typeof(T));
+            Unsafe.As<byte, T>(ref Unsafe.As<RawData>(box).Data) = value;
+            return box;
+        }
 
         /// <inheritdoc/>
         public bool MoveNext()
