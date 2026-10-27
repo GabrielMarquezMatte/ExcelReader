@@ -433,6 +433,31 @@ namespace ExcelReader.Tests.Writer.Xls
         }
 
         [Fact]
+        public async Task ContinuationSheetKeepsColumnStyles()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            int styleId = 0;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                styleId = wb.AddStyle(new Core.Writer.CellStyle { NumberFormat = "0.00" });
+                var s = wb.AddSheet("S");
+                s.SetColumnStyle(0, styleId);
+                s.SetColumnWidth(0, 30);
+                for (int i = 0; i < 65537; i++)
+                {
+                    using var r = s.StartRow();
+                    r.Write(i);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.Sheets[1].GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(XlsGlobals.CustomXf(styleId), e.Current[0].StyleIndex);
+        }
+
+        [Fact]
         public async Task EndThrowsWhenLastRowStillActive()
         {
             var ms = new MemoryStream();
