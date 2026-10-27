@@ -78,6 +78,33 @@ namespace ExcelReader.Tests.Generator
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         }
 
+        [Theory]
+        [InlineData("partial interface", "interface")]
+        [InlineData("partial struct", "struct")]
+        [InlineData("partial record", "record")]
+        [InlineData("partial record struct", "record struct")]
+        public void ModelNestedInContainerKindCompiles(string declaration, string keyword)
+        {
+            string source = $$"""
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.ContainerKinds
+                {
+                    public {{declaration}} Container{{(keyword.StartsWith("record", StringComparison.Ordinal) ? "()" : "")}}
+                    {
+                        [ExcelSerializable]
+                        public partial class Model
+                        {
+                            public string Name { get; set; } = "";
+                        }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            Assert.Empty(result.Emit().Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+        }
+
         [Fact]
         public void NonPartialContainingTypeReportsEXR002()
         {

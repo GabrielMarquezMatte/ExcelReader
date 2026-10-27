@@ -551,6 +551,10 @@ namespace ExcelReader.Generator
                 }
                 return symbol.IsRecord ? "partial record struct" : "partial struct";
             }
+            if (symbol.TypeKind == TypeKind.Interface)
+            {
+                return "partial interface";
+            }
             return symbol.IsRecord ? "partial record" : "partial class";
         }
 
