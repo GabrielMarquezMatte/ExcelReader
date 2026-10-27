@@ -219,7 +219,7 @@ jobs:
         run: chmod +x python/src/excelreader/_lib/*
 
       - name: Install the Python package
-        run: pip install -e "python[dev]" ${{ matrix.os == 'ubuntu-latest' && 'pytest-cov' || '' }}
+        run: pip install -e "python[dev]" ${{ matrix.os == 'ubuntu-latest' && 'pytest-cov pyarrow pandas polars' || '' }}
 
       - name: Run the Python tests
         run: >-
