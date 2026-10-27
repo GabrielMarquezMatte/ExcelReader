@@ -327,7 +327,16 @@ namespace ExcelReader.Core.Parser
 
         private void BuildIndexColumnMap()
         {
-            ColumnBinding<T>[] bindings = _typeInfo.IndexBindings;
+            CsvBoundColumnMap<T> map = BuildIndexBoundMap(_typeInfo);
+            _fieldParsers = map.FieldParsers;
+            _fieldNames = map.FieldNames;
+            _fieldRequired = map.FieldRequired;
+            _requiredFields = map.RequiredFields;
+        }
+
+        internal static CsvBoundColumnMap<T> BuildIndexBoundMap(TypeMapInfo<T> typeInfo)
+        {
+            ColumnBinding<T>[] bindings = typeInfo.IndexBindings;
             int width = bindings.Length == 0 ? 0 : bindings[^1].Column + 1;
             var parsers = new ColumnParser<T>[width];
             var names = new string?[width];
@@ -343,10 +352,7 @@ namespace ExcelReader.Core.Parser
                     (requiredFields ??= []).Add((binding.Column, binding.Name));
                 }
             }
-            _fieldParsers = parsers;
-            _fieldNames = names;
-            _fieldRequired = required;
-            _requiredFields = requiredFields is null ? [] : [.. requiredFields];
+            return new CsvBoundColumnMap<T>(parsers, names, required, requiredFields is null ? [] : [.. requiredFields]);
         }
 
         private readonly void ParseCurrentRow(CsvReader.Enumerator rows, ref T model)
