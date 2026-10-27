@@ -180,7 +180,11 @@ namespace ExcelReader.Core.Crypto
 
             byte[] verifierInput = DecryptNoPadding(p.EncryptedVerifierHashInput, key1, ivSalt);
             byte[] verifierValue = DecryptNoPadding(p.EncryptedVerifierHashValue, key2, ivSalt);
-            byte[] actual = HashOne(p.Hash, verifierInput);
+            if (verifierInput.Length < p.SaltSize)
+            {
+                throw new InvalidDataException("The encryption descriptor's encryptedVerifierHashInput is shorter than saltSize.");
+            }
+            byte[] actual = HashOne(p.Hash, verifierInput.AsSpan(0, p.SaltSize));
 
             if (verifierValue.Length < actual.Length
                 || !CryptographicOperations.FixedTimeEquals(actual, verifierValue.AsSpan(0, actual.Length)))
