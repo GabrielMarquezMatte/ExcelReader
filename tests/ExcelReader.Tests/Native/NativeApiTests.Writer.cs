@@ -184,7 +184,7 @@ namespace ExcelReader.Tests.Native
                 Assert.True(rows.MoveNext());
                 Assert.Equal(CellType.Date, rows.Current[0].Type);
                 Assert.Equal(CellType.Date, rows.Current[2].Type);
-                Assert.Equal(CellType.Number, rows.Current[1].Type);
+                Assert.Equal(CellType.Date, rows.Current[1].Type);
             }
 
             using ZipArchive archive = ZipFile.OpenRead(path);
