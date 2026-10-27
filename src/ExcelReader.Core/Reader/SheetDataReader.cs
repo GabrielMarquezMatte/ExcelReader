@@ -219,6 +219,14 @@ namespace ExcelReader.Core.Reader
             };
         }
 
+        private static readonly object BoxedTrue = true;
+        private static readonly object BoxedFalse = false;
+
+        private static object Boxed(bool value)
+        {
+            return value ? BoxedTrue : BoxedFalse;
+        }
+
         /// <inheritdoc/>
         public object GetValue(int i)
         {
@@ -228,7 +236,7 @@ namespace ExcelReader.Core.Reader
                 CellType.Empty => DBNull.Value,
                 CellType.Number => cell.TryGetDouble(out double d) ? d : cell.GetString(),
                 CellType.Date => cell.TryGetDateTime(_isDate1904, out DateTime dt) ? dt : cell.GetString(),
-                CellType.Boolean => ExcelCellReaders.Bool(in cell, default, out bool b) ? b : cell.GetString(),
+                CellType.Boolean => ExcelCellReaders.Bool(in cell, default, out bool b) ? Boxed(b) : cell.GetString(),
                 _ => cell.GetString(),
             };
         }
