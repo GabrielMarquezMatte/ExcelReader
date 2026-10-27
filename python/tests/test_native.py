@@ -47,6 +47,7 @@ def test_exported_functions_are_present():
         "xl_typed_reader_close",
         "xl_parse_arrow_stream",
         "xl_write_typed",
+        "xl_abort_write_handle",
         "xl_last_error",
         "xl_last_error_ptr",
         "xl_abi_version",

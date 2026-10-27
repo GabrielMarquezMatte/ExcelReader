@@ -656,6 +656,9 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_write_handle_bytes.argtypes = [ctypes.c_void_p, ctypes.POINTER(NativeBuffer)]
     lib.xl_write_handle_bytes.restype = ctypes.c_int32
 
+    lib.xl_abort_write_handle.argtypes = [ctypes.c_void_p]
+    lib.xl_abort_write_handle.restype = ctypes.c_int32
+
     lib.xl_free_buffer.argtypes = [ctypes.POINTER(NativeBuffer)]
     lib.xl_free_buffer.restype = None
 
