@@ -137,7 +137,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     {
                         case HeadKind.End:
                             _reachedEnd = true;
-                            return false;
+                            return Finish();
                         case HeadKind.Row:
                             if (!BeginRow())
                             {
@@ -193,7 +193,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     switch (ClassifyHead())
                     {
                         case HeadKind.End:
-                            return new ValueTask<bool>(false);
+                            return FinishAsync();
                         case HeadKind.Row:
                             return ReadRowAsync();
                         default:
