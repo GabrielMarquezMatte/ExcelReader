@@ -1055,6 +1055,31 @@ namespace ExcelReader.Tests.Writer
             Assert.Contains("a_x0001_b _x005F_x0041_", xml, StringComparison.Ordinal);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task WriterEscapesLoneSurrogatesAndKeepsPairs(bool sharedStrings)
+        {
+            var ms = new MemoryStream();
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, new XlsxWriterOptions { UseSharedStrings = sharedStrings }))
+            {
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                {
+                    row.Write("a\uD800b\uDC00 😀&\uD83D");
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await wb.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
+            ms.Position = 0;
+            using var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true);
+            string part = sharedStrings ? "xl/sharedStrings.xml" : "xl/worksheets/sheet1.xml";
+            using var text = new StreamReader(zip.GetEntry(part)!.Open(), Encoding.UTF8);
+            string xml = await text.ReadToEndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            Assert.Contains("a_xD800_b_xDC00_ \U0001F600&amp;_xD83D_", xml, StringComparison.Ordinal);
+        }
+
         [Fact]
         public async Task WriterRejectsColumnsBeyondXfd()
         {
