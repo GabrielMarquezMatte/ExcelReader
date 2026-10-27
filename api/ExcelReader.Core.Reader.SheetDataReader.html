@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Reader_SheetDataReader" data-uid="ExcelReader.Core.Reader.SheetDataReader" class="text-break">
-Class SheetDataReader  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L31"><i class="bi bi-code-slash"></i></a>
+Class SheetDataReader  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L32"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -157,8 +157,9 @@ can feed <code>SqlBulkCopy</code>, <code>DataTable.Load</code>, Dapper, or any o
   <div class="markdown level0 remarks"><p>The column shape is fixed once, at construction time, from the header row (or from the first data
 row when <a class="xref" href="ExcelReader.Core.Reader.SheetDataReaderOptions.html#ExcelReader_Core_Reader_SheetDataReaderOptions_HeaderRow">HeaderRow</a> is 0) — it never grows as later, wider rows come in. There is no schema
 pass, so <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_GetFieldType_System_Int32_">GetFieldType(int)</a>, <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_GetValue_System_Int32_">GetValue(int)</a>, and the typed getters all read the
-<em>current</em> row's own cell type; a consumer that builds a schema from the first
-<a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_Read">Read()</a> (e.g. <code>DataTable.Load</code>) locks in that row's types for the whole load.</p>
+<em>current</em> row's own cell type; a consumer that builds a schema (e.g. <code>DataTable.Load</code>,
+which calls <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_GetSchemaTable">GetSchemaTable()</a> before the first <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_Read">Read()</a>) locks in the first data
+row's types for the whole load; the constructor reads that row ahead for this.</p>
 <p>
 One <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html">SheetDataReader</a> reads one sheet: <a class="xref" href="ExcelReader.Core.Reader.SheetDataReader.html#ExcelReader_Core_Reader_SheetDataReader_NextResult">NextResult()</a> always returns
 <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>. To read every sheet, construct one per <a class="xref" href="ExcelReader.Core.Reader.IExcelWorkbook.html#ExcelReader_Core_Reader_IExcelWorkbook_SheetAt_System_Int32_">SheetAt(int)</a>.
@@ -178,7 +179,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader__ctor_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Core_Reader_SheetDataReaderOptions_" data-uid="ExcelReader.Core.Reader.SheetDataReader.#ctor(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Core.Reader.SheetDataReaderOptions)">
   SheetDataReader(IExcelSheet, SheetDataReaderOptions?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L54"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Wraps <code class="paramref">sheet</code>.</p>
@@ -230,7 +231,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_Depth" data-uid="ExcelReader.Core.Reader.SheetDataReader.Depth">
   Depth
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L132"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets a value indicating the depth of nesting for the current row.</p>
@@ -263,7 +264,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_FieldCount" data-uid="ExcelReader.Core.Reader.SheetDataReader.FieldCount">
   FieldCount
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L129"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the number of columns in the current row.</p>
@@ -296,7 +297,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_IsClosed" data-uid="ExcelReader.Core.Reader.SheetDataReader.IsClosed">
   IsClosed
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L135"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets a value indicating whether the data reader is closed.</p>
@@ -329,7 +330,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_Item_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Item(System.Int32)">
   this[int]
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L141"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the column located at the specified index.</p>
@@ -374,7 +375,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_Item_System_String_" data-uid="ExcelReader.Core.Reader.SheetDataReader.Item(System.String)">
   this[string]
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L144"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the column with the specified name.</p>
@@ -419,7 +420,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_RecordsAffected" data-uid="ExcelReader.Core.Reader.SheetDataReader.RecordsAffected">
   RecordsAffected
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L138"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the number of rows changed, inserted, or deleted by execution of the SQL statement.</p>
@@ -456,7 +457,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_Close" data-uid="ExcelReader.Core.Reader.SheetDataReader.Close">
   Close()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L166"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Closes the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> Object.</p>
@@ -483,7 +484,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_Dispose" data-uid="ExcelReader.Core.Reader.SheetDataReader.Dispose">
   Dispose()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L172"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
@@ -510,7 +511,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetBoolean_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetBoolean(System.Int32)">
   GetBoolean(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L261"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the value of the specified column as a Boolean.</p>
@@ -555,7 +556,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetByte_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetByte(System.Int32)">
   GetByte(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L279"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the 8-bit unsigned integer value of the specified column.</p>
@@ -600,7 +601,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetBytes_System_Int32_System_Int64_System_Byte___System_Int32_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetBytes(System.Int32,System.Int64,System.Byte[],System.Int32,System.Int32)">
   GetBytes(int, long, byte[]?, int, int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L337"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads a stream of bytes from the specified column offset into the buffer as an array, starting at the given buffer offset.</p>
@@ -657,7 +658,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetChar_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetChar(System.Int32)">
   GetChar(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L330"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the character value of the specified column.</p>
@@ -702,7 +703,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetChars_System_Int32_System_Int64_System_Char___System_Int32_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetChars(System.Int32,System.Int64,System.Char[],System.Int32,System.Int32)">
   GetChars(int, long, char[]?, int, int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L370"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads a stream of characters from the specified column offset into the buffer as an array, starting at the given buffer offset.</p>
@@ -759,7 +760,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetData_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetData(System.Int32)">
   GetData(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L372"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L387"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> for the specified column ordinal.</p>
@@ -804,7 +805,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDataTypeName_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDataTypeName(System.Int32)">
   GetDataTypeName(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L199"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the data type information for the specified field.</p>
@@ -849,7 +850,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDateTime_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDateTime(System.Int32)">
   GetDateTime(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L270"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the date and time data value of the specified field.</p>
@@ -894,7 +895,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDecimal_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDecimal(System.Int32)">
   GetDecimal(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L315"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the fixed-position numeric value of the specified field.</p>
@@ -939,7 +940,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetDouble_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetDouble(System.Int32)">
   GetDouble(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L309"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the double-precision floating point number of the specified field.</p>
@@ -984,7 +985,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetFieldType_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetFieldType(System.Int32)">
   GetFieldType(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L205"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.type">Type</a> information corresponding to the type of <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> that would be returned from <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatarecord.getvalue">GetValue(int)</a>.</p>
@@ -1029,7 +1030,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetFloat_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetFloat(System.Int32)">
   GetFloat(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L303"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the single-precision floating point number of the specified field.</p>
@@ -1074,7 +1075,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetGuid_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetGuid(System.Int32)">
   GetGuid(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L306"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L321"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns the GUID value of the specified field.</p>
@@ -1119,7 +1120,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetInt16_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt16(System.Int32)">
   GetInt16(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L285"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the 16-bit signed integer value of the specified field.</p>
@@ -1164,7 +1165,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetInt32_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt32(System.Int32)">
   GetInt32(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L291"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the 32-bit signed integer value of the specified field.</p>
@@ -1209,7 +1210,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetInt64_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetInt64(System.Int32)">
   GetInt64(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L297"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the 64-bit signed integer value of the specified field.</p>
@@ -1254,7 +1255,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetName_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetName(System.Int32)">
   GetName(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L183"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the name for the field to find.</p>
@@ -1299,7 +1300,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetOrdinal_System_String_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetOrdinal(System.String)">
   GetOrdinal(string)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L189"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Return the index of the named field.</p>
@@ -1338,7 +1339,7 @@ from — the caller still owns that.
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetSchemaTable" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetSchemaTable">
   GetSchemaTable()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L378"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L393"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns a <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.datatable">DataTable</a> that describes the column metadata of the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a>.</p>
@@ -1379,7 +1380,7 @@ public DataTable GetSchemaTable()</code></pre>
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetString_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetString(System.Int32)">
   GetString(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L255"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the string value of the specified field.</p>
@@ -1424,7 +1425,7 @@ public DataTable GetSchemaTable()</code></pre>
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetValue_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetValue(System.Int32)">
   GetValue(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L208"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L223"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns the value of the specified field.</p>
@@ -1469,7 +1470,7 @@ public DataTable GetSchemaTable()</code></pre>
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_GetValues_System_Object___" data-uid="ExcelReader.Core.Reader.SheetDataReader.GetValues(System.Object[])">
   GetValues(object[])
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L237"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Populates an array of objects with the column values of the current record.</p>
@@ -1508,7 +1509,7 @@ public DataTable GetSchemaTable()</code></pre>
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_IsDBNull_System_Int32_" data-uid="ExcelReader.Core.Reader.SheetDataReader.IsDBNull(System.Int32)">
   IsDBNull(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L249"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Return whether the specified field is set to null.</p>
@@ -1553,7 +1554,7 @@ public DataTable GetSchemaTable()</code></pre>
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_NextResult" data-uid="ExcelReader.Core.Reader.SheetDataReader.NextResult">
   NextResult()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L160"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Always returns <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> — see the type-level remarks.</p>
@@ -1585,7 +1586,7 @@ public DataTable GetSchemaTable()</code></pre>
 
   <h3 id="ExcelReader_Core_Reader_SheetDataReader_Read" data-uid="ExcelReader.Core.Reader.SheetDataReader.Read">
   Read()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L147"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Advances the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.data.idatareader">IDataReader</a> to the next record.</p>
@@ -1618,7 +1619,7 @@ public DataTable GetSchemaTable()</code></pre>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L31" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/SheetDataReader.cs/#L32" class="edit-link">Edit this page</a>
         </div>
 
 

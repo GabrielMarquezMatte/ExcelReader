@@ -393,8 +393,9 @@ per-field dispatch resolved at compile time. That transpose is the only copy it 
 what the ABI's columnar shape costs a row-shaped caller; <code>write_columns</code> pays nothing.</p>
 <h3 id="writing-cell-by-cell">Writing cell by cell</h3>
 <p><code>xl::WriterHandle</code> writes a workbook as calls arrive, sheet by sheet, without holding it in memory
-first. Call <code>finish()</code> at the end: destruction finishes too, but cannot report a failure. Opened over
-a <code>std::vector&lt;std::uint8_t&gt;&amp;</code>, the handle fills the vector when it finishes.</p>
+first. Only <code>finish()</code> commits: destroying a handle that was not finished, an early return or an
+exception included, discards what was written and leaves an existing file at the path as it was, as
+<code>abort()</code> does. Opened over a <code>std::vector&lt;std::uint8_t&gt;&amp;</code>, the handle fills the vector when it finishes.</p>
 <pre><code class="lang-cpp">auto writer = xl::WriterHandle::open(&quot;out.xlsx&quot;).value();
 writer.start_sheet(&quot;Totals&quot;);
 writer.start_row();

@@ -434,8 +434,9 @@ handle.finish()?;
 then per sheet <code>start_sheet..end_sheet</code>, each containing <code>start_row..end_row</code> with one <code>write_*</code>
 call per cell (<code>None</code> writes a blank cell), left to right, then <code>finish</code>. A call out of order
 returns <code>Err</code> rather than corrupting output. A handle from <code>new</code> writes the whole workbook to its
-writer once, in <code>finish</code>. Dropping a handle without finishing it closes it on a best-effort basis,
-discarding any error, and writes nothing to a writer.</p>
+writer once, in <code>finish</code>. Only <code>finish</code> commits: dropping a handle without finishing it (an early
+<code>?</code> return, a panic) discards what was written, leaves an existing file at the path as it was, and
+writes nothing to a writer.</p>
 <p>To write several sheets from whole tables, call the handle's <code>write_sheet</code> or <code>write_columns</code> once
 per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
 instead of one per cell, using the handle's <code>degree_of_parallelism</code> and <code>batch_rows</code>. Between sheets

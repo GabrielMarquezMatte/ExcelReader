@@ -395,6 +395,9 @@ with open_writer(&quot;out.xlsx&quot;) as writer:
     writer.write_row([&quot;widget&quot;, 7, datetime.date(2026, 1, 31)])
     writer.end_sheet()
 </code></pre>
+<p>Only a clean exit from the <code>with</code> block, or <code>close()</code>, commits the workbook. An exception inside the
+block, <code>abort()</code>, or a writer collected without being closed discards what was written and leaves an
+existing file at the path as it was.</p>
 <p><code>write_row</code> picks each cell's type from the Python value: <code>str</code>, <code>bool</code>, <code>int</code> (64-bit), <code>float</code>,
 <code>datetime.datetime</code> (an aware one is converted to UTC), <code>datetime.date</code> and <code>datetime.time</code>. A <code>None</code>
 becomes a blank string cell; the tuple <code>(None, ColumnType.I64)</code> writes a blank cell of that type:</p>

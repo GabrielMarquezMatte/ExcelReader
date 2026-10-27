@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Reader_Cell" data-uid="ExcelReader.Core.Reader.Cell" class="text-break">
-Struct Cell  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L14"><i class="bi bi-code-slash"></i></a>
+Struct Cell  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L15"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -145,7 +145,7 @@ buffers. Only valid for the lifetime of the row it was read from — do not stor
 
   <h3 id="ExcelReader_Core_Reader_Cell__ctor_ExcelReader_Core_Reader_CellType_System_ReadOnlySpan_System_Byte__System_Int32_" data-uid="ExcelReader.Core.Reader.Cell.#ctor(ExcelReader.Core.Reader.CellType,System.ReadOnlySpan{System.Byte},System.Int32)">
   Cell(CellType, ReadOnlySpan&lt;byte&gt;, int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L47"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a cell with the given type, text bytes, and optional style index.</p>
@@ -185,7 +185,7 @@ buffers. Only valid for the lifetime of the row it was read from — do not stor
 
   <h3 id="ExcelReader_Core_Reader_Cell_StyleIndex" data-uid="ExcelReader.Core.Reader.Cell.StyleIndex">
   StyleIndex
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L44"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The worksheet's <code>s</code> style index for this cell (0 when absent). Callers can map this to a
@@ -219,7 +219,7 @@ number format to detect dates themselves, since date cells arrive with <a class=
 
   <h3 id="ExcelReader_Core_Reader_Cell_Type" data-uid="ExcelReader.Core.Reader.Cell.Type">
   Type
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L32"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The kind of value this cell holds.</p>
@@ -251,7 +251,7 @@ number format to detect dates themselves, since date cells arrive with <a class=
 
   <h3 id="ExcelReader_Core_Reader_Cell_Value" data-uid="ExcelReader.Core.Reader.Cell.Value">
   Value
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L38"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>The cell's raw UTF-8 text bytes. Empty for binary-numeric cells (XLS Number/RK/Date/Formula);
@@ -289,7 +289,7 @@ use <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Rea
 
   <h3 id="ExcelReader_Core_Reader_Cell_GetString" data-uid="ExcelReader.Core.Reader.Cell.GetString">
   GetString()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L406"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L454"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns the cell's value as a string, allocating a new instance unless it is a repeated
@@ -326,7 +326,7 @@ instead of decoding UTF-8 and allocating again. See the constructor for how the 
 
   <h3 id="ExcelReader_Core_Reader_Cell_ToString" data-uid="ExcelReader.Core.Reader.Cell.ToString">
   ToString()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L436"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L484"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Returns the cell's value as a string. Equivalent to <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_GetString">GetString()</a>.</p>
@@ -358,7 +358,7 @@ instead of decoding UTF-8 and allocating again. See the constructor for how the 
 
   <h3 id="ExcelReader_Core_Reader_Cell_TryFormat_System_Span_System_Byte__System_Int32__" data-uid="ExcelReader.Core.Reader.Cell.TryFormat(System.Span{System.Byte},System.Int32@)">
   TryFormat(Span&lt;byte&gt;, out int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L431"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes the cell's text into <code class="paramref">destination</code> as UTF-8, without allocating;
@@ -398,13 +398,14 @@ returns false if the buffer is too small.</p>
 
   <h3 id="ExcelReader_Core_Reader_Cell_TryGetDateTime_System_Boolean_System_DateTime__" data-uid="ExcelReader.Core.Reader.Cell.TryGetDateTime(System.Boolean,System.DateTime@)">
   TryGetDateTime(bool, out DateTime)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L377"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Interprets the cell's numeric value as an Excel serial date, falling back to an ISO-8601
 text date (<code>yyyy-MM-dd</code>, optionally followed by <code>T</code> or a space, a time, and up to
-seven fractional-second digits) when the value is not numeric. A trailing zone designator is
-not accepted.</p>
+seven fractional-second digits) when the value is not numeric. A trailing zone designator
+(<code>Z</code> or <code>±hh:mm</code>) is accepted and converts the result to UTC (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetimekind#system-datetimekind-utc">Utc</a>);
+without one the clock time is kept as written (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetimekind#system-datetimekind-unspecified">Unspecified</a>).</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -443,7 +444,7 @@ so the epoch offset is applied correctly. Ignored for a text date, which carries
 
   <h3 id="ExcelReader_Core_Reader_Cell_TryGetDouble_System_Double__" data-uid="ExcelReader.Core.Reader.Cell.TryGetDouble(System.Double@)">
   TryGetDouble(out double)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L81"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Reads the cell's value as a <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>; returns false if it isn't numeric.</p>
@@ -484,7 +485,7 @@ format-then-parse round trip. Text-backed cells (XLSX, strings) parse <a class="
 
   <h3 id="ExcelReader_Core_Reader_Cell_TryParse__1_System_IFormatProvider___0__" data-uid="ExcelReader.Core.Reader.Cell.TryParse``1(System.IFormatProvider,``0@)">
   TryParse&lt;T&gt;(IFormatProvider?, out T)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L101"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Parses the cell's value as <code class="typeparamref">T</code>, using the stored binary double directly
@@ -532,7 +533,7 @@ null means <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.g
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L14" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Reader/Cell.cs/#L15" class="edit-link">Edit this page</a>
         </div>
 
 
