@@ -132,6 +132,23 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public async Task AccessorsAfterDisposeThrowObjectDisposed()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Id"], [1], [2]);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            var data = new SheetDataReader(reader.FirstSheet);
+            Assert.True(data.Read());
+            data.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => data.GetValue(0));
+            Assert.Throws<ObjectDisposedException>(() => data.GetInt32(0));
+            Assert.Throws<ObjectDisposedException>(() => data.IsDBNull(0));
+            Assert.Throws<ObjectDisposedException>(() => data.GetFieldType(0));
+            Assert.Throws<ObjectDisposedException>(() => data.Read());
+            Assert.Throws<ObjectDisposedException>(() => data.GetSchemaTable());
+        }
+
+        [Fact]
         public async Task GetOrdinalForUnknownNameThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id"], [1]);

@@ -146,6 +146,7 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public bool Read()
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_pendingConsumed)
             {
                 return _rowAvailable = _rows.MoveNext();
@@ -393,6 +394,7 @@ namespace ExcelReader.Core.Reader
             Justification = "typeof(Type) as the 'DataType' schema column's own type is a metadata literal, never reflected over.")]
         public DataTable GetSchemaTable()
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             var table = new DataTable();
             table.Columns.Add(SchemaTableColumn.ColumnName, typeof(string));
             table.Columns.Add(SchemaTableColumn.ColumnOrdinal, typeof(int));
@@ -447,6 +449,7 @@ namespace ExcelReader.Core.Reader
 
         private Cell CurrentCell(int i)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             ArgumentOutOfRangeException.ThrowIfNegative(i);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(i, FieldCount);
             if (!_rowAvailable)
