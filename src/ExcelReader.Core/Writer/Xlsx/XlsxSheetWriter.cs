@@ -390,6 +390,11 @@ namespace ExcelReader.Core.Writer.Xlsx
             return FaultAsync();
         }
 
+        ValueTask IZipSheet.DrainAsync(CancellationToken ct)
+        {
+            return _stream is WriteOffloadStream offload ? offload.DrainAsync(ct) : ValueTask.CompletedTask;
+        }
+
         private void Release(bool faulted)
         {
             _state = WriterState.Ended;
