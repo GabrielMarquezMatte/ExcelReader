@@ -623,6 +623,22 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void LabelSurrogatePairSplitAcrossContinueDecodesAsOneCharacter()
+        {
+            const string value = "ab\U0001F600cd";
+            byte[] utf16 = System.Text.Encoding.Unicode.GetBytes(value);
+            byte[] label = [.. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(value.Length), 1, .. utf16.AsSpan(0, 6)];
+            byte[] continued = [1, .. utf16.AsSpan(6)];
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(includeEof: true, (0x0204, label), (0x003C, continued));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(value, e.Current[0].GetString());
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public void ShortAndUnknownSheetRecordsAreSkippedSafely()
         {
             using var ms = XlsWorkbookBuilder.BuildRawSheet(
