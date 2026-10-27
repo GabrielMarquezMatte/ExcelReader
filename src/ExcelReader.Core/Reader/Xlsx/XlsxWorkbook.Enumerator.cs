@@ -1096,7 +1096,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     value = default;
                     return false;
                 }
-                value = parsed.DateTime;
+                value = utf8.Contains((byte)':') && utf8.IndexOfAny((byte)'-', (byte)'/') < 0 ? new DateTime(1899, 12, 31) + parsed.TimeOfDay : parsed.DateTime;
                 return value.Year >= 100 || RejectDate(out value);
             }
 
