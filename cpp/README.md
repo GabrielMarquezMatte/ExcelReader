@@ -415,8 +415,9 @@ what the ABI's columnar shape costs a row-shaped caller; `write_columns` pays no
 ### Writing cell by cell
 
 `xl::WriterHandle` writes a workbook as calls arrive, sheet by sheet, without holding it in memory
-first. Call `finish()` at the end: destruction finishes too, but cannot report a failure. Opened over
-a `std::vector<std::uint8_t>&`, the handle fills the vector when it finishes.
+first. Only `finish()` commits: destroying a handle that was not finished, an early return or an
+exception included, discards what was written and leaves an existing file at the path as it was, as
+`abort()` does. Opened over a `std::vector<std::uint8_t>&`, the handle fills the vector when it finishes.
 
 ```cpp
 auto writer = xl::WriterHandle::open("out.xlsx").value();

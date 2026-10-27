@@ -2713,7 +2713,8 @@ namespace xl
     ///
     /// Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and
     /// end_row; then end_sheet. Or one write_columns or write_sheet per whole sheet. A call out of order returns an error rather than corrupting the
-    /// output. Finish with finish(); destruction finishes too, but cannot report a failure.
+    /// output. Only finish() commits: destroying or overwriting a handle that was not finished
+    /// discards what was written and leaves an existing file at the path as it was, as abort() does.
     class WriterHandle
     {
     public:
@@ -2726,14 +2727,14 @@ namespace xl
         {
             if (this != &other)
             {
-                (void)finish();
+                abort();
                 handle_ = std::exchange(other.handle_, nullptr);
                 out_ = std::exchange(other.out_, nullptr);
             }
             return *this;
         }
 
-        ~WriterHandle() { (void)finish(); }
+        ~WriterHandle() { abort(); }
 
         /// @brief Creates a file to write into.
         /// @param path File to create.
@@ -2901,6 +2902,17 @@ namespace xl
                 detail::take_buffer(buffer, *out);
             }
             return status_result(closed);
+        }
+
+        /// @brief Discards what was written and closes the handle, leaving an existing file at the
+        /// path, or the vector, as it was. Every call after finish() or abort() does nothing.
+        void abort() noexcept
+        {
+            out_ = nullptr;
+            if (handle_ != nullptr)
+            {
+                (void)xl_abort_write_handle(std::exchange(handle_, nullptr));
+            }
         }
 
     private:

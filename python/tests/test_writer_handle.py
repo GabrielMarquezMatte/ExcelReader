@@ -128,6 +128,62 @@ def test_closing_twice_is_safe(tmp_path):
     writer.close()
 
 
+def test_an_exception_inside_with_keeps_the_existing_file(tmp_path):
+    path = tmp_path / "out.xlsx"
+    path.write_bytes(b"ORIGINAL")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with open_writer(path) as writer:
+            writer.start_sheet("Data")
+            writer.write_row(["new"])
+            raise RuntimeError("boom")
+
+    assert path.read_bytes() == b"ORIGINAL"
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_an_exception_inside_with_hands_a_stream_nothing():
+    import io
+
+    buffer = io.BytesIO()
+    with pytest.raises(RuntimeError):
+        with open_writer(buffer, "xlsx") as writer:
+            writer.start_sheet("Data")
+            raise RuntimeError("boom")
+
+    assert buffer.getvalue() == b""
+
+
+def test_a_writer_collected_without_close_keeps_the_existing_file(tmp_path):
+    import gc
+
+    path = tmp_path / "out.xlsx"
+    path.write_bytes(b"ORIGINAL")
+    writer = open_writer(path)
+    writer.start_sheet("Data")
+    writer.write_row(["new"])
+    del writer
+    gc.collect()
+
+    assert path.read_bytes() == b"ORIGINAL"
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_abort_discards_the_output_and_closes_the_writer(tmp_path):
+    path = tmp_path / "out.xlsx"
+    path.write_bytes(b"ORIGINAL")
+    writer = open_writer(path)
+    writer.start_sheet("Data")
+
+    writer.abort()
+    writer.abort()
+    writer.close()
+
+    assert path.read_bytes() == b"ORIGINAL"
+    with pytest.raises(ValueError, match="closed"):
+        writer.start_sheet("Again")
+
+
 def test_write_row_infers_every_supported_type(tmp_path):
     path = tmp_path / "inferred.xlsx"
     with open_writer(path) as writer:

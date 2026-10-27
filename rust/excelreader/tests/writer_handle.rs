@@ -209,6 +209,31 @@ fn dropping_an_unfinished_handle_writes_nothing() {
 }
 
 #[test]
+fn dropping_an_unfinished_file_handle_keeps_the_existing_file() {
+    let directory = temp_path("drop-dir");
+    std::fs::create_dir(&directory).expect("the temp directory must be created");
+    let path = directory.join("out.xlsx");
+    std::fs::write(&path, b"ORIGINAL").expect("the existing file must be written");
+
+    let failed: Result<(), excelreader::Error> = (|| {
+        let mut handle = WriterHandle::create(&path, &WriteOptions::new())?;
+        handle.start_sheet("S")?;
+        handle.start_row()?;
+        handle.write_str(Some("new"))?;
+        handle.end_row()?;
+        handle.end_sheet()?;
+        handle.end_sheet()?;
+        handle.finish()
+    })();
+
+    assert!(failed.is_err(), "the second end_sheet must fail");
+    assert_eq!(std::fs::read(&path).expect("the file must still exist"), b"ORIGINAL");
+    let entries = std::fs::read_dir(&directory).expect("the directory must list").count();
+    assert_eq!(entries, 1, "the staged file must be removed");
+    std::fs::remove_dir_all(&directory).ok();
+}
+
+#[test]
 fn writer_handle_rejects_out_of_order_calls() {
     let path = temp_path("order.xlsx");
     {
