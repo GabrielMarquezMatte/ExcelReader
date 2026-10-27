@@ -49,6 +49,19 @@ namespace ExcelReader.Tests.Reader.Csv
             Assert.Equal((byte)';', dialect.Delimiter);
         }
 
+        [Theory]
+        [InlineData("a;b;c")]
+        [InlineData("a|b|c")]
+        [InlineData("\"x;y\";b;c")]
+        public void OneLineWithoutATrailingNewlineStillDetectsItsDelimiter(string text)
+        {
+            byte expected = (byte)text[^2];
+
+            Assert.Equal(expected, CsvSniffer.Detect(Bytes(text)).Delimiter);
+            using var stream = new MemoryStream(Bytes(text));
+            Assert.Equal(expected, CsvSniffer.Detect(stream).Delimiter);
+        }
+
         [Fact]
         public void SingleColumnFileReturnsDefault()
         {
@@ -134,14 +147,6 @@ namespace ExcelReader.Tests.Reader.Csv
             byte[] sample = Bytes($"a{d}b{d}c\n");
             CsvDialect dialect = CsvSniffer.Detect(sample);
             Assert.Equal(delimiter, dialect.Delimiter);
-        }
-
-        [Fact]
-        public void SingleLineWithoutTrailingNewlineReturnsDefault()
-        {
-            byte[] sample = Bytes("a;b;c");
-            CsvDialect dialect = CsvSniffer.Detect(sample);
-            Assert.Equal(CsvDialect.Default, dialect);
         }
 
         [Fact]
