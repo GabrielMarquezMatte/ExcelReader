@@ -9,12 +9,14 @@ namespace ExcelReader.Core.Reader.Sources
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly SemaphoreSlim _gate = new(1, 1);
+        private readonly long _start;
 
-        internal StreamByteSource(Stream stream, bool leaveOpen)
+        internal StreamByteSource(Stream stream, bool leaveOpen, long start = 0)
         {
             _stream = stream;
             _leaveOpen = leaveOpen;
-            Length = stream.Length;
+            _start = start;
+            Length = Math.Max(0, stream.Length - start);
         }
 
         internal override long Length { get; }
@@ -29,7 +31,7 @@ namespace ExcelReader.Core.Reader.Sources
             _gate.Wait();
             try
             {
-                _stream.Position = offset;
+                _stream.Position = _start + offset;
                 return _stream.Read(destination);
             }
             finally
@@ -48,7 +50,7 @@ namespace ExcelReader.Core.Reader.Sources
             await _gate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                _stream.Position = offset;
+                _stream.Position = _start + offset;
                 return await _stream.ReadAsync(destination, ct).ConfigureAwait(false);
             }
             finally
