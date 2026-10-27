@@ -40,14 +40,16 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         columns.push(plan.column());
     }
 
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
     Ok(quote! {
-        impl ::excelreader::ExcelMapper for #struct_name {
+        impl #impl_generics ::excelreader::ExcelMapper for #struct_name #ty_generics #where_clause {
             fn bindings() -> ::std::vec::Vec<::excelreader::__private::ColumnBinding<Self>> {
                 ::std::vec![ #(#bindings),* ]
             }
         }
 
-        impl ::excelreader::ExcelWriter for #struct_name {
+        impl #impl_generics ::excelreader::ExcelWriter for #struct_name #ty_generics #where_clause {
             fn to_columns(
                 rows: &[Self],
             ) -> ::core::result::Result<
