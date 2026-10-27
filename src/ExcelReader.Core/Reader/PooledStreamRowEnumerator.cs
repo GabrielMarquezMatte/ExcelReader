@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader
 {
@@ -115,6 +116,22 @@ namespace ExcelReader.Core.Reader
         {
             await OpenDeferredAsync().ConfigureAwait(false);
             await _io.FillAsync(_source, _ct).ConfigureAwait(false);
+        }
+
+        // The last row ends before the entry does; reading the rest compares the entry's checksum.
+        private protected bool Finish()
+        {
+            (_source as LimitedReadStream)?.ReadRemainderForChecksum();
+            return false;
+        }
+
+        private protected async ValueTask<bool> FinishAsync()
+        {
+            if (_source is LimitedReadStream entry)
+            {
+                await entry.ReadRemainderForChecksumAsync(_ct).ConfigureAwait(false);
+            }
+            return false;
         }
 
         private protected void Ensure(int count)

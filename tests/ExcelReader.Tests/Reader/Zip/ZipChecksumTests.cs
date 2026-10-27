@@ -60,6 +60,35 @@ namespace ExcelReader.Tests.Reader.Zip
         }
 
         [Theory]
+        [MemberData(nameof(Cases))]
+        public void ADamagedSheetWithALongTailAfterSheetDataIsRefused(bool xlsb, bool fromStream, bool prefetch)
+        {
+            string sheet = xlsb ? "xl/worksheets/sheet1.bin" : "xl/worksheets/sheet1.xml";
+            byte[] package = Damage(WithLongTail(Write(xlsb), sheet, xlsb), xlsb, sheet);
+            var options = new ExcelReaderOptions { PrefetchDecompression = prefetch };
+
+            InvalidDataException error = Assert.Throws<InvalidDataException>(() => Sum(package, fromStream, options));
+            Assert.Contains("CRC-32", error.Message, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task ADamagedSheetWithALongTailIsRefusedByAParallelRead(bool xlsb)
+        {
+            string sheet = xlsb ? "xl/worksheets/sheet1.bin" : "xl/worksheets/sheet1.xml";
+            byte[] package = Damage(WithLongTail(Write(xlsb), sheet, xlsb), xlsb, sheet);
+            using IExcelWorkbook workbook = Excel.Open(package);
+
+            await Assert.ThrowsAsync<InvalidDataException>(async () =>
+                await SheetParallel.AggregateAsync(
+                    workbook.FirstSheet,
+                    new RowAggregation<int> { Seed = static () => 0, Accumulate = static (ref int s, Row r) => s++, Combine = static (a, b) => a + b },
+                    new SheetParallelOptions { DegreeOfParallelism = 4 },
+                    TestContext.Current.CancellationToken));
+        }
+
+        [Theory]
         [InlineData(false)]
         [InlineData(true)]
         public void ADamagedSharedStringTableIsRefused(bool xlsb)
@@ -116,6 +145,52 @@ namespace ExcelReader.Tests.Reader.Zip
                 wb.End();
             }
             return ms.ToArray();
+        }
+
+        // Content after the sheet data that a reader has no reason to parse, long enough to span many buffer fills:
+        // an XML comment after </sheetData>, or one large record after BrtEndSheetData.
+        private static byte[] WithLongTail(byte[] package, string entryName, bool xlsb)
+        {
+            using var output = new MemoryStream();
+            using (var source = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read))
+            using (var target = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (ZipArchiveEntry entry in source.Entries)
+                {
+                    using var copy = new MemoryStream();
+                    using (Stream data = entry.Open())
+                    {
+                        data.CopyTo(copy);
+                    }
+                    byte[] content = copy.ToArray();
+                    if (string.Equals(entry.FullName, entryName, StringComparison.Ordinal))
+                    {
+                        content = xlsb ? WithTailRecord(content) : WithTailComment(content);
+                    }
+                    using Stream written = target.CreateEntry(entry.FullName, CompressionLevel.NoCompression).Open();
+                    written.Write(content);
+                }
+            }
+            return output.ToArray();
+        }
+
+        private static byte[] WithTailComment(byte[] xml)
+        {
+            string text = Encoding.UTF8.GetString(xml);
+            return Encoding.UTF8.GetBytes(text.Replace("</sheetData>", "</sheetData><!--" + new string('x', 1 << 20) + "-->", StringComparison.Ordinal));
+        }
+
+        // BrtEndSheetData is record 146 with no payload: 0x92 0x01 0x00. The tail record is id 0x7F, length 1 MiB.
+        private static byte[] WithTailRecord(byte[] bin)
+        {
+            int end = bin.AsSpan().LastIndexOf(new byte[] { 0x92, 0x01, 0x00 }) + 3;
+            Assert.True(end > 3, "BrtEndSheetData not found");
+            byte[] tail = new byte[4 + (1 << 20)];
+            tail[0] = 0x7F;
+            tail[1] = 0x80;
+            tail[2] = 0x80;
+            tail[3] = 0x40;
+            return [.. bin.AsSpan(0, end), .. tail, .. bin.AsSpan(end)];
         }
 
         // The package is stored, not deflated, so one changed letter of the cell text "text" stays valid

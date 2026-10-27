@@ -100,7 +100,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             public bool MoveNext()
             {
                 _ct.ThrowIfCancellationRequested();
-                return MoveNextCore();
+                return MoveNextCore() || Finish();
             }
 
             /// <inheritdoc/>
@@ -109,7 +109,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                 _ct.ThrowIfCancellationRequested();
                 if (_ended)
                 {
-                    return new ValueTask<bool>(false);
+                    return FinishAsync();
                 }
                 ResetRow();
                 if (!_pendingRowHdr)
@@ -117,7 +117,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                     int seek = SeekRowHdrFromBuffer();
                     if (seek == 0)
                     {
-                        return new ValueTask<bool>(false);
+                        return FinishAsync();
                     }
                     if (seek == 2)
                     {
@@ -137,7 +137,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             {
                 if (!seekDone && !await SeekRowHdrAsync().ConfigureAwait(false))
                 {
-                    return false;
+                    return await FinishAsync().ConfigureAwait(false);
                 }
                 _pendingRowHdr = false;
                 _rowIndex = _nextRowIndex;

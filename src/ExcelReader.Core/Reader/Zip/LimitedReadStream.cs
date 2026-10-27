@@ -1,3 +1,4 @@
+using System.Buffers;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Writer.Zip;
 
@@ -93,6 +94,47 @@ namespace ExcelReader.Core.Reader.Zip
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+        }
+
+        private bool VerifiesChecksum => _expectedCrc is not null || _inner is PrefetchStream { VerifiesChecksum: true };
+
+        // A reader stops at the end of the sheet's rows; reading what follows still compares the entry's checksum.
+        internal void ReadRemainderForChecksum()
+        {
+            if (!VerifiesChecksum || _produced >= _declaredLength)
+            {
+                return;
+            }
+            byte[] scratch = ArrayPool<byte>.Shared.Rent(16 * 1024);
+            try
+            {
+                while (Read(scratch.AsSpan()) > 0)
+                {
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(scratch);
+            }
+        }
+
+        internal async ValueTask ReadRemainderForChecksumAsync(CancellationToken ct)
+        {
+            if (!VerifiesChecksum || _produced >= _declaredLength)
+            {
+                return;
+            }
+            byte[] scratch = ArrayPool<byte>.Shared.Rent(16 * 1024);
+            try
+            {
+                while (await ReadAsync(scratch.AsMemory(), ct).ConfigureAwait(false) > 0)
+                {
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(scratch);
+            }
         }
 
         protected override void Dispose(bool disposing)
