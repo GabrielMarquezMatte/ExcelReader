@@ -208,6 +208,11 @@ namespace ExcelReader.Core.Reader.Csv
             {
                 stop = ProcessControlByte(sample, ref scanner, stop, delimiter, quote, ref inQuotes, ref delimiterCount, ref lineStart, counts);
             }
+            // An unterminated last line may be cut short by the sample cap, so it only counts when it is the only line.
+            if (counts.Count == 0 && !inQuotes && lineStart < sample.Length)
+            {
+                counts.Add(delimiterCount + 1);
+            }
             return counts;
         }
 
