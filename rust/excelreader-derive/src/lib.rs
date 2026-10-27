@@ -93,6 +93,7 @@ struct ParsedField<'a> {
     /// Primary `#[excel(name = "...")]` first, then any aliases in declared order.
     names: Vec<LitStr>,
     kind: FieldKind,
+    ty: &'a Type,
     is_option: bool,
 }
 
@@ -102,6 +103,7 @@ fn parse_field(field: &Field) -> syn::Result<ParsedField<'_>> {
         ident: field.ident.as_ref().expect("named_fields guarantees Some"),
         names: excel_names(field)?,
         kind: FieldKind::from_type(inner_ty)?,
+        ty: inner_ty,
         is_option,
     })
 }
@@ -117,11 +119,20 @@ fn field_binding(parsed: &ParsedField<'_>) -> proc_macro2::TokenStream {
         value
     };
 
+    let ty = parsed.ty;
+    let fits = match parsed.kind {
+        FieldKind::Int => quote! {
+            ::core::option::Option::Some(|v| <#ty as ::core::convert::TryFrom<i64>>::try_from(v).is_ok())
+        },
+        _ => quote! { ::core::option::Option::None },
+    };
+
     quote! {
         ::excelreader::__private::ColumnBinding {
             names: &[#(#name),*],
             column_type: #column_type,
             assign: |r, col, row| r.#field_ident = #assign_value,
+            fits: #fits,
         }
     }
 }
