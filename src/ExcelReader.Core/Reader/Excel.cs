@@ -413,7 +413,13 @@ namespace ExcelReader.Core.Reader
                     : ExcelFileFormat.Xls;
             }
             memZip = ZipIndex.Create(data, options);
-            return ClassifyZip(memZip);
+            ExcelFileFormat zipFormat = ClassifyZip(memZip);
+            if (zipFormat is ExcelFileFormat.Unknown)
+            {
+                memZip.Dispose();
+                memZip = null;
+            }
+            return zipFormat;
         }
 
         /// <summary>
@@ -630,7 +636,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
         /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static ExcelFileFormat DetectFileFormat(Stream stream)
@@ -645,6 +651,10 @@ namespace ExcelReader.Core.Reader
                 zip?.Dispose();
                 return format;
             }
+            catch (InvalidDataException)
+            {
+                return ExcelFileFormat.Unknown;
+            }
             finally
             {
                 if (!ReferenceEquals(view, stream))
@@ -658,18 +668,25 @@ namespace ExcelReader.Core.Reader
         /// Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from an in-memory buffer's signature, without consuming it.
         /// </summary>
         /// <param name="data">A buffer containing the workbook data.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
         public static ExcelFileFormat DetectFileFormat(ReadOnlyMemory<byte> data)
         {
-            var format = ClassifyMemory(data, ExcelReaderOptions.Default, out ZipIndex? memZip);
-            memZip?.Dispose();
-            return format;
+            try
+            {
+                var format = ClassifyMemory(data, ExcelReaderOptions.Default, out ZipIndex? memZip);
+                memZip?.Dispose();
+                return format;
+            }
+            catch (InvalidDataException)
+            {
+                return ExcelFileFormat.Unknown;
+            }
         }
 
         /// <summary>Asynchronously detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
         /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="ct">A token to cancel the detection operation.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static async ValueTask<ExcelFileFormat> DetectFileFormatAsync(Stream stream, CancellationToken ct = default)
@@ -683,6 +700,10 @@ namespace ExcelReader.Core.Reader
                 (ExcelFileFormat format, ZipIndex? zip) = await DetectSeekableAsync(view, leaveOpen: true, ExcelReaderOptions.Default, ct).ConfigureAwait(false);
                 zip?.Dispose();
                 return format;
+            }
+            catch (InvalidDataException)
+            {
+                return ExcelFileFormat.Unknown;
             }
             finally
             {
@@ -817,7 +838,11 @@ namespace ExcelReader.Core.Reader
 
         private static ExcelFileFormat ClassifyZip(ZipIndex zip)
         {
-            return zip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
+            if (zip.TryGetEntry("xl/workbook.bin"u8, out _))
+            {
+                return ExcelFileFormat.Xlsb;
+            }
+            return zip.TryGetEntry("xl/workbook.xml"u8, out _) ? ExcelFileFormat.Xlsx : ExcelFileFormat.Unknown;
         }
 
         [SkipLocalsInit]
@@ -851,7 +876,13 @@ namespace ExcelReader.Core.Reader
                     stream.Position = start;
                 }
             }
-            return ClassifyZip(zip);
+            ExcelFileFormat zipFormat = ClassifyZip(zip);
+            if (zipFormat is ExcelFileFormat.Unknown)
+            {
+                zip.Dispose();
+                zip = null;
+            }
+            return zipFormat;
         }
 
         private static async ValueTask<(ExcelFileFormat Format, ZipIndex? Zip)> DetectSeekableAsync(
@@ -897,7 +928,13 @@ namespace ExcelReader.Core.Reader
                     stream.Position = start;
                 }
             }
-            return (ClassifyZip(zip), zip);
+            ExcelFileFormat zipFormat = ClassifyZip(zip);
+            if (zipFormat is ExcelFileFormat.Unknown)
+            {
+                zip.Dispose();
+                return (zipFormat, null);
+            }
+            return (zipFormat, zip);
         }
 
         private static bool TryDecryptCfbStream(Stream stream, bool leaveOpen, ExcelReaderOptions? options, out Stream decrypted)
