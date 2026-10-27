@@ -614,7 +614,7 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_start_row.argtypes = [ctypes.c_void_p]
     lib.xl_start_row.restype = ctypes.c_int32
 
-    lib.xl_write_string.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_int32]
+    lib.xl_write_string.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int32]
     lib.xl_write_string.restype = ctypes.c_int32
 
     lib.xl_write_int64.argtypes = [ctypes.c_void_p, ctypes.c_int64]

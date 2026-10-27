@@ -122,16 +122,20 @@ class SheetWriter:
 
     def _write_cell(self, handle: ctypes.c_void_p, value: Any) -> int:
         lib = self._lib
+        kind = type(value)
+        if kind is str:
+            raw = value.encode("utf-8")
+            return lib.xl_write_string(handle, raw, _native.int32_len(raw))
+        if kind is int:
+            return lib.xl_write_int64(handle, value)
+        if kind is float:
+            return lib.xl_write_float64(handle, value)
+        if kind is bool:
+            return lib.xl_write_bool(handle, 1 if value else 0)
         if value is None:
             return lib.xl_write_string(handle, None, 0)
-        if isinstance(value, tuple):
+        if kind is tuple:
             return lib.xl_write_null(handle, int(value[1]))
-        if isinstance(value, bool):
-            return lib.xl_write_bool(handle, 1 if value else 0)
-        if isinstance(value, int):
-            return lib.xl_write_int64(handle, value)
-        if isinstance(value, float):
-            return lib.xl_write_float64(handle, value)
         if isinstance(value, datetime.datetime):
             if value.tzinfo is not None:
                 value = value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
@@ -143,8 +147,14 @@ class SheetWriter:
             return lib.xl_write_time(
                 handle, (value.hour * 3600 + value.minute * 60 + value.second) * 1_000_000 + value.microsecond
             )
-        pointer, length = _encode(value)
-        return lib.xl_write_string(handle, pointer, length)
+        if isinstance(value, bool):
+            return lib.xl_write_bool(handle, 1 if value else 0)
+        if isinstance(value, int):
+            return lib.xl_write_int64(handle, value)
+        if isinstance(value, float):
+            return lib.xl_write_float64(handle, value)
+        raw = value.encode("utf-8")
+        return lib.xl_write_string(handle, raw, _native.int32_len(raw))
 
     def _finished_bytes(self, handle: ctypes.c_void_p) -> bytes:
         buffer = _native.NativeBuffer()
