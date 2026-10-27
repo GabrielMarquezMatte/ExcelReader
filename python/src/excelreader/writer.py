@@ -10,7 +10,6 @@ the data being written.
 from __future__ import annotations
 
 import ctypes
-import datetime
 import io
 import os
 import sys
@@ -215,12 +214,17 @@ def _typed_table(data: Any, types: list[ColumnType] | None) -> tuple[TypedTable,
 
 def _write_all(destination: IO[bytes], data: bytes) -> None:
     """Calls `write()` until it has taken all of `data`. A `write()` that returns None is taken to
-    have written everything, as files that predate the `int` return convention do.
+    have written everything, as files that predate the `int` return convention do, except on a raw
+    stream, where None means the write would block and nothing was written.
     """
     view = memoryview(data)
     offset = 0
     while offset < len(data):
         written = destination.write(data if offset == 0 else view[offset:])
+        if written is None and isinstance(destination, io.RawIOBase):
+            raise BlockingIOError(
+                f"write() would block with {len(data) - offset} bytes left to write; use a blocking stream"
+            )
         if written is None:
             return
         if not 0 < written <= len(data) - offset:
@@ -283,17 +287,16 @@ _ARROW_TYPES = {
     "timestamp[us]": ColumnType.TIMESTAMP,
 }
 
-_ARRAY_TYPECODES = {
-    ColumnType.I64: "q",
-    ColumnType.TIME: "q",
-    ColumnType.TIMESTAMP: "q",
-    ColumnType.F64: "d",
-    ColumnType.BOOL: "b",
-    ColumnType.DATE: "i",
+# The Arrow type each column is cast to before its values are read, and the array typecode of the
+# same layout: date32 is days, time64[us] and timestamp[us] are microseconds, as the native side takes them.
+_STORAGE = {
+    ColumnType.I64: ("int64", "q"),
+    ColumnType.TIME: ("int64", "q"),
+    ColumnType.TIMESTAMP: ("int64", "q"),
+    ColumnType.F64: ("float64", "d"),
+    ColumnType.BOOL: ("int8", "b"),
+    ColumnType.DATE: ("int32", "i"),
 }
-
-_EPOCH_DATE = datetime.date(1970, 1, 1)
-_EPOCH_DATETIME = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 
 
 def _arrow_column_type(field: Any) -> ColumnType:
@@ -307,68 +310,73 @@ def _arrow_column_type(field: Any) -> ColumnType:
         ) from None
 
 
-def _column_from_pylist(values: list[Any], column_type: ColumnType, row_count: int) -> tuple[Any, bytes | None]:
-    """Builds one column's native buffer layout from a plain Python list, as `to_pylist()` returns it.
+def _slots(array_: Any, width: int, count: int, buffer_index: int = 1) -> memoryview:
+    """The bytes of `count` fixed-width slots of an Arrow array's buffer, from its slice offset on."""
+    buffer = array_.buffers()[buffer_index]
+    start = array_.offset * width
+    return memoryview(buffer)[start : start + count * width]
 
-    Returns `(column, validity)`: `column` is a `StringColumn` for `ColumnType.STRING` (UTF-8 data plus
-    an `array("i")` of `row_count + 1` offsets), or an `array.array` of the typecode matching
-    `column_type` otherwise. `validity` is an Arrow-style LSB-first bitmap — `(row_count + 7) // 8`
-    bytes, bit `r` set when row `r` is valid — or `None` when no value in `values` was ever `None`,
-    matching `TypedTable.validity`'s "None means no nulls" convention. A `None` value contributes a
-    zero/empty placeholder to `column` and a cleared bit to the bitmap.
+
+def _validity_bitmap(column: Any) -> bytes:
+    """An LSB-first bitmap of `(len + 7) // 8` bytes, bit `r` set when row `r` is valid."""
+    import pyarrow.compute
+
+    valid = pyarrow.compute.is_valid(column)
+    row_count = len(column)
+    if valid.offset % 8:
+        bits = bytearray((row_count + 7) // 8)
+        for row, flag in enumerate(valid.to_pylist()):
+            bits[row // 8] |= flag << (row % 8)
+        return bytes(bits)
+    start = valid.offset // 8
+    bits = bytearray(memoryview(valid.buffers()[1])[start : start + (row_count + 7) // 8])
+    if row_count % 8:
+        bits[-1] &= (1 << (row_count % 8)) - 1
+    return bytes(bits)
+
+
+def _string_column(strings: Any) -> StringColumn:
+    """UTF-8 data plus `len + 1` offsets starting at 0, from an Arrow `string` array without nulls."""
+    row_count = len(strings)
+    if row_count == 0:
+        return StringColumn(array("i", [0]), b"")
+    offsets = array("i")
+    offsets.frombytes(_slots(strings, 4, row_count + 1))
+    first, last = offsets[0], offsets[-1]
+    data_buffer = strings.buffers()[2]
+    data = b"" if data_buffer is None else bytes(memoryview(data_buffer)[first:last])
+    if first:
+        offsets = array("i", [offset - first for offset in offsets])
+    return StringColumn(offsets, data)
+
+
+def _column_from_arrow(column: Any, column_type: ColumnType) -> tuple[Any, bytes | None]:
+    """Builds one column's native buffer layout and its validity bitmap, `None` when nothing is null.
+
+    Arrow first casts the column to the one layout this reads, and replaces nulls with an empty or
+    zero placeholder, so the producer's choices of string variant, null slots or bit packing never
+    reach the buffer reads.
     """
-    validity = bytearray((row_count + 7) // 8)
-    has_null = False
+    import pyarrow
+    import pyarrow.compute
 
+    validity = _validity_bitmap(column) if column.null_count else None
     if column_type is ColumnType.STRING:
-        offsets = array("i", [0])
-        chunks: list[bytes] = []
-        total = 0
-        for row, value in enumerate(values):
-            if value is None:
-                has_null = True
-            else:
-                validity[row // 8] |= 1 << (row % 8)
-                encoded = value.encode("utf-8")
-                chunks.append(encoded)
-                total += len(encoded)
-            offsets.append(total)
-        string_column: Any = StringColumn(offsets, b"".join(chunks))
-        return string_column, (bytes(validity) if has_null else None)
-
-    data_array = array(_ARRAY_TYPECODES[column_type])
-    for row, value in enumerate(values):
-        if value is None:
-            has_null = True
-            data_array.append(0)
-            continue
-        validity[row // 8] |= 1 << (row % 8)
-        if column_type is ColumnType.DATE:
-            data_array.append((value - _EPOCH_DATE).days)
-        elif column_type is ColumnType.TIME:
-            data_array.append(
-                value.hour * 3_600_000_000
-                + value.minute * 60_000_000
-                + value.second * 1_000_000
-                + value.microsecond
-            )
-        elif column_type is ColumnType.TIMESTAMP:
-            delta = value.replace(tzinfo=datetime.timezone.utc) - _EPOCH_DATETIME
-            data_array.append(delta.days * 86_400_000_000 + delta.seconds * 1_000_000 + delta.microseconds)
-        elif column_type is ColumnType.BOOL:
-            data_array.append(1 if value else 0)
-        else:
-            data_array.append(value)
-
-    return data_array, (bytes(validity) if has_null else None)
+        strings = column.cast(pyarrow.string())
+        if strings.null_count:
+            strings = pyarrow.compute.fill_null(strings, "")
+        return _string_column(strings), validity
+    storage, typecode = _STORAGE[column_type]
+    values = column.cast(storage)
+    if values.null_count:
+        values = pyarrow.compute.fill_null(values, 0)
+    data = array(typecode)
+    if len(values):
+        data.frombytes(_slots(values, data.itemsize, len(values)))
+    return data, validity
 
 
 def _table_from_arrow(batch: Any) -> tuple[TypedTable, list[ColumnType]]:
-    """Converts through Python lists rather than borrowing Arrow's buffers directly: Arrow's null
-    representation, offset conventions and chunking are the producer's choice, and reproducing all of
-    them faithfully is exactly the parser this package deliberately does not have. The conversion is
-    one pass and keeps the native side reading only layouts it produced itself.
-    """
     import pyarrow
 
     if isinstance(batch, pyarrow.Table):
@@ -379,7 +387,7 @@ def _table_from_arrow(batch: Any) -> tuple[TypedTable, list[ColumnType]]:
     columns: list[Any] = []
     validity: list[bytes | None] = []
     for index, column in enumerate(batch.columns):
-        built, mask = _column_from_pylist(column.to_pylist(), types[index], batch.num_rows)
+        built, mask = _column_from_arrow(column, types[index])
         columns.append(built)
         validity.append(mask)
 

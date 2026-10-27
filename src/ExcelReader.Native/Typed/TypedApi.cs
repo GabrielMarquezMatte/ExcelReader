@@ -218,7 +218,7 @@ namespace ExcelReader.Native.Typed
                 return false;
             }
 
-            Row header = rows.Current;
+            Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>>? header = null;
             for (int i = 0; i < specs.Length; i++)
             {
                 string[] names = specs[i].Names;
@@ -227,14 +227,15 @@ namespace ExcelReader.Native.Typed
                     columnIndices[i] = specs[i].Index;
                     continue;
                 }
+                header ??= HeaderColumns(rows.Current).GetAlternateLookup<ReadOnlySpan<char>>();
                 int found = -1;
                 foreach (string name in names)
                 {
-                    found = FindHeaderColumn(header, name);
-                    if (found >= 0)
+                    if (header.Value.TryGetValue(name.AsSpan().Trim(), out found))
                     {
                         break;
                     }
+                    found = -1;
                 }
                 if (found < 0)
                 {
@@ -251,17 +252,15 @@ namespace ExcelReader.Native.Typed
             return string.Join(", ", Array.ConvertAll(names, n => $"\"{n}\""));
         }
 
-        private static int FindHeaderColumn(Row header, string name)
+        // The first column carrying a header wins, as a left-to-right search would find it.
+        private static Dictionary<string, int> HeaderColumns(Row header)
         {
-            string target = name.Trim();
+            Dictionary<string, int> columns = new(StringComparer.OrdinalIgnoreCase);
             foreach (RowCell cell in header.Cells)
             {
-                if (string.Equals(cell.Value.GetString().Trim(), target, StringComparison.OrdinalIgnoreCase))
-                {
-                    return cell.ColumnIndex;
-                }
+                columns.TryAdd(cell.Value.GetString().Trim(), cell.ColumnIndex);
             }
-            return -1;
+            return columns;
         }
 
         private static NativeTable BuildTable(ColumnBuilder[] builders)

@@ -4,7 +4,9 @@ using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Parser;
 using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xls;
 using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
@@ -38,39 +40,37 @@ namespace ExcelReader.Cli
                 ThrowIfOutputIsADirectory(output);
                 using IExcelWorkbook workbook = Open(path, sheet, out IExcelSheet selected, password, inputDelimiter);
 
-                bool leaveOpen = output is null;
-                Stream target = leaveOpen
-                    ? stdout
-                    : new FileStream(output!, FileMode.Create, FileAccess.Write, FileShare.None);
-                try
+                if (output is null)
                 {
-                    switch (resolvedFormat)
-                    {
-                        case "csv":
-                            WriteCsv(selected, target, leaveOpen, delimiter, onProgress);
-                            break;
-                        case "xlsx":
-                            WriteXlsx(selected, target, leaveOpen, onProgress);
-                            break;
-                        case "xlsb":
-                            WriteXlsb(selected, target, leaveOpen, onProgress);
-                            break;
-                        case "xls":
-                            WriteXls(selected, target, leaveOpen, onProgress);
-                            break;
-                        default:
-                            throw new UnreachableException($"unresolved format '{resolvedFormat}'.");
-                    }
+                    WriteFormat(resolvedFormat, selected, stdout, leaveOpen: true, delimiter, onProgress);
+                    return 0;
                 }
-                finally
-                {
-                    if (!leaveOpen)
-                    {
-                        target.Dispose();
-                    }
-                }
+                using StagedFile staged = new(output);
+                WriteFormat(resolvedFormat, selected, staged.Stream, leaveOpen: true, delimiter, onProgress);
+                staged.Commit();
                 return 0;
             }, stderr);
+        }
+
+        private static void WriteFormat(string format, IExcelSheet selected, Stream target, bool leaveOpen, char delimiter, Action<int>? onProgress)
+        {
+            switch (format)
+            {
+                case "csv":
+                    WriteCsv(selected, target, leaveOpen, delimiter, onProgress);
+                    return;
+                case "xlsx":
+                    WriteXlsx(selected, target, leaveOpen, onProgress);
+                    return;
+                case "xlsb":
+                    WriteXlsb(selected, target, leaveOpen, onProgress);
+                    return;
+                case "xls":
+                    WriteXls(selected, target, leaveOpen, onProgress);
+                    return;
+                default:
+                    throw new UnreachableException($"unresolved format '{format}'.");
+            }
         }
 
         internal static string ResolveFormat(string? format, string? output)
@@ -143,7 +143,7 @@ namespace ExcelReader.Cli
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            using TSheet sheetWriter = workbook.AddSheet(sheet.Name);
+            using TSheet sheetWriter = workbook.AddSheet(sheet.Name.Length == 0 ? "Sheet1" : sheet.Name);
 
             int rowCount = 0;
             using IExcelRowEnumerator rows = sheet.GetEnumerator();
@@ -151,23 +151,20 @@ namespace ExcelReader.Cli
             {
                 using TRow row = sheetWriter.StartRow();
                 Row current = rows.Current;
+                int nextColumn = 0;
                 foreach (var cell in current.Cells)
                 {
+                    row.Skip(cell.ColumnIndex - nextColumn);
+                    nextColumn = cell.ColumnIndex + 1;
                     var cellValue = cell.Value;
                     switch (cellValue.Type)
                     {
                         case CellType.Boolean:
-                            row.Write(!cellValue.Value.IsEmpty && cellValue.Value[0] != (byte)'0');
+                            var boolValue = ExcelCellReaders.Bool(in cellValue, default, out bool flag) ? flag : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a boolean but holds '{cellValue.GetString()}'.");
+                            row.Write(boolValue);
                             break;
                         case CellType.Number:
-                            if (cellValue.TryGetDouble(out double number))
-                            {
-                                row.Write(number);
-                            }
-                            else
-                            {
-                                row.Write(cellValue.GetString());
-                            }
+                            WriteNumber(row, in cellValue);
                             break;
                         case CellType.Date:
                             var dateValue = cellValue.TryGetDateTime(sheet.IsDate1904, out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");
@@ -187,6 +184,30 @@ namespace ExcelReader.Cli
             onProgress?.Invoke(rowCount);
             sheetWriter.End();
             workbook.End();
+        }
+
+        // Text-backed numbers keep their exact integer or decimal value; a double cannot tell apart
+        // integers above 2^53.
+        private static void WriteNumber<TRow>(TRow row, in Cell cell) where TRow : IRowWriter
+        {
+            if (!cell.Value.IsEmpty && cell.TryParse(CultureInfo.InvariantCulture, out long integer))
+            {
+                row.Write(integer);
+                return;
+            }
+            bool hasDouble = cell.TryGetDouble(out double number);
+            if (!cell.Value.IsEmpty && hasDouble && cell.TryParse(CultureInfo.InvariantCulture, out decimal exact)
+                && double.Parse(exact.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) == number)
+            {
+                row.Write(exact);
+                return;
+            }
+            if (hasDouble)
+            {
+                row.Write(number);
+                return;
+            }
+            row.Write(cell.GetString());
         }
 
         internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr, string? password = null, char? inputDelimiter = null)

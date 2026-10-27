@@ -9,6 +9,8 @@ namespace ExcelReader.Core.Reader.Xlsx
     internal static class XlsxXml
     {
         private static readonly SearchValues<byte> MarkupOrEscape = SearchValues.Create("<&_\r"u8);
+        private static readonly SearchValues<byte> NameTerminators = SearchValues.Create(" \t\r\n>/"u8);
+        private static readonly SearchValues<byte> TagEndOrQuote = SearchValues.Create(">\"'"u8);
 
         internal static int ParseIntOr(ReadOnlySpan<byte> source, int fallback)
         {
@@ -17,24 +19,108 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         public static ReadOnlySpan<byte> Attr(ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> name)
         {
-            int i = openTag.IndexOf(name);
-            if (i < 0)
+            int pos = ElementNameEnd(openTag);
+            while (NextAttribute(openTag, ref pos, out ReadOnlySpan<byte> attributeName, out ReadOnlySpan<byte> value))
             {
-                return default;
+                if (attributeName.SequenceEqual(name))
+                {
+                    return value;
+                }
             }
-            int start = i + name.Length;
-            if (start >= openTag.Length)
+            return default;
+        }
+
+        internal static int ElementNameEnd(ReadOnlySpan<byte> openTag)
+        {
+            if (openTag.IsEmpty || openTag[0] != (byte)'<')
             {
-                return default;
+                return 0;
             }
-            byte quote = openTag[start];
-            if (quote is not ((byte)'"' or (byte)'\''))
+            int end = openTag.IndexOfAny(NameTerminators);
+            return end < 0 ? openTag.Length : end;
+        }
+
+        // Reads the attribute at or after pos, allowing XML whitespace around '='. Skips anything that is
+        // not name="value" or name='value', and stops at the tag's closing '>' or '/>'.
+        internal static bool NextAttribute(ReadOnlySpan<byte> tag, scoped ref int pos, out ReadOnlySpan<byte> name, out ReadOnlySpan<byte> value)
+        {
+            int i = pos;
+            while (true)
             {
-                return default;
+                i = SkipSpace(tag, i);
+                if (i >= tag.Length || tag[i] is (byte)'>' or (byte)'/')
+                {
+                    break;
+                }
+                int nameStart = i;
+                while (i < tag.Length && !IsXmlSpace(tag[i]) && tag[i] is not ((byte)'=' or (byte)'>' or (byte)'/'))
+                {
+                    i++;
+                }
+                int nameEnd = i;
+                i = SkipSpace(tag, i);
+                if (i >= tag.Length || tag[i] != (byte)'=')
+                {
+                    continue;
+                }
+                i = SkipSpace(tag, i + 1);
+                if (i >= tag.Length || tag[i] is not ((byte)'"' or (byte)'\''))
+                {
+                    continue;
+                }
+                int close = tag[(i + 1)..].IndexOf(tag[i]);
+                if (close < 0)
+                {
+                    break;
+                }
+                name = tag[nameStart..nameEnd];
+                value = tag.Slice(i + 1, close);
+                pos = i + close + 2;
+                return true;
             }
-            start++;
-            int end = openTag[start..].IndexOf(quote);
-            return end < 0 ? default : openTag.Slice(start, end);
+            pos = tag.Length;
+            name = value = default;
+            return false;
+        }
+
+        private static int SkipSpace(ReadOnlySpan<byte> tag, int i)
+        {
+            while (i < tag.Length && IsXmlSpace(tag[i]))
+            {
+                i++;
+            }
+            return i;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool IsXmlSpace(byte b)
+        {
+            return b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
+        }
+
+        // The index of the '>' closing the tag that starts tag, skipping any '>' inside a quoted attribute value.
+        internal static int TagEnd(ReadOnlySpan<byte> tag)
+        {
+            int i = 0;
+            while (true)
+            {
+                int hit = tag[i..].IndexOfAny(TagEndOrQuote);
+                if (hit < 0)
+                {
+                    return -1;
+                }
+                i += hit;
+                if (tag[i] == (byte)'>')
+                {
+                    return i;
+                }
+                int close = tag[(i + 1)..].IndexOf(tag[i]);
+                if (close < 0)
+                {
+                    return -1;
+                }
+                i += close + 2;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -415,6 +501,34 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         internal static string NormalizePart(ReadOnlySpan<char> target)
         {
+            string part = PackagePath(target);
+            if (!part.Contains("./", StringComparison.Ordinal))
+            {
+                return part;
+            }
+            List<string> segments = [];
+            foreach (string segment in part.Split('/'))
+            {
+                if (string.Equals(segment, ".", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (!string.Equals(segment, "..", StringComparison.Ordinal))
+                {
+                    segments.Add(segment);
+                    continue;
+                }
+                if (segments.Count == 0)
+                {
+                    throw new InvalidDataException($"The part target '{target}' climbs above the package root.");
+                }
+                segments.RemoveAt(segments.Count - 1);
+            }
+            return string.Join('/', segments);
+        }
+
+        private static string PackagePath(ReadOnlySpan<char> target)
+        {
             if (target.Length > 0 && target[0] == '/')
             {
                 return new string(target[1..]);
@@ -435,10 +549,10 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
             foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(relsBytes, "<Relationship"u8))
             {
-                string id = DecodeToString(Attr(tag, " Id="u8));
+                string id = DecodeToString(Attr(tag, "Id"u8));
                 if (id.Length > 0)
                 {
-                    rels[id] = DecodeToString(Attr(tag, " Target="u8));
+                    rels[id] = DecodeToString(Attr(tag, "Target"u8));
                 }
             }
             return rels;
@@ -449,9 +563,9 @@ namespace ExcelReader.Core.Reader.Xlsx
             List<string> targets = [];
             foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(relsBytes, "<Relationship"u8))
             {
-                if (Attr(tag, " Type="u8).EndsWith(typeSuffix))
+                if (Attr(tag, "Type"u8).EndsWith(typeSuffix))
                 {
-                    targets.Add(DecodeToString(Attr(tag, " Target="u8)));
+                    targets.Add(DecodeToString(Attr(tag, "Target"u8)));
                 }
             }
             return targets;

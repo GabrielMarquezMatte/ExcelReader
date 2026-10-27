@@ -48,7 +48,7 @@ namespace ExcelReader.Arrow
             private const int NumberFormatMaxBytes = 32;
 
             private readonly StringArray.Builder _builder = new();
-            private byte[] _scratch = [];
+            private readonly byte[] _scratch = new byte[NumberFormatMaxBytes];
 
             internal StringColumnAppender(ExcelColumnSchema schema) : base(schema)
             {
@@ -69,10 +69,10 @@ namespace ExcelReader.Arrow
                     _builder.AppendNull();
                     return;
                 }
-                int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
-                if (_scratch.Length < capacity)
+                if (!cell.Value.IsEmpty)
                 {
-                    _scratch = new byte[capacity];
+                    _builder.Append(cell.Value);
+                    return;
                 }
                 if (!cell.TryFormat(_scratch, out int written))
                 {

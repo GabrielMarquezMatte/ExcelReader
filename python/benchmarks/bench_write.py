@@ -82,7 +82,7 @@ def benchmark_pandas(args: argparse.Namespace, tmp: Path):
     with excelreader.open_workbook(args.path, format="xlsb") as workbook:
         pandas_df = workbook.sheets[0].to_pandas(_FIXTURE_SCHEMA)
 
-    print("write_workbook(pandas) [pandas.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
+    print("write_workbook(pandas) [pandas.DataFrame -> Arrow -> native columns -> xlsx]:")
     _time_and_assert(
         "  write_workbook(pandas)",
         lambda p: excelreader.write_workbook(p, pandas_df),
@@ -115,7 +115,7 @@ def benchmark_polars(args: argparse.Namespace, tmp: Path):
         schema = workbook.sheets[0].infer_schema(sample_size=10)
         polars_df = workbook.sheets[0].to_polars(schema)
 
-    print("write_workbook(polars) [polars.DataFrame -> Arrow -> pylist -> native columns -> xlsx]:")
+    print("write_workbook(polars) [polars.DataFrame -> Arrow -> native columns -> xlsx]:")
     _time_and_assert(
         "  write_workbook(polars)",
         lambda p: excelreader.write_workbook(p, polars_df),

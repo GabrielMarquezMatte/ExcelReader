@@ -319,13 +319,23 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         private void WriteSharedStrings()
         {
-            using var data = _sharedStrings is null ? EmptySharedStrings() : _sharedStrings.ToXlsbBytes();
+            if (_sharedStrings is not null)
+            {
+                _package.WriteSharedStrings("xl/sharedStrings.bin", _sharedStrings, binary: true);
+                return;
+            }
+            using BiffBuffer data = EmptySharedStrings();
             _package.WriteEntry("xl/sharedStrings.bin", data.Span);
         }
 
         private async ValueTask WriteSharedStringsAsync(CancellationToken ct)
         {
-            using var data = _sharedStrings is null ? EmptySharedStrings() : _sharedStrings.ToXlsbBytes();
+            if (_sharedStrings is not null)
+            {
+                await _package.WriteSharedStringsAsync("xl/sharedStrings.bin", _sharedStrings, binary: true, ct).ConfigureAwait(false);
+                return;
+            }
+            using BiffBuffer data = EmptySharedStrings();
             await _package.WriteEntryAsync("xl/sharedStrings.bin", data.Memory, ct).ConfigureAwait(false);
         }
 

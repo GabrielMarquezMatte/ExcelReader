@@ -75,7 +75,7 @@ namespace ExcelReader.Native.Reading
                 IExcelWorkbook workbook;
                 if (format == NativeFormat.Csv || (format == NativeFormat.Auto && !IsWorkbookSignature(stream.Peek(8))))
                 {
-                    workbook = Excel.OpenCsv(stream, leaveOpen: false, readerOptions.Csv ?? CsvReaderOptions.Default);
+                    workbook = Excel.OpenCsv(stream, leaveOpen: false, Excel.CsvOf(readerOptions));
                 }
                 else
                 {

@@ -269,5 +269,20 @@ namespace ExcelReader.Core.Writer.Zip
         {
             return ZipEntryWriter.WriteBytesAsync(Zip, entryName, content, _compression, ct);
         }
+
+        internal void WriteSharedStrings(string entryName, SharedStringTable strings, bool binary)
+        {
+            using Stream entry = Zip.OpenEntry(entryName, _compression);
+            strings.WriteTo(entry, binary);
+        }
+
+        internal async ValueTask WriteSharedStringsAsync(string entryName, SharedStringTable strings, bool binary, CancellationToken ct)
+        {
+            Stream entry = Zip.OpenEntry(entryName, _compression);
+            await using (entry.ConfigureAwait(false))
+            {
+                await strings.WriteToAsync(entry, binary, ct).ConfigureAwait(false);
+            }
+        }
     }
 }
