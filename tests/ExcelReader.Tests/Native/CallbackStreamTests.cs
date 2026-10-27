@@ -138,6 +138,36 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(1, test.Releases);
         }
 
+        [Theory]
+        [InlineData(NativeFormat.Csv)]
+        [InlineData(NativeFormat.Auto)]
+        public void A_Csv_Stream_Applies_The_Global_Max_Cell_Bytes(int format)
+        {
+            TestStream test = new(Encoding.UTF8.GetBytes("name\n" + new string('x', 200_000) + "\n"));
+            using Pinned pinned = new(test);
+            Assert.Equal(NativeStatus.Ok, Open(pinned, format, out NativeHandle? handle, Options() with { MaxCellBytes = 16 }));
+            using (handle)
+            {
+                Assert.Equal(NativeStatus.Ok, ReadApi.OpenRows(handle, 0, out NativeRowCursor? opened));
+                using NativeRowCursor cursor = opened!;
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRowView(cursor, out _));
+                Assert.Equal(NativeStatus.Error, ReadApi.NextRowView(cursor, out _));
+                Assert.Contains("MaxCellBytes", NativeApi.LastErrorText(), StringComparison.Ordinal);
+            }
+        }
+
+        [Fact]
+        public void A_Csv_Stream_Prefers_Csv_Max_Cell_Bytes_Over_The_Global_One()
+        {
+            TestStream test = new(Encoding.UTF8.GetBytes("name\n" + new string('x', 200) + "\n"));
+            using Pinned pinned = new(test);
+            Assert.Equal(NativeStatus.Ok, Open(pinned, NativeFormat.Csv, out NativeHandle? handle, Options() with { MaxCellBytes = 16, CsvMaxCellBytes = 1024 }));
+            using (handle)
+            {
+                Assert.Equal(2, CountRows(handle!, 0));
+            }
+        }
+
         [Fact]
         public void A_Stream_Past_The_Buffer_Limit_Fails_And_Is_Released_Once()
         {

@@ -2,6 +2,9 @@ using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Tests.Reader
@@ -92,6 +95,65 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal(
                 [ExcelColumnType.Int64Column, ExcelColumnType.Float64Column, ExcelColumnType.StringColumn, ExcelColumnType.Int64Column],
                 TypesOf(schema));
+        }
+
+        [Theory]
+        [InlineData("xlsx")]
+        [InlineData("xlsb")]
+        [InlineData("xls")]
+        public void ParseText_Should_Infer_The_Same_Types_From_Every_Format_When_Booleans_Meet_Binary_Numbers(string extension)
+        {
+            using MemoryStream buffer = new();
+            WriteBoolsAndNumbers(extension, buffer);
+            buffer.Position = 0;
+            using IExcelWorkbook reader = Excel.Open(buffer, ExcelFileFormat.Unknown);
+
+            IReadOnlyList<ExcelColumnSchema> schema = Excel.InferSchema(reader.FirstSheet, new SchemaInferenceOptions { HeaderRow = 0, ParseText = true });
+
+            Assert.Equal([ExcelColumnType.StringColumn, ExcelColumnType.BoolColumn], schema.Select(static column => column.Type));
+        }
+
+        private static void WriteBoolsAndNumbers(string extension, Stream stream)
+        {
+            if (string.Equals(extension, "xlsb", StringComparison.Ordinal))
+            {
+                WriteBoolsAndNumbers<XlsbSheetWriter, XlsbRowWriter>(XlsbWorkbookWriter.Create(stream, leaveOpen: true));
+                return;
+            }
+            if (string.Equals(extension, "xls", StringComparison.Ordinal))
+            {
+                WriteBoolsAndNumbers<XlsSheetWriter, XlsRowWriter>(XlsWorkbookWriter.Create(stream, leaveOpen: true));
+                return;
+            }
+            WriteBoolsAndNumbers<XlsxSheetWriter, XlsxRowWriter>(XlsxWorkbookWriter.Create(stream, leaveOpen: true));
+        }
+
+        private static void WriteBoolsAndNumbers<TSheet, TRow>(IWorkbookWriter<TSheet> workbook)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            using (workbook)
+            using (TSheet sheet = workbook.AddSheet("S"))
+            {
+                foreach ((object first, object second) in ((object, object)[])[(0, true), (true, 1), (2, true)])
+                {
+                    using TRow row = sheet.StartRow();
+                    WriteValue(row, first);
+                    WriteValue(row, second);
+                }
+                sheet.End();
+                workbook.End();
+            }
+        }
+
+        private static void WriteValue(IRowWriter row, object value)
+        {
+            if (value is bool flag)
+            {
+                row.Write(flag);
+                return;
+            }
+            row.Write((int)value);
         }
 
         [Fact]

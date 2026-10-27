@@ -162,8 +162,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             _package.WriteEntry("xl/styles.xml", BuildStylesXml());
             if (_sharedStrings is not null)
             {
-                using var bytes = _sharedStrings.ToXlsxBytes();
-                _package.WriteEntry("xl/sharedStrings.xml", bytes.Memory.Span);
+                _package.WriteSharedStrings("xl/sharedStrings.xml", _sharedStrings, binary: false);
             }
             _package.WriteEntry("xl/workbook.xml", BuildWorkbookXml());
             _package.WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
@@ -184,8 +183,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             await _package.WriteEntryAsync("xl/styles.xml", BuildStylesXml(), ct).ConfigureAwait(false);
             if (_sharedStrings is not null)
             {
-                using var bytes = _sharedStrings.ToXlsxBytes();
-                await _package.WriteEntryAsync("xl/sharedStrings.xml", bytes.Memory, ct).ConfigureAwait(false);
+                await _package.WriteSharedStringsAsync("xl/sharedStrings.xml", _sharedStrings, binary: false, ct).ConfigureAwait(false);
             }
             await _package.WriteEntryAsync("xl/workbook.xml", BuildWorkbookXml(), ct).ConfigureAwait(false);
             await _package.WriteEntryAsync("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml(), ct).ConfigureAwait(false);

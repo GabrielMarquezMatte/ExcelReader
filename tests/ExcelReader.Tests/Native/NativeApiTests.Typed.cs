@@ -414,6 +414,35 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void ParseTyped_Should_Match_Trimmed_Headers_First_Column_First_And_Candidates_In_Order()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "id, Qty ,qty,amount\n1,10,20,30\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Names = ["amount", "qty"], Type = NativeColumnType.Int64 },
+                    new() { Names = [" QTY"], Type = NativeColumnType.Int64 },
+                    new() { Index = 0, Type = NativeColumnType.Int64 },
+                ];
+
+                Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable table));
+
+                Assert.Equal(30, Marshal.ReadInt64(ColumnAt(table, 0).Values));
+                Assert.Equal(10, Marshal.ReadInt64(ColumnAt(table, 1).Values));
+                Assert.Equal(1, Marshal.ReadInt64(ColumnAt(table, 2).Values));
+                TypedApi.FreeTable(ref table);
+                ReadApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void ParseTyped_Should_Fail_With_A_Message_Listing_Every_Candidate_When_None_Match()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");

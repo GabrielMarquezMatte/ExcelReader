@@ -355,11 +355,25 @@ namespace ExcelReader.Core.Reader
             double oadate = ExcelEpoch.SerialToOADate(serial, isDate1904);
             if (oadate is > -657435.0 and < 2958466.0)
             {
-                result = DateTime.FromOADate(oadate);
-                return true;
+                return TryFromOADate(oadate, out result);
             }
             result = default;
             return false;
+        }
+
+        // FromOADate rounds to the millisecond, which can carry a serial just under the upper bound past DateTime.MaxValue.
+        private static bool TryFromOADate(double oadate, out DateTime result)
+        {
+            try
+            {
+                result = DateTime.FromOADate(oadate);
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                result = default;
+                return false;
+            }
         }
 
         /// <summary>

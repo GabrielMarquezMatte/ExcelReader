@@ -38,7 +38,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                         {
                             byte[] last = buffer;
                             buffer = null;
-                            await emit(new SheetChunk(last, length)).ConfigureAwait(false);
+                            await EmitAsync(emit, new SheetChunk(last, length)).ConfigureAwait(false);
                         }
                         return;
                     }
@@ -63,7 +63,7 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                     filled = tail;
                     target = Math.Max(chunkBytes, tail);
                     cutter.Rebase(cut);
-                    await emit(new SheetChunk(full, cut)).ConfigureAwait(false);
+                    await EmitAsync(emit, new SheetChunk(full, cut)).ConfigureAwait(false);
                 }
             }
             finally
@@ -72,6 +72,20 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                 {
                     ArrayPool<byte>.Shared.Return(buffer);
                 }
+            }
+        }
+
+        // emit owns the chunk once it returns; a throw means no consumer took it, so it goes back here.
+        private static async ValueTask EmitAsync(Func<SheetChunk, ValueTask> emit, SheetChunk chunk)
+        {
+            try
+            {
+                await emit(chunk).ConfigureAwait(false);
+            }
+            catch
+            {
+                ArrayPool<byte>.Shared.Return(chunk.Buffer);
+                throw;
             }
         }
     }

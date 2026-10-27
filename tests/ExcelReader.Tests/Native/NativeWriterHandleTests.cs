@@ -81,6 +81,57 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void OpenWriteHandle_Should_Replace_The_Existing_File_Only_When_Closed_Successfully()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-writer-handle-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "out.csv");
+            File.WriteAllText(path, "ORIGINAL");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenWriteHandle(path, NativeFormat.Csv, out NativeWriterHandle? handle));
+                Assert.NotNull(handle);
+                handle.StartSheet("Dados");
+                handle.StartRow();
+                handle.WriteString("new");
+                handle.EndRow();
+
+                Assert.Equal("ORIGINAL", File.ReadAllText(path));
+                Assert.Equal(NativeStatus.Ok, WriteApi.CloseWriteHandle(handle));
+
+                Assert.Equal("new", File.ReadAllText(path).TrimEnd());
+                Assert.Equal([path], Directory.GetFiles(directory));
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void OpenWriteHandle_Should_Keep_The_Existing_File_When_Close_Fails()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-writer-handle-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "out.xlsx");
+            File.WriteAllText(path, "ORIGINAL");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenWriteHandle(path, NativeFormat.Xlsx, out NativeWriterHandle? handle));
+                Assert.NotNull(handle);
+
+                Assert.Equal(NativeStatus.Error, WriteApi.CloseWriteHandle(handle));
+
+                Assert.Equal("ORIGINAL", File.ReadAllText(path));
+                Assert.Equal([path], Directory.GetFiles(directory));
+            }
+            finally
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        [Fact]
         public void OpenWriteHandle_Should_Reject_An_Empty_Path()
         {
             Assert.Equal(NativeStatus.InvalidArgument,
@@ -369,6 +420,22 @@ namespace ExcelReader.Tests.Native
             }
 
             Assert.Equal(NativeStatus.Ok, WriteApi.CloseWriteHandle(handle));
+        }
+
+        [Fact]
+        public void GetWriteHandleBytes_Should_Keep_Failing_When_Finishing_The_Workbook_Failed()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenWriteHandleToMemory(NativeFormat.Xlsx, out NativeWriterHandle? handle));
+            Assert.NotNull(handle);
+
+            Assert.Equal(NativeStatus.Error, WriteApi.GetWriteHandleBytes(handle, out byte[]? first));
+            string firstError = NativeApi.LastErrorText();
+            Assert.Equal(NativeStatus.Error, WriteApi.GetWriteHandleBytes(handle, out byte[]? second));
+            Assert.Equal(NativeStatus.Error, WriteApi.CloseWriteHandle(handle));
+
+            Assert.Null(first);
+            Assert.Null(second);
+            Assert.Contains(firstError, NativeApi.LastErrorText(), StringComparison.Ordinal);
         }
 
         [Fact]

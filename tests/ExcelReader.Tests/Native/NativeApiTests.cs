@@ -161,6 +161,25 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void LastError_Should_Return_Only_The_Latest_Non_Ascii_Message()
+        {
+            NativeApi.SetLastError("planilha não encontrada: relatório ✓");
+            NativeApi.SetLastError("ação");
+
+            Span<byte> buffer = stackalloc byte[64];
+            Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+            Assert.Equal("ação", Encoding.UTF8.GetString(buffer[..length]));
+            Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int again));
+            Assert.Equal(length, again);
+
+            Span<byte> tooSmall = stackalloc byte[5];
+            tooSmall.Fill(0xAA);
+            Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.LastError(tooSmall, out int required));
+            Assert.Equal(6, required);
+            Assert.All(tooSmall.ToArray(), static b => Assert.Equal(0xAA, b));
+        }
+
+        [Fact]
         public void LastError_Should_Return_Zero_Length_When_Cleared()
         {
             NativeApi.SetLastError("boom");

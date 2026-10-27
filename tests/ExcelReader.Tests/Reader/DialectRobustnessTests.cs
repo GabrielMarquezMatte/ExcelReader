@@ -18,23 +18,70 @@ namespace ExcelReader.Tests.Reader
         public void AttrReadsDoubleQuotedValue()
         {
             ReadOnlySpan<byte> tag = " name=\"S1\" r:id=\"rId1\""u8;
-            Assert.True(XlsxXml.Attr(tag, " name="u8).SequenceEqual("S1"u8));
-            Assert.True(XlsxXml.Attr(tag, " r:id="u8).SequenceEqual("rId1"u8));
+            Assert.True(XlsxXml.Attr(tag, "name"u8).SequenceEqual("S1"u8));
+            Assert.True(XlsxXml.Attr(tag, "r:id"u8).SequenceEqual("rId1"u8));
         }
 
         [Fact]
         public void AttrReadsSingleQuotedValue()
         {
             ReadOnlySpan<byte> tag = " name='S1' r:id='rId1'"u8;
-            Assert.True(XlsxXml.Attr(tag, " name="u8).SequenceEqual("S1"u8));
-            Assert.True(XlsxXml.Attr(tag, " r:id="u8).SequenceEqual("rId1"u8));
+            Assert.True(XlsxXml.Attr(tag, "name"u8).SequenceEqual("S1"u8));
+            Assert.True(XlsxXml.Attr(tag, "r:id"u8).SequenceEqual("rId1"u8));
         }
 
         [Fact]
         public void AttrReturnsEmptyForMissingOrUnquotedAttribute()
         {
-            Assert.True(XlsxXml.Attr(" name=\"S1\""u8, " id="u8).IsEmpty);
-            Assert.True(XlsxXml.Attr(" name=bad"u8, " name="u8).IsEmpty);
+            Assert.True(XlsxXml.Attr(" name=\"S1\""u8, "id"u8).IsEmpty);
+            Assert.True(XlsxXml.Attr(" name=bad"u8, "name"u8).IsEmpty);
+        }
+
+        [Fact]
+        public void AttrAllowsWhitespaceAroundTheEqualsSign()
+        {
+            ReadOnlySpan<byte> tag = "<sheet\n\tname = \"S1\"\r\nr:id\t=\t'rId1' state=\"hidden\"/>"u8;
+            Assert.True(XlsxXml.Attr(tag, "name"u8).SequenceEqual("S1"u8));
+            Assert.True(XlsxXml.Attr(tag, "r:id"u8).SequenceEqual("rId1"u8));
+            Assert.True(XlsxXml.Attr(tag, "state"u8).SequenceEqual("hidden"u8));
+        }
+
+        [Fact]
+        public void AttrMatchesWholeNamesOnly()
+        {
+            ReadOnlySpan<byte> tag = "<xf xfId=\"7\" numFmtId=\"14\" title=\"a id='x'\"/>"u8;
+            Assert.True(XlsxXml.Attr(tag, "numFmtId"u8).SequenceEqual("14"u8));
+            Assert.True(XlsxXml.Attr(tag, "id"u8).IsEmpty);
+        }
+
+        [Fact]
+        public void TagsSkipCommentsAndQuotedGreaterThanSigns()
+        {
+            List<string> tags = [];
+            foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(
+                "<a><!-- <numFmt numFmtId=\"1\"/> --><numFmt formatCode=\"[>1]0\" numFmtId=\"2\"/><numFmts/></a>"u8, "<numFmt"u8))
+            {
+                tags.Add(Encoding.UTF8.GetString(tag));
+            }
+            Assert.Equal(["<numFmt formatCode=\"[>1]0\" numFmtId=\"2\"/>"], tags);
+        }
+
+        [Theory]
+        [InlineData("worksheets/sheet1.xml")]
+        [InlineData("./worksheets/sheet1.xml")]
+        [InlineData("worksheets/./sheet1.xml")]
+        [InlineData("../xl/worksheets/sheet1.xml")]
+        [InlineData("/xl/worksheets/sheet1.xml")]
+        [InlineData("charts/../worksheets/sheet1.xml")]
+        public void NormalizePartResolvesDotSegments(string target)
+        {
+            Assert.Equal("xl/worksheets/sheet1.xml", XlsxXml.NormalizePart(target));
+        }
+
+        [Fact]
+        public void NormalizePartRejectsATargetAboveThePackageRoot()
+        {
+            Assert.Throws<InvalidDataException>(() => XlsxXml.NormalizePart("../../sheet1.xml"));
         }
 
 

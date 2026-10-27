@@ -824,7 +824,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             [MethodImpl(MethodImplOptions.NoInlining)]
             private void AdvanceRowIndex(ReadOnlySpan<byte> rowTag)
             {
-                int rowNumber = XlsxXml.ParseIntOr(XlsxXml.Attr(rowTag, " r="u8), 0);
+                int rowNumber = XlsxXml.ParseIntOr(XlsxXml.Attr(rowTag, "r"u8), 0);
                 if (rowNumber > 0)
                 {
                     _rowIndex = rowNumber - 1;
@@ -931,55 +931,17 @@ namespace ExcelReader.Core.Reader.Xlsx
                 out ReadOnlySpan<byte> tVal)
             {
                 rRef = sVal = tVal = default;
-                int i = 2;
-                while (i < open.Length && open[i] is not ((byte)'>' or (byte)'/'))
+                int pos = XlsxXml.ElementNameEnd(open);
+                while (XlsxXml.NextAttribute(open, ref pos, out ReadOnlySpan<byte> name, out ReadOnlySpan<byte> value))
                 {
-                    if (!IsXmlSpace(open[i]))
-                    {
-                        i++;
-                        continue;
-                    }
-                    i++;
-
-                    int nameStart = i;
-                    while (i < open.Length && open[i] is not ((byte)'=' or (byte)'>' or (byte)' '))
-                    {
-                        i++;
-                    }
-                    if (i >= open.Length || open[i] != (byte)'=')
+                    if (name.Length != 1)
                     {
                         continue;
                     }
-                    int nameLen = i - nameStart;
-
-                    i++;
-                    if (i >= open.Length || open[i] is not ((byte)'"' or (byte)'\''))
-                    {
-                        continue;
-                    }
-                    byte quote = open[i++];
-                    int valueStart = i;
-                    while (i < open.Length && open[i] != quote)
-                    {
-                        i++;
-                    }
-                    ReadOnlySpan<byte> value = open[valueStart..i];
-                    i++;
-
-                    if (nameLen != 1)
-                    {
-                        continue;
-                    }
-                    if (open[nameStart] == (byte)'r') { rRef = value; }
-                    else if (open[nameStart] == (byte)'s') { sVal = value; }
-                    else if (open[nameStart] == (byte)'t') { tVal = value; }
+                    if (name[0] == (byte)'r') { rRef = value; }
+                    else if (name[0] == (byte)'s') { sVal = value; }
+                    else if (name[0] == (byte)'t') { tVal = value; }
                 }
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static bool IsXmlSpace(byte b)
-            {
-                return b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
             }
 
             private enum Kind { Number, Shared, Inline, Bool, Error, Formula, IsoDate }

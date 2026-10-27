@@ -16,20 +16,20 @@ namespace ExcelReader.Core.Reader.Xlsx
             Dictionary<string, string> rels = XlsxXml.ParseRelationships(relsBytes);
             var sheets = new List<(string, string, ExcelSheetVisibility)>();
             ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(wbBytes);
-            ReadOnlySpan<byte> sheetTag = "<sheet "u8;
+            ReadOnlySpan<byte> sheetTag = "<sheet"u8;
             if (!prefix.IsEmpty)
             {
-                sheetTag = XlsxXml.Token("<"u8, prefix, "sheet "u8);
+                sheetTag = XlsxXml.Token("<"u8, prefix, "sheet"u8);
             }
             foreach (var tag in Tags(wbBytes, sheetTag))
             {
-                var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " r:id="u8));
-                var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " name="u8));
+                var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, "r:id"u8));
+                var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, "name"u8));
                 if (!rels.TryGetValue(rid, out var target))
                 {
                     throw new InvalidDataException($"The workbook's sheet '{name}' refers to relationship '{rid}', which xl/_rels/workbook.xml.rels does not define.");
                 }
-                sheets.Add((name, XlsxXml.NormalizePart(target), ParseVisibility(XlsxXml.Attr(tag, " state="u8))));
+                sheets.Add((name, XlsxXml.NormalizePart(target), ParseVisibility(XlsxXml.Attr(tag, "state"u8))));
             }
             return [.. sheets];
         }
@@ -65,7 +65,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             {
                 return false;
             }
-            var attr = XlsxXml.Attr(src.Slice(pos, end - pos + 1), " date1904="u8);
+            var attr = XlsxXml.Attr(src.Slice(pos, end - pos + 1), "date1904"u8);
             return attr.SequenceEqual("1"u8) || attr.SequenceEqual("true"u8);
         }
 
@@ -173,7 +173,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 int sstEnd = FindSeqGrowing(io, stream, GtToken);
                 if (sstEnd > sstPos)
                 {
-                    uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount="u8), 0);
+                    uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), "uniqueCount"u8), 0);
                 }
             }
             LimitChecks.ThrowIfSharedStringCountImplausible(uniqueCount, partLength);
@@ -225,7 +225,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 int sstEnd = await FindSeqGrowingAsync(io, stream, GtToken, ct).ConfigureAwait(false);
                 if (sstEnd > sstPos)
                 {
-                    uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount="u8), 0);
+                    uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), "uniqueCount"u8), 0);
                 }
             }
             LimitChecks.ThrowIfSharedStringCountImplausible(uniqueCount, partLength);

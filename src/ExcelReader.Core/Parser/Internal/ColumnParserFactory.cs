@@ -463,29 +463,54 @@ namespace ExcelReader.Core.Parser.Internal
         {
             private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
             private static readonly FrozenDictionary<string, TEnum>.AlternateLookup<ReadOnlySpan<char>> _alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
-            private static readonly FrozenDictionary<long, TEnum> _valueMap = BuildValueMap();
+            private static readonly FrozenDictionary<Int128, TEnum> _valueMap = BuildValueMap();
 
             private static FrozenDictionary<string, TEnum> BuildNameMap()
             {
                 Dictionary<string, TEnum> map = new(StringComparer.OrdinalIgnoreCase);
-                foreach (TEnum value in Enum.GetValues<TEnum>())
+                foreach (string name in Enum.GetNames<TEnum>())
                 {
-                    string name = value.ToString();
-                    long numericValue = Convert.ToInt64(value, CultureInfo.InvariantCulture);
+                    TEnum value = Enum.Parse<TEnum>(name);
                     map[name] = value;
-                    map[numericValue.ToString(CultureInfo.InvariantCulture)] = value;
+                    map[value.ToString("D")] = value;
                 }
                 return map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
             }
-            private static FrozenDictionary<long, TEnum> BuildValueMap()
+
+            private static FrozenDictionary<Int128, TEnum> BuildValueMap()
             {
-                Dictionary<long, TEnum> map = [];
+                Dictionary<Int128, TEnum> map = [];
                 foreach (TEnum value in Enum.GetValues<TEnum>())
                 {
-                    long numericValue = Convert.ToInt64(value, CultureInfo.InvariantCulture);
-                    map[numericValue] = value;
+                    map[Numeric(value)] = value;
                 }
                 return map.ToFrozenDictionary();
+            }
+
+            // Int128 holds every value of both a signed and an unsigned underlying type exactly.
+            private static Int128 Numeric(TEnum value)
+            {
+                if (Type.GetTypeCode(Enum.GetUnderlyingType(typeof(TEnum))) is TypeCode.Byte or TypeCode.UInt16 or TypeCode.UInt32 or TypeCode.UInt64)
+                {
+                    return Convert.ToUInt64(value, CultureInfo.InvariantCulture);
+                }
+                return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            }
+
+            // Integer text is parsed exactly; a double cannot tell apart integers above 2^53.
+            private static bool TryGetIntegral(in Cell cell, double number, out Int128 integral)
+            {
+                if (!cell.Value.IsEmpty && Int128.TryParse(cell.Value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out integral))
+                {
+                    return true;
+                }
+                if (number == Math.Truncate(number) && number is >= -9223372036854775808.0 and < 18446744073709551616.0)
+                {
+                    integral = (Int128)number;
+                    return true;
+                }
+                integral = default;
+                return false;
             }
 
             [SkipLocalsInit]
@@ -493,12 +518,12 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 if (cell.Type is CellType.Number or CellType.Date && cell.TryGetDouble(out double d))
                 {
-                    if (d != Math.Truncate(d) || d < long.MinValue || d > long.MaxValue)
+                    if (!TryGetIntegral(in cell, d, out Int128 integral))
                     {
                         value = default;
                         return false;
                     }
-                    return _valueMap.TryGetValue((long)d, out value);
+                    return _valueMap.TryGetValue(integral, out value);
                 }
                 Span<char> stack = stackalloc char[Utf8Text.StackChars];
                 ReadOnlySpan<char> chars = Utf8Text.Decode(cell.Value, stack, out char[]? rented);
