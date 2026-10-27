@@ -212,7 +212,7 @@ impl OpenOptions {
         };
         if let Some(bytes) = password {
             raw.password = bytes.as_ptr();
-            raw.password_len = bytes.len() as i32;
+            raw.password_len = i32::try_from(bytes.len()).unwrap_or(-1);
         }
         OpenOptionsRaw {
             raw,
@@ -406,7 +406,10 @@ impl WriteOptions {
     pub(crate) fn to_raw(&self) -> XlWriteOptions {
         XlWriteOptions {
             struct_size: std::mem::size_of::<XlWriteOptions>() as i32,
-            sheet_name_len: self.sheet_name.as_ref().map_or(0, |n| n.len() as i32),
+            sheet_name_len: self
+                .sheet_name
+                .as_ref()
+                .map_or(0, |n| i32::try_from(n.len()).unwrap_or(-1)),
             sheet_name: self
                 .sheet_name
                 .as_ref()
@@ -557,7 +560,10 @@ mod tests {
         assert_eq!(raw.degree_of_parallelism, 1);
         assert_eq!(raw.batch_rows, 0);
 
-        let raw = WriteOptions::new().degree_of_parallelism(0).batch_rows(2).to_raw();
+        let raw = WriteOptions::new()
+            .degree_of_parallelism(0)
+            .batch_rows(2)
+            .to_raw();
         assert_eq!(raw.degree_of_parallelism, 0);
         assert_eq!(raw.batch_rows, 2);
     }

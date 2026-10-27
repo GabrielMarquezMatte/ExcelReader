@@ -11,7 +11,9 @@
 use crate::ffi::{self, XlWriterHandle};
 use crate::workbook::{buffer_to_vec, check, check_abi_version, len_i32, path_str};
 use crate::writer::{raw_table, OwnedColumn};
-use crate::{Column, ColumnType, Date, Error, ExcelWriter, TableOptions, Time, Timestamp, WriteOptions};
+use crate::{
+    Column, ColumnType, Date, Error, ExcelWriter, TableOptions, Time, Timestamp, WriteOptions,
+};
 use std::io::Write;
 use std::path::Path;
 
@@ -68,7 +70,8 @@ impl<'w> WriterHandle<'w> {
     /// Starts a new sheet named `name`. Must not be called again before the current sheet, if
     /// any, has been ended with [`end_sheet`](Self::end_sheet).
     pub fn start_sheet(&mut self, name: &str) -> Result<(), Error> {
-        check(unsafe { ffi::xl_start_sheet(self.handle, name.as_ptr(), name.len() as i32) })
+        let name_len = len_i32(name.len(), "sheet name")?;
+        check(unsafe { ffi::xl_start_sheet(self.handle, name.as_ptr(), name_len) })
     }
 
     /// Starts a new row on the current sheet. Must not be called again before the current row, if
@@ -79,9 +82,10 @@ impl<'w> WriterHandle<'w> {
 
     /// Writes the next cell of the current row as text, or a blank cell for `None`.
     pub fn write_str(&mut self, value: Option<&str>) -> Result<(), Error> {
-        let (ptr, len) = value.map_or((std::ptr::null(), 0), |text| {
-            (text.as_ptr(), text.len() as i32)
-        });
+        let (ptr, len) = match value {
+            Some(text) => (text.as_ptr(), len_i32(text.len(), "text")?),
+            None => (std::ptr::null(), 0),
+        };
         check(unsafe { ffi::xl_write_string(self.handle, ptr, len) })
     }
 
