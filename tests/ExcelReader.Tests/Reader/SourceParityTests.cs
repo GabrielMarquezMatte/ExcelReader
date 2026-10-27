@@ -511,19 +511,19 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
-        public void A_Failed_Detection_Restores_The_Stream_Position()
+        public void A_Corrupt_Zip_Detection_Restores_The_Stream_Position()
         {
             TrickleStream stream = new(CorruptZip());
-            Assert.Throws<InvalidDataException>(() => Excel.DetectFileFormat(stream));
+            Assert.Equal(ExcelFileFormat.Unknown, Excel.DetectFileFormat(stream));
             Assert.Equal(0, stream.Position);
             Assert.True(stream.CanRead);
         }
 
         [Fact]
-        public async Task A_Failed_Asynchronous_Detection_Restores_The_Stream_Position()
+        public async Task A_Corrupt_Zip_Asynchronous_Detection_Restores_The_Stream_Position()
         {
             TrickleStream stream = new(CorruptZip());
-            await Assert.ThrowsAsync<InvalidDataException>(async () => await Excel.DetectFileFormatAsync(stream, TestContext.Current.CancellationToken));
+            Assert.Equal(ExcelFileFormat.Unknown, await Excel.DetectFileFormatAsync(stream, TestContext.Current.CancellationToken));
             Assert.Equal(0, stream.Position);
             Assert.True(stream.CanRead);
         }
