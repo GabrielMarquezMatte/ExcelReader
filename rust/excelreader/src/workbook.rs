@@ -194,9 +194,8 @@ impl Workbook {
     /// The sheet called `name`, compared without regard to case. `Ok(None)` when no sheet matches.
     pub fn sheet_by_name(&self, name: &str) -> Result<Option<Sheet<'_>>, Error> {
         let mut index: i32 = -1;
-        check(unsafe {
-            ffi::xl_sheet_index(self.handle, name.as_ptr(), name.len() as i32, &mut index)
-        })?;
+        let name_len = len_i32(name.len(), "name")?;
+        check(unsafe { ffi::xl_sheet_index(self.handle, name.as_ptr(), name_len, &mut index) })?;
         Ok((index >= 0).then_some(Sheet {
             workbook: self,
             index,
@@ -246,7 +245,12 @@ impl Workbook {
     pub fn table_by_name(&self, name: &str) -> Result<Option<Sheet<'_>>, Error> {
         let mut index: i32 = -1;
         check(unsafe {
-            ffi::xl_table_index(self.handle, name.as_ptr(), len_i32(name.len(), "name")?, &mut index)
+            ffi::xl_table_index(
+                self.handle,
+                name.as_ptr(),
+                len_i32(name.len(), "name")?,
+                &mut index,
+            )
         })?;
         Ok((index >= 0).then_some(Sheet {
             workbook: self,
