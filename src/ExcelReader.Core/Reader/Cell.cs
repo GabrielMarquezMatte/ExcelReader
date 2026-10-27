@@ -112,19 +112,19 @@ namespace ExcelReader.Core.Reader
                 }
                 if (typeof(T) == typeof(double))
                 {
-                    bool parsedDouble = double.TryParse(Value, NumberStyles.Float, provider, out double d);
+                    bool parsedDouble = double.TryParse(Value, TextStyles(provider), provider, out double d);
                     result = Unsafe.As<double, T>(ref d);
                     return parsedDouble;
                 }
                 if (typeof(T) == typeof(float))
                 {
-                    bool parsedFloat = float.TryParse(Value, NumberStyles.Float, provider, out float f);
+                    bool parsedFloat = float.TryParse(Value, TextStyles(provider), provider, out float f);
                     result = Unsafe.As<float, T>(ref f);
                     return parsedFloat;
                 }
                 if (typeof(T) == typeof(Half))
                 {
-                    bool parsedHalf = Half.TryParse(Value, NumberStyles.Float, provider, out Half h);
+                    bool parsedHalf = Half.TryParse(Value, TextStyles(provider), provider, out Half h);
                     result = Unsafe.As<Half, T>(ref h);
                     return parsedHalf;
                 }
@@ -164,7 +164,12 @@ namespace ExcelReader.Core.Reader
         private static bool TryParseDecimalText(ReadOnlySpan<byte> utf8, IFormatProvider provider, out decimal value)
         {
             return (UsesDotDecimalSeparator(provider) && FastDecimal.TryParse(utf8, out value))
-                || decimal.TryParse(utf8, NumberStyles.Float, provider, out value);
+                || decimal.TryParse(utf8, TextStyles(provider), provider, out value);
+        }
+
+        private static NumberStyles TextStyles(IFormatProvider provider)
+        {
+            return ReferenceEquals(provider, CultureInfo.InvariantCulture) ? NumberStyles.Float : NumberStyles.Float | NumberStyles.AllowThousands;
         }
 
         // A binary cell keeps no text, so this goes through the shortest text that round-trips the double, the
