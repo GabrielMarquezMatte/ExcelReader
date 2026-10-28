@@ -98,14 +98,11 @@ namespace Snippets.Parsing.Generated
             }
 
             var changes = new[] { new ChangeRow { File = "README.md", LinesAdded = 12 } };
-            var stream = File.Create("changes.xlsx");
-            await using (stream.ConfigureAwait(false))
+            await using var stream = File.Create("changes.xlsx");
+            await using var writer = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
+            await using (var sheet = writer.AddSheet("Changes"))
             {
-                await using var writer = XlsxWorkbookWriter.Create(stream).ConfigureAwait(false);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
-                await using (var sheet = writer.AddSheet("Changes").ConfigureAwait(false))
-                {
-                    await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>()).ConfigureAwait(false);
-                }
+                await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>());
             }
             #endregion
         }
@@ -282,13 +279,11 @@ namespace Snippets.Parsing.RefStructAsync
         internal static async Task Run()
         {
             #region parsing-ref-struct-async
-            var workbook = await Excel.FromXlsxFileAsync("changes.xlsx").ConfigureAwait(false);
-            await using (workbook.ConfigureAwait(false))
+            await using var workbook = await Excel.FromXlsxFileAsync("changes.xlsx");
+
+            await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(workbook.FirstSheet))
             {
-                await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(workbook.FirstSheet).ConfigureAwait(false))
-                {
-                    Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
-                }
+                Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
             }
             #endregion
         }

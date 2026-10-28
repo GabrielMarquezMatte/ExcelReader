@@ -46,7 +46,7 @@ namespace Snippets.Reading.ParallelParse
             #region reading-parallel-parse
             using XlsxWorkbook workbook = Excel.FromXlsxFile("big.xlsx");
 
-            await foreach (var row in SheetParallel.ParseAsync(workbook.FirstSheet, ExcelParser.FromAttributes<SalesRow>(), new SheetParallelOptions { DegreeOfParallelism = 8 }).ConfigureAwait(false))
+            await foreach (var row in SheetParallel.ParseAsync(workbook.FirstSheet, ExcelParser.FromAttributes<SalesRow>(), new SheetParallelOptions { DegreeOfParallelism = 8 }))
             {
                 Total += row.Revenue;
             }
@@ -68,15 +68,9 @@ namespace Snippets.Reading.ParallelAggregate
     {
         public long Units;
 
-        public void Add(SaleRow model)
-        {
-            Units += model.Units;
-        }
+        public void Add(SaleRow model) => Units += model.Units;
 
-        public void Merge(UnitTotal following)
-        {
-            Units += following.Units;
-        }
+        public void Merge(UnitTotal following) => Units += following.Units;
     }
     #endregion
 
@@ -90,7 +84,7 @@ namespace Snippets.Reading.ParallelAggregate
             UnitTotal total = await SheetParallel.AggregateAsync<UnitTotal, SaleRow>(
                 workbook.FirstSheet,
                 ExcelParser.FromAttributes<SaleRow>(),
-                new SheetParallelOptions { HeaderRow = 1 }).ConfigureAwait(false);
+                new SheetParallelOptions { HeaderRow = 1 });
             #endregion
         }
     }
@@ -112,7 +106,7 @@ namespace Snippets.Reading.ParallelForeach
                 workbook.FirstSheet,
                 ExcelParser.FromAttributes<SaleRow>(),
                 row => Interlocked.Add(ref total, row.Units),
-                new SheetParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 }).ConfigureAwait(false);
+                new SheetParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
             #endregion
         }
     }
@@ -317,14 +311,11 @@ namespace Snippets.Reading.Async
         internal static async Task Run(CancellationToken cancellationToken)
         {
             #region reading-async
-            var workbook = await Excel.FromXlsxFileAsync("report.xlsx", ct: cancellationToken).ConfigureAwait(false);
-            #region reading-async
-            await using (workbook.ConfigureAwait(false))
+            await using var workbook = await Excel.FromXlsxFileAsync("report.xlsx", ct: cancellationToken);
+
+            await foreach (var row in workbook.FirstSheet)
             {
-                await foreach (var row in workbook.FirstSheet.ConfigureAwait(false))
-                {
-                    Console.WriteLine(row[0].GetString());
-                }
+                Console.WriteLine(row[0].GetString());
             }
             #endregion
         }
@@ -337,17 +328,14 @@ namespace Snippets.Reading.AsyncEnumerator
     {
         internal static async Task Run(CancellationToken cancellationToken)
         {
-            var workbook = await Excel.FromXlsxFileAsync("report.xlsx", ct: cancellationToken).ConfigureAwait(false);
             #region reading-async-enumerator
-            await using (workbook.ConfigureAwait(false))
-            {
-                await using var rows = workbook.FirstSheet.GetAsyncEnumerator(cancellationToken).ConfigureAwait(false);
+            await using var workbook = await Excel.FromXlsxFileAsync("report.xlsx", ct: cancellationToken);
+            await using var rows = workbook.FirstSheet.GetAsyncEnumerator(cancellationToken);
 
-                while (await rows.MoveNextAsync().ConfigureAwait(false))
-                {
-                    var row = rows.Current;
-                    Console.WriteLine(row[0].GetString());
-                }
+            while (await rows.MoveNextAsync())
+            {
+                var row = rows.Current;
+                Console.WriteLine(row[0].GetString());
             }
             #endregion
         }
