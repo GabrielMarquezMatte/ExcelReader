@@ -130,14 +130,15 @@ using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
 
 using var plain = new MemoryStream();
-await using (var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true))
+var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true);
+await using (workbook.ConfigureAwait(false))
 {
     // write sheets and rows as usual
 }
 plain.Position = 0;
 
 using var destination = File.Create(&quot;secret.xlsx&quot;);
-await Excel.EncryptPackageAsync(plain, destination, &quot;hunter2&quot;);
+await Excel.EncryptPackageAsync(plain, destination, &quot;hunter2&quot;).ConfigureAwait(false);
 </code></pre>
 <p>The package stream must be seekable (it is read twice, so the container never has to be buffered in
 memory); the destination does not. Path-to-path overloads exist for both the sync and async forms.

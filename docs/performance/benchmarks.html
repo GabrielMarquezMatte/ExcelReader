@@ -1409,56 +1409,56 @@ zero-copy advantage the other can't take:</p>
 <tr>
 <td>vs. <a href="https://github.com/tafia/calamine">calamine</a> (Rust)</td>
 <td>XLSX</td>
-<td style="text-align: right;">72.3 ms</td>
-<td style="text-align: right;">271.2 ms</td>
-<td style="text-align: right;">~3.8x faster</td>
+<td style="text-align: right;">69.5 ms</td>
+<td style="text-align: right;">276.4 ms</td>
+<td style="text-align: right;">~4.0x faster</td>
 </tr>
 <tr>
 <td>vs. calamine (Rust)</td>
 <td>XLSB</td>
-<td style="text-align: right;">46.3 ms</td>
-<td style="text-align: right;">82.9 ms</td>
+<td style="text-align: right;">47.8 ms</td>
+<td style="text-align: right;">87.0 ms</td>
 <td style="text-align: right;">~1.8x faster</td>
 </tr>
 <tr>
 <td>vs. <a href="https://github.com/duckdb/duckdb">DuckDB</a> <code>read_xlsx</code> (C++)</td>
 <td>XLSX</td>
-<td style="text-align: right;">61.3 ms</td>
-<td style="text-align: right;">413.8 ms</td>
-<td style="text-align: right;">~6.7x faster</td>
+<td style="text-align: right;">58.0 ms</td>
+<td style="text-align: right;">417.8 ms</td>
+<td style="text-align: right;">~7.2x faster</td>
 </tr>
 <tr>
 <td>vs. <a href="https://github.com/brechtsanders/xlsxio">xlsxio</a> (C)</td>
 <td>XLSX</td>
-<td style="text-align: right;">61.3 ms</td>
-<td style="text-align: right;">497.4 ms</td>
-<td style="text-align: right;">~8.1x faster</td>
+<td style="text-align: right;">58.0 ms</td>
+<td style="text-align: right;">515.5 ms</td>
+<td style="text-align: right;">~8.9x faster</td>
 </tr>
 <tr>
 <td>vs. <a href="https://github.com/tfussell/xlnt">xlnt</a> (C++)</td>
 <td>XLSX</td>
-<td style="text-align: right;">61.3 ms</td>
-<td style="text-align: right;">2,335.0 ms</td>
-<td style="text-align: right;">~38x faster</td>
+<td style="text-align: right;">58.0 ms</td>
+<td style="text-align: right;">2,495.0 ms</td>
+<td style="text-align: right;">~43x faster</td>
 </tr>
 <tr>
 <td>vs. <a href="https://github.com/liquidaty/zsv">zsv</a> <code>fast</code> engine (C)</td>
 <td>CSV</td>
-<td style="text-align: right;">27.4 ms</td>
-<td style="text-align: right;">20.0 ms</td>
-<td style="text-align: right;">~1.4x <strong>slower</strong></td>
+<td style="text-align: right;">28.1 ms</td>
+<td style="text-align: right;">21.2 ms</td>
+<td style="text-align: right;">~1.3x <strong>slower</strong></td>
 </tr>
 </tbody>
 </table>
 <p>Writing the same 14 columns × 65,535 rows from row-shaped data, the C++ suite measures
-<code>write_sheet</code> at 74.8–76.0 ms against DuckDB's 831 ms (~11x), libxlsxwriter's 1,207 ms (~16x),
-xlsxio's 2,405 ms (~32x) and xlnt's 5,525 ms (~74x). The Rust suite measures 40.7 ms against
-rust_xlsxwriter's 322.0 ms (~7.9x) over 7 columns. Caveats for both are in the binding READMEs.</p>
+<code>write_sheet</code> at 76.2–76.5 ms against DuckDB's 835 ms (~11x), libxlsxwriter's 1,200 ms (~16x),
+xlsxio's 2,441 ms (~32x) and xlnt's 5,554 ms (~73x). The Rust suite measures 40.8 ms against
+rust_xlsxwriter's 338.5 ms (~8.3x) over 7 columns. Caveats for both are in the binding READMEs.</p>
 <p>DuckDB, xlsxio and xlnt do not read <code>.xlsb</code>, so those comparisons are XLSX-only. calamine is a fast,
 well-optimized reader in its own right — the gap there is real but not the order of magnitude seen
 against the C/C++ competitors.</p>
 <p>zsv is the one competitor ahead. The CSV row is the typed workload, where both sides build the same
-14-column rows with owned strings. Just counting cell bytes, zsv is ~3.3x faster, and that gap is
+14-column rows with owned strings. Just counting cell bytes, zsv is ~3.4x faster, and that gap is
 ExcelReader's C ABI, which serializes every row into a buffer, not its CSV parser. That suite is
 built with GCC (zsv does not compile under MSVC). Its caveats are in the C++ README.</p>
 
