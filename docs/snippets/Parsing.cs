@@ -98,11 +98,14 @@ namespace Snippets.Parsing.Generated
             }
 
             var changes = new[] { new ChangeRow { File = "README.md", LinesAdded = 12 } };
-            await using var stream = File.Create("changes.xlsx");
-            await using var writer = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
-            await using (var sheet = writer.AddSheet("Changes"))
+            var stream = File.Create("changes.xlsx");
+            await using (stream.ConfigureAwait(false))
             {
-                await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>());
+                await using var writer = XlsxWorkbookWriter.Create(stream).ConfigureAwait(false);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
+            await using (var sheet = writer.AddSheet("Changes").ConfigureAwait(false))
+            {
+                await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>()).ConfigureAwait(false);
+            }
             }
             #endregion
         }
@@ -279,11 +282,14 @@ namespace Snippets.Parsing.RefStructAsync
         internal static async Task Run()
         {
             #region parsing-ref-struct-async
-            await using var workbook = await Excel.FromXlsxFileAsync("changes.xlsx");
-
-            await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(workbook.FirstSheet))
+            var workbook = await Excel.FromXlsxFileAsync("changes.xlsx").ConfigureAwait(false);
+            #region parsing-ref-struct-async
+            await using (workbook.ConfigureAwait(false))
+            {
+                await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(workbook.FirstSheet).ConfigureAwait(false))
             {
                 Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
+            }
             }
             #endregion
         }

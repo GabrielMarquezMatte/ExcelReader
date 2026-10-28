@@ -85,7 +85,10 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal int StyleCount => _styles.Count;
 
-        internal int DateStyle(int styleId) => _styles.DateVariant(styleId);
+        internal int DateStyle(int styleId)
+        {
+            return _styles.DateVariant(styleId);
+        }
 
         internal int AddSharedString(ReadOnlySpan<char> value)
         {

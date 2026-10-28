@@ -375,8 +375,15 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 return Last.GetHashCode();
             }
 
-            public static bool operator ==(WideRow left, WideRow right) => left.Equals(right);
-            public static bool operator !=(WideRow left, WideRow right) => !left.Equals(right);
+            public static bool operator ==(WideRow left, WideRow right)
+            {
+                return left.Equals(right);
+            }
+
+            public static bool operator !=(WideRow left, WideRow right)
+            {
+                return !left.Equals(right);
+            }
         }
 
         private sealed class WideLog : IRowAccumulator<WideLog, WideRow>
