@@ -186,11 +186,13 @@ catch (Exception ex) when (IsRejectedFile(ex))
     Console.WriteLine($&quot;Rejected: {ex.Message}&quot;);
 }
 
-static bool IsRejectedFile(Exception ex) =&gt;
-    ex is InvalidDataException or EndOfStreamException or NotSupportedException
+static bool IsRejectedFile(Exception ex)
+{
+    return ex is InvalidDataException or EndOfStreamException or NotSupportedException
         or ExcelEncryptionException or ExcelParseException
     || ex.GetType() == typeof(ArgumentException)
     || ex.GetType() == typeof(InvalidOperationException);
+}
 </code></pre>
 <p><code>LimitName</code> is the option's name (or <code>Columns</code>, <code>ArrayMaxLength</code>); <code>Limit</code> and <code>Actual</code> are in that
 limit's unit — bytes, entries or iterations.</p>
@@ -224,8 +226,10 @@ string. CSV has no cell types, and Excel opening a <code>.csv</code> treats a fi
 <code>-</code> or <code>@</code> as a formula. <a class="xref" href="../../api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html"><code>CsvWorkbookWriter</code></a> writes your text unchanged, so if a person may open the
 file in a spreadsheet program, neutralize those fields yourself:</p>
 <!-- snippet: untrusted-input-csv-injection -->
-<pre><code class="lang-csharp">static string Neutralize(string text) =&gt;
-    text.Length &gt; 0 &amp;&amp; &quot;=+-@\t\r&quot;.Contains(text[0]) ? &quot;'&quot; + text : text;
+<pre><code class="lang-csharp">static string Neutralize(string text)
+{
+    return text.Length &gt; 0 &amp;&amp; &quot;=+-@\t\r&quot;.Contains(text[0]) ? &quot;'&quot; + text : text;
+}
 
 row.Write(Neutralize(comment));
 </code></pre>

@@ -202,7 +202,7 @@ Use <code>Cell.as_date()</code> to convert, passing the workbook's epoch flag:</
 <p><code>rows()</code> hands back cell <em>text</em>, which means the library formats every value to a string on the way
 out and builds one Python object per cell. <code>parse()</code> skips that entirely: you give it a schema,
 and the conversion happens natively, straight into typed column buffers. On a 65,536 × 14 sheet it is
-~30× faster than <code>rows()</code>, and faster than <code>polars.read_excel()</code> — see <a href="#reading">Reading</a> below for
+~20× faster than <code>rows()</code>, and faster than <code>polars.read_excel()</code> — see <a href="#reading">Reading</a> below for
 the measured numbers.</p>
 <pre><code class="lang-python">from excelreader import ColumnSpec, ColumnType
 
@@ -562,8 +562,8 @@ encrypt_package(plain, secret, &quot;hunter2&quot;)
 <code>tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb</code> (65,535 data rows, 14 columns), the same
 fixture the .NET, C++ and Rust suites use. Measured on Windows 10 (22H2), AMD Ryzen 7 5700X
 (16 logical CPUs @ 3.39 GHz), CPython 3.14.7, 10 runs each (medians shown; <code>min</code> is in the scripts' own
-output), against a library published from commit 449ca144. Competitors: polars 1.44.1 (with
-fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter 3.2.9.</p>
+output), against a library published from commit ef831b19. Competitors: polars 2.0.0 (with
+fastexcel 0.21.0), pandas 3.1.0 (with openpyxl 3.1.5), xlsxwriter 3.2.9.</p>
 <h3 id="reading">Reading</h3>
 <table>
 <thead>
@@ -575,49 +575,49 @@ fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter 3.2.9.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>to_arrow_stream()</code>, read by pyarrow</td>
-<td style="text-align: right;">31.2 ms</td>
-<td>Arrow record batches, streamed</td>
-</tr>
-<tr>
 <td><code>to_arrow()</code></td>
-<td style="text-align: right;">30.1 ms</td>
+<td style="text-align: right;">31.2 ms</td>
 <td>the same parse, handed to pyarrow zero-copy</td>
 </tr>
 <tr>
+<td><code>to_arrow_stream()</code>, read by pyarrow</td>
+<td style="text-align: right;">32.0 ms</td>
+<td>Arrow record batches, streamed</td>
+</tr>
+<tr>
 <td><code>parse()</code></td>
-<td style="text-align: right;">32.5 ms</td>
+<td style="text-align: right;">33.8 ms</td>
 <td>typed columnar buffers, converted natively</td>
 </tr>
 <tr>
 <td><code>parse_batches()</code></td>
-<td style="text-align: right;">33.2 ms</td>
+<td style="text-align: right;">34.9 ms</td>
 <td>the same typed buffers, in batches</td>
 </tr>
 <tr>
 <td><code>to_polars()</code></td>
-<td style="text-align: right;">33.6 ms</td>
+<td style="text-align: right;">35.4 ms</td>
 <td>typed columnar DataFrame, schema inferred</td>
 </tr>
 <tr>
 <td><code>polars.read_excel()</code></td>
-<td style="text-align: right;">120.6 ms</td>
+<td style="text-align: right;">135.0 ms</td>
 <td>typed columnar DataFrame, types inferred</td>
 </tr>
 <tr>
 <td><code>rows()</code></td>
-<td style="text-align: right;">975.7 ms</td>
+<td style="text-align: right;">693.8 ms</td>
 <td>one <code>Cell</code> object per cell, streamed per row</td>
 </tr>
 </tbody>
 </table>
 <p>The batched readers cost the same as their whole-sheet counterparts and lower the peak memory:
-<code>to_arrow_stream(batch_size=10000)</code> peaks at 11.4 MiB against 19.5 MiB for one whole-sheet
+<code>to_arrow_stream(batch_size=10000)</code> peaks at 10.9 MiB against 19.4 MiB for one whole-sheet
 record batch on this file.</p>
-<p>Only the <code>to_polars()</code> / <code>polars.read_excel()</code> pair is a like-for-like comparison (~3.6x), and even
+<p>Only the <code>to_polars()</code> / <code>polars.read_excel()</code> pair is a like-for-like comparison (~3.8x), and even
 that one is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules
 are not identical. The rows above it produce different things and are listed to show what each API
-costs, not to rank them — <code>rows()</code> is ~30x slower than <code>parse()</code> because it materializes
+costs, not to rank them — <code>rows()</code> is ~20x slower than <code>parse()</code> because it materializes
 917,504 Python objects, which is the price of that shape, not a slow parser.</p>
 <p>CSV, from <code>65K_Records_Data.csv</code> (8.2 MB), same 14 typed columns:</p>
 <table>
@@ -630,36 +630,37 @@ costs, not to rank them — <code>rows()</code> is ~30x slower than <code>parse(
 <tbody>
 <tr>
 <td><code>parse(parallelism=1)</code></td>
-<td style="text-align: right;">23.3 ms</td>
+<td style="text-align: right;">25.8 ms</td>
 </tr>
 <tr>
 <td><code>parse(parallelism=0)</code></td>
-<td style="text-align: right;">11.3 ms</td>
+<td style="text-align: right;">13.7 ms</td>
 </tr>
 <tr>
 <td><code>to_polars(parallelism=1)</code></td>
-<td style="text-align: right;">24.2 ms</td>
+<td style="text-align: right;">25.3 ms</td>
 </tr>
 <tr>
 <td><code>to_polars(parallelism=0)</code></td>
-<td style="text-align: right;">9.7 ms</td>
+<td style="text-align: right;">11.3 ms</td>
 </tr>
 <tr>
 <td><code>polars.read_csv(try_parse_dates=True)</code></td>
-<td style="text-align: right;">6.9 ms</td>
+<td style="text-align: right;">12.9 ms</td>
 </tr>
 <tr>
 <td><code>pandas.read_csv</code>, pyarrow engine</td>
-<td style="text-align: right;">116.0 ms</td>
+<td style="text-align: right;">114.5 ms</td>
 </tr>
 <tr>
 <td><code>pandas.read_csv</code>, C engine</td>
-<td style="text-align: right;">132.3 ms</td>
+<td style="text-align: right;">73.0 ms</td>
 </tr>
 </tbody>
 </table>
-<p>polars' CSV reader is ahead (multithreaded, and it infers types from the text without our schema
-step); ExcelReader is ~10x faster than pandas on either engine. These include opening the file, so
+<p>At <code>parallelism=0</code> ExcelReader and polars' multithreaded CSV reader are level (<code>to_polars()</code> 11.3 ms
+against 12.9 ms; polars infers types from the text, we convert against a given schema). ExcelReader is
+~5x faster than pandas' C engine and ~8x faster than its pyarrow engine, measured with <code>parse(parallelism=0)</code>. These include opening the file, so
 they are above the in-memory <code>xl_parse_typed</code> figures in <a href="#reading-a-large-sheet-on-several-threads">Reading a large sheet on several
 threads</a>.</p>
 <h3 id="writing-1">Writing</h3>
@@ -674,57 +675,57 @@ threads</a>.</p>
 <tbody>
 <tr>
 <td><code>write_workbook()</code> → csv</td>
-<td style="text-align: right;">33.3 ms</td>
+<td style="text-align: right;">35.9 ms</td>
 <td>8.2 MB</td>
 </tr>
 <tr>
-<td><code>write_workbook()</code> → xlsb</td>
-<td style="text-align: right;">51.7 ms</td>
-<td>4.5 MB</td>
-</tr>
-<tr>
 <td><code>write_workbook()</code> → xls</td>
-<td style="text-align: right;">59.2 ms</td>
+<td style="text-align: right;">53.0 ms</td>
 <td>13.4 MB</td>
 </tr>
 <tr>
+<td><code>write_workbook()</code> → xlsb</td>
+<td style="text-align: right;">53.7 ms</td>
+<td>4.5 MB</td>
+</tr>
+<tr>
 <td><code>write_workbook()</code> → xlsx</td>
-<td style="text-align: right;">68.5 ms</td>
+<td style="text-align: right;">68.8 ms</td>
 <td>5.1 MB</td>
 </tr>
 <tr>
 <td><code>write_workbook(polars_df)</code> → xlsx</td>
-<td style="text-align: right;">76.6 ms</td>
+<td style="text-align: right;">76.1 ms</td>
 <td>5.1 MB</td>
 </tr>
 <tr>
 <td><code>write_workbook(pandas_df)</code> → xlsx</td>
-<td style="text-align: right;">82.5 ms</td>
+<td style="text-align: right;">82.4 ms</td>
 <td>5.1 MB</td>
 </tr>
 <tr>
 <td><code>polars.DataFrame.write_excel()</code></td>
-<td style="text-align: right;">4,714.9 ms</td>
+<td style="text-align: right;">4,754.8 ms</td>
 <td>5.6 MB</td>
 </tr>
 <tr>
 <td><code>pandas.DataFrame.to_excel()</code></td>
-<td style="text-align: right;">7,371.4 ms</td>
+<td style="text-align: right;">7,696.4 ms</td>
 <td>5.5 MB</td>
 </tr>
 </tbody>
 </table>
 <p>The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
 <code>write_workbook(polars_df)</code> is ~62x faster than polars' own <code>write_excel()</code>, and
-<code>write_workbook(pandas_df)</code> ~89x faster than <code>to_excel()</code>. Both of ours pay a conversion the raw path does not: the DataFrame goes
+<code>write_workbook(pandas_df)</code> ~93x faster than <code>to_excel()</code>. Both of ours pay a conversion the raw path does not: the DataFrame goes
 through Arrow, and each column is cast to the layout the native side reads and copied out of Arrow's
-buffers, which is the gap between those rows and the 68.5 ms one. Handing <code>write_workbook()</code> buffers
+buffers, which is the gap between those rows and the 68.8 ms one. Handing <code>write_workbook()</code> buffers
 that are already columnar — what <code>parse()</code> returns — skips it.</p>
-<p><code>write_workbook(xlsx)</code> at 68.5 ms lands within ~4 ms of the C++ binding's
-<code>xl::write_columns</code> on the same 14 columns (64.2 ms), which is the expected result: both are thin wrappers
+<p><code>write_workbook(xlsx)</code> at 68.8 ms lands within ~3 ms of the C++ binding's
+<code>xl::write_columns</code> on the same 14 columns (65.7 ms), which is the expected result: both are thin wrappers
 over the same <code>xl_write_typed</code> call, and neither adds work per cell.</p>
 <p><code>xls</code> being the largest file and still faster than xlsx is not a paradox — BIFF8 writes
-fixed-width records with no compression, so it trades ~2.6x the bytes for less work per cell. xlsb is faster still, at 51.7 ms.</p>
+fixed-width records with no compression, so it trades ~2.6x the bytes for less work per cell. xlsb costs about the same, at 53.7 ms.</p>
 <h2 id="notes">Notes</h2>
 <ul>
 <li>A <code>Workbook</code> can be read from several threads at once; see <a href="#sheets">Sheets</a>.</li>
