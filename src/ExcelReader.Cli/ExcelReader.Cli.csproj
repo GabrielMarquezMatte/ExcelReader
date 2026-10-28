@@ -45,7 +45,7 @@
   <ItemGroup>
     <!-- Source generator only: it emits the ConsoleApp class itself, so nothing from this package
          reaches the published tool. PrivateAssets/ExcludeAssets are what keep it that way. -->
-    <PackageReference Include="ConsoleAppFramework" Version="5.7.13">
+    <PackageReference Include="ConsoleAppFramework" Version="5.8.0">
       <PrivateAssets>all</PrivateAssets>
       <ExcludeAssets>runtime</ExcludeAssets>
       <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
