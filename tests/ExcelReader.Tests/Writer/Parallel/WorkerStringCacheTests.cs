@@ -50,8 +50,8 @@ namespace ExcelReader.Tests.Writer.Parallel
             var table = new SharedStringTable();
 
             int serialA = table.GetOrAdd("a");
-            int concurrentA = table.GetOrAddConcurrent("a");
-            int concurrentB = table.GetOrAddConcurrent("b");
+            int concurrentA = table.GetOrAddConcurrent("a", "a");
+            int concurrentB = table.GetOrAddConcurrent("b", owned: null);
             int serialB = table.GetOrAdd("b".AsSpan());
             int serialC = table.GetOrAdd("c");
 
@@ -77,7 +77,7 @@ namespace ExcelReader.Tests.Writer.Parallel
                 for (int step = 0; step < texts; step++)
                 {
                     int i = (step * 7919 + thread * 104_729) % texts;
-                    indexes[i] = table.GetOrAddConcurrent(values[i]);
+                    indexes[i] = table.GetOrAddConcurrent(values[i], thread % 2 == 0 ? values[i] : null);
                 }
                 seen[thread] = indexes;
             });
