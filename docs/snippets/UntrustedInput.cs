@@ -42,11 +42,13 @@ namespace Snippets.UntrustedInput.Reject
                 Console.WriteLine($"Rejected: {ex.Message}");
             }
 
-            static bool IsRejectedFile(Exception ex) =>
-                ex is InvalidDataException or EndOfStreamException or NotSupportedException
+            static bool IsRejectedFile(Exception ex)
+            {
+                return ex is InvalidDataException or EndOfStreamException or NotSupportedException
                     or ExcelEncryptionException or ExcelParseException
                 || ex.GetType() == typeof(ArgumentException)
                 || ex.GetType() == typeof(InvalidOperationException);
+            }
             #endregion
         }
     }
@@ -59,8 +61,10 @@ namespace Snippets.UntrustedInput.CsvInjection
         internal static void Run(CsvRowWriter row, string comment)
         {
             #region untrusted-input-csv-injection
-            static string Neutralize(string text) =>
-                text.Length > 0 && "=+-@\t\r".Contains(text[0]) ? "'" + text : text;
+            static string Neutralize(string text)
+            {
+                return text.Length > 0 && "=+-@\t\r".Contains(text[0]) ? "'" + text : text;
+            }
 
             row.Write(Neutralize(comment));
             #endregion
