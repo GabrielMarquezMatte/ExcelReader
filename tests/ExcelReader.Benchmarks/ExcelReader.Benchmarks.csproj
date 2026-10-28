@@ -24,9 +24,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.16.0-preview.1" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.16.0-preview.2" />
     <PackageReference Include="ExcelDataReader" Version="3.9.0" />
-    <PackageReference Include="OfficeIMO.Excel" Version="3.5.1" />
+    <PackageReference Include="OfficeIMO.Excel" Version="3.5.2" />
     <PackageReference Include="Sep" Version="0.17.1" />
     <PackageReference Include="SpreadCheetah" Version="1.28.0" />
     <PackageReference Include="Sylvan.Data" Version="0.2.17" />
