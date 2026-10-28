@@ -447,23 +447,23 @@ zero-copy advantage the other can't take:
 
 | Comparison | Format | ExcelReader | Competitor | Ratio |
 |---|---|---:|---:|---:|
-| vs. [calamine](https://github.com/tafia/calamine) (Rust) | XLSX | 72.3 ms | 271.2 ms | ~3.8x faster |
-| vs. calamine (Rust) | XLSB | 46.3 ms | 82.9 ms | ~1.8x faster |
-| vs. [DuckDB](https://github.com/duckdb/duckdb) `read_xlsx` (C++) | XLSX | 61.3 ms | 413.8 ms | ~6.7x faster |
-| vs. [xlsxio](https://github.com/brechtsanders/xlsxio) (C) | XLSX | 61.3 ms | 497.4 ms | ~8.1x faster |
-| vs. [xlnt](https://github.com/tfussell/xlnt) (C++) | XLSX | 61.3 ms | 2,335.0 ms | ~38x faster |
-| vs. [zsv](https://github.com/liquidaty/zsv) `fast` engine (C) | CSV | 27.4 ms | 20.0 ms | ~1.4x **slower** |
+| vs. [calamine](https://github.com/tafia/calamine) (Rust) | XLSX | 69.5 ms | 276.4 ms | ~4.0x faster |
+| vs. calamine (Rust) | XLSB | 47.8 ms | 87.0 ms | ~1.8x faster |
+| vs. [DuckDB](https://github.com/duckdb/duckdb) `read_xlsx` (C++) | XLSX | 58.0 ms | 417.8 ms | ~7.2x faster |
+| vs. [xlsxio](https://github.com/brechtsanders/xlsxio) (C) | XLSX | 58.0 ms | 515.5 ms | ~8.9x faster |
+| vs. [xlnt](https://github.com/tfussell/xlnt) (C++) | XLSX | 58.0 ms | 2,495.0 ms | ~43x faster |
+| vs. [zsv](https://github.com/liquidaty/zsv) `fast` engine (C) | CSV | 28.1 ms | 21.2 ms | ~1.3x **slower** |
 
 Writing the same 14 columns × 65,535 rows from row-shaped data, the C++ suite measures
-`write_sheet` at 74.8–76.0 ms against DuckDB's 831 ms (~11x), libxlsxwriter's 1,207 ms (~16x),
-xlsxio's 2,405 ms (~32x) and xlnt's 5,525 ms (~74x). The Rust suite measures 40.7 ms against
-rust_xlsxwriter's 322.0 ms (~7.9x) over 7 columns. Caveats for both are in the binding READMEs.
+`write_sheet` at 76.2–76.5 ms against DuckDB's 835 ms (~11x), libxlsxwriter's 1,200 ms (~16x),
+xlsxio's 2,441 ms (~32x) and xlnt's 5,554 ms (~73x). The Rust suite measures 40.8 ms against
+rust_xlsxwriter's 338.5 ms (~8.3x) over 7 columns. Caveats for both are in the binding READMEs.
 
 DuckDB, xlsxio and xlnt do not read `.xlsb`, so those comparisons are XLSX-only. calamine is a fast,
 well-optimized reader in its own right — the gap there is real but not the order of magnitude seen
 against the C/C++ competitors.
 
 zsv is the one competitor ahead. The CSV row is the typed workload, where both sides build the same
-14-column rows with owned strings. Just counting cell bytes, zsv is ~3.3x faster, and that gap is
+14-column rows with owned strings. Just counting cell bytes, zsv is ~3.4x faster, and that gap is
 ExcelReader's C ABI, which serializes every row into a buffer, not its CSV parser. That suite is
 built with GCC (zsv does not compile under MSVC). Its caveats are in the C++ README.
