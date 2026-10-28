@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Writer.Xlsb;
 
@@ -19,6 +20,7 @@ namespace ExcelReader.Core.Writer.Internal
         private readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _serialSpan;
         private int _count;
         private int _uniqueCount;
+        private bool _sharded;
 
         internal SharedStringTable()
         {
@@ -36,31 +38,29 @@ namespace ExcelReader.Core.Writer.Internal
         internal int GetOrAdd(string value)
         {
             _count++;
-            if (_serial.TryGetValue(value, out int index))
+            ref int index = ref CollectionsMarshal.GetValueRefOrAddDefault(_serial, value, out bool exists);
+            if (!exists)
             {
-                return index;
+                index = SerialMiss(value);
             }
-            index = SerialMiss(value);
-            _serial.Add(value, index);
             return index;
         }
 
         internal int GetOrAdd(ReadOnlySpan<char> value)
         {
             _count++;
-            if (_serialSpan.TryGetValue(value, out int index))
+            ref int index = ref CollectionsMarshal.GetValueRefOrAddDefault(_serialSpan, value, out bool exists);
+            if (!exists)
             {
-                return index;
+                index = SerialMiss(value);
             }
-            index = SerialMiss(value);
-            _serialSpan.TryAdd(value, index);
             return index;
         }
 
         // Workers may have added it to a shard; a text new to both takes the next index.
         private int SerialMiss(ReadOnlySpan<char> value)
         {
-            return ShardFor(value).SpanIndexes.TryGetValue(value, out int index) ? index : _uniqueCount++;
+            return _sharded && ShardFor(value).SpanIndexes.TryGetValue(value, out int index) ? index : _uniqueCount++;
         }
 
         /// <summary>Resolves a text from a parallel worker without counting the reference; see <see cref="AddReferences"/>.</summary>
@@ -79,6 +79,7 @@ namespace ExcelReader.Core.Writer.Internal
                 }
                 index = Interlocked.Increment(ref _uniqueCount) - 1;
                 shard.SpanIndexes.TryAdd(value, index);
+                _sharded = true;
                 return index;
             }
         }
