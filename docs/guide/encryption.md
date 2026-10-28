@@ -74,14 +74,15 @@ using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Xlsx;
 
 using var plain = new MemoryStream();
-await using (var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true))
+var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true);
+await using (workbook.ConfigureAwait(false))
 {
     // write sheets and rows as usual
 }
 plain.Position = 0;
 
 using var destination = File.Create("secret.xlsx");
-await Excel.EncryptPackageAsync(plain, destination, "hunter2");
+await Excel.EncryptPackageAsync(plain, destination, "hunter2").ConfigureAwait(false);
 ```
 
 The package stream must be seekable (it is read twice, so the container never has to be buffered in
