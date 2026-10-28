@@ -480,6 +480,7 @@ namespace ExcelReader.Core.Parser.Internal
             private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
             private static readonly FrozenDictionary<string, TEnum>.AlternateLookup<ReadOnlySpan<char>> _alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
             private static readonly FrozenDictionary<Int128, TEnum> _valueMap = BuildValueMap();
+            private static readonly FrozenDictionary<long, TEnum> _longMap = _valueMap.Where(p => p.Key >= long.MinValue && p.Key <= long.MaxValue).ToFrozenDictionary(p => (long)p.Key, p => p.Value);
 
             private static FrozenDictionary<string, TEnum> BuildNameMap()
             {
@@ -513,6 +514,29 @@ namespace ExcelReader.Core.Parser.Internal
                 return Convert.ToInt64(value, CultureInfo.InvariantCulture);
             }
 
+            private static bool TryParseLong(ReadOnlySpan<byte> text, out long result)
+            {
+                result = 0;
+                bool negative = !text.IsEmpty && text[0] == (byte)'-';
+                ReadOnlySpan<byte> digits = negative ? text[1..] : text;
+                if (digits.IsEmpty || digits.Length > 18)
+                {
+                    return false;
+                }
+                long acc = 0;
+                foreach (byte b in digits)
+                {
+                    uint digit = (uint)(b - (byte)'0');
+                    if (digit > 9)
+                    {
+                        return false;
+                    }
+                    acc = acc * 10 + digit;
+                }
+                result = negative ? -acc : acc;
+                return true;
+            }
+
             // Integer text is parsed exactly; a double cannot tell apart integers above 2^53.
             private static bool TryGetIntegral(in Cell cell, double number, out Int128 integral)
             {
@@ -534,6 +558,14 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 if (cell.Type is CellType.Number or CellType.Date && cell.TryGetDouble(out double d))
                 {
+                    if (TryParseLong(cell.Value, out long small))
+                    {
+                        return _longMap.TryGetValue(small, out value);
+                    }
+                    if (cell.Value.IsEmpty && d == Math.Truncate(d) && d is >= -9223372036854775808.0 and < 9223372036854775808.0)
+                    {
+                        return _longMap.TryGetValue((long)d, out value);
+                    }
                     if (!TryGetIntegral(in cell, d, out Int128 integral))
                     {
                         value = default;

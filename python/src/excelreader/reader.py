@@ -42,6 +42,7 @@ except ImportError:
 _FORMATS = _native.FORMATS
 
 _CELL_HEADER = struct.Struct("<iii")
+_CELL_TYPES = tuple(CellType)
 _INITIAL_ROW_BUFFER = 64 * 1024
 
 
@@ -246,6 +247,7 @@ class Sheet:
             written = ctypes.c_int32()
             capacity = _INITIAL_ROW_BUFFER
             buffer = ctypes.create_string_buffer(capacity)
+            view = memoryview(buffer)
             while True:
                 status = self._lib.xl_rows_next(cursor, buffer, capacity, ctypes.byref(written))
                 if status == _native.XL_EOF:
@@ -253,9 +255,10 @@ class Sheet:
                 if status == _native.XL_BUFFER_TOO_SMALL:
                     capacity = written.value
                     buffer = ctypes.create_string_buffer(capacity)
+                    view = memoryview(buffer)
                     continue
                 _check(status)
-                yield _decode_row(buffer[: written.value], written.value, date1904)
+                yield _decode_row(view, written.value, date1904)
         finally:
             self._close_rows(cursor)
 
@@ -522,16 +525,16 @@ class Table(Sheet):
         return info
 
 
-def _decode_row(blob: bytes, length: int, date1904: bool) -> list[Cell]:
+def _decode_row(blob: memoryview, length: int, date1904: bool) -> list[Cell]:
     count = struct.unpack_from("<i", blob, 0)[0]
     cells: list[Cell] = []
     offset = 4
     for _ in range(count):
         column, cell_type, value_length = _CELL_HEADER.unpack_from(blob, offset)
         offset += _CELL_HEADER.size
-        value = blob[offset : offset + value_length].decode("utf-8")
+        value = str(blob[offset : offset + value_length], "utf-8")
         offset += value_length
-        cells.append(Cell(column=column, type=CellType(cell_type), value=value, date1904=date1904))
+        cells.append(Cell(column=column, type=_CELL_TYPES[cell_type], value=value, date1904=date1904))
     if offset != length:
         raise ExcelReaderError(f"row blob is malformed: consumed {offset} of {length} bytes")
     return cells

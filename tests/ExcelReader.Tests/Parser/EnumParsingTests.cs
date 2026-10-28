@@ -76,6 +76,95 @@ namespace ExcelReader.Tests.Parser
             }
         }
 
+        private enum Signed : long
+        {
+            Min = long.MinValue,
+            Negative = -5,
+            Zero = 0,
+            Max = long.MaxValue,
+        }
+
+        private enum Wide : ulong
+        {
+            AboveLong = 9223372036854775808,
+            Max = ulong.MaxValue,
+        }
+
+        [Theory]
+        [InlineData("-9223372036854775808", long.MinValue)]
+        [InlineData("-5", -5L)]
+        [InlineData("-0", 0L)]
+        [InlineData("0", 0L)]
+        [InlineData("9223372036854775807", long.MaxValue)]
+        public void Should_ResolveSignedMembers_When_TheyReachTheInt64Boundaries(string text, long expected)
+        {
+            Assert.True(TryParse(CellType.Number, text, out Signed value));
+            Assert.Equal((Signed)expected, value);
+        }
+
+        [Theory]
+        [InlineData("9223372036854775808")]
+        [InlineData("-9223372036854775809")]
+        [InlineData("-4")]
+        [InlineData("-")]
+        [InlineData("5.5")]
+        [InlineData("1E3")]
+        public void Should_RejectUndeclaredSignedValues(string text)
+        {
+            Assert.False(TryParse(CellType.Number, text, out Signed _));
+        }
+
+        [Theory]
+        [InlineData("9223372036854775808", 9223372036854775808UL)]
+        [InlineData("18446744073709551615", ulong.MaxValue)]
+        public void Should_ResolveMembersOnlyRepresentableAsUnsigned(string text, ulong expected)
+        {
+            Assert.True(TryParse(CellType.Number, text, out Wide value));
+            Assert.Equal((Wide)expected, value);
+            Assert.False(TryParse(CellType.Number, "9223372036854775807", out Wide _));
+        }
+
+        [Theory]
+        [InlineData(-5.0, -5L)]
+        [InlineData(0.0, 0L)]
+        [InlineData(-9223372036854775808.0, long.MinValue)]
+        public void Should_ResolveBinaryNumbers_When_TheyAreIntegral(double number, long expected)
+        {
+            Cell cell = new(CellType.Number, default, number, hasNumber: true, styleIndex: 0);
+
+            Assert.True(ExcelCellReaders.Enum(in cell, default, out Signed value));
+            Assert.Equal((Signed)expected, value);
+        }
+
+        [Theory]
+        [InlineData(-4.0)]
+        [InlineData(0.5)]
+        [InlineData(9223372036854775808.0)]
+        [InlineData(double.NaN)]
+        [InlineData(double.PositiveInfinity)]
+        public void Should_RejectBinaryNumbers_When_NotADeclaredIntegral(double number)
+        {
+            Cell cell = new(CellType.Number, default, number, hasNumber: true, styleIndex: 0);
+
+            Assert.False(ExcelCellReaders.Enum(in cell, default, out Signed _));
+        }
+
+        [Fact]
+        public void Should_ResolveAUnsignedMemberFromABinaryNumber()
+        {
+            Cell cell = new(CellType.Number, default, 9223372036854775808.0, hasNumber: true, styleIndex: 0);
+
+            Assert.True(ExcelCellReaders.Enum(in cell, default, out Wide value));
+            Assert.Equal(Wide.AboveLong, value);
+        }
+
+        [Fact]
+        public void Should_ResolveAnAliasFromNumericText()
+        {
+            Assert.True(TryParse(CellType.Number, "1", out Aliased value));
+            Assert.Equal(Aliased.First, value);
+        }
+
         [Fact]
         public void Should_ReadABinaryNumberAsItsStoredDouble()
         {

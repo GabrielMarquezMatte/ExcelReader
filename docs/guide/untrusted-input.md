@@ -94,11 +94,13 @@ catch (Exception ex) when (IsRejectedFile(ex))
     Console.WriteLine($"Rejected: {ex.Message}");
 }
 
-static bool IsRejectedFile(Exception ex) =>
-    ex is InvalidDataException or EndOfStreamException or NotSupportedException
+static bool IsRejectedFile(Exception ex)
+{
+    return ex is InvalidDataException or EndOfStreamException or NotSupportedException
         or ExcelEncryptionException or ExcelParseException
     || ex.GetType() == typeof(ArgumentException)
     || ex.GetType() == typeof(InvalidOperationException);
+}
 ```
 
 `LimitName` is the option's name (or `Columns`, `ArrayMaxLength`); `Limit` and `Actual` are in that
@@ -140,8 +142,10 @@ file in a spreadsheet program, neutralize those fields yourself:
 
 <!-- snippet: untrusted-input-csv-injection -->
 ```csharp
-static string Neutralize(string text) =>
-    text.Length > 0 && "=+-@\t\r".Contains(text[0]) ? "'" + text : text;
+static string Neutralize(string text)
+{
+    return text.Length > 0 && "=+-@\t\r".Contains(text[0]) ? "'" + text : text;
+}
 
 row.Write(Neutralize(comment));
 ```

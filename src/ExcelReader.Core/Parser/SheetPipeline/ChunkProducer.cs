@@ -1,6 +1,7 @@
 using System.Buffers;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Parser.SheetPipeline
 {
@@ -33,6 +34,10 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                     int cut = cutter.Cut(buffer.AsSpan(0, filled), out bool ended);
                     if (ended || eof)
                     {
+                        if (source is LimitedReadStream entry)
+                        {
+                            await entry.ReadRemainderForChecksumAsync(ct).ConfigureAwait(false);
+                        }
                         int length = ended ? cut : filled;
                         if (length > 0)
                         {

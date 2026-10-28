@@ -121,7 +121,10 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         internal int StyleCount => _styles.Count;
 
-        internal int DateStyle(int styleId) => _styles.DateVariant(styleId);
+        internal int DateStyle(int styleId)
+        {
+            return _styles.DateVariant(styleId);
+        }
 
         /// <summary>
         /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is

@@ -23,21 +23,33 @@ namespace ExcelReader.Core.Writer.Parallel
 
         internal int GetOrAdd(string value)
         {
-            return GetOrAdd(value.AsSpan());
+            return GetOrAdd(value, value);
         }
 
         internal int GetOrAdd(ReadOnlySpan<char> value)
+        {
+            return GetOrAdd(value, null);
+        }
+
+        // An owned string is stored as is; a span is copied into a new string only when it is kept.
+        private int GetOrAdd(ReadOnlySpan<char> value, string? owned)
         {
             _references++;
             if (_spanIndexes.TryGetValue(value, out int index))
             {
                 return index;
             }
-            index = _table.GetOrAddConcurrent(value);
-            if (_indexes.Count < MaxEntries)
+            index = _table.GetOrAddConcurrent(value, owned);
+            if (_indexes.Count >= MaxEntries)
             {
-                _spanIndexes.TryAdd(value, index);
+                return index;
             }
+            if (owned is not null)
+            {
+                _indexes.TryAdd(owned, index);
+                return index;
+            }
+            _spanIndexes.TryAdd(value, index);
             return index;
         }
 
