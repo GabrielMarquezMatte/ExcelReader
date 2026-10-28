@@ -16,24 +16,24 @@ namespace Snippets.Writing.Xlsx
             {
                 await using var workbook = XlsxWorkbookWriter.Create(stream).ConfigureAwait(false);
 
-            await using (var sheet = workbook.AddSheet("Summary").ConfigureAwait(false))
-            {
-                await using (var row = (await sheet.StartRowAsync()).ConfigureAwait(false))
+                await using (var sheet = workbook.AddSheet("Summary").ConfigureAwait(false))
                 {
-                    row.Write("Name");
-                    row.Write("Total");
-                    row.Write("Created");
+                    await using (var row = (await sheet.StartRowAsync()).ConfigureAwait(false))
+                    {
+                        row.Write("Name");
+                        row.Write("Total");
+                        row.Write("Created");
+                    }
+
+                    await using (var row = (await sheet.StartRowAsync()).ConfigureAwait(false))
+                    {
+                        row.Write("Q1");
+                        row.Write(42);
+                        row.Write(DateTime.UtcNow);
+                    }
                 }
 
-                await using (var row = (await sheet.StartRowAsync()).ConfigureAwait(false))
-                {
-                    row.Write("Q1");
-                    row.Write(42);
-                    row.Write(DateTime.UtcNow);
-                }
-            }
-
-            await workbook.EndAsync().ConfigureAwait(false);
+                await workbook.EndAsync().ConfigureAwait(false);
             }
             #endregion
         }
@@ -97,27 +97,27 @@ namespace Snippets.Writing.Styles
             await using (workbook.ConfigureAwait(false))
             {
                 int currency = workbook.AddStyle(new CellStyle { NumberFormat = "R$ #,##0.00" });
-            int header = workbook.AddStyle(new CellStyle { Bold = true });
+                int header = workbook.AddStyle(new CellStyle { Bold = true });
 
-            await using var sheet = workbook.AddSheet("Summary").ConfigureAwait(false);
-            sheet.SetColumnStyle(columnIndex: 1, currency); // before the first row
-            sheet.SetColumnWidth(columnIndex: 0, width: 20);
+                await using var sheet = workbook.AddSheet("Summary").ConfigureAwait(false);
+                sheet.SetColumnStyle(columnIndex: 1, currency); // before the first row
+                sheet.SetColumnWidth(columnIndex: 0, width: 20);
 
-            await using (var row = (await sheet.StartRowAsync(header).ConfigureAwait(false)).ConfigureAwait(false))
-            {
-                row.Write("Product");
-                row.Write("Total");
-            }
-            {
-                var row = await sheet.StartRowAsync().ConfigureAwait(false);
-                await using (row.ConfigureAwait(false))
+                await using (var row = (await sheet.StartRowAsync(header).ConfigureAwait(false)).ConfigureAwait(false))
                 {
-                    row.Write("Widget");
-                    row.Write(1234.5);
+                    row.Write("Product");
+                    row.Write("Total");
                 }
-            }
+                {
+                    var row = await sheet.StartRowAsync().ConfigureAwait(false);
+                    await using (row.ConfigureAwait(false))
+                    {
+                        row.Write("Widget");
+                        row.Write(1234.5);
+                    }
+                }
 
-            await workbook.EndAsync().ConfigureAwait(false);
+                await workbook.EndAsync().ConfigureAwait(false);
             }
             #endregion
         }
@@ -142,17 +142,17 @@ namespace Snippets.Writing.Xlsb
             {
                 await using var workbook = XlsbWorkbookWriter.Create(stream).ConfigureAwait(false);
 
-            await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary").ConfigureAwait(false).ConfigureAwait(false))
-            {
-                await using (XlsbRowWriter row = (await sheet.StartRowAsync().ConfigureAwait(false)).ConfigureAwait(false))
+                await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary").ConfigureAwait(false).ConfigureAwait(false))
                 {
-                    row.Write("Name");
-                    row.Write("Total");
-                    row.Write("Created");
+                    await using (XlsbRowWriter row = (await sheet.StartRowAsync().ConfigureAwait(false)).ConfigureAwait(false))
+                    {
+                        row.Write("Name");
+                        row.Write("Total");
+                        row.Write("Created");
+                    }
                 }
-            }
 
-            await workbook.EndAsync().ConfigureAwait(false);
+                await workbook.EndAsync().ConfigureAwait(false);
             }
             #endregion
         }
@@ -177,24 +177,24 @@ namespace Snippets.Writing.Xls
             {
                 await using var workbook = XlsWorkbookWriter.Create(stream).ConfigureAwait(false);
 
-            using (var sheet = workbook.AddSheet("Summary"))
-            {
-                using (var row = sheet.StartRow())
+                using (var sheet = workbook.AddSheet("Summary"))
                 {
-                    row.Write("Name");
-                    row.Write("Total");
-                    row.Write("Created");
+                    using (var row = sheet.StartRow())
+                    {
+                        row.Write("Name");
+                        row.Write("Total");
+                        row.Write("Created");
+                    }
+
+                    using (var row = sheet.StartRow())
+                    {
+                        row.Write("Q1");
+                        row.Write(42);
+                        row.Write(DateTime.UtcNow);
+                    }
                 }
 
-                using (var row = sheet.StartRow())
-                {
-                    row.Write("Q1");
-                    row.Write(42);
-                    row.Write(DateTime.UtcNow);
-                }
-            }
-
-            await workbook.EndAsync().ConfigureAwait(false);
+                await workbook.EndAsync().ConfigureAwait(false);
             }
             #endregion
         }
@@ -233,10 +233,10 @@ namespace Snippets.Writing.Records
             await using (stream.ConfigureAwait(false))
             {
                 await using var workbook = XlsxWorkbookWriter.Create(stream).ConfigureAwait(false);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
-            await using (var sheet = workbook.AddSheet("Sales").ConfigureAwait(false))
-            {
-                await sheet.WriteRecordsAsync(sales, ExcelRecordLayout.FromAttributes<Sale>()).ConfigureAwait(false);
-            }
+                await using (var sheet = workbook.AddSheet("Sales").ConfigureAwait(false))
+                {
+                    await sheet.WriteRecordsAsync(sales, ExcelRecordLayout.FromAttributes<Sale>()).ConfigureAwait(false);
+                }
             }
             #endregion
         }
@@ -298,14 +298,14 @@ namespace Snippets.Writing.Prefetch
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
 
-            foreach (var record in records)
-            {
-                using XlsxRowWriter row = sheet.StartRow();
-                row.Write(record.Name);
-                row.Write(record.Value);
-            }
+                foreach (var record in records)
+                {
+                    using XlsxRowWriter row = sheet.StartRow();
+                    row.Write(record.Name);
+                    row.Write(record.Value);
+                }
 
-            await sheet.EndAsync().ConfigureAwait(false);
+                await sheet.EndAsync().ConfigureAwait(false);
             }
             #endregion
         }
@@ -320,24 +320,23 @@ namespace Snippets.Writing.Parallel
     {
         internal static async Task Run(Stream stream, IEnumerable<Metric> records)
         {
-            #region writing-parallel
             var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true);
             #region writing-parallel
             await using (wb.ConfigureAwait(false))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
 
-            // Header row from the layout, then one row per record.
-            await sheet.WriteRecordsParallelAsync(records, ExcelRecordLayout.FromAttributes<Metric>()).ConfigureAwait(false);
+                // Header row from the layout, then one row per record.
+                await sheet.WriteRecordsParallelAsync(records, ExcelRecordLayout.FromAttributes<Metric>()).ConfigureAwait(false);
 
-            // Or format each row yourself; this delegate runs on several threads at once.
-            await sheet.WriteRecordsParallelAsync(records, static (XlsxRowWriter row, Metric record) =>
-            {
-                row.Write(record.Name);
-                row.Write(record.Value);
-            }, new ParallelWriteOptions { DegreeOfParallelism = 4 }).ConfigureAwait(false);
+                // Or format each row yourself; this delegate runs on several threads at once.
+                await sheet.WriteRecordsParallelAsync(records, static (XlsxRowWriter row, Metric record) =>
+                {
+                    row.Write(record.Name);
+                    row.Write(record.Value);
+                }, new ParallelWriteOptions { DegreeOfParallelism = 4 }).ConfigureAwait(false);
 
-            await sheet.EndAsync().ConfigureAwait(false);
+                await sheet.EndAsync().ConfigureAwait(false);
             }
             #endregion
         }

@@ -102,10 +102,10 @@ namespace Snippets.Parsing.Generated
             await using (stream.ConfigureAwait(false))
             {
                 await using var writer = XlsxWorkbookWriter.Create(stream).ConfigureAwait(false);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
-            await using (var sheet = writer.AddSheet("Changes").ConfigureAwait(false))
-            {
-                await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>()).ConfigureAwait(false);
-            }
+                await using (var sheet = writer.AddSheet("Changes").ConfigureAwait(false))
+                {
+                    await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>()).ConfigureAwait(false);
+                }
             }
             #endregion
         }
@@ -283,13 +283,12 @@ namespace Snippets.Parsing.RefStructAsync
         {
             #region parsing-ref-struct-async
             var workbook = await Excel.FromXlsxFileAsync("changes.xlsx").ConfigureAwait(false);
-            #region parsing-ref-struct-async
             await using (workbook.ConfigureAwait(false))
             {
                 await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(workbook.FirstSheet).ConfigureAwait(false))
-            {
-                Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
-            }
+                {
+                    Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
+                }
             }
             #endregion
         }

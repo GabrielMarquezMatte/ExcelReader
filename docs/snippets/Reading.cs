@@ -322,9 +322,9 @@ namespace Snippets.Reading.Async
             await using (workbook.ConfigureAwait(false))
             {
                 await foreach (var row in workbook.FirstSheet.ConfigureAwait(false))
-            {
-                Console.WriteLine(row[0].GetString());
-            }
+                {
+                    Console.WriteLine(row[0].GetString());
+                }
             }
             #endregion
         }
@@ -337,18 +337,17 @@ namespace Snippets.Reading.AsyncEnumerator
     {
         internal static async Task Run(CancellationToken cancellationToken)
         {
-            #region reading-async-enumerator
             var workbook = await Excel.FromXlsxFileAsync("report.xlsx", ct: cancellationToken).ConfigureAwait(false);
             #region reading-async-enumerator
             await using (workbook.ConfigureAwait(false))
             {
                 await using var rows = workbook.FirstSheet.GetAsyncEnumerator(cancellationToken).ConfigureAwait(false);
 
-            while (await rows.MoveNextAsync().ConfigureAwait(false))
-            {
-                var row = rows.Current;
-                Console.WriteLine(row[0].GetString());
-            }
+                while (await rows.MoveNextAsync().ConfigureAwait(false))
+                {
+                    var row = rows.Current;
+                    Console.WriteLine(row[0].GetString());
+                }
             }
             #endregion
         }
