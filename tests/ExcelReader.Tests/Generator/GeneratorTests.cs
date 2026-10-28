@@ -1031,7 +1031,7 @@ namespace ExcelReader.Tests.Generator
             Assert.Contains("ref partial struct Reading : global::ExcelReader.Core.Parser.IExcelRowMap<", generated, StringComparison.Ordinal);
             Assert.Contains("global::ExcelReader.Core.Writer.IExcelRecordMap<", generated, StringComparison.Ordinal);
             Assert.Contains("global::ExcelReader.Core.Parser.ExcelCellReaders.Utf8(in c, in x, out global::System.ReadOnlySpan<byte> v)", generated, StringComparison.Ordinal);
-            Assert.Contains("row.Write(global::System.Text.Encoding.UTF8.GetString(m.Station))", generated, StringComparison.Ordinal);
+            Assert.Contains("row.WriteUtf8(m.Station)", generated, StringComparison.Ordinal);
         }
     }
 }
