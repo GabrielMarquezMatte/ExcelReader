@@ -212,43 +212,43 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_int64")]
         public static int WriteInt64(nint handle, long value)
         {
-            return RunWriterOp(handle, writerHandle => writerHandle.WriteInt64(value));
+            return RunWriterOp(handle, value, static (writerHandle, state) => writerHandle.WriteInt64(state));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_float64")]
         public static int WriteFloat64(nint handle, double value)
         {
-            return RunWriterOp(handle, writerHandle => writerHandle.WriteFloat64(value));
+            return RunWriterOp(handle, value, static (writerHandle, state) => writerHandle.WriteFloat64(state));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_bool")]
         public static int WriteBool(nint handle, int value)
         {
-            return RunWriterOp(handle, writerHandle => writerHandle.WriteBool(value != 0));
+            return RunWriterOp(handle, value != 0, static (writerHandle, state) => writerHandle.WriteBool(state));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_date")]
         public static int WriteDate(nint handle, int daysSinceEpoch)
         {
-            return RunWriterOp(handle, writerHandle => writerHandle.WriteDate(daysSinceEpoch));
+            return RunWriterOp(handle, daysSinceEpoch, static (writerHandle, state) => writerHandle.WriteDate(state));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_time")]
         public static int WriteTime(nint handle, long microsecondsSinceMidnight)
         {
-            return RunWriterOp(handle, writerHandle => writerHandle.WriteTime(microsecondsSinceMidnight));
+            return RunWriterOp(handle, microsecondsSinceMidnight, static (writerHandle, state) => writerHandle.WriteTime(state));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_timestamp")]
         public static int WriteTimestamp(nint handle, long microsecondsSinceEpoch)
         {
-            return RunWriterOp(handle, writerHandle => writerHandle.WriteTimestamp(microsecondsSinceEpoch));
+            return RunWriterOp(handle, microsecondsSinceEpoch, static (writerHandle, state) => writerHandle.WriteTimestamp(state));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_null")]
         public static int WriteNull(nint handle, int type)
         {
-            return RunWriterOp(handle, writerHandle => writerHandle.WriteNull(type));
+            return RunWriterOp(handle, type, static (writerHandle, state) => writerHandle.WriteNull(state));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_end_row")]
@@ -346,6 +346,25 @@ namespace ExcelReader.Native
             try
             {
                 operation(writerHandle);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        private static int RunWriterOp<TState>(nint handle, TState state, Action<NativeWriterHandle, TState> operation)
+        {
+            NativeApi.ClearLastError();
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                operation(writerHandle, state);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)

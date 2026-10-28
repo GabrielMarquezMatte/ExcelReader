@@ -365,7 +365,8 @@ namespace ExcelReader.Generator
                 {
                     bool needsNullConditional = isNullable || !underlying.IsValueType;
                     string valueExpr = WriteValueExpression(writeKind, needsNullConditional, member, underlying);
-                    writeEmit = $"            .Column({Literal(names[0])}, static (row, m) => row.Write({valueExpr}))";
+                    string writeMethod = writeKind == WriteKind.Utf8Text ? "WriteUtf8" : "Write";
+                    writeEmit = $"            .Column({Literal(names[0])}, static (row, m) => row.{writeMethod}({valueExpr}))";
                 }
             }
 
@@ -409,11 +410,7 @@ namespace ExcelReader.Generator
 
         private static string WriteValueExpression(WriteKind kind, bool needsNullConditional, string propertyName, ITypeSymbol underlying)
         {
-            if (kind == WriteKind.Utf8Text)
-            {
-                return $"global::System.Text.Encoding.UTF8.GetString(m.{propertyName})";
-            }
-            if (kind == WriteKind.Direct)
+            if (kind is WriteKind.Utf8Text or WriteKind.Direct)
             {
                 return $"m.{propertyName}";
             }

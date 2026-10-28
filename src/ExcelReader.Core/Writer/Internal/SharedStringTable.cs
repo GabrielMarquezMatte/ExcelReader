@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Writer.Xlsb;
 
@@ -19,6 +20,7 @@ namespace ExcelReader.Core.Writer.Internal
         private readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _serialSpan;
         private int _count;
         private int _uniqueCount;
+        private bool _sharded;
 
         internal SharedStringTable()
         {
@@ -36,35 +38,33 @@ namespace ExcelReader.Core.Writer.Internal
         internal int GetOrAdd(string value)
         {
             _count++;
-            if (_serial.TryGetValue(value, out int index))
+            ref int index = ref CollectionsMarshal.GetValueRefOrAddDefault(_serial, value, out bool exists);
+            if (!exists)
             {
-                return index;
+                index = SerialMiss(value);
             }
-            index = SerialMiss(value);
-            _serial.Add(value, index);
             return index;
         }
 
         internal int GetOrAdd(ReadOnlySpan<char> value)
         {
             _count++;
-            if (_serialSpan.TryGetValue(value, out int index))
+            ref int index = ref CollectionsMarshal.GetValueRefOrAddDefault(_serialSpan, value, out bool exists);
+            if (!exists)
             {
-                return index;
+                index = SerialMiss(value);
             }
-            index = SerialMiss(value);
-            _serialSpan.TryAdd(value, index);
             return index;
         }
 
         // Workers may have added it to a shard; a text new to both takes the next index.
         private int SerialMiss(ReadOnlySpan<char> value)
         {
-            return ShardFor(value).SpanIndexes.TryGetValue(value, out int index) ? index : _uniqueCount++;
+            return _sharded && ShardFor(value).SpanIndexes.TryGetValue(value, out int index) ? index : _uniqueCount++;
         }
 
         /// <summary>Resolves a text from a parallel worker without counting the reference; see <see cref="AddReferences"/>.</summary>
-        internal int GetOrAddConcurrent(ReadOnlySpan<char> value)
+        internal int GetOrAddConcurrent(ReadOnlySpan<char> value, string? owned)
         {
             if (_serialSpan.TryGetValue(value, out int serial))
             {
@@ -73,12 +73,12 @@ namespace ExcelReader.Core.Writer.Internal
             Shard shard = ShardFor(value);
             lock (shard.Gate)
             {
-                if (shard.SpanIndexes.TryGetValue(value, out int index))
+                ref int index = ref shard.Slot(value, owned, out bool exists);
+                if (!exists)
                 {
-                    return index;
+                    index = Interlocked.Increment(ref _uniqueCount) - 1;
+                    _sharded = true;
                 }
-                index = Interlocked.Increment(ref _uniqueCount) - 1;
-                shard.SpanIndexes.TryAdd(value, index);
                 return index;
             }
         }
@@ -220,6 +220,15 @@ namespace ExcelReader.Core.Writer.Internal
             internal Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> SpanIndexes { get; }
 
             internal Lock Gate { get; } = new();
+
+            internal ref int Slot(ReadOnlySpan<char> value, string? owned, out bool exists)
+            {
+                if (owned is null)
+                {
+                    return ref CollectionsMarshal.GetValueRefOrAddDefault(SpanIndexes, value, out exists);
+                }
+                return ref CollectionsMarshal.GetValueRefOrAddDefault(Indexes, owned, out exists);
+            }
         }
     }
 }

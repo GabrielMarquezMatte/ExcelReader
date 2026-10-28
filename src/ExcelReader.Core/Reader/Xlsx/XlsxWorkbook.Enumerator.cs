@@ -137,7 +137,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     {
                         case HeadKind.End:
                             _reachedEnd = true;
-                            return false;
+                            return Finish();
                         case HeadKind.Row:
                             if (!BeginRow())
                             {
@@ -193,7 +193,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     switch (ClassifyHead())
                     {
                         case HeadKind.End:
-                            return new ValueTask<bool>(false);
+                            return FinishAsync();
                         case HeadKind.Row:
                             return ReadRowAsync();
                         default:
@@ -477,7 +477,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
                 else if (kind == Kind.Inline)
                 {
-                    int end = TryEmitPlainInline(buf, len, p, col, style);
+                    int end = TryEmitPlainInline(buf.AsSpan(0, len), p, col, style);
                     if (end >= 0)
                     {
                         return end;
@@ -537,9 +537,14 @@ namespace ExcelReader.Core.Reader.Xlsx
                     nextCol = col + 1;
                     return i + 2;
                 }
-                if (kind == Kind.Inline || !buf.Slice(i, 4).SequenceEqual("><v>"u8))
+                if (!buf.Slice(i, 4).SequenceEqual("><v>"u8))
                 {
-                    return -1;
+                    int end = TryParseCanonicalCellBody(buf, i, col, style, kind);
+                    if (end >= 0)
+                    {
+                        nextCol = col + 1;
+                    }
+                    return end;
                 }
                 int start = i + 4;
                 int v = ScanCanonicalValue(buf, start, kind, out int sharedIndex);
@@ -550,6 +555,58 @@ namespace ExcelReader.Core.Reader.Xlsx
                 nextCol = col + 1;
                 EmitCanonicalCell(kind, buf, start, v, col, style, sharedIndex);
                 return v + 8;
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private int TryParseCanonicalCellBody(ReadOnlySpan<byte> buf, int i, int col, int style, Kind kind)
+            {
+                if (buf[i] != (byte)'>')
+                {
+                    return -1;
+                }
+                if (kind == Kind.Inline)
+                {
+                    return TryEmitPlainInline(buf, i + 1, col, style);
+                }
+                int start = SkipFormula(buf, i + 1);
+                if (start < 0 || !buf[start..].StartsWith("<v>"u8))
+                {
+                    return -1;
+                }
+                start += 3;
+                int v = ScanCanonicalValue(buf, start, kind, out int sharedIndex);
+                if (v < 0 || !buf[v..].StartsWith("</v></c>"u8))
+                {
+                    return -1;
+                }
+                EmitCanonicalCell(kind, buf, start, v, col, style, sharedIndex);
+                return v + 8;
+            }
+
+            // Formula text and attributes hold no raw '<', so the next '<' after the start tag is the end tag.
+            private static int SkipFormula(ReadOnlySpan<byte> buf, int p)
+            {
+                if (buf.Length - p < 3 || buf[p] != (byte)'<' || buf[p + 1] != (byte)'f' || !IsBoundary(buf[p + 2]))
+                {
+                    return -1;
+                }
+                int gt = buf[(p + 2)..].IndexOfAny((byte)'<', (byte)'>');
+                if (gt < 0 || buf[p + 2 + gt] != (byte)'>')
+                {
+                    return -1;
+                }
+                gt += p + 2;
+                if (buf[gt - 1] == (byte)'/')
+                {
+                    return gt + 1;
+                }
+                int lt = buf[(gt + 1)..].IndexOf((byte)'<');
+                if (lt < 0)
+                {
+                    return -1;
+                }
+                lt += gt + 1;
+                return buf[lt..].StartsWith("</f>"u8) ? lt + 4 : -1;
             }
 
             // A shared string's value must be its index in at most 9 digits; any other value runs to the next markup.
@@ -691,20 +748,20 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return i + 8;
             }
 
-            private int TryEmitPlainInline(byte[] buf, int len, int p, int col, int style)
+            private int TryEmitPlainInline(ReadOnlySpan<byte> buf, int p, int col, int style)
             {
-                if (!buf.AsSpan(p, Math.Min(7, len - p)).StartsWith("<is><t>"u8))
+                if (!buf[p..].StartsWith("<is><t>"u8))
                 {
                     return -1;
                 }
                 int textStart = p + 7;
-                int rel = XlsxXml.IndexOfMarkup(buf.AsSpan(textStart, len - textStart), out bool mayEscape);
+                int rel = XlsxXml.IndexOfMarkup(buf[textStart..], out bool mayEscape);
                 if (rel < 0)
                 {
                     return -1;
                 }
                 int lt = textStart + rel;
-                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8) || (mayEscape && buf.AsSpan(textStart, rel).IndexOf("_x"u8) >= 0))
+                if (!buf[lt..].StartsWith("</t></is></c>"u8) || (mayEscape && buf.Slice(textStart, rel).IndexOf("_x"u8) >= 0))
                 {
                     return -1;
                 }

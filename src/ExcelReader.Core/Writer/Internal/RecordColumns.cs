@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Parser;
 
 namespace ExcelReader.Core.Writer.Internal
@@ -63,6 +64,22 @@ namespace ExcelReader.Core.Writer.Internal
                     Expression.Call(boxed, toString),
                     Expression.Constant(null, typeof(string)));
             }
+            // Runtime value types (Guid, DateTimeOffset, TimeSpan...) format to the same text as UTF-8, without the string.
+            private static MethodCallExpression? TryBuildUtf8Write(ParameterExpression rowParam, Expression value, Type pt)
+            {
+                Type? underlying = Nullable.GetUnderlyingType(pt);
+                Type core = underlying ?? pt;
+                // char is left out: its UTF-8 TryFormat throws on a lone surrogate.
+                if (!core.IsValueType || core.Assembly != typeof(object).Assembly || core == typeof(char)
+                    || !typeof(IUtf8SpanFormattable).IsAssignableFrom(core) || !typeof(IFormattable).IsAssignableFrom(core))
+                {
+                    return null;
+                }
+                string helper = underlying is null ? nameof(InvariantText.WriteValue) : nameof(InvariantText.WriteNullable);
+                MethodInfo method = typeof(InvariantText).GetMethod(helper, BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(typeof(TRow), core);
+                return Expression.Call(method, rowParam, value);
+            }
+
             private static MethodCallExpression? TryBuildConverterWrite(
                 PropertyInfo prop, ParameterExpression rowParam, Expression value, Dictionary<Type, object> instances)
             {
@@ -102,6 +119,11 @@ namespace ExcelReader.Core.Writer.Internal
                         continue;
                     }
                     MethodInfo write = RowWriteMethods<TRow>.Select(prop.PropertyType, out bool asString);
+                    if (asString && TryBuildUtf8Write(rowParam, value, prop.PropertyType) is { } utf8Write)
+                    {
+                        body.Add(utf8Write);
+                        continue;
+                    }
                     if (asString)
                     {
                         value = ToStringExpression(value, prop.PropertyType);
@@ -195,6 +217,32 @@ namespace ExcelReader.Core.Writer.Internal
             where TValue : struct, IFormattable
         {
             return value.HasValue ? FormatValue(value.GetValueOrDefault()) : null;
+        }
+
+        [SkipLocalsInit]
+        internal static void WriteValue<TRow, TValue>(TRow row, TValue value)
+            where TRow : IRowWriter
+            where TValue : struct, IFormattable, IUtf8SpanFormattable
+        {
+            Span<byte> utf8 = stackalloc byte[128];
+            if (value.TryFormat(utf8, out int written, typeof(TValue) == typeof(DateTimeOffset) ? "O" : default, CultureInfo.InvariantCulture))
+            {
+                row.WriteUtf8(utf8[..written]);
+                return;
+            }
+            row.Write(FormatValue(value));
+        }
+
+        internal static void WriteNullable<TRow, TValue>(TRow row, TValue? value)
+            where TRow : IRowWriter
+            where TValue : struct, IFormattable, IUtf8SpanFormattable
+        {
+            if (!value.HasValue)
+            {
+                row.Write((string?)null);
+                return;
+            }
+            WriteValue(row, value.GetValueOrDefault());
         }
 
         internal static string? FormatReference<TValue>(TValue? value)

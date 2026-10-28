@@ -64,14 +64,15 @@ namespace Snippets.Encryption.Write
         {
             #region encryption-write
             using var plain = new MemoryStream();
-            await using (var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true))
+            var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true);
+            await using (workbook.ConfigureAwait(false))
             {
                 // write sheets and rows as usual
             }
             plain.Position = 0;
 
             using var destination = File.Create("secret.xlsx");
-            await Excel.EncryptPackageAsync(plain, destination, "hunter2");
+            await Excel.EncryptPackageAsync(plain, destination, "hunter2").ConfigureAwait(false);
             #endregion
         }
     }

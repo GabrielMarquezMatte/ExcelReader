@@ -41,6 +41,8 @@ namespace ExcelReader.Core.Reader.Zip
             _producer = Task.Run(() => ProduceAsync(_cts.Token), _cts.Token);
         }
 
+        internal bool VerifiesChecksum => _expectedCrc is not null;
+
         public override int Read(byte[] buffer, int offset, int count)
         {
             return Read(buffer.AsSpan(offset, count));
