@@ -23,11 +23,11 @@
        it used to arrive transitively through Roslyn.Diagnostics.Analyzers, which brought a whole
        Roslyn-internal ruleset along for those three rules. -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.402">
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.403">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Meziantou.Analyzer" Version="3.0.315">
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.317">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
