@@ -19,7 +19,7 @@ namespace ExcelReader.Core.Reader.Internal
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared, ReadOnlySpan<byte> rowBuffer,
-            string?[]? sharedStringCache = null, Utf8StringCache? contentCache = null)
+            SharedStringCache? sharedStringCache = null, Utf8StringCache? contentCache = null)
         {
             if (Source == CellValueSource.Shared)
             {
