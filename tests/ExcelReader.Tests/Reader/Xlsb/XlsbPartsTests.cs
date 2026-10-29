@@ -123,7 +123,8 @@ namespace ExcelReader.Tests.Reader.Xlsb
                 .. B.Record(Brt.SSTItem, [0, .. B.WideString("Ω")]),
             ];
 
-            var (flat, offsets) = XlsbSharedStrings.Parse(shared);
+            using var stream = new MemoryStream(shared);
+            var (flat, offsets) = XlsbSharedStrings.ParseStreaming(stream, shared.Length, ExcelReaderOptions.Default);
 
             Assert.Equal(4, offsets.Length);
             Assert.Equal("Alice", At(flat, offsets, 0));
@@ -132,10 +133,9 @@ namespace ExcelReader.Tests.Reader.Xlsb
         }
 
         [Fact]
-        public void StreamingSharedStringsMatchInMemoryDecoder()
+        public void StreamingSharedStringsDecodeManyItems()
         {
             byte[] shared = SharedStringsWithManyItems();
-            var expected = XlsbSharedStrings.Parse(shared);
 
             byte[] flat = [];
             try
@@ -143,8 +143,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
                 using var stream = new MemoryStream(shared);
                 (flat, int[] offsets) = XlsbSharedStrings.ParseStreaming(stream, shared.Length, ExcelReaderOptions.Default);
 
-                Assert.Equal(expected.Offsets, offsets);
-                Assert.True(expected.Flat.AsSpan().SequenceEqual(flat.AsSpan(0, offsets[^1])));
+                AssertManyItems(flat, offsets);
             }
             finally
             {
@@ -156,10 +155,9 @@ namespace ExcelReader.Tests.Reader.Xlsb
         }
 
         [Fact]
-        public async Task AsyncStreamingSharedStringsMatchInMemoryDecoder()
+        public async Task AsyncStreamingSharedStringsDecodeManyItems()
         {
             byte[] shared = SharedStringsWithManyItems();
-            var expected = XlsbSharedStrings.Parse(shared);
 
             byte[] flat = [];
             try
@@ -168,8 +166,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
                 (flat, int[] offsets) = await XlsbSharedStrings.ParseStreamingAsync(
                     stream, shared.Length, ExcelReaderOptions.Default, TestContext.Current.CancellationToken);
 
-                Assert.Equal(expected.Offsets, offsets);
-                Assert.True(expected.Flat.AsSpan().SequenceEqual(flat.AsSpan(0, offsets[^1])));
+                AssertManyItems(flat, offsets);
             }
             finally
             {
@@ -200,10 +197,24 @@ namespace ExcelReader.Tests.Reader.Xlsb
             bytes.AddRange(B.Record(Brt.BeginSst, [.. B.U32(700), .. B.U32(700)]));
             for (int i = 0; i < 700; i++)
             {
-                bytes.AddRange(B.Record(Brt.SSTItem, [0, .. B.WideString($"shared string {i:D4} — café")]));
+                bytes.AddRange(B.Record(Brt.SSTItem, [0, .. B.WideString(ManyItem(i))]));
             }
             bytes.AddRange(B.Record(Brt.EndSst));
             return [.. bytes];
+        }
+
+        private static string ManyItem(int i)
+        {
+            return $"shared string {i:D4} — café";
+        }
+
+        private static void AssertManyItems(byte[] flat, int[] offsets)
+        {
+            Assert.Equal(701, offsets.Length);
+            for (int i = 0; i < 700; i++)
+            {
+                Assert.Equal(ManyItem(i), At(flat, offsets, i));
+            }
         }
 
         private static string At(byte[] flat, int[] offsets, int index)
