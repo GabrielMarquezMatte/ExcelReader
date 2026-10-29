@@ -1,3 +1,4 @@
+using System.Buffers;
 using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Reader.Csv
@@ -9,7 +10,8 @@ namespace ExcelReader.Core.Reader.Csv
     /// </summary>
     internal sealed class ReplayStream(Stream inner, bool leaveOpen, int limit) : ReadOnlyStream
     {
-        private MemoryStream? _recorded = new();
+        private byte[]? _recorded = [];
+        private int _recordedLength;
         private int _position;
         private int _busy;
 
@@ -30,7 +32,7 @@ namespace ExcelReader.Core.Reader.Csv
 
         internal void Release()
         {
-            _recorded = null;
+            DropRecording();
             if (!leaveOpen)
             {
                 inner.Dispose();
@@ -72,12 +74,12 @@ namespace ExcelReader.Core.Reader.Csv
         private bool TryReplay(Span<byte> buffer, out int count)
         {
             count = 0;
-            if (_recorded is not { } recorded || _position >= recorded.Length || buffer.IsEmpty)
+            if (_recorded is not { } recorded || _position >= _recordedLength || buffer.IsEmpty)
             {
                 return false;
             }
-            count = Math.Min(buffer.Length, (int)recorded.Length - _position);
-            recorded.GetBuffer().AsSpan(_position, count).CopyTo(buffer);
+            count = Math.Min(buffer.Length, _recordedLength - _position);
+            recorded.AsSpan(_position, count).CopyTo(buffer);
             _position += count;
             return true;
         }
@@ -88,13 +90,31 @@ namespace ExcelReader.Core.Reader.Csv
             {
                 return;
             }
-            if (recorded.Length + data.Length > limit)
+            int needed = _recordedLength + data.Length;
+            if (needed > limit)
             {
-                _recorded = null;
+                DropRecording();
                 return;
             }
-            recorded.Write(data);
+            if (needed > recorded.Length)
+            {
+                byte[] bigger = ArrayPool<byte>.Shared.Rent(Math.Max(needed, Math.Max(64 * 1024, recorded.Length * 2)));
+                recorded.AsSpan(0, _recordedLength).CopyTo(bigger);
+                DropRecording();
+                _recorded = recorded = bigger;
+            }
+            data.CopyTo(recorded.AsSpan(_recordedLength));
+            _recordedLength = needed;
             _position += data.Length;
+        }
+
+        private void DropRecording()
+        {
+            if (_recorded is { Length: > 0 } recorded)
+            {
+                ArrayPool<byte>.Shared.Return(recorded);
+            }
+            _recorded = null;
         }
 
         protected override void Dispose(bool disposing)
