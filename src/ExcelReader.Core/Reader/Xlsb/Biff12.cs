@@ -31,6 +31,20 @@ namespace ExcelReader.Core.Reader.Xlsb
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static uint ReadU32(ref byte src, int offset)
+        {
+            uint value = Unsafe.ReadUnaligned<uint>(ref Unsafe.Add(ref src, offset));
+            return BitConverter.IsLittleEndian ? value : BinaryPrimitives.ReverseEndianness(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static double ReadF64(ref byte src, int offset)
+        {
+            ulong value = Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref src, offset));
+            return BitConverter.UInt64BitsToDouble(BitConverter.IsLittleEndian ? value : BinaryPrimitives.ReverseEndianness(value));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static double Rk(uint rk)
         {
             double value = (rk & 0x02) != 0
