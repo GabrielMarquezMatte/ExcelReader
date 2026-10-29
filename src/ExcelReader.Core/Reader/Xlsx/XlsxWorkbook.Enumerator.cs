@@ -34,6 +34,9 @@ namespace ExcelReader.Core.Reader.Xlsx
             private ReadOnlySpan<byte> VOpen => _ns is null ? "<v>"u8 : _ns.VOpen;
             private ReadOnlySpan<byte> VClose => _ns is null ? "</v>"u8 : _ns.VClose;
             private ReadOnlySpan<byte> CClose => _ns is null ? "</c>"u8 : _ns.CClose;
+            private ReadOnlySpan<byte> ValueCellClose => _ns is null ? "</v></c>"u8 : _ns.ValueCellClose;
+            // How much longer the cell's start tag name is than "<c", so prefixed cells take the fast tag scan too.
+            private int PrefixLength => _ns is null ? 0 : _ns.CellOpen.Length - 2;
 
             internal Enumerator(XlsxWorkbook reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
                 : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ownsSource: true, ct)
@@ -429,7 +432,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private int ParseCellSpan(byte[] buf, int len, int p)
             {
-                if (!TryScanCanonicalCellTag(buf, len, p, out int gt, out int col, out int style, out Kind kind))
+                if (!TryScanCanonicalCellTag(buf, len, p + PrefixLength, out int gt, out int col, out int style, out Kind kind))
                 {
                     gt = IndexOfBounded(buf, len, p, (byte)'>');
                     if (gt < 0)
@@ -449,9 +452,10 @@ namespace ExcelReader.Core.Reader.Xlsx
                     return p;
                 }
 
-                if (buf.AsSpan(p, Math.Min(3, len - p)).StartsWith("<v>"u8))
+                ReadOnlySpan<byte> vOpen = VOpen;
+                if (buf.AsSpan(p, Math.Min(vOpen.Length, len - p)).StartsWith(vOpen))
                 {
-                    int valueStart = p + 3;
+                    int valueStart = p + vOpen.Length;
                     if (kind == Kind.Shared)
                     {
                         int end = TryEmitSharedIndex(buf, len, valueStart, col, style);
@@ -461,7 +465,8 @@ namespace ExcelReader.Core.Reader.Xlsx
                         }
                     }
                     int lt = IndexOfBounded(buf, len, valueStart, (byte)'<');
-                    if (lt >= 0 && buf.AsSpan(lt, Math.Min(8, len - lt)).StartsWith("</v></c>"u8))
+                    ReadOnlySpan<byte> valueCellClose = ValueCellClose;
+                    if (lt >= 0 && buf.AsSpan(lt, Math.Min(valueCellClose.Length, len - lt)).StartsWith(valueCellClose))
                     {
                         ReadOnlySpan<byte> value = buf.AsSpan(valueStart, lt - valueStart);
                         if (kind == Kind.Shared)
@@ -472,7 +477,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                         {
                             EmitScalarValueFast(kind, value, valueStart, col, style);
                         }
-                        return lt + 8;
+                        return lt + valueCellClose.Length;
                     }
                 }
                 else if (kind == Kind.Inline)
@@ -739,13 +744,14 @@ namespace ExcelReader.Core.Reader.Xlsx
                     index = (index * 10) + (buf[i] - '0');
                     i++;
                 }
-                if (i - valueStart is 0 or > 9 || !buf.AsSpan(i, Math.Min(8, len - i)).StartsWith("</v></c>"u8))
+                ReadOnlySpan<byte> valueCellClose = ValueCellClose;
+                if (i - valueStart is 0 or > 9 || !buf.AsSpan(i, Math.Min(valueCellClose.Length, len - i)).StartsWith(valueCellClose))
                 {
                     return -1;
                 }
                 var (start, length, sharedIndex) = WorkbookLookups.SharedAt(_sharedOffsets, index);
                 _acc.Add(col, start, length, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
-                return i + 8;
+                return i + valueCellClose.Length;
             }
 
             private int TryEmitPlainInline(ReadOnlySpan<byte> buf, int p, int col, int style)
