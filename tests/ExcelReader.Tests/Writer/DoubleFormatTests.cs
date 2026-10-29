@@ -13,7 +13,8 @@ namespace ExcelReader.Tests.Writer
         public void FormattedBytesMatchUtf8FormatterExactly()
         {
             Random rng = new(42);
-            List<double> values = [0, -0.0, 1e9, 999_999_999.9999, -999_999_999.9999, 0.0001, 0.00001, 0.00015, 0.1 + 0.2, 1.0 / 3, 1e15, 2.5, -2.5, double.Epsilon, double.MaxValue];
+            List<double> values = [0, -0.0, 1e9, 999_999_999.9999, -999_999_999.9999, 0.0001, 0.00001, 0.00015, 0.1 + 0.2, 1.0 / 3, 1e15, 2.5, -2.5, double.Epsilon, double.MaxValue,
+                0.001, 1e14, 9.007199254740992e15, 562949953421312.1, 999.9999999999999, 1024, 0.125];
             foreach (double edge in values.ToArray())
             {
                 values.Add(Math.BitIncrement(edge));
@@ -25,6 +26,9 @@ namespace ExcelReader.Tests.Writer
                 values.Add(digits / Math.Pow(10, rng.Next(0, 7)));
                 values.Add(rng.NextDouble() * Math.Pow(10, rng.Next(-8, 12)));
                 values.Add(BitConverter.Int64BitsToDouble(rng.NextInt64()));
+                values.Add(new DateTime(1990, 1, 1).AddTicks(rng.NextInt64(0, TimeSpan.TicksPerDay * 365 * 60)).ToOADate());
+                values.Add(Math.Pow(10, -3.5 + (rng.NextDouble() * 19)));
+                values.Add(Math.BitIncrement(Math.ScaleB(1.0, rng.Next(-10, 50))));
             }
             byte[] expected = new byte[64];
             byte[] actual = new byte[64];
