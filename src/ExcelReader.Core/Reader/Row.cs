@@ -35,6 +35,20 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<CellDesc> Descriptors => _cells;
 
+        // The bytes Cell.Value would return for this row's cell, without building the Cell.
+        internal ReadOnlySpan<byte> ValueOf(in CellDesc cell)
+        {
+            if (cell.Source == CellValueSource.Shared)
+            {
+                return _shared.Slice(cell.Start, cell.Length);
+            }
+            if (cell.Source == CellValueSource.RowBuffer)
+            {
+                return _rowBuffer.Slice(cell.Start, cell.Length);
+            }
+            return _rowValues.Slice(cell.Start, cell.Length);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Cell CellAt(int index)
         {
@@ -64,7 +78,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        private int IndexOf(int column)
+        internal int IndexOf(int column)
         {
             if ((uint)column < (uint)_cells.Length && _cells[column].Column == column)
             {
