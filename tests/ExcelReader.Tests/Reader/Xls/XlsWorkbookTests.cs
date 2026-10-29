@@ -783,6 +783,29 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void SharedStringsWithinOneRecordDecodeEveryEncoding()
+        {
+            byte[] firstRegion =
+            [
+                0x02, 0x00, 0x00, 0x80, 0xE9,
+                0x01, 0x00, 0x01, 0xA9, 0x03,
+                0x01, 0x00, 0x08, 0x01, 0x00, (byte)'X', 0x00, 0x00, 0x00, 0x00,
+            ];
+            byte[] continueRegion = [0x01, 0x00, 0x00, (byte)'Z'];
+            byte[] framed = XlsWorkbookBuilder.FrameSstWithContinue(4, 4, firstRegion, continueRegion);
+
+            using var ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 4);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("€é", e.Current[0].GetString());
+            Assert.Equal("Ω", e.Current[1].GetString());
+            Assert.Equal("X", e.Current[2].GetString());
+            Assert.Equal("Z", e.Current[3].GetString());
+        }
+
+        [Fact]
         public void AstralCharInUnicodeStringRoundTripsAsValidUtf8()
         {
             const string emoji = "A\U0001F600B";

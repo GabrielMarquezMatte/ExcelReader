@@ -418,11 +418,7 @@ namespace ExcelReader.Core.Reader.Xls
                         extBytes = ReadI32(sst, pos);
                         pos += 4;
                     }
-                    bool compressed = (flags & 1) == 0;
-                    int produced = DecodeChars(sst, boundaries, chars, scratch, ref pos, ref boundaryIdx, ref compressed, out bool truncated);
-                    int maxBytes = System.Text.Encoding.UTF8.GetMaxByteCount(produced);
-                    EnsureSharedCapacity(options, ref flat, flatLen + maxBytes);
-                    flatLen += System.Text.Encoding.UTF8.GetBytes(scratch.AsSpan(0, produced), flat.AsSpan(flatLen));
+                    flatLen = AppendSharedString(sst, boundaries, chars, flags, scratch, options, ref flat, flatLen, ref pos, ref boundaryIdx, out bool truncated);
                     offsets.Add(flatLen);
                     if (truncated) { break; }
                     long next = pos + ((long)richRuns * 4) + extBytes;
@@ -438,6 +434,27 @@ namespace ExcelReader.Core.Reader.Xls
                 ArrayPool<byte>.Shared.Return(flat);
                 ArrayPool<char>.Shared.Return(scratch);
             }
+        }
+
+        private static int AppendSharedString(
+            ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, int chars, byte flags, char[] scratch, ExcelReaderOptions options,
+            ref byte[] flat, int flatLen, ref int pos, ref int boundaryIdx, out bool truncated)
+        {
+            int byteLen = (flags & 1) == 0 ? chars : chars * 2;
+            while (boundaryIdx < boundaries.Length && boundaries[boundaryIdx] < pos) { boundaryIdx++; }
+            bool crossesContinue = boundaryIdx < boundaries.Length && boundaries[boundaryIdx] < pos + byteLen;
+            if (!crossesContinue && pos + byteLen <= sst.Length)
+            {
+                truncated = false;
+                EnsureSharedCapacity(options, ref flat, flatLen + System.Text.Encoding.UTF8.GetMaxByteCount(chars));
+                int written = DecodeStringToUtf8(sst.Slice(pos, byteLen), chars, flags, flat.AsSpan(flatLen));
+                pos += byteLen;
+                return flatLen + written;
+            }
+            bool compressed = (flags & 1) == 0;
+            int produced = DecodeChars(sst, boundaries, chars, scratch, ref pos, ref boundaryIdx, ref compressed, out truncated);
+            EnsureSharedCapacity(options, ref flat, flatLen + System.Text.Encoding.UTF8.GetMaxByteCount(produced));
+            return flatLen + System.Text.Encoding.UTF8.GetBytes(scratch.AsSpan(0, produced), flat.AsSpan(flatLen));
         }
 
         private static int DecodeChars(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, int chars, char[] scratch, ref int pos, ref int boundaryIdx, ref bool compressed, out bool truncated)
