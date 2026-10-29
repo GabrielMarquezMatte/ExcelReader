@@ -37,6 +37,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private int _rowNumber = -1;
         private XlsbRowWriter? _rowWriter;
         private Dictionary<int, int>? _columnStyles;
+        private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
         private int _dimPayloadPos = -1;
@@ -81,7 +82,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             Visibility = source.Visibility;
             _date1904 = source._date1904;
             _compression = source._compression;
-            _columnStyles = source._columnStyles;
+            _columnStyleLookup = source._columnStyleLookup;
             _spillThreshold = int.MaxValue;
             _state = WriterState.Started;
             if (_owner.UseSharedStrings)
@@ -132,7 +133,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return _activeRowStyle;
             }
-            return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;
+            return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
         }
 
         private void EnsureStarted()
@@ -142,6 +143,7 @@ namespace ExcelReader.Core.Writer.Xlsb
                 return;
             }
             _state = WriterState.Started;
+            _columnStyleLookup = SheetColumnValidation.StyleLookup(_columnStyles);
             WriteRecord(Brt.BeginSheet);
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.WsDim, DimLength, out Span<byte> dim);
             dim.Clear();
