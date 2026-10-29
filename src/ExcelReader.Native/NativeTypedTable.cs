@@ -54,9 +54,9 @@ namespace ExcelReader.Native
         public long RowCount;
         public IntPtr Columns;
 
-        internal readonly NativeColumn ColumnAt(int index)
+        internal readonly ref readonly NativeColumn ColumnAt(int index)
         {
-            return ((NativeColumn*)Columns)[index];
+            return ref ((NativeColumn*)Columns)[index];
         }
     }
 }
