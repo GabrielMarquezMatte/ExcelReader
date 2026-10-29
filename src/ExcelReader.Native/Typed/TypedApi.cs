@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Schema;
 
 namespace ExcelReader.Native.Typed
@@ -63,9 +64,15 @@ namespace ExcelReader.Native.Typed
 
         private static bool TryAppendRow(ColumnBuilder[] builders, in Row row, int[] columnIndices, bool isDate1904, out int failedColumn)
         {
+            ReadOnlySpan<CellDesc> cells = row.Descriptors;
             for (int i = 0; i < builders.Length; i++)
             {
-                if (!builders[i].AppendFrom(row[columnIndices[i]], isDate1904))
+                int index = row.IndexOf(columnIndices[i]);
+                if (index >= 0 && builders[i].CanAppendDirect(in cells[index]) && builders[i].TryAppendDirect(in cells[index], in row))
+                {
+                    continue;
+                }
+                if (!builders[i].AppendFrom(CellAt(in row, index), isDate1904))
                 {
                     failedColumn = i;
                     return false;
@@ -73,6 +80,15 @@ namespace ExcelReader.Native.Typed
             }
             failedColumn = -1;
             return true;
+        }
+
+        private static Cell CellAt(in Row row, int index)
+        {
+            if (index < 0)
+            {
+                return new Cell(CellType.Empty, default);
+            }
+            return row.CellAt(index);
         }
 
         internal static void FreeTable(ref NativeTable table)
@@ -400,6 +416,44 @@ namespace ExcelReader.Native.Typed
                     NativeColumnType.Time => AppendTime(in cell, isDate1904),
                     _ => AppendTimestamp(in cell, isDate1904),
                 };
+            }
+
+            // The common cases read straight from the cell's descriptor, with the same result AppendFrom
+            // gives them: text bytes as they are, a binary number as Cell.TryParse<double/long> returns it.
+            // Everything else returns false and goes through AppendFrom.
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal bool CanAppendDirect(in CellDesc cell)
+            {
+                return cell.HasNumber || type == NativeColumnType.String;
+            }
+
+            internal bool TryAppendDirect(in CellDesc cell, in Row row)
+            {
+                if (type == NativeColumnType.String && cell.Length > 0)
+                {
+                    _stringData.AddRange(row.ValueOf(in cell));
+                    _stringOffsets.Add(_stringData.Count);
+                    RecordValidity(valid: true);
+                    return true;
+                }
+                if (!cell.HasNumber)
+                {
+                    return false;
+                }
+                double number = cell.Number;
+                if (type == NativeColumnType.Float64)
+                {
+                    _doubles.Add(number);
+                    RecordValidity(valid: true);
+                    return true;
+                }
+                if (type == NativeColumnType.Int64 && number == Math.Truncate(number) && number is >= -9223372036854775808.0 and < 9223372036854775808.0)
+                {
+                    _longs.Add((long)number);
+                    RecordValidity(valid: true);
+                    return true;
+                }
+                return false;
             }
 
             private const int NumberFormatMaxBytes = 32;

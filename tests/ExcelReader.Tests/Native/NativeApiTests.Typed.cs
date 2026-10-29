@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Native;
 using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
@@ -293,6 +296,122 @@ namespace ExcelReader.Tests.Native
             {
                 File.Delete(path);
             }
+        }
+
+        // XLSB stores numbers as binary doubles, which ParseTyped copies straight from the cell; the
+        // same values as CSV text take the converting path. Both must build the same table.
+        [Fact]
+        public void ParseTyped_Should_Build_The_Same_Table_From_Binary_Numbers_As_From_Text()
+        {
+            object?[][] rows =
+            [
+                ["name", "qty", "price", "code"],
+                ["alpha", 3.0, 9.99, 7.0],
+                ["beta", 2.5, 1e300, 12.25],
+                [null, null, null, null],
+                ["delta", 1e20, 0.1 + 0.2, 45000.5],
+                ["epsilon", -4.0, -1.5, "text"],
+            ];
+            NativeColumnSpec[] specs =
+            [
+                new() { Names = ["name"], Type = NativeColumnType.String, Nullable = true },
+                new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
+                new() { Names = ["price"], Type = NativeColumnType.Float64, Nullable = true },
+                new() { Names = ["code"], Type = NativeColumnType.String, Nullable = true },
+            ];
+
+            using var xlsb = new MemoryStream();
+            using (XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(xlsb, leaveOpen: true))
+            {
+                WriteRows<XlsbSheetWriter, XlsbRowWriter>(workbook, rows);
+            }
+            using var csv = new MemoryStream();
+            using (CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(csv, leaveOpen: true))
+            {
+                WriteRows<CsvSheetWriter, CsvRowWriter>(workbook, rows);
+            }
+
+            List<string> fromBinary = ParseTypedSnapshot(xlsb.ToArray(), NativeFormat.Xlsb, specs);
+            List<string> fromText = ParseTypedSnapshot(csv.ToArray(), NativeFormat.Csv, specs);
+
+            Assert.Equal(5, fromBinary.Count);
+            Assert.Equal(fromText, fromBinary);
+            Assert.Equal("alpha|3|9.99|7", fromBinary[0]);
+            Assert.Equal("beta|null|1E+300|12.25", fromBinary[1]);
+        }
+
+        private static void WriteRows<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, object?[][] rows)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            TSheet sheet = workbook.AddSheet("S1");
+            foreach (object?[] cells in rows)
+            {
+                using TRow row = sheet.StartRow();
+                foreach (object? cell in cells)
+                {
+                    if (cell is double number)
+                    {
+                        row.Write(number);
+                        continue;
+                    }
+                    row.Write((string?)cell);
+                }
+            }
+            sheet.End();
+            sheet.Dispose();
+            workbook.End();
+        }
+
+        private static List<string> ParseTypedSnapshot(byte[] workbook, int format, NativeColumnSpec[] specs)
+        {
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(workbook, format, out NativeHandle? handle));
+            Assert.Equal(NativeStatus.Ok, TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out NativeTable table));
+            try
+            {
+                int rowCount = (int)table.RowCount;
+                List<string[]> columns = [];
+                for (int c = 0; c < table.ColumnCount; c++)
+                {
+                    columns.Add(RenderColumn(ColumnAt(table, c), rowCount));
+                }
+                return [.. Enumerable.Range(0, rowCount).Select(r => string.Join("|", columns.Select(column => column[r])))];
+            }
+            finally
+            {
+                TypedApi.FreeTable(ref table);
+                ReadApi.Close(handle);
+            }
+        }
+
+        private static string[] RenderColumn(NativeColumn column, int rowCount)
+        {
+            string[] text = new string[rowCount];
+            if (column.Type == NativeColumnType.String)
+            {
+                DecodeStringColumn(column).CopyTo(text);
+            }
+            if (column.Type == NativeColumnType.Int64)
+            {
+                long[] longs = new long[rowCount];
+                Marshal.Copy(column.Values, longs, 0, rowCount);
+                text = [.. longs.Select(value => value.ToString(CultureInfo.InvariantCulture))];
+            }
+            if (column.Type == NativeColumnType.Float64)
+            {
+                double[] doubles = new double[rowCount];
+                Marshal.Copy(column.Values, doubles, 0, rowCount);
+                text = [.. doubles.Select(value => value.ToString("R", CultureInfo.InvariantCulture))];
+            }
+            bool[] valid = DecodeValidity(column);
+            for (int r = 0; r < rowCount; r++)
+            {
+                if (!valid[r])
+                {
+                    text[r] = "null";
+                }
+            }
+            return text;
         }
 
         [Fact]
