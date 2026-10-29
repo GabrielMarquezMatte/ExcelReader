@@ -1,4 +1,5 @@
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Writer.Xlsx;
 
@@ -55,7 +56,7 @@ namespace ExcelReader.Tests.Reader.Internal
         {
             using XlsxWorkbook reader = Excel.FromXlsx(BuildXlsx());
             _ = FirstColumn(reader);
-            string?[] seen = reader.SharedStringCache;
+            SharedStringCache seen = reader.SharedStringCache;
             Parallel.For(0, 32, _ => Assert.Same(seen, reader.SharedStringCache));
         }
     }

@@ -23,7 +23,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private readonly OnceGate _sharedGate = new();
         private byte[] _sharedFlat = [];
         private int[] _sharedOffsets = [0];
-        private string?[]? _sharedStringCache;
+        private SharedStringCache? _sharedStringCache;
 
         internal ReaderLifetime Lifetime { get; }
 
@@ -288,11 +288,11 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal string?[] SharedStringCache => Volatile.Read(ref _sharedStringCache) ?? CreateSharedStringCache();
+        internal SharedStringCache SharedStringCache => Volatile.Read(ref _sharedStringCache) ?? CreateSharedStringCache();
 
-        private string?[] CreateSharedStringCache()
+        private SharedStringCache CreateSharedStringCache()
         {
-            string?[] created = WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
+            SharedStringCache created = WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
             return Interlocked.CompareExchange(ref _sharedStringCache, created, null) ?? created;
         }
 

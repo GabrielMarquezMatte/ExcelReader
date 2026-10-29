@@ -50,10 +50,10 @@ namespace ExcelReader.Core.Reader.Internal
 
         private const int MaxCachedSharedStrings = 4_000_000;
 
-        internal static string?[] CreateSharedStringCache(int[] sharedOffsets)
+        internal static SharedStringCache CreateSharedStringCache(int[] sharedOffsets)
         {
             int count = sharedOffsets.Length - 1;
-            return count is > 0 and <= MaxCachedSharedStrings ? new string?[count] : [];
+            return new SharedStringCache(count is > 0 and <= MaxCachedSharedStrings ? count : 0);
         }
 
         internal static (int Start, int Length, int ValidIndex) SharedAt(int[] sharedOffsets, int index)
