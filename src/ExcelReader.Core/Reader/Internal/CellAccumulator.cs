@@ -125,6 +125,15 @@ namespace ExcelReader.Core.Reader.Internal
             _lastCol = lastCol;
         }
 
+        internal int LastColumn => _lastCol;
+
+        internal void Commit(int count, int lastCol, bool sorted)
+        {
+            Count = count;
+            _lastCol = lastCol;
+            _sorted &= sorted;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false, int sharedIndex = -1)
         {

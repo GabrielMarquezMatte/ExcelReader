@@ -218,6 +218,63 @@ namespace ExcelReader.Tests.Reader.Xlsb
 
 
         [Fact]
+        public void FastAndGeneralCellRecordsInterleaveWithinAndAcrossRows()
+        {
+            var reader = new XlsbWorkbook([.. "AB"u8], [0, 1, 2], styleIsDate: [false, true], date1904: false);
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.CellIsst, B.CellIsst(0, 0, 1)),
+                .. B.Record(Brt.CellBool, B.CellBool(1, 0, true)),
+                .. B.Record(Brt.CellRk, B.CellRk(2, 0, (7u << 2) | 0x02)),
+                .. B.Record(Brt.CellSt, B.CellSt(4, 0, "inline")),
+                .. B.Record(Brt.CellReal, B.CellReal(5, 1, 45000.5)),
+                .. B.Record(Brt.FmlaNum, B.CellReal(7, 0, -2.25)),
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.CellRk, B.CellRk(1, 0, (3u << 2) | 0x03)),
+                .. B.Record(Brt.CellIsst, B.CellIsst(3, 0, 0)),
+                .. B.Record(Brt.EndSheetData),
+            ];
+            using var e = Open(reader, sheet);
+
+            Assert.True(e.MoveNext());
+            Row first = e.Current;
+            Assert.Equal(8, first.ColumnCount);
+            Assert.Equal("B", first[0].GetString());
+            Assert.Equal(CellType.Boolean, first[1].Type);
+            Assert.True(first[2].TryGetDouble(out double rk));
+            Assert.Equal(7.0, rk);
+            Assert.Equal("inline", first[4].GetString());
+            Assert.Equal(CellType.Date, first[5].Type);
+            Assert.True(first[5].TryGetDouble(out double real));
+            Assert.Equal(45000.5, real);
+            Assert.True(first[7].TryGetDouble(out double formula));
+            Assert.Equal(-2.25, formula);
+
+            Assert.True(e.MoveNext());
+            Row second = e.Current;
+            Assert.Equal(4, second.ColumnCount);
+            Assert.True(second[1].TryGetDouble(out double scaled));
+            Assert.Equal(0.03, scaled);
+            Assert.Equal("A", second[3].GetString());
+
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public void SharedCellPastTheColumnLimitThrows()
+        {
+            var reader = ReaderWithShared("x");
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.CellIsst, B.CellIsst(16_384, 0, 0)),
+            ];
+            using var e = Open(reader, sheet);
+            Assert.Throws<ExcelLimitExceededException>(() => e.MoveNext());
+        }
+
+        [Fact]
         public void MultipleRowsEnumeratedInOrder()
         {
             byte[] sheet =

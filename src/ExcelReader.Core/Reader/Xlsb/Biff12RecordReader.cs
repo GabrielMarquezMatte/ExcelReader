@@ -6,10 +6,10 @@ namespace ExcelReader.Core.Reader.Xlsb
     {
         private readonly ReadOnlySpan<byte> _data;
 
-        internal Biff12RecordReader(ReadOnlySpan<byte> data)
+        internal Biff12RecordReader(ReadOnlySpan<byte> data, int position = 0)
         {
             _data = data;
-            Position = 0;
+            Position = position;
         }
 
         internal int Position { get; private set; }
