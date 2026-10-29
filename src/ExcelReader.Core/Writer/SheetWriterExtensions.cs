@@ -34,6 +34,11 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(layout);
             (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
             await WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
+            if (sheet is XlsxSheetWriter xlsx && writeRow is Action<XlsxRowWriter, T> writeXlsxRow)
+            {
+                await xlsx.WriteRecordsAsync(records, writeXlsxRow, ct).ConfigureAwait(false);
+                return;
+            }
             await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
         }
 
