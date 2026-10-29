@@ -1,6 +1,7 @@
 using ExcelReader.Native;
 using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
+using ExcelReader.Native.Writer;
 
 namespace ExcelReader.NativePgoTrainer
 {
@@ -50,6 +51,10 @@ namespace ExcelReader.NativePgoTrainer
                     if (status == NativeStatus.Ok)
                     {
                         status = TypedApi.ParseTyped(handle, 0, Specs, headerRow: 1, out NativeTable table);
+                        if (status == NativeStatus.Ok)
+                        {
+                            status = WriteAll(table);
+                        }
                         TypedApi.FreeTable(ref table);
                         if (status == NativeStatus.Ok && format != NativeFormat.Csv)
                         {
@@ -84,6 +89,23 @@ namespace ExcelReader.NativePgoTrainer
                 }
             }
             return 0;
+        }
+
+        // The parsed table written back out in every format xl_write_typed takes, serially and in parallel.
+        private static int WriteAll(NativeTable table)
+        {
+            foreach (int format in (int[])[NativeFormat.Xlsx, NativeFormat.Xlsb, NativeFormat.Csv])
+            {
+                foreach (int degree in (int[])[1, 0])
+                {
+                    int status = WriteApi.WriteTypedToMemory(format, Specs, table, new NativeWriteOptions { DegreeOfParallelism = degree }, out _);
+                    if (status != NativeStatus.Ok)
+                    {
+                        return status;
+                    }
+                }
+            }
+            return NativeStatus.Ok;
         }
 
         private static NativeColumnSpec Column(string name, int type)
