@@ -181,6 +181,18 @@ namespace ExcelReader.Tests.Writer.Styles
         }
 
         [Fact]
+        public void FontIndexAbove511ThrowsFromAddStyle()
+        {
+            using var wb = XlsWorkbookWriter.Create(new MemoryStream());
+            for (int i = 0; i < 507; i++)
+            {
+                wb.AddStyle(new CellStyle { FontName = $"F{i}" });
+            }
+            var ex = Assert.Throws<ExcelLimitExceededException>(() => wb.AddStyle(new CellStyle { FontName = "F507" }));
+            Assert.Equal("Fonts", ex.LimitName);
+        }
+
+        [Fact]
         public void PaletteOmittedWhenNoColorIsUsed()
         {
             byte[] file = WriteStyledCells(new CellStyle { Bold = true });
