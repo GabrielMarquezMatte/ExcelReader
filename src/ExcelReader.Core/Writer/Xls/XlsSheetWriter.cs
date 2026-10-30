@@ -46,6 +46,7 @@ namespace ExcelReader.Core.Writer.Xls
         private bool _rowActive;
         private bool _rowHasCells;
         private Dictionary<int, int>? _columnStyles;
+        private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
         private XlsRowWriter? _rowWriter;
@@ -95,16 +96,11 @@ namespace ExcelReader.Core.Writer.Xls
 
         private int EffectiveStyle(int columnIndex)
         {
-            int abstractStyle = 0;
             if (_activeRowStyle != 0)
             {
-                abstractStyle = _activeRowStyle;
+                return _activeRowStyle;
             }
-            else if (_columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId))
-            {
-                abstractStyle = styleId;
-            }
-            return abstractStyle;
+            return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
         }
 
         private void EnsureStarted()
@@ -114,6 +110,7 @@ namespace ExcelReader.Core.Writer.Xls
                 return;
             }
             _state = WriterState.Started;
+            _columnStyleLookup = SheetColumnValidation.StyleLookup(_columnStyles);
             WriteColInfos();
             _owner.RegisterSheet(this);
         }

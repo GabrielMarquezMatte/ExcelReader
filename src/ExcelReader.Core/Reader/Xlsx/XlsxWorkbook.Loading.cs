@@ -108,13 +108,6 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return;
             }
             WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.UncompressedSize, _decompressedBytes, _options);
-            if (_zip.HasMemory)
-            {
-                using ZipPart part = _zip.OpenPart(entry, _decompressedBytes,
-                    nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
-                ParseSharedFromMemory(part.Memory, entry.UncompressedSize);
-                return;
-            }
             using LimitedReadStream stream = _zip.OpenEntryStream(entry, _decompressedBytes, _options,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
             ParseSharedStreaming(stream, entry.UncompressedSize);

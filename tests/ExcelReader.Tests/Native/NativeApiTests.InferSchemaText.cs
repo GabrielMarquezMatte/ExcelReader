@@ -1,3 +1,4 @@
+using System.Text;
 using ExcelReader.Native;
 using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
@@ -65,6 +66,23 @@ namespace ExcelReader.Tests.Native
                 Assert.Equal(NativeStatus.InvalidArgument, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, 2, out NativeInferredSchema schema));
                 Assert.Equal(IntPtr.Zero, schema.Columns);
                 Assert.Contains("flags", NativeApi.LastErrorText(), StringComparison.Ordinal);
+            }
+            finally
+            {
+                ReadApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Fail_When_A_Header_Name_Exceeds_The_Column_Name_Limit()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes(new string('a', NativeLimits.MaxColumnNameBytes + 1) + "\n1\n");
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(csv, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Error, ReadApi.InferSchema(handle, 0, headerRow: 1, sampleSize: 100, 0, out NativeInferredSchema schema));
+                Assert.Equal(IntPtr.Zero, schema.Columns);
+                Assert.Contains("XL_MAX_COLUMN_NAME_BYTES", NativeApi.LastErrorText(), StringComparison.Ordinal);
             }
             finally
             {

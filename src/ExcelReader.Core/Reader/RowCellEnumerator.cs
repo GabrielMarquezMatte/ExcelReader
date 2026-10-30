@@ -13,11 +13,11 @@ namespace ExcelReader.Core.Reader
         private readonly ReadOnlySpan<byte> _rowValues;
         private readonly ReadOnlySpan<byte> _shared;
         private readonly ReadOnlySpan<byte> _rowBuffer;
-        private readonly string?[]? _sharedStringCache;
+        private readonly SharedStringCache? _sharedStringCache;
         private readonly Utf8StringCache? _contentCache;
         private int _index;
         internal RowCellEnumerator(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
-            ReadOnlySpan<byte> rowBuffer = default, string?[]? sharedStringCache = null, Utf8StringCache? contentCache = null)
+            ReadOnlySpan<byte> rowBuffer = default, SharedStringCache? sharedStringCache = null, Utf8StringCache? contentCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;

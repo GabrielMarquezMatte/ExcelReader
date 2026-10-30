@@ -19,7 +19,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         private readonly byte[] _sharedFlat = [];
         private readonly int[] _sharedOffsets = [0];
         private readonly bool _pooledSharedFlat;
-        private string?[]? _sharedStringCache;
+        private SharedStringCache? _sharedStringCache;
         private readonly bool[] _styleIsDate = [];
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
@@ -148,13 +148,6 @@ namespace ExcelReader.Core.Reader.Xlsb
                 return ([], [0], false);
             }
             WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.UncompressedSize, decompressedBytes, options);
-            if (zip.HasMemory)
-            {
-                using ZipPart part = zip.OpenPart(entry, decompressedBytes,
-                    nameof(ExcelReaderOptions.MaxSharedStringBytes), options.MaxSharedStringBytes);
-                (byte[] parsedFlat, int[] parsedOffsets) = XlsbSharedStrings.Parse(part.Memory.Span, options);
-                return (parsedFlat, parsedOffsets, false);
-            }
             using LimitedReadStream stream = zip.OpenEntryStream(entry, decompressedBytes, options,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), options.MaxSharedStringBytes);
             (byte[] flat, int[] offsets) = XlsbSharedStrings.ParseStreaming(stream, entry.UncompressedSize, options);
@@ -186,11 +179,11 @@ namespace ExcelReader.Core.Reader.Xlsb
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal string?[] SharedStringCache => Volatile.Read(ref _sharedStringCache) ?? CreateSharedStringCache();
+        internal SharedStringCache SharedStringCache => Volatile.Read(ref _sharedStringCache) ?? CreateSharedStringCache();
 
-        private string?[] CreateSharedStringCache()
+        private SharedStringCache CreateSharedStringCache()
         {
-            string?[] created = WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
+            SharedStringCache created = WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
             return Interlocked.CompareExchange(ref _sharedStringCache, created, null) ?? created;
         }
 

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Zip;
@@ -246,28 +247,36 @@ namespace ExcelReader.Core.Reader.Xlsb
 
             private int CollectCellsFromBuffer()
             {
-                var reader = new Biff12RecordReader(_buf.AsSpan(_pos, _len - _pos));
-                while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
+                ReadOnlySpan<byte> data = _buf.AsSpan(_pos, _len - _pos);
+                int position = 0;
+                while (true)
                 {
+                    var reader = new Biff12RecordReader(data, DrainCells(data, position));
+                    bool read = reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload);
+                    position = reader.Position;
+                    if (!read)
+                    {
+                        break;
+                    }
                     if (id == Brt.RowHdr)
                     {
                         if (_trackRowIndex)
                         {
                             NoteRowHeader(payload);
                         }
-                        _pos += reader.Position;
+                        _pos += position;
                         _pendingRowHdr = true;
                         return 1;
                     }
                     if (IsEndSheetData(id))
                     {
-                        _pos += reader.Position;
+                        _pos += position;
                         _ended = true;
                         return 0;
                     }
                     ProcessCell(id, payload);
                 }
-                _pos += reader.Position;
+                _pos += position;
                 if (_eof)
                 {
                     ThrowIfTruncated();
@@ -275,6 +284,84 @@ namespace ExcelReader.Core.Reader.Xlsb
                     return 0;
                 }
                 return 2;
+            }
+
+            // Writes the common number and shared-string cell records straight into the cell array.
+            // Stops at the first record it is not sure about and leaves it to ProcessCell.
+            private int DrainCells(ReadOnlySpan<byte> data, int position)
+            {
+                CellAccumulator acc = _acc;
+                CellDesc[] cells = acc.RawCells;
+                bool[] styleIsDate = _styleIsDate;
+                int[] sharedOffsets = _sharedOffsets;
+                int count = acc.Count;
+                int lastCol = acc.LastColumn;
+                int numberStart = acc.ValueLength;
+                bool sorted = true;
+                ref byte start = ref MemoryMarshal.GetReference(data);
+                while (position + 2 <= data.Length && count < cells.Length)
+                {
+                    int id = Unsafe.Add(ref start, position);
+                    int length = Unsafe.Add(ref start, position + 1);
+                    if (((id | length) & 0x80) != 0 || length < 12 || position + 2 + length > data.Length)
+                    {
+                        break;
+                    }
+                    ref byte payload = ref Unsafe.Add(ref start, position + 2);
+                    uint col = Biff12.ReadU32(ref payload, 0);
+                    if (col >= ExcelLimits.MaxColumns)
+                    {
+                        break;
+                    }
+                    int style = (int)(Biff12.ReadU32(ref payload, 4) & 0x00FFFFFF);
+                    if (id == Brt.CellIsst)
+                    {
+                        (int sharedStart, int sharedLength, int sharedIndex) = WorkbookLookups.SharedAt(sharedOffsets, (int)Biff12.ReadU32(ref payload, 8));
+                        cells[count] = new CellDesc
+                        {
+                            Column = (int)col,
+                            Start = sharedStart,
+                            Length = sharedLength,
+                            Type = CellType.ExcelString,
+                            Style = style,
+                            Source = CellValueSource.Shared,
+                            SharedIndex = sharedIndex,
+                        };
+                    }
+                    else
+                    {
+                        double value;
+                        if (id == Brt.CellRk)
+                        {
+                            value = Biff12.Rk(Biff12.ReadU32(ref payload, 8));
+                        }
+                        else if ((id == Brt.CellReal || id == Brt.FmlaNum) && length >= 16)
+                        {
+                            value = Biff12.ReadF64(ref payload, 8);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                        cells[count] = new CellDesc
+                        {
+                            Column = (int)col,
+                            Start = numberStart,
+                            Type = (uint)style < (uint)styleIsDate.Length && styleIsDate[style] ? CellType.Date : CellType.Number,
+                            Style = style,
+                            Source = CellValueSource.RowValues,
+                            Number = value,
+                            HasNumber = true,
+                            SharedIndex = -1,
+                        };
+                    }
+                    sorted &= (int)col >= lastCol;
+                    lastCol = (int)col;
+                    count++;
+                    position += 2 + length;
+                }
+                acc.Commit(count, lastCol, sorted);
+                return position;
             }
 
             [MethodImpl(MethodImplOptions.NoInlining)]

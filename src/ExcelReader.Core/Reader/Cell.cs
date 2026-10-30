@@ -17,7 +17,7 @@ namespace ExcelReader.Core.Reader
         private readonly double _number;
         private readonly bool _hasNumber;
         private readonly int _sharedIndex;
-        private readonly string?[]? _sharedCache;
+        private readonly SharedStringCache? _sharedCache;
         private readonly Utf8StringCache? _contentCache;
 
         private static readonly string[] ZonedIsoFormats =
@@ -55,13 +55,13 @@ namespace ExcelReader.Core.Reader
         }
 
         internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex,
-            int sharedIndex, string?[]? sharedCache)
+            int sharedIndex, SharedStringCache? sharedCache)
             : this(type, value, number, hasNumber, styleIndex, sharedIndex, sharedCache, contentCache: null)
         {
         }
 
         internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex,
-            int sharedIndex, string?[]? sharedCache, Utf8StringCache? contentCache)
+            int sharedIndex, SharedStringCache? sharedCache, Utf8StringCache? contentCache)
         {
             Type = type;
             Value = value;
@@ -461,16 +461,9 @@ namespace ExcelReader.Core.Reader
                     ? Encoding.UTF8.GetString(buffer[..written])
                     : string.Empty;
             }
-            if (_sharedCache is not null && !Value.IsEmpty && (uint)_sharedIndex < (uint)_sharedCache.Length)
+            if (_sharedCache is not null && !Value.IsEmpty && _sharedCache.TryGet(_sharedIndex, Value, out string? shared))
             {
-                ref string? slot = ref _sharedCache[_sharedIndex];
-                string? cached = Volatile.Read(ref slot);
-                if (cached is not null)
-                {
-                    return cached;
-                }
-                string created = Encoding.UTF8.GetString(Value);
-                return Interlocked.CompareExchange(ref slot, created, null) ?? created;
+                return shared;
             }
             if (_contentCache is not null && !Value.IsEmpty)
             {

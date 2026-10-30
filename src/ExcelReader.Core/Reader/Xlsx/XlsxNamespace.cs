@@ -10,6 +10,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         internal readonly byte[] VOpen;
         internal readonly byte[] VClose;
         internal readonly byte[] CClose;
+        internal readonly byte[] ValueCellClose;
         internal readonly byte[] TOpen;
         internal readonly byte[] TClose;
         internal readonly byte[] RPhOpen;
@@ -26,6 +27,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             VOpen = XlsxXml.Token("<"u8, prefix, "v>"u8);
             VClose = XlsxXml.Token("</"u8, prefix, "v>"u8);
             CClose = XlsxXml.Token("</"u8, prefix, "c>"u8);
+            ValueCellClose = [.. VClose, .. CClose];
             TOpen = XlsxXml.Token("<"u8, prefix, "t"u8);
             TClose = XlsxXml.Token("</"u8, prefix, "t>"u8);
             RPhOpen = XlsxXml.Token("<"u8, prefix, "rPh"u8);

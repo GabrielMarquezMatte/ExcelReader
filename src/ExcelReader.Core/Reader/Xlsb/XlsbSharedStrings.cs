@@ -6,44 +6,6 @@ namespace ExcelReader.Core.Reader.Xlsb
 {
     internal static class XlsbSharedStrings
     {
-        internal static (byte[] Flat, int[] Offsets) Parse(ReadOnlySpan<byte> sharedBin, ExcelReaderOptions? options = null)
-        {
-            ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
-            if (sharedBin.IsEmpty)
-            {
-                return ([], [0]);
-            }
-            LimitChecks.ThrowIfOverSharedStringLimit(effectiveOptions, sharedBin.Length);
-
-            int[] offsets = [0];
-            int offsetCount = 1;
-            byte[] flat = ArrayPool<byte>.Shared.Rent(Math.Max(16, sharedBin.Length));
-            try
-            {
-                int flatLen = 0;
-                var reader = new Biff12RecordReader(sharedBin);
-                while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
-                {
-                    if (id == Brt.BeginSst)
-                    {
-                        PrepareOffsets(payload, sharedBin.Length, ref offsets, ref offsetCount);
-                    }
-                    else if (id == Brt.SSTItem)
-                    {
-                        flatLen = AppendItemPooled(payload, ref flat, flatLen, effectiveOptions);
-                        AddOffset(ref offsets, ref offsetCount, flatLen);
-                    }
-                }
-                byte[] result = new byte[flatLen];
-                flat.AsSpan(0, flatLen).CopyTo(result);
-                return (result, offsetCount == offsets.Length ? offsets : offsets[..offsetCount]);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(flat);
-            }
-        }
-
         internal static (byte[] Flat, int[] Offsets) ParseStreaming(Stream stream, long entryLength, ExcelReaderOptions options)
         {
             var io = new BufferedStreamCursor(GrowthCap(options), nameof(ExcelReaderOptions.MaxSharedStringBytes),
