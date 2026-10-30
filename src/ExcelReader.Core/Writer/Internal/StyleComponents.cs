@@ -27,6 +27,22 @@ namespace ExcelReader.Core.Writer.Internal
         internal int ReservedFontIndices { get; init; }
     }
 
+    internal static class StyleAlignment
+    {
+        internal static bool HasAlignment(in CellStyle style)
+        {
+            return style.HorizontalAlignment != ExcelHorizontalAlignment.General
+                || style.VerticalAlignment != ExcelVerticalAlignment.Bottom
+                || style.WrapText || style.Indent != 0 || style.Rotation != 0;
+        }
+
+        // OOXML and BIFF store a downward rotation -r as 90 + r.
+        internal static int TextRotation(int rotation)
+        {
+            return rotation < 0 ? 90 - rotation : rotation;
+        }
+    }
+
     // Fills 0 and 1 are the two mandatory built-ins (none, gray125) and appear as FillKey(null) placeholders.
     internal sealed class StyleComponents(IReadOnlyList<FontKey> fonts, IReadOnlyList<FillKey> fills, IReadOnlyList<BorderKey> borders,
         int[] fontIds, int[] fillIds, int[] borderIds)

@@ -380,7 +380,7 @@ namespace ExcelReader.Core.Writer.Xlsx
                 AppendApply(sb, "applyFont", fontId);
                 AppendApply(sb, "applyFill", fillId);
                 AppendApply(sb, "applyBorder", borderId);
-                if (!HasAlignment(style))
+                if (!StyleAlignment.HasAlignment(style))
                 {
                     sb.Append("/>");
                     continue;
@@ -398,13 +398,6 @@ namespace ExcelReader.Core.Writer.Xlsx
             {
                 sb.Append(CultureInfo.InvariantCulture, $" {attribute}=\"1\"");
             }
-        }
-
-        private static bool HasAlignment(in CellStyle style)
-        {
-            return style.HorizontalAlignment != ExcelHorizontalAlignment.General
-                || style.VerticalAlignment != ExcelVerticalAlignment.Bottom
-                || style.WrapText || style.Indent != 0 || style.Rotation != 0;
         }
 
         private static void AppendAlignment(StringBuilder sb, in CellStyle style)
@@ -428,14 +421,9 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
             if (style.Rotation != 0)
             {
-                sb.Append(CultureInfo.InvariantCulture, $" textRotation=\"{TextRotation(style.Rotation)}\"");
+                sb.Append(CultureInfo.InvariantCulture, $" textRotation=\"{StyleAlignment.TextRotation(style.Rotation)}\"");
             }
             sb.Append("/>");
-        }
-
-        private static int TextRotation(int rotation)
-        {
-            return rotation < 0 ? 90 - rotation : rotation;
         }
 
         private static string StateAttribute(ExcelSheetVisibility visibility)
