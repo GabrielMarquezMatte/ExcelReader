@@ -15,6 +15,11 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        internal static void ThrowPendingStyle(string action)
+        {
+            throw new InvalidOperationException($"A cell style is pending: write the styled cell before {action}.");
+        }
+
         internal static void RequireNoActiveRowForEnd(bool rowActive, string rowWriterTypeName)
         {
             if (rowActive)

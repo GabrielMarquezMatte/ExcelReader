@@ -40,6 +40,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
+        private int _pendingStyle = -1;
         private int _dimPayloadPos = -1;
         private int _usedRowFirst = -1;
         private int _usedRowLast = -1;
@@ -127,8 +128,36 @@ namespace ExcelReader.Core.Writer.Xlsb
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, ExcelLimits.MaxColumns, _state, this);
         }
 
+        internal bool HasPendingStyle
+        {
+            get
+            {
+                return _pendingStyle >= 0;
+            }
+        }
+
+        internal void SetPendingStyle(int styleId)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
+            _pendingStyle = styleId;
+        }
+
+        internal bool ClearPendingStyle()
+        {
+            bool wasPending = _pendingStyle >= 0;
+            _pendingStyle = -1;
+            return wasPending;
+        }
+
         private int EffectiveStyle(int columnIndex)
         {
+            if (_pendingStyle >= 0)
+            {
+                int pending = _pendingStyle;
+                _pendingStyle = -1;
+                return pending;
+            }
             if (_activeRowStyle != 0)
             {
                 return _activeRowStyle;
@@ -665,7 +694,21 @@ namespace ExcelReader.Core.Writer.Xlsb
             if (value is not null)
             {
                 WriteTextCell(columnIndex, value, value);
+                return;
             }
+            if (_pendingStyle >= 0)
+            {
+                WriteBlankCell(columnIndex);
+            }
+        }
+
+        internal void WriteBlankCell(int columnIndex)
+        {
+            ValidateColumn(columnIndex);
+            TrackColumn(columnIndex);
+            Span<byte> p = Biff12RecordWriter.WriteCellRecord(_records, Brt.CellBlank, CellHeaderLength);
+            Biff12RecordWriter.WriteCellHeader(p, columnIndex, EffectiveStyle(columnIndex));
+            MaybeFlush();
         }
 
         internal void WriteStringCell(int columnIndex, ReadOnlySpan<char> value)

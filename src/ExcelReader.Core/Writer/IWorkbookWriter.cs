@@ -247,5 +247,23 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="count">The number of columns to skip; must not be negative.</param>
         void Skip(int count = 1);
+
+        /// <summary>
+        /// Styles the next cell written, and only that cell. The style replaces any row and column style;
+        /// style 0 forces the general style. A <see langword="null"/> write with a style pending writes a
+        /// styled blank cell. CSV accepts the call and ignores the style.
+        /// </summary>
+        /// <param name="styleId">The style to apply, from <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</param>
+        /// <returns>This row writer, so the call chains into the <c>Write</c> that consumes it.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
+        /// <exception cref="NotSupportedException">The implementation does not support per-cell styles.</exception>
+        /// <remarks>
+        /// <see cref="Skip"/> with a style pending, and disposing the row with a style pending, throw
+        /// <see cref="InvalidOperationException"/>.
+        /// </remarks>
+        IRowWriter Style(int styleId)
+        {
+            throw new NotSupportedException("This row writer does not support per-cell styles.");
+        }
     }
 }

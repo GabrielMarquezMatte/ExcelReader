@@ -23,6 +23,7 @@ namespace ExcelReader.Core.Writer.Csv
         private readonly SearchValues<byte> _specialBytes;
         private readonly SearchValues<char> _specialChars;
         private int _columnIndex;
+        private int _pendingStyle = -1;
         private bool _disposed;
 
         internal CsvRowWriter(CsvWriter owner, BiffBuffer buffer, byte delimiter, byte quote,
@@ -39,6 +40,7 @@ namespace ExcelReader.Core.Writer.Csv
         internal void Reset()
         {
             _columnIndex = 0;
+            _pendingStyle = -1;
             _disposed = false;
         }
 
@@ -54,6 +56,31 @@ namespace ExcelReader.Core.Writer.Csv
                 _buffer.WriteByte(_delimiter);
             }
             _columnIndex++;
+            _pendingStyle = -1;
+        }
+
+        /// <summary>Validates <paramref name="styleId"/> is not negative, then ignores it: CSV has no cell styles. Skipping or disposing the row with a style pending still throws, as in the other formats.</summary>
+        /// <param name="styleId">The style id; ignored.</param>
+        /// <returns>This row writer.</returns>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative.</exception>
+        public CsvRowWriter Style(int styleId)
+        {
+            ThrowIfDisposed();
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            _pendingStyle = styleId;
+            return this;
+        }
+
+        IRowWriter IRowWriter.Style(int styleId)
+        {
+            return Style(styleId);
+        }
+
+        private void WriteNull()
+        {
+            ThrowIfDisposed();
+            BeginField();
         }
 
         /// <inheritdoc/>
@@ -98,7 +125,7 @@ namespace ExcelReader.Core.Writer.Csv
         /// <inheritdoc/>
         public void Write(bool? value)
         {
-            if (value is null) { Skip(1); return; }
+            if (value is null) { WriteNull(); return; }
             Write(value.Value);
         }
 
@@ -117,7 +144,7 @@ namespace ExcelReader.Core.Writer.Csv
         /// <inheritdoc/>
         public void Write(DateTime? value)
         {
-            if (value is null) { Skip(1); return; }
+            if (value is null) { WriteNull(); return; }
             Write(value.Value);
         }
 
@@ -136,7 +163,7 @@ namespace ExcelReader.Core.Writer.Csv
         /// <inheritdoc/>
         public void Write(DateOnly? value)
         {
-            if (value is null) { Skip(1); return; }
+            if (value is null) { WriteNull(); return; }
             Write(value.Value);
         }
 
@@ -155,7 +182,7 @@ namespace ExcelReader.Core.Writer.Csv
         /// <inheritdoc/>
         public void Write(TimeOnly? value)
         {
-            if (value is null) { Skip(1); return; }
+            if (value is null) { WriteNull(); return; }
             Write(value.Value);
         }
 
@@ -176,7 +203,7 @@ namespace ExcelReader.Core.Writer.Csv
         public void Write<T>(T? value)
             where T : struct, IUtf8SpanFormattable
         {
-            if (value is null) { Skip(1); return; }
+            if (value is null) { WriteNull(); return; }
             Write(value.Value);
         }
 
@@ -185,6 +212,10 @@ namespace ExcelReader.Core.Writer.Csv
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
+            if (count > 0 && _pendingStyle >= 0)
+            {
+                WriterStateGuard.ThrowPendingStyle("skipping");
+            }
             for (int i = 0; i < count; i++)
             {
                 BeginField();
@@ -299,6 +330,17 @@ namespace ExcelReader.Core.Writer.Csv
             }
             _disposed = true;
             _owner.EndRow();
+            ThrowIfStylePending();
+        }
+
+        private void ThrowIfStylePending()
+        {
+            if (_pendingStyle < 0)
+            {
+                return;
+            }
+            _pendingStyle = -1;
+            WriterStateGuard.ThrowPendingStyle("disposing the row");
         }
 
         /// <inheritdoc/>
@@ -309,7 +351,18 @@ namespace ExcelReader.Core.Writer.Csv
                 return ValueTask.CompletedTask;
             }
             _disposed = true;
-            return _owner.EndRowAsync();
+            ValueTask ended = _owner.EndRowAsync();
+            if (_pendingStyle < 0)
+            {
+                return ended;
+            }
+            return ThrowPendingStyleAsync(ended);
+        }
+
+        private async ValueTask ThrowPendingStyleAsync(ValueTask ended)
+        {
+            await ended.ConfigureAwait(false);
+            ThrowIfStylePending();
         }
     }
 }

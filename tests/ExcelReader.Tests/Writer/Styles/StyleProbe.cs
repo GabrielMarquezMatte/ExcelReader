@@ -25,7 +25,11 @@ namespace ExcelReader.Tests.Writer.Styles
 
         internal static ProbedStyle Xlsx(byte[] file, int row, int column)
         {
-            int styleIndex = StyleIndexOf(Excel.FromXlsx(new MemoryStream(file)), row, column);
+            return XlsxAt(file, StyleIndexOf(Excel.FromXlsx(new MemoryStream(file)), row, column));
+        }
+
+        internal static ProbedStyle XlsxAt(byte[] file, int styleIndex)
+        {
             using var zip = new ZipArchive(new MemoryStream(file), ZipArchiveMode.Read);
             XElement sheet = XDocument.Load(zip.GetEntry("xl/styles.xml")!.Open()).Root!;
             XElement xf = sheet.Element(Main + "cellXfs")!.Elements(Main + "xf").ElementAt(styleIndex);
@@ -57,7 +61,11 @@ namespace ExcelReader.Tests.Writer.Styles
 
         internal static ProbedStyle Xlsb(byte[] file, int row, int column)
         {
-            int styleIndex = StyleIndexOf(Excel.FromXlsb(new MemoryStream(file)), row, column);
+            return XlsbAt(file, StyleIndexOf(Excel.FromXlsb(new MemoryStream(file)), row, column));
+        }
+
+        internal static ProbedStyle XlsbAt(byte[] file, int styleIndex)
+        {
             List<(int Id, byte[] Payload)> records = XlsbRecords(file);
             byte[][] fonts = Payloads(records, Brt.Font);
             int xfStart = records.FindIndex(r => r.Id == Brt.BeginCellXFs) + 1;
@@ -90,7 +98,11 @@ namespace ExcelReader.Tests.Writer.Styles
 
         internal static ProbedStyle Xls(byte[] file, int row, int column)
         {
-            int xfIndex = StyleIndexOf(Excel.FromXls(new MemoryStream(file)), row, column);
+            return XlsAt(file, StyleIndexOf(Excel.FromXls(new MemoryStream(file)), row, column));
+        }
+
+        internal static ProbedStyle XlsAt(byte[] file, int xfIndex)
+        {
             List<XlsRecord> records = XlsRecords(file);
             byte[][] fonts = XlsPayloads(records, BiffFont);
             byte[] xf = XlsPayloads(records, BiffXf)[xfIndex];
@@ -202,15 +214,25 @@ namespace ExcelReader.Tests.Writer.Styles
 
         internal static byte[] XlsbStylesPart(byte[] file)
         {
+            return XlsbPart(file, "xl/styles.bin");
+        }
+
+        internal static byte[] XlsbPart(byte[] file, string entry)
+        {
             using var zip = new ZipArchive(new MemoryStream(file), ZipArchiveMode.Read);
             using var ms = new MemoryStream();
-            zip.GetEntry("xl/styles.bin")!.Open().CopyTo(ms);
+            zip.GetEntry(entry)!.Open().CopyTo(ms);
             return ms.ToArray();
         }
 
         internal static List<(int Id, byte[] Payload)> XlsbRecords(byte[] file)
         {
-            byte[] data = XlsbStylesPart(file);
+            return XlsbRecords(file, "xl/styles.bin");
+        }
+
+        internal static List<(int Id, byte[] Payload)> XlsbRecords(byte[] file, string entry)
+        {
+            byte[] data = XlsbPart(file, entry);
             var records = new List<(int, byte[])>();
             int pos = 0;
             while (pos < data.Length)

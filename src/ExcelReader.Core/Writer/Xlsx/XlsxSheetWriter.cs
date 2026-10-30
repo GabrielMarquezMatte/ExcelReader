@@ -106,6 +106,14 @@ namespace ExcelReader.Core.Writer.Xlsx
             return _workerStrings.GetOrAdd(value);
         }
 
+        internal int StyleCount
+        {
+            get
+            {
+                return _owner.StyleCount;
+            }
+        }
+
         internal int GetColumnStyle(int columnIndex)
         {
             return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
