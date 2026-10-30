@@ -256,31 +256,125 @@ namespace ExcelReader.Core.Writer.Xlsb
                 WriteFmt(data, payload, id, format);
             }
             Biff12RecordWriter.WriteRecord(data, Brt.EndFmts);
-            WriteCountedRecord(data, payload, Brt.BeginFonts, 1);
-            WriteBlobRecord(data, payload, Brt.Font, DefaultFontPayload);
-            Biff12RecordWriter.WriteRecord(data, Brt.EndFonts);
-            WriteCountedRecord(data, payload, Brt.BeginFills, 2);
-            WriteFill(data, payload, FillPatternNone);
-            WriteFill(data, payload, FillPatternGray125);
-            Biff12RecordWriter.WriteRecord(data, Brt.EndFills);
-            WriteCountedRecord(data, payload, Brt.BeginBorders, 1);
-            WriteBlobRecord(data, payload, Brt.Border, DefaultBorderPayload);
-            Biff12RecordWriter.WriteRecord(data, Brt.EndBorders);
+            StyleComponents components = _styles.AssignComponents();
+            WriteFonts(data, payload, components.Fonts);
+            WriteFills(data, payload, components.Fills);
+            WriteBorders(data, payload, components.Borders);
             WriteCountedRecord(data, payload, Brt.BeginCellStyleXFs, 1);
-            WriteXf(data, payload, 0, isStyleXf: true);
+            WriteXf(data, payload, ushort.MaxValue, 0, default, components, 0);
             Biff12RecordWriter.WriteRecord(data, Brt.EndCellStyleXFs);
             IReadOnlyList<CellStyle> styles = _styles.Styles;
             WriteCountedRecord(data, payload, Brt.BeginCellXFs, styles.Count);
-            WriteXf(data, payload, 0);
-            WriteXf(data, payload, 14);
+            WriteXf(data, payload, 0, 0, styles[0], components, 0);
+            WriteXf(data, payload, 0, 14, styles[1], components, 1);
             for (int i = 2; i < styles.Count; i++)
             {
                 int numFmtId = styles[i].NumberFormat is string format ? numFmtIds[format] : 0;
-                WriteXf(data, payload, numFmtId);
+                WriteXf(data, payload, 0, numFmtId, styles[i], components, i);
             }
             Biff12RecordWriter.WriteRecord(data, Brt.EndCellXFs);
             WriteStyles(data, payload);
             Biff12RecordWriter.WriteRecord(data, Brt.EndStyleSheet);
+        }
+
+        private static void WriteFonts(BiffBuffer data, BiffBuffer payload, IReadOnlyList<FontKey> fonts)
+        {
+            WriteCountedRecord(data, payload, Brt.BeginFonts, fonts.Count);
+            foreach (FontKey font in fonts)
+            {
+                payload.Reset();
+                payload.WriteU16(FontHeight(font.Size));
+                payload.WriteU16(FontFlags(font));
+                payload.WriteU16(font.Bold ? FontWeightBold : FontWeightNormal);
+                payload.WriteU16(0);
+                payload.WriteByte(font.Underline ? FontUnderlineSingle : (byte)0);
+                payload.WriteByte(font.Name is null ? FontFamilySwiss : (byte)0);
+                payload.WriteByte(0);
+                payload.WriteByte(0);
+                WriteColor(payload, font.Color, NoColor);
+                payload.WriteByte(0);
+                Biff12RecordWriter.WriteWideString(payload, font.Name ?? DefaultFontName);
+                Biff12RecordWriter.WriteRecord(data, Brt.Font, payload.Span);
+            }
+            Biff12RecordWriter.WriteRecord(data, Brt.EndFonts);
+        }
+
+        private static int FontHeight(double? size)
+        {
+            if (size is not double points)
+            {
+                return DefaultFontHeight;
+            }
+            return (int)Math.Round(points * 20);
+        }
+
+        // Excel sets bit 0 with bold and bit 2 with underline; [MS-XLSB] marks both unused.
+        private static int FontFlags(in FontKey font)
+        {
+            int flags = 0;
+            flags |= font.Bold ? 0x01 : 0;
+            flags |= font.Italic ? 0x02 : 0;
+            flags |= font.Underline ? 0x04 : 0;
+            flags |= font.Strikethrough ? 0x08 : 0;
+            return flags;
+        }
+
+        private static void WriteFills(BiffBuffer data, BiffBuffer payload, IReadOnlyList<FillKey> fills)
+        {
+            WriteCountedRecord(data, payload, Brt.BeginFills, fills.Count);
+            WriteFill(data, payload, FillPatternNone, null);
+            WriteFill(data, payload, FillPatternGray125, null);
+            for (int i = 2; i < fills.Count; i++)
+            {
+                WriteFill(data, payload, FillPatternSolid, fills[i].Color);
+            }
+            Biff12RecordWriter.WriteRecord(data, Brt.EndFills);
+        }
+
+        private static void WriteBorders(BiffBuffer data, BiffBuffer payload, IReadOnlyList<BorderKey> borders)
+        {
+            WriteCountedRecord(data, payload, Brt.BeginBorders, borders.Count);
+            foreach (BorderKey border in borders)
+            {
+                payload.Reset();
+                payload.WriteByte(0);
+                WriteBorderSide(payload, border.Top);
+                WriteBorderSide(payload, border.Bottom);
+                WriteBorderSide(payload, border.Left);
+                WriteBorderSide(payload, border.Right);
+                WriteBorderSide(payload, null);
+                Biff12RecordWriter.WriteRecord(data, Brt.Border, payload.Span);
+            }
+            Biff12RecordWriter.WriteRecord(data, Brt.EndBorders);
+        }
+
+        private static void WriteBorderSide(BiffBuffer payload, CellBorder? side)
+        {
+            if (side is not CellBorder border || border.Style == ExcelBorderStyle.None)
+            {
+                payload.WriteU16(0);
+                payload.Write(EmptyBorderColor);
+                return;
+            }
+            payload.WriteByte((byte)border.Style);
+            payload.WriteByte(0);
+            WriteColor(payload, border.Color, ForegroundColor);
+        }
+
+        private static void WriteColor(BiffBuffer payload, ExcelColor? color, ReadOnlySpan<byte> unset)
+        {
+            if (color is not ExcelColor rgb)
+            {
+                payload.Write(unset);
+                return;
+            }
+            payload.WriteByte(ColorRgbValid);
+            payload.WriteByte(0xFF);
+            payload.WriteU16(0);
+            payload.WriteByte(rgb.R);
+            payload.WriteByte(rgb.G);
+            payload.WriteByte(rgb.B);
+            payload.WriteByte(0xFF);
         }
 
         private void WriteStyles()
@@ -362,50 +456,47 @@ namespace ExcelReader.Core.Writer.Xlsb
             Biff12RecordWriter.WriteRecord(data, id, payload.Span);
         }
 
-        private static void WriteBlobRecord(BiffBuffer data, BiffBuffer payload, int id, ReadOnlySpan<byte> blob)
-        {
-            payload.Reset();
-            payload.Write(blob);
-            Biff12RecordWriter.WriteRecord(data, id, payload.Span);
-        }
+        private const string DefaultFontName = "Calibri";
+        private const int DefaultFontHeight = 220;
+        private const int FontWeightNormal = 400;
+        private const int FontWeightBold = 700;
+        private const byte FontUnderlineSingle = 1;
+        private const byte FontFamilySwiss = 2;
 
-        private static ReadOnlySpan<byte> DefaultFontPayload => [
-            0xDC, 0x00, 0x00, 0x00, 0x90, 0x01, 0x00, 0x00,
-            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00,
-            0x00, 0x43, 0x00, 0x61, 0x00, 0x6C, 0x00, 0x69,
-            0x00, 0x62, 0x00, 0x72, 0x00, 0x69, 0x00,
-        ];
-        private static ReadOnlySpan<byte> FillPayloadAfterPattern => [
-            0x03, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF,
-            0x03, 0x41, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ];
+        // BrtColor first byte: fValidRGB in bit 0, xColorType in bits 1-7 (1 indexed, 2 RGB).
+        private const byte ColorRgbValid = 0x05;
+
+        private static ReadOnlySpan<byte> NoColor => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        private static ReadOnlySpan<byte> EmptyBorderColor => [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        private static ReadOnlySpan<byte> ForegroundColor => [0x03, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF];
+        private static ReadOnlySpan<byte> BackgroundColor => [0x03, 0x41, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF];
 
         private const uint FillPatternNone = 0x00;
+        private const uint FillPatternSolid = 0x01;
         private const uint FillPatternGray125 = 0x11;
+        private const int FillGradientBytes = 48;
 
-        private static void WriteFill(BiffBuffer data, BiffBuffer payload, uint pattern)
+        private static void WriteFill(BiffBuffer data, BiffBuffer payload, uint pattern, ExcelColor? color)
         {
             payload.Reset();
             payload.WriteU32(pattern);
-            payload.Write(FillPayloadAfterPattern);
+            WriteFillColors(payload, color);
+            payload.GetSpan(FillGradientBytes)[..FillGradientBytes].Clear();
+            payload.Advance(FillGradientBytes);
             Biff12RecordWriter.WriteRecord(data, Brt.Fill, payload.Span);
         }
-        private static ReadOnlySpan<byte> DefaultBorderPayload => [
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00,
-        ];
+
+        private static void WriteFillColors(BiffBuffer payload, ExcelColor? color)
+        {
+            if (color is null)
+            {
+                payload.Write(ForegroundColor);
+                payload.Write(BackgroundColor);
+                return;
+            }
+            WriteColor(payload, color, ForegroundColor);
+            payload.Write(ForegroundColor);
+        }
 
         private const string AppPropertiesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
             "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\">" +
@@ -454,23 +545,48 @@ namespace ExcelReader.Core.Writer.Xlsb
             await _package.WriteEntryAsync($"xl/tables/table{table.Id}.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
-        private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId, bool isStyleXf = false)
+        private static void WriteXf(BiffBuffer data, BiffBuffer payload, int parent, int numFmtId, in CellStyle style,
+            StyleComponents components, int styleIndex)
         {
+            int fontId = components.FontId(styleIndex);
+            int fillId = components.FillId(styleIndex);
+            int borderId = components.BorderId(styleIndex);
             payload.Reset();
-            payload.WriteU16(isStyleXf ? ushort.MaxValue : 0);
+            payload.WriteU16(parent);
             payload.WriteU16(numFmtId);
-            payload.WriteU16(0);
-            payload.WriteU16(0);
-            payload.WriteU16(0);
-            payload.WriteByte(0);
-            payload.WriteByte(0);
-            payload.WriteU16(XfDefaultFlags);
-            payload.WriteU16(numFmtId != 0 ? XfAttributeNumberFormat : 0);
+            payload.WriteU16(fontId);
+            payload.WriteU16(fillId);
+            payload.WriteU16(borderId);
+            payload.WriteByte((byte)StyleAlignment.TextRotation(style.Rotation));
+            payload.WriteByte((byte)style.Indent);
+            payload.WriteU16(XfAlignmentFlags(style));
+            int applied = 0;
+            applied |= numFmtId != 0 ? XfAttributeNumberFormat : 0;
+            applied |= fontId != 0 ? XfAttributeFont : 0;
+            applied |= StyleAlignment.HasAlignment(style) ? XfAttributeAlignment : 0;
+            applied |= borderId != 0 ? XfAttributeBorder : 0;
+            applied |= fillId != 0 ? XfAttributeFill : 0;
+            payload.WriteU16(applied);
             Biff12RecordWriter.WriteRecord(data, Brt.Xf, payload.Span);
         }
 
-        private const int XfDefaultFlags = 0x1010;
+        private static int XfAlignmentFlags(in CellStyle style)
+        {
+            int flags = XfLocked | (int)style.HorizontalAlignment | (BiffVerticalAlignment[(int)style.VerticalAlignment] << 3);
+            flags |= style.WrapText ? XfWrapText : 0;
+            return flags;
+        }
+
+        // BIFF alcv order is top, center, bottom, justify, distributed; indexed by ExcelVerticalAlignment.
+        private static ReadOnlySpan<byte> BiffVerticalAlignment => [2, 0, 1, 3, 4];
+
+        private const int XfLocked = 0x1000;
+        private const int XfWrapText = 0x0040;
         private const int XfAttributeNumberFormat = 0x0001;
+        private const int XfAttributeFont = 0x0002;
+        private const int XfAttributeAlignment = 0x0004;
+        private const int XfAttributeBorder = 0x0008;
+        private const int XfAttributeFill = 0x0010;
 
         private string BuildContentTypesXml()
         {
