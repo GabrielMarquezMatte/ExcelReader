@@ -639,6 +639,20 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void LabelWideCodeUnitSplitAcrossContinueDecodesCorrectly()
+        {
+            byte[] label = [.. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(3), 1, 0x41, 0x00, 0xA9];
+            byte[] continued = [0x00, 0x03, (byte)'B'];
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(includeEof: true, (0x0204, label), (0x003C, continued));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal("AΩB", e.Current[0].GetString());
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public void FormulaWithEmptyStringResultReadsAsEmptyString()
         {
             byte[] formula = [.. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), 3, 0, 0, 0, 0, 0, 0xFF, 0xFF, .. new byte[8]];
