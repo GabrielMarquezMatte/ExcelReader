@@ -8,9 +8,8 @@ namespace ExcelReader.Core.Writer.Internal
         internal static readonly CellStyle DateStyle = new() { NumberFormat = "mm-dd-yy" };
 
         // Excel refuses a workbook with more custom number formats than this (its documented limit
-        // is "between 200 and 250"), and a BIFF12 format string longer than 255 characters.
+        // is "between 200 and 250").
         private const int MaxCustomNumberFormats = 200;
-        private const int MaxNumberFormatLength = 255;
 
         private readonly Dictionary<CellStyle, int> _indices = [];
         private readonly List<CellStyle> _styles = [];
@@ -36,15 +35,7 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 return index;
             }
-            if (style.NumberFormat is { Length: > MaxNumberFormatLength })
-            {
-                throw new ArgumentException(
-                    $"A number format cannot be longer than {MaxNumberFormatLength} characters ({style.NumberFormat.Length} chars).", nameof(style));
-            }
-            if (style.NumberFormat is { } numberFormat && WriterStateGuard.HasUnwritableCharacter(numberFormat))
-            {
-                throw new ArgumentException("A number format cannot contain control characters, U+FFFE or U+FFFF.", nameof(style));
-            }
+            CellStyleValidation.Validate(style, nameof(style));
             ClaimNumberFormat(style.NumberFormat);
             index = _styles.Count;
             _styles.Add(style);
