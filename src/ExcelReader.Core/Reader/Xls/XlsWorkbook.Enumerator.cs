@@ -261,23 +261,37 @@ namespace ExcelReader.Core.Reader.Xls
                     _acc.Advance(DecodeStringToUtf8(firstData[..firstBytes], firstChars, flags, dst));
                     return;
                 }
-                DecodeContinuedString(firstData[..firstBytes], firstChars, flags, chars);
+                DecodeContinuedString(firstData, flags, chars);
             }
 
-            /// <summary>Decodes every chunk to UTF-16 before encoding, so a surrogate pair split across CONTINUE records stays one character.</summary>
-            private void DecodeContinuedString(ReadOnlySpan<byte> firstData, int firstChars, byte flags, int chars)
+            /// <summary>
+            /// Decodes every chunk to UTF-16 before encoding, so a surrogate pair split across CONTINUE records stays one
+            /// character. A UTF-16 code unit split across records keeps its high byte after the next record's flag byte.
+            /// </summary>
+            private void DecodeContinuedString(ReadOnlySpan<byte> chunk, byte flags, int chars)
             {
                 char[] buffer = ArrayPool<char>.Shared.Rent(chars);
                 try
                 {
-                    int charsDecoded = DecodeStringToChars(firstData, firstChars, flags, buffer);
-                    while (charsDecoded < chars && _cursor.PeekId() == Rec.Continue && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont) && cont.Length > 0)
+                    int charsDecoded = 0;
+                    int splitLow = -1;
+                    while (true)
                     {
-                        byte contFlags = cont[0];
-                        int contByteLen = cont.Length - 1;
-                        int contChars = Math.Min((contFlags & 1) == 0 ? contByteLen : contByteLen / 2, chars - charsDecoded);
-                        int contBytes = (contFlags & 1) == 0 ? contChars : contChars * 2;
-                        charsDecoded += DecodeStringToChars(cont.Slice(1, contBytes), contChars, contFlags, buffer.AsSpan(charsDecoded));
+                        if (splitLow >= 0 && !chunk.IsEmpty)
+                        {
+                            buffer[charsDecoded++] = (char)(splitLow | (chunk[0] << 8));
+                            chunk = chunk[1..];
+                        }
+                        int chunkChars = Math.Min((flags & 1) == 0 ? chunk.Length : chunk.Length / 2, chars - charsDecoded);
+                        int chunkBytes = (flags & 1) == 0 ? chunkChars : chunkChars * 2;
+                        charsDecoded += DecodeStringToChars(chunk[..chunkBytes], chunkChars, flags, buffer.AsSpan(charsDecoded));
+                        splitLow = charsDecoded < chars && chunkBytes < chunk.Length ? chunk[chunkBytes] : -1;
+                        if (charsDecoded == chars || _cursor.PeekId() != Rec.Continue || !_cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont) || cont.IsEmpty)
+                        {
+                            break;
+                        }
+                        flags = cont[0];
+                        chunk = cont[1..];
                     }
                     Span<byte> dst = _acc.ReserveValueSpan((charsDecoded * 3) + 1);
                     _acc.Advance(Encoding.UTF8.GetBytes(buffer.AsSpan(0, charsDecoded), dst));
