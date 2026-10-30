@@ -1,7 +1,9 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
+using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Writer;
@@ -14,6 +16,8 @@ namespace ExcelReader.Tests.Writer.Styles
         (ExcelBorderStyle Style, int? Rgb) Top, (ExcelBorderStyle Style, int? Rgb) Bottom,
         ExcelHorizontalAlignment Horizontal, ExcelVerticalAlignment Vertical, bool Wrap, int Indent, int Rotation,
         string? NumberFormat);
+
+    internal readonly record struct XlsRecord(int Position, int Id, byte[] Payload);
 
     internal static class StyleProbe
     {
@@ -82,6 +86,118 @@ namespace ExcelReader.Tests.Writer.Styles
                 xf[11],
                 RotationOf(xf[10]),
                 BiffNumberFormat(records, BitConverter.ToUInt16(xf, 2)));
+        }
+
+        internal static ProbedStyle Xls(byte[] file, int row, int column)
+        {
+            int xfIndex = StyleIndexOf(Excel.FromXls(new MemoryStream(file)), row, column);
+            List<XlsRecord> records = XlsRecords(file);
+            byte[][] fonts = XlsPayloads(records, BiffFont);
+            byte[] xf = XlsPayloads(records, BiffXf)[xfIndex];
+            int fontIndex = BitConverter.ToUInt16(xf, 0);
+            byte[] font = fonts[fontIndex < 4 ? fontIndex : fontIndex - 1];
+            byte[]? palette = records.Where(r => r.Id == BiffPalette).Select(r => r.Payload).SingleOrDefault();
+            string name = XlsFontName(font);
+            int height = BitConverter.ToUInt16(font, 0);
+            uint border1 = BitConverter.ToUInt32(xf, 10);
+            uint border2 = BitConverter.ToUInt32(xf, 14);
+            int colors = BitConverter.ToUInt16(xf, 18);
+            return new ProbedStyle(
+                string.Equals(name, XlsFontName(fonts[0]), StringComparison.Ordinal) ? null : name,
+                height == BitConverter.ToUInt16(fonts[0], 0) ? null : height / 20.0,
+                PaletteRgb(palette, BitConverter.ToUInt16(font, 4)),
+                BitConverter.ToUInt16(font, 6) == 700,
+                (font[2] & 0x02) != 0,
+                font[10] != 0,
+                (font[2] & 0x08) != 0,
+                (border2 >> 26) == 1 ? PaletteRgb(palette, colors & 0x7F) : null,
+                XlsSide(palette, border1, (int)(border1 >> 16)),
+                XlsSide(palette, border1 >> 4, (int)(border1 >> 23)),
+                XlsSide(palette, border1 >> 8, (int)border2),
+                XlsSide(palette, border1 >> 12, (int)(border2 >> 7)),
+                (ExcelHorizontalAlignment)(xf[6] & 0x7),
+                BiffVertical[(xf[6] >> 4) & 0x7],
+                (xf[6] & 0x08) != 0,
+                xf[8] & 0x0F,
+                RotationOf(xf[7]),
+                XlsNumberFormat(records, BitConverter.ToUInt16(xf, 2)));
+        }
+
+        internal const int BiffFont = 0x0031;
+        internal const int BiffXf = 0x00E0;
+        internal const int BiffPalette = 0x0092;
+        internal const int BiffFormat = 0x041E;
+        internal const int BiffStyle = 0x0293;
+
+        internal static List<XlsRecord> XlsRecords(byte[] xls)
+        {
+            using var cfb = CfbContainer.Parse(new MemoryStream(xls), ownsSource: true, ExcelReaderOptions.Default);
+            byte[] stream = cfb.ReadStream("Workbook", maxBytes: 64 * 1024 * 1024);
+            var records = new List<XlsRecord>();
+            int pos = 0;
+            while (pos + 4 <= stream.Length)
+            {
+                int id = BinaryPrimitives.ReadUInt16LittleEndian(stream.AsSpan(pos));
+                if (id == 0)
+                {
+                    break;
+                }
+                int length = BinaryPrimitives.ReadUInt16LittleEndian(stream.AsSpan(pos + 2));
+                records.Add(new XlsRecord(pos, id, stream.AsSpan(pos + 4, length).ToArray()));
+                pos += 4 + length;
+            }
+            return records;
+        }
+
+        internal static byte[][] XlsPayloads(List<XlsRecord> records, int id)
+        {
+            return records.Where(r => r.Id == id).Select(r => r.Payload).ToArray();
+        }
+
+        private static string XlsFontName(byte[] font)
+        {
+            return XlsString(font, 15, font[14]);
+        }
+
+        private static string XlsString(byte[] payload, int flagsOffset, int length)
+        {
+            if ((payload[flagsOffset] & 1) == 0)
+            {
+                return Encoding.Latin1.GetString(payload, flagsOffset + 1, length);
+            }
+            return Encoding.Unicode.GetString(payload, flagsOffset + 1, length * 2);
+        }
+
+        // icv 8-63 index the PALETTE record; 64 and 0x7FFF mean automatic.
+        private static int? PaletteRgb(byte[]? palette, int icv)
+        {
+            if (icv is < 8 or > 63)
+            {
+                return null;
+            }
+            Assert.NotNull(palette);
+            int offset = 2 + ((icv - 8) * 4);
+            return (palette[offset] << 16) | (palette[offset + 1] << 8) | palette[offset + 2];
+        }
+
+        private static (ExcelBorderStyle Style, int? Rgb) XlsSide(byte[]? palette, uint lineStyle, int icv)
+        {
+            var style = (ExcelBorderStyle)(lineStyle & 0xF);
+            if (style == ExcelBorderStyle.None)
+            {
+                return (ExcelBorderStyle.None, null);
+            }
+            return (style, PaletteRgb(palette, icv & 0x7F));
+        }
+
+        private static string? XlsNumberFormat(List<XlsRecord> records, int formatIndex)
+        {
+            byte[]? format = XlsPayloads(records, BiffFormat).FirstOrDefault(p => BitConverter.ToUInt16(p, 0) == formatIndex);
+            if (format is null)
+            {
+                return null;
+            }
+            return XlsString(format, 4, BitConverter.ToUInt16(format, 2));
         }
 
         internal static byte[] XlsbStylesPart(byte[] file)

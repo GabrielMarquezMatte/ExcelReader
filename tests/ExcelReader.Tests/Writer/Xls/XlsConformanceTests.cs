@@ -1,8 +1,8 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
-using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Tests.Writer.Styles;
 
 namespace ExcelReader.Tests.Writer.Xls
 {
@@ -30,8 +30,6 @@ namespace ExcelReader.Tests.Writer.Xls
         private const int MulRk = 0x00BD;
         private const int Number = 0x0203;
 
-        private readonly record struct Record(int Position, int Id, byte[] Payload);
-
         private static byte[] Write(Action<XlsWorkbookWriter> build)
         {
             var ms = new MemoryStream();
@@ -43,27 +41,7 @@ namespace ExcelReader.Tests.Writer.Xls
             return ms.ToArray();
         }
 
-        private static List<Record> Records(byte[] xls)
-        {
-            using var cfb = CfbContainer.Parse(new MemoryStream(xls), ownsSource: true, ExcelReaderOptions.Default);
-            byte[] stream = cfb.ReadStream("Workbook", maxBytes: 64 * 1024 * 1024);
-            var records = new List<Record>();
-            int pos = 0;
-            while (pos + 4 <= stream.Length)
-            {
-                int id = BinaryPrimitives.ReadUInt16LittleEndian(stream.AsSpan(pos));
-                if (id == 0)
-                {
-                    break;
-                }
-                int length = BinaryPrimitives.ReadUInt16LittleEndian(stream.AsSpan(pos + 2));
-                records.Add(new Record(pos, id, stream.AsSpan(pos + 4, length).ToArray()));
-                pos += 4 + length;
-            }
-            return records;
-        }
-
-        private static List<Record> Worksheet(List<Record> records)
+        private static List<XlsRecord> Worksheet(List<XlsRecord> records)
         {
             int start = records.FindLastIndex(r => r.Id == Bof);
             return records.GetRange(start, records.Count - start);
@@ -83,8 +61,8 @@ namespace ExcelReader.Tests.Writer.Xls
                 }
             });
 
-            List<Record> sheet = Worksheet(Records(xls));
-            Dictionary<int, Record> byPosition = sheet.ToDictionary(r => r.Position);
+            List<XlsRecord> sheet = Worksheet(StyleProbe.XlsRecords(xls));
+            Dictionary<int, XlsRecord> byPosition = sheet.ToDictionary(r => r.Position);
 
             Assert.Equal(Bof, sheet[0].Id);
             Assert.Equal(Index, sheet[1].Id);
@@ -99,7 +77,7 @@ namespace ExcelReader.Tests.Writer.Xls
             Assert.Equal(2, blocks);
             for (int block = 0; block < blocks; block++)
             {
-                Record dbCell = byPosition[BinaryPrimitives.ReadInt32LittleEndian(index.AsSpan(16 + (4 * block)))];
+                XlsRecord dbCell = byPosition[BinaryPrimitives.ReadInt32LittleEndian(index.AsSpan(16 + (4 * block)))];
                 Assert.Equal(DbCell, dbCell.Id);
                 int firstRow = dbCell.Position - BinaryPrimitives.ReadInt32LittleEndian(dbCell.Payload);
                 Assert.Equal(Row, byPosition[firstRow].Id);
@@ -120,7 +98,7 @@ namespace ExcelReader.Tests.Writer.Xls
                 row.Write(1);
             });
 
-            List<Record> records = Records(xls);
+            List<XlsRecord> records = StyleProbe.XlsRecords(xls);
             Assert.Equal(0x07CC, BinaryPrimitives.ReadUInt16LittleEndian(records[0].Payload.AsSpan(6)));
 
             byte[] writeAccess = records.Single(r => r.Id == WriteAccess).Payload;
@@ -196,7 +174,7 @@ namespace ExcelReader.Tests.Writer.Xls
                 row.Write(Math.PI);
             });
 
-            List<int> cells = Worksheet(Records(xls))
+            List<int> cells = Worksheet(StyleProbe.XlsRecords(xls))
                 .Where(r => r.Id is MulRk or Rk or Number or Label)
                 .Select(r => r.Id)
                 .ToList();
@@ -238,7 +216,7 @@ namespace ExcelReader.Tests.Writer.Xls
                 }
             });
 
-            byte[] sst = Records(xls).Single(r => r.Id == Sst).Payload;
+            byte[] sst = StyleProbe.XlsRecords(xls).Single(r => r.Id == Sst).Payload;
             Assert.Equal(2 * distinct, BinaryPrimitives.ReadInt32LittleEndian(sst));
             Assert.Equal(distinct, BinaryPrimitives.ReadInt32LittleEndian(sst.AsSpan(4)));
 
@@ -275,7 +253,7 @@ namespace ExcelReader.Tests.Writer.Xls
                 }
             });
 
-            List<Record> records = Records(xls);
+            List<XlsRecord> records = StyleProbe.XlsRecords(xls);
             // "short" is a LABEL too.
             int expectedCount = expectedRecord == Label ? 3 : 2;
             Assert.Equal(expectedCount, Worksheet(records).Count(r => r.Id == expectedRecord));

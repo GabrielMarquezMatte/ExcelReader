@@ -283,8 +283,8 @@ namespace ExcelReader.Core.Writer.Xlsb
             foreach (FontKey font in fonts)
             {
                 payload.Reset();
-                payload.WriteU16(FontHeight(font.Size));
-                payload.WriteU16(FontFlags(font));
+                payload.WriteU16(font.Twips);
+                payload.WriteU16(font.Flags);
                 payload.WriteU16(font.Bold ? FontWeightBold : FontWeightNormal);
                 payload.WriteU16(0);
                 payload.WriteByte(font.Underline ? FontUnderlineSingle : (byte)0);
@@ -297,26 +297,6 @@ namespace ExcelReader.Core.Writer.Xlsb
                 Biff12RecordWriter.WriteRecord(data, Brt.Font, payload.Span);
             }
             Biff12RecordWriter.WriteRecord(data, Brt.EndFonts);
-        }
-
-        private static int FontHeight(double? size)
-        {
-            if (size is not double points)
-            {
-                return DefaultFontHeight;
-            }
-            return (int)Math.Round(points * 20);
-        }
-
-        // Excel sets bit 0 with bold and bit 2 with underline; [MS-XLSB] marks both unused.
-        private static int FontFlags(in FontKey font)
-        {
-            int flags = 0;
-            flags |= font.Bold ? 0x01 : 0;
-            flags |= font.Italic ? 0x02 : 0;
-            flags |= font.Underline ? 0x04 : 0;
-            flags |= font.Strikethrough ? 0x08 : 0;
-            return flags;
         }
 
         private static void WriteFills(BiffBuffer data, BiffBuffer payload, IReadOnlyList<FillKey> fills)
@@ -457,7 +437,6 @@ namespace ExcelReader.Core.Writer.Xlsb
         }
 
         private const string DefaultFontName = "Calibri";
-        private const int DefaultFontHeight = 220;
         private const int FontWeightNormal = 400;
         private const int FontWeightBold = 700;
         private const byte FontUnderlineSingle = 1;
@@ -572,13 +551,10 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         private static int XfAlignmentFlags(in CellStyle style)
         {
-            int flags = XfLocked | (int)style.HorizontalAlignment | (BiffVerticalAlignment[(int)style.VerticalAlignment] << 3);
+            int flags = XfLocked | (int)style.HorizontalAlignment | (StyleAlignment.BiffVerticalAlignment(style.VerticalAlignment) << 3);
             flags |= style.WrapText ? XfWrapText : 0;
             return flags;
         }
-
-        // BIFF alcv order is top, center, bottom, justify, distributed; indexed by ExcelVerticalAlignment.
-        private static ReadOnlySpan<byte> BiffVerticalAlignment => [2, 0, 1, 3, 4];
 
         private const int XfLocked = 0x1000;
         private const int XfWrapText = 0x0040;

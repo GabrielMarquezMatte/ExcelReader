@@ -35,10 +35,16 @@ namespace ExcelReader.Core.Writer.Xls
             BiffRecordWriter.WritePrecision(buffer);
             BiffRecordWriter.WriteRefreshAll(buffer);
             BiffRecordWriter.WriteBookBool(buffer);
-            // Excel writes at least four FONT records; every XF here refers to the first.
+            StyleComponents components = styles.AssignComponents();
+            IReadOnlyList<ExcelColor> palette = styles.PaletteColors;
+            // Excel writes at least four FONT records, all the default font here.
             for (int i = 0; i < 4; i++)
             {
-                BiffRecordWriter.WriteFont(buffer);
+                BiffRecordWriter.WriteFont(buffer, default, palette);
+            }
+            for (int i = 1; i < components.Fonts.Count; i++)
+            {
+                BiffRecordWriter.WriteFont(buffer, components.Fonts[i], palette);
             }
             Dictionary<string, int> numFmtIds = styles.AssignCustomNumberFormatIds();
             foreach (var (format, id) in numFmtIds)
@@ -49,15 +55,16 @@ namespace ExcelReader.Core.Writer.Xls
             {
                 BiffRecordWriter.WriteStyleXf(buffer, formatIndex: 0);
             }
-            BiffRecordWriter.WriteCellXf(buffer, formatIndex: 0);
-            BiffRecordWriter.WriteCellXf(buffer, formatIndex: BuiltinDateFormat);
             IReadOnlyList<CellStyle> styleList = styles.Styles;
-            for (int i = 2; i < styleList.Count; i++)
+            for (int i = 0; i < styleList.Count; i++)
             {
-                int formatIndex = styleList[i].NumberFormat is string format ? numFmtIds[format] : 0;
-                BiffRecordWriter.WriteCellXf(buffer, formatIndex);
+                BiffRecordWriter.WriteCellXf(buffer, FontIndex(components.FontId(i)), FormatIndex(i, styleList[i], numFmtIds), styleList[i], palette);
             }
             BiffRecordWriter.WriteStyle(buffer);
+            if (palette.Count > 0)
+            {
+                BiffRecordWriter.WritePalette(buffer, palette);
+            }
 
             int[] offsetPositions = new int[sheetNames.Length];
             for (int i = 0; i < sheetNames.Length; i++)
@@ -69,6 +76,25 @@ namespace ExcelReader.Core.Writer.Xls
             sharedStrings.Write(buffer);
             BiffRecordWriter.WriteEof(buffer);
             return offsetPositions;
+        }
+
+        // BIFF8 has no FONT index 4, so font k of the component table is index k + 4.
+        private static int FontIndex(int fontId)
+        {
+            if (fontId == 0)
+            {
+                return 0;
+            }
+            return fontId + 4;
+        }
+
+        private static int FormatIndex(int styleIndex, in CellStyle style, Dictionary<string, int> numFmtIds)
+        {
+            if (styleIndex == 1)
+            {
+                return BuiltinDateFormat;
+            }
+            return style.NumberFormat is string format ? numFmtIds[format] : 0;
         }
     }
 }
