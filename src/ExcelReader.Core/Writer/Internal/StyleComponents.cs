@@ -7,6 +7,13 @@ namespace ExcelReader.Core.Writer.Internal
     {
         internal static FontKey Of(in CellStyle style)
             => new(style.FontName, style.FontSize, style.FontColor, style.Bold, style.Italic, style.Underline, style.Strikethrough);
+
+        private const int DefaultTwips = 220;
+
+        internal int Twips => Size is double points ? (int)Math.Round(points * 20) : DefaultTwips;
+
+        // BIFF8 and BIFF12 share these bits. Excel sets bit 0 with bold and bit 2 with underline; both specs mark them unused.
+        internal int Flags => (Bold ? 0x01 : 0) | (Italic ? 0x02 : 0) | (Underline ? 0x04 : 0) | (Strikethrough ? 0x08 : 0);
     }
 
     internal readonly record struct FillKey(ExcelColor? Color);
@@ -41,6 +48,14 @@ namespace ExcelReader.Core.Writer.Internal
         {
             return rotation < 0 ? 90 - rotation : rotation;
         }
+
+        internal static int BiffVerticalAlignment(ExcelVerticalAlignment alignment)
+        {
+            return BiffVerticalCodes[(int)alignment];
+        }
+
+        // BIFF alcV order is top, center, bottom, justify, distributed; indexed by ExcelVerticalAlignment.
+        private static ReadOnlySpan<byte> BiffVerticalCodes => [2, 0, 1, 3, 4];
     }
 
     // Fills 0 and 1 are the two mandatory built-ins (none, gray125) and appear as FillKey(null) placeholders.

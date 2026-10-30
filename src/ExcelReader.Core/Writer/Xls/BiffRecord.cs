@@ -15,6 +15,7 @@ namespace ExcelReader.Core.Writer.Xls
         internal const int Format = 0x041E;
         internal const int Xf = 0x00E0;
         internal const int Style = 0x0293;
+        internal const int Palette = 0x0092;
         internal const int BoundSheet = 0x0085;
         internal const int ColInfo = 0x007D;
         internal const int TabId = 0x013D;
