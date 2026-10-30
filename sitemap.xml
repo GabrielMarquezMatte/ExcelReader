@@ -2,1129 +2,1129 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/ARCHITECTURE.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/CODE_OF_CONDUCT.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/CONTRIBUTING.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/SECURITY.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/STYLEGUIDE.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Arrow.ArrowConversionExtensions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Arrow.ArrowReadOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Arrow.ArrowWriteExtensions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Arrow.ArrowWriteOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Arrow.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.ExcelSheetVisibility.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.CsvEnumerable-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelCellReader-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelCellReaders.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelColumnAttribute.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelConverterAttribute.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelEnumerable-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelIgnoreAttribute.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelParseException.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelParser-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelParser.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelParserOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelPropertySetter-2.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelRequiredAttribute.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelRowContext.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelRowMapBuilder-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelRowParser-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.ExcelSerializableAttribute.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.HeaderNormalization.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.IExcelCellConverter-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.IExcelRowMap-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Parser.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Cell.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.CellType.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.CsvDialect.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.CsvReader.Enumerator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.CsvReader.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.CsvReaderOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.CsvSheet.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.CsvSniffer.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.CsvSnifferOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Csv.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Excel.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelEncryptionException.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelEncryptionReason.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelFileFormat.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelLimitExceededException.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelPassword.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelReaderOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelSheetList-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.ExcelTable.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.IExcelRowEnumerator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.IExcelSheet-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.IExcelSheet.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.IExcelWorkbook.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.IRowAccumulator-2.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.IRowRecord-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Row.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.RowAction-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.RowAggregation-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.RowCell.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.RowCellEnumerator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Schema.ExcelColumnSchema.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Schema.ExcelColumnType.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Schema.SchemaInferenceOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Schema.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.SheetDataReader.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.SheetDataReaderOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.SheetParallel.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.SheetParallelOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xls.XlsSheet.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xls.XlsWorkbook.Enumerator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xls.XlsWorkbook.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xls.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsb.XlsbSheet.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.Enumerator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsb.XlsbWorkbook.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsb.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsx.XlsxSheet.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.Enumerator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsx.XlsxWorkbook.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.Xlsx.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Reader.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.CellStyle.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Csv.CsvNewLine.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Csv.CsvRowWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Csv.CsvWorkbookWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Csv.CsvWriterOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Csv.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ExcelRecordLayout-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ExcelRecordLayout.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ExcelTableOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.IExcelCellWriter-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.IExcelRecordMap-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.IRowWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ISheetWriter-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ITableSheetWriter-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.IWorkbookWriter-1.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ParallelSheetWriterExtensions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.ParallelWriteOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.SheetWriterExtensions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xls.XlsRowWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xls.XlsWorkbookWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xls.XlsWriterOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xls.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsb.XlsbCell.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsb.XlsbWriterOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsb.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsx.XlsxWorkbookWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsx.XlsxWriterOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.Xlsx.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.Writer.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/api/ExcelReader.Core.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/Accumulator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/ArrowStream.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/ArrowTable.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/CellType.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/CellView.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/ColumnRef.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/CsvAccumulator.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/DecodedRows.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/Error.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/ExcelMapper.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/InferredColumn.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/InputStream.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/OpenOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/ReadOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/RowCursor.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/RowView.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/Sheet.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/SheetVisibility.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/Source.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/Table.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/TableInfo.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/TableOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/TableReader.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/TableView.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/TypedReader.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/Workbook.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/WriteOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/WriterHandle.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp-api/functions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/cpp/README.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/README.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/csv.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/encryption.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/errors.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/migrating-to-v6.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/migrating-to-v7.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/parsing.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/reading.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/untrusted-input.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/versioning.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/guide/writing.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/performance/benchmarks.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/docs/performance/reader-performance.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/index.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/Cell.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/CellType.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/ColumnSpec.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/ColumnType.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/ExcelReaderError.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/OpenOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/PasswordIncorrectError.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/PasswordRequiredError.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/Sheet.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/SheetVisibility.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/SheetWriter.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/Sheets.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/Source.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/StringColumn.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/Table.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/TableOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/Tables.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/TypedTable.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/Workbook.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/WriteOptions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python-api/functions.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/python/README.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gabrielmarquezmatte.github.io/ExcelReader/rust/excelreader/README.html</loc>
-    <lastmod>2026-10-28T05:47:40+00:00</lastmod>
+    <lastmod>2026-10-30T04:02:09+00:00</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>

@@ -162,7 +162,7 @@ records to a sheet in one call, driving the start-row/write/dispose lifecycle pe
 
   <h3 id="ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__1_ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_System_Collections_Generic_IEnumerable___0__System_Action_ExcelReader_Core_Writer_Xlsx_XlsxRowWriter___0__System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.SheetWriterExtensions.WriteRecordsAsync``1(ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter,System.Collections.Generic.IEnumerable{``0},System.Action{ExcelReader.Core.Writer.Xlsx.XlsxRowWriter,``0},System.Threading.CancellationToken)">
   WriteRecordsAsync&lt;T&gt;(XlsxSheetWriter, IEnumerable&lt;T&gt;, Action&lt;XlsxRowWriter, T&gt;, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L219"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes one row per item in <code class="paramref">records</code> to an <a class="xref" href="ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html">XlsxSheetWriter</a> using
@@ -226,7 +226,7 @@ machinery entirely.</p>
 
   <h3 id="ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__2_ExcelReader_Core_Writer_ISheetWriter___1__System_Collections_Generic_IAsyncEnumerable___0__ExcelReader_Core_Writer_ExcelRecordLayout___0__System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.SheetWriterExtensions.WriteRecordsAsync``2(ExcelReader.Core.Writer.ISheetWriter{``1},System.Collections.Generic.IAsyncEnumerable{``0},ExcelReader.Core.Writer.ExcelRecordLayout{``0},System.Threading.CancellationToken)">
   WriteRecordsAsync&lt;T, TRow&gt;(ISheetWriter&lt;TRow&gt;, IAsyncEnumerable&lt;T&gt;, ExcelRecordLayout&lt;T&gt;, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L55"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a header row followed by one row per item produced by <code class="paramref">records</code>, the
@@ -283,7 +283,7 @@ columns coming from <code class="paramref">layout</code>. The sheet stays open; 
 
   <h3 id="ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__2_ExcelReader_Core_Writer_ISheetWriter___1__System_Collections_Generic_IAsyncEnumerable___0__System_Action___1___0__System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.SheetWriterExtensions.WriteRecordsAsync``2(ExcelReader.Core.Writer.ISheetWriter{``1},System.Collections.Generic.IAsyncEnumerable{``0},System.Action{``1,``0},System.Threading.CancellationToken)">
   WriteRecordsAsync&lt;T, TRow&gt;(ISheetWriter&lt;TRow&gt;, IAsyncEnumerable&lt;T&gt;, Action&lt;TRow, T&gt;, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L185"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes one row per item produced by <code class="paramref">records</code>, calling <code class="paramref">writeRow</code>
@@ -398,7 +398,7 @@ for, so the sheet parses straight back. The sheet stays open; dispose it to end 
 
   <h3 id="ExcelReader_Core_Writer_SheetWriterExtensions_WriteRecordsAsync__2_ExcelReader_Core_Writer_ISheetWriter___1__System_Collections_Generic_IEnumerable___0__System_Action___1___0__System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.SheetWriterExtensions.WriteRecordsAsync``2(ExcelReader.Core.Writer.ISheetWriter{``1},System.Collections.Generic.IEnumerable{``0},System.Action{``1,``0},System.Threading.CancellationToken)">
   WriteRecordsAsync&lt;T, TRow&gt;(ISheetWriter&lt;TRow&gt;, IEnumerable&lt;T&gt;, Action&lt;TRow, T&gt;, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L158"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes one row per item in <code class="paramref">records</code>, calling <code class="paramref">writeRow</code>
@@ -455,7 +455,7 @@ for each to populate that row's cells.</p>
 
   <h3 id="ExcelReader_Core_Writer_SheetWriterExtensions_WriteTableAsync__2_ExcelReader_Core_Writer_ITableSheetWriter___1__System_Collections_Generic_IAsyncEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.SheetWriterExtensions.WriteTableAsync``2(ExcelReader.Core.Writer.ITableSheetWriter{``1},System.Collections.Generic.IAsyncEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,System.Threading.CancellationToken)">
   WriteTableAsync&lt;T, TRow&gt;(ITableSheetWriter&lt;TRow&gt;, IAsyncEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L106"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes the records produced by <code class="paramref">records</code> as an Excel table named <code class="paramref">name</code>,
@@ -518,7 +518,7 @@ as <a class="xref" href="ExcelReader.Core.Writer.SheetWriterExtensions.html#Exce
 
   <h3 id="ExcelReader_Core_Writer_SheetWriterExtensions_WriteTableAsync__2_ExcelReader_Core_Writer_ITableSheetWriter___1__System_Collections_Generic_IEnumerable___0__System_String_ExcelReader_Core_Writer_ExcelRecordLayout___0__ExcelReader_Core_Writer_ExcelTableOptions_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.SheetWriterExtensions.WriteTableAsync``2(ExcelReader.Core.Writer.ITableSheetWriter{``1},System.Collections.Generic.IEnumerable{``0},System.String,ExcelReader.Core.Writer.ExcelRecordLayout{``0},ExcelReader.Core.Writer.ExcelTableOptions,System.Threading.CancellationToken)">
   WriteTableAsync&lt;T, TRow&gt;(ITableSheetWriter&lt;TRow&gt;, IEnumerable&lt;T&gt;, string, ExcelRecordLayout&lt;T&gt;, ExcelTableOptions?, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/SheetWriterExtensions.cs/#L80"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes <code class="paramref">records</code> as an Excel table named <code class="paramref">name</code>: a header row from
