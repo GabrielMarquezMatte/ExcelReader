@@ -105,6 +105,21 @@ namespace ExcelReader.Tests.Writer.Styles
         public void OverlongNumberFormatStillThrows(string format)
             => AssertRejected(format, new CellStyle { NumberFormat = new string('0', 256) });
 
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public void UndefinedBorderStyleThrows(string format)
+            => AssertRejected(format, new CellStyle { Left = new CellBorder((ExcelBorderStyle)99) });
+
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public void UndefinedHorizontalAlignmentThrows(string format)
+            => AssertRejected(format, new CellStyle { HorizontalAlignment = (ExcelHorizontalAlignment)99 });
+
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public void UndefinedVerticalAlignmentThrows(string format)
+            => AssertRejected(format, new CellStyle { VerticalAlignment = (ExcelVerticalAlignment)(-1) });
+
         [Fact]
         public void FromRgbRejectsValuesOutsideTwentyFourBits()
         {
