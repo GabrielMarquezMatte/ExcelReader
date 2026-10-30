@@ -313,7 +313,7 @@ namespace ExcelReader.Native.Writer
             }
         }
 
-        internal static void WriteCell(IRowWriter row, NativeColumn column, long rowIndex)
+        internal static void WriteCell(IRowWriter row, in NativeColumn column, long rowIndex)
         {
             if (!IsValidAt(column, rowIndex))
             {
@@ -383,7 +383,7 @@ namespace ExcelReader.Native.Writer
             }
         }
 
-        private static bool IsValidAt(NativeColumn column, long rowIndex)
+        private static bool IsValidAt(in NativeColumn column, long rowIndex)
         {
             if (column.Validity == IntPtr.Zero)
             {

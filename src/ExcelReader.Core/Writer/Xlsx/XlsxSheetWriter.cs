@@ -34,6 +34,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
         private Dictionary<int, int>? _columnStyles;
+        private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
 
         internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipPackageWriter zip, string name, int sheetId,
@@ -60,7 +61,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             SheetId = source.SheetId;
             Visibility = source.Visibility;
             _compression = source._compression;
-            _columnStyles = source._columnStyles;
+            _columnStyleLookup = source._columnStyleLookup;
             _flushThreshold = int.MaxValue;
             _state = WriterState.Started;
             if (_owner.UseSharedStrings)
@@ -107,7 +108,7 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         internal int GetColumnStyle(int columnIndex)
         {
-            return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;
+            return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
         }
 
         /// <inheritdoc/>
@@ -180,6 +181,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private void MarkStarted()
         {
             _rowBuffer.Reset();
+            _columnStyleLookup = SheetColumnValidation.StyleLookup(_columnStyles);
             _state = WriterState.Started;
             _owner.RegisterSheet(Name, SheetId, Visibility);
         }

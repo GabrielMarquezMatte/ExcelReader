@@ -202,7 +202,8 @@ namespace ExcelReader.Core.Writer.Internal
         {
             if (value == 0 || Math.Abs(value) >= 1e9)
             {
-                return Utf8Formatter.TryFormat(value, destination, out written);
+                return ShortestDouble.TryFormat(value, destination, out written)
+                    || Utf8Formatter.TryFormat(value, destination, out written);
             }
             ReadOnlySpan<double> pow10 = [1, 10, 100, 1000, 10000];
             for (int scale = 0; scale < pow10.Length; scale++)
@@ -213,7 +214,8 @@ namespace ExcelReader.Core.Writer.Internal
                     return TryFormatScaled((long)scaled, scale, destination, out written);
                 }
             }
-            return Utf8Formatter.TryFormat(value, destination, out written);
+            return ShortestDouble.TryFormat(value, destination, out written)
+                || Utf8Formatter.TryFormat(value, destination, out written);
         }
 
         private static bool TryFormatScaled(long scaled, int scale, Span<byte> destination, out int written)

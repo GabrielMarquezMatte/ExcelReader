@@ -26,19 +26,20 @@ example) silently drops its profile. That happened after the namespace refactor 
 look for `; No PGO data` in the listing header.
 
 `tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_rows_next` and
-`xl_rows_next_view` over the 65K benchmark fixtures in XLSX, XLSB and CSV. Record it and convert the
-trace (needs `dotnet-trace` and `dotnet-pgo`):
+`xl_rows_next_view` over the 65K benchmark fixtures in XLSX, XLSB and CSV, and writes each parsed
+table back out with `xl_write_typed_to_memory` in XLSX, XLSB and CSV, serially and in parallel.
+Record it and convert the trace (needs `dotnet-trace` and `dotnet-pgo`):
 
     dotnet build tests/ExcelReader.NativePgoTrainer -c Release
     DOTNET_TieredPGO=1 DOTNET_ReadyToRun=0 DOTNET_TC_QuickJitForLoops=1 \
       dotnet-trace collect --providers Microsoft-Windows-DotNETRuntime:0x1F000080018:5 -o pgo.nettrace \
       -- "$PWD/tests/ExcelReader.NativePgoTrainer/bin/Release/net10.0/ExcelReader.NativePgoTrainer"
-    dotnet-pgo create-mibc -t pgo.nettrace --exclude-methods 'Xlsb|Biff12' -o src/ExcelReader.Native/pgo/excelreader.mibc
+    dotnet-pgo create-mibc -t pgo.nettrace -o src/ExcelReader.Native/pgo/excelreader.mibc
 
-The XLSB methods are excluded on purpose: with their profile the XLSB parse got 3% slower, and
-without it 1.12x faster. Re-measured with the regenerated profile: including them makes XLSB typed
-parsing ~22% slower. Measure every format before and after replacing the profile. Some formats
-may get worse, not only better.
+Until 2026-10 the profile excluded `Xlsb|Biff12`: the old XLSB cell loop got 3-22% slower with its
+profile. After the cell loop rewrite, the profile no longer hurts XLSB parsing (~2% faster), and the
+same filter was also dropping the XLSB writer's profile. Measure every format before and after
+replacing the profile. Some formats may get worse, not only better.
 
 ## Layout
 

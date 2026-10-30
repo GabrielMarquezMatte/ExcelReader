@@ -22,6 +22,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
             Assert.Equal(Rows, expected.Count);
             Assert.Equal(expected, actual);
+            Assert.Equal(expected, TrickleSnapshot(prefixed.ToArray()));
         }
 
         private static readonly string[] FormulaCells =
@@ -148,6 +149,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             string prefixedSheet = sheet.Replace("<", "<x:", StringComparison.Ordinal).Replace("<x:/", "</x:", StringComparison.Ordinal);
             using MemoryStream prefixed = WorkbookBuilder.BuildPrefixed("x", prefixedSheet, SharedStrings("x:"), StylesInner("x:"));
             Assert.Equal(expected, Snapshot(prefixed));
+            Assert.Equal(expected, TrickleSnapshot(prefixed.ToArray()));
         }
 
         private static byte[] Workbook(string sheet)

@@ -37,6 +37,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private int _rowNumber = -1;
         private XlsbRowWriter? _rowWriter;
         private Dictionary<int, int>? _columnStyles;
+        private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
         private int _dimPayloadPos = -1;
@@ -81,7 +82,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             Visibility = source.Visibility;
             _date1904 = source._date1904;
             _compression = source._compression;
-            _columnStyles = source._columnStyles;
+            _columnStyleLookup = source._columnStyleLookup;
             _spillThreshold = int.MaxValue;
             _state = WriterState.Started;
             if (_owner.UseSharedStrings)
@@ -132,7 +133,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return _activeRowStyle;
             }
-            return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;
+            return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
         }
 
         private void EnsureStarted()
@@ -142,6 +143,7 @@ namespace ExcelReader.Core.Writer.Xlsb
                 return;
             }
             _state = WriterState.Started;
+            _columnStyleLookup = SheetColumnValidation.StyleLookup(_columnStyles);
             WriteRecord(Brt.BeginSheet);
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.WsDim, DimLength, out Span<byte> dim);
             dim.Clear();
@@ -681,7 +683,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 int index = SharedStringIndex(value, owned);
                 const int Length = CellHeaderLength + 4;
-                Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellIsst, Length, out Span<byte> shared);
+                Span<byte> shared = Biff12RecordWriter.WriteCellRecord(_records, Brt.CellIsst, Length);
                 Biff12RecordWriter.WriteCellHeader(shared, columnIndex, style);
                 BinaryPrimitives.WriteUInt32LittleEndian(shared.Slice(8, 4), (uint)index);
                 MaybeFlush();
@@ -717,7 +719,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             ValidateColumn(columnIndex);
             TrackColumn(columnIndex);
             const int Length = CellHeaderLength + 1;
-            Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellBool, Length, out Span<byte> p);
+            Span<byte> p = Biff12RecordWriter.WriteCellRecord(_records, Brt.CellBool, Length);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, EffectiveStyle(columnIndex));
             p[8] = value ? (byte)1 : (byte)0;
             MaybeFlush();
@@ -742,14 +744,14 @@ namespace ExcelReader.Core.Writer.Xlsb
             if (XlsRk.TryEncode(value, out int rk))
             {
                 const int RkLength = CellHeaderLength + 4;
-                Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellRk, RkLength, out Span<byte> rkPayload);
+                Span<byte> rkPayload = Biff12RecordWriter.WriteCellRecord(_records, Brt.CellRk, RkLength);
                 Biff12RecordWriter.WriteCellHeader(rkPayload, columnIndex, style);
                 BinaryPrimitives.WriteInt32LittleEndian(rkPayload.Slice(8, 4), rk);
                 MaybeFlush();
                 return;
             }
             const int Length = CellHeaderLength + 8;
-            Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellReal, Length, out Span<byte> p);
+            Span<byte> p = Biff12RecordWriter.WriteCellRecord(_records, Brt.CellReal, Length);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
             BinaryPrimitives.WriteDoubleLittleEndian(p.Slice(8, 8), value);
             MaybeFlush();

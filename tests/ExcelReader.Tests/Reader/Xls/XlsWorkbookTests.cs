@@ -639,6 +639,20 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
+        public void LabelWideCodeUnitSplitAcrossContinueDecodesCorrectly()
+        {
+            byte[] label = [.. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(3), 1, 0x41, 0x00, 0xA9];
+            byte[] continued = [0x00, 0x03, (byte)'B'];
+            using var ms = XlsWorkbookBuilder.BuildRawSheet(includeEof: true, (0x0204, label), (0x003C, continued));
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal("AΩB", e.Current[0].GetString());
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public void FormulaWithEmptyStringResultReadsAsEmptyString()
         {
             byte[] formula = [.. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), .. XlsWorkbookBuilder.LE16(0), 3, 0, 0, 0, 0, 0, 0xFF, 0xFF, .. new byte[8]];
@@ -780,6 +794,29 @@ namespace ExcelReader.Tests.Reader.Xls
             using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("AΩB", e.Current[0].GetString());
+        }
+
+        [Fact]
+        public void SharedStringsWithinOneRecordDecodeEveryEncoding()
+        {
+            byte[] firstRegion =
+            [
+                0x02, 0x00, 0x00, 0x80, 0xE9,
+                0x01, 0x00, 0x01, 0xA9, 0x03,
+                0x01, 0x00, 0x08, 0x01, 0x00, (byte)'X', 0x00, 0x00, 0x00, 0x00,
+            ];
+            byte[] continueRegion = [0x01, 0x00, 0x00, (byte)'Z'];
+            byte[] framed = XlsWorkbookBuilder.FrameSstWithContinue(4, 4, firstRegion, continueRegion);
+
+            using var ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 4);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("€é", e.Current[0].GetString());
+            Assert.Equal("Ω", e.Current[1].GetString());
+            Assert.Equal("X", e.Current[2].GetString());
+            Assert.Equal("Z", e.Current[3].GetString());
         }
 
         [Fact]

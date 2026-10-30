@@ -31,6 +31,26 @@ namespace ExcelReader.Core.Writer.Internal
             columnWidths[columnIndex] = width;
         }
 
+        // Styles are frozen once the first row starts, so cells read this array instead of the dictionary.
+        internal static int[]? StyleLookup(Dictionary<int, int>? columnStyles)
+        {
+            if (columnStyles is null)
+            {
+                return null;
+            }
+            int[] lookup = new int[columnStyles.Keys.Max() + 1];
+            foreach ((int columnIndex, int styleId) in columnStyles)
+            {
+                lookup[columnIndex] = styleId;
+            }
+            return lookup;
+        }
+
+        internal static int StyleAt(int[]? lookup, int columnIndex)
+        {
+            return lookup is not null && (uint)columnIndex < (uint)lookup.Length ? lookup[columnIndex] : 0;
+        }
+
         internal static SortedSet<int> Columns(Dictionary<int, int>? columnStyles, Dictionary<int, double>? columnWidths)
         {
             var columns = new SortedSet<int>();

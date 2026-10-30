@@ -13,11 +13,11 @@ namespace ExcelReader.Core.Reader
         private readonly ReadOnlySpan<byte> _rowValues;
         private readonly ReadOnlySpan<byte> _shared;
         private readonly ReadOnlySpan<byte> _rowBuffer;
-        private readonly string?[]? _sharedStringCache;
+        private readonly SharedStringCache? _sharedStringCache;
         private readonly Utf8StringCache? _contentCache;
 
         internal Row(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
-            ReadOnlySpan<byte> rowBuffer = default, string?[]? sharedStringCache = null, Utf8StringCache? contentCache = null)
+            ReadOnlySpan<byte> rowBuffer = default, SharedStringCache? sharedStringCache = null, Utf8StringCache? contentCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;
@@ -34,6 +34,20 @@ namespace ExcelReader.Core.Reader
         public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
 
         internal ReadOnlySpan<CellDesc> Descriptors => _cells;
+
+        // The bytes Cell.Value would return for this row's cell, without building the Cell.
+        internal ReadOnlySpan<byte> ValueOf(in CellDesc cell)
+        {
+            if (cell.Source == CellValueSource.Shared)
+            {
+                return _shared.Slice(cell.Start, cell.Length);
+            }
+            if (cell.Source == CellValueSource.RowBuffer)
+            {
+                return _rowBuffer.Slice(cell.Start, cell.Length);
+            }
+            return _rowValues.Slice(cell.Start, cell.Length);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Cell CellAt(int index)
@@ -64,7 +78,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        private int IndexOf(int column)
+        internal int IndexOf(int column)
         {
             if ((uint)column < (uint)_cells.Length && _cells[column].Column == column)
             {

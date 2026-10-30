@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer.Xlsb
@@ -10,6 +12,18 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriteId(dest, id);
             WriteVarint(dest, payload.Length);
             dest.Write(payload);
+        }
+
+        // Cell records: one-byte id and length, so the header is two plain bytes once inlined.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static Span<byte> WriteCellRecord(BiffBuffer dest, int id, int payloadLen)
+        {
+            Debug.Assert((uint)id < 0x80 && (uint)payloadLen < 0x80);
+            Span<byte> span = dest.GetSpan(2 + payloadLen);
+            span[0] = (byte)id;
+            span[1] = (byte)payloadLen;
+            dest.Advance(2 + payloadLen);
+            return span.Slice(2, payloadLen);
         }
 
         internal static void WriteFixedRecord(BiffBuffer dest, int id, int payloadLen, out Span<byte> payload)

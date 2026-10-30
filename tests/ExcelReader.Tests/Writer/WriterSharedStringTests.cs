@@ -189,7 +189,8 @@ namespace ExcelReader.Tests.Writer
             using (var zip = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true))
             {
                 byte[] sharedBytes = ReadEntry(zip, "xl/sharedStrings.bin");
-                var (flat, offsets) = XlsbSharedStrings.Parse(sharedBytes);
+                using var sharedStream = new MemoryStream(sharedBytes);
+                var (flat, offsets) = XlsbSharedStrings.ParseStreaming(sharedStream, sharedBytes.Length, ExcelReaderOptions.Default);
                 Assert.Equal(3, offsets.Length);
                 Assert.Equal("repeat", SharedAt(flat, offsets, 0));
                 Assert.Equal("Café", SharedAt(flat, offsets, 1));

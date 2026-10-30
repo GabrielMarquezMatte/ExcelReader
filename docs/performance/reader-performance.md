@@ -765,9 +765,22 @@ three times, min of 25):
 BenchmarkDotNet afterwards: XLSX writing 12.261 ms against SpreadCheetah's 15.548 ms, CSV writing
 4.624 ms against Sep's 7.075 ms. XLSB writes doubles in binary and is unaffected.
 
-Not extended to serials with a time of day: `days + seconds/86400` has a factor of 3³ in the
-denominator, so its shortest form is ~17 digits and no scale reaches it. Only a full shortest-float
-algorithm (Ryu-class) would, for ~85 ns per such cell. Not built.
+Serials with a time of day (`days + seconds/86400`, a factor of 3³ in the denominator) have a ~17-digit
+shortest form that no scale reaches. For those, `ShortestDouble` covers `1e-3 <= |v| < 1e15`
+without tables: `v·10ᵏ` is exact as `N / 2ˢ` in a `UInt128`, the rounding interval is symmetric
+unless the mantissa is a power of two, and its ends cannot be integers in that range (`2ˢ` would
+have to divide `10ᵏ`). So the shortest form is the multiple of the largest power of ten inside the
+interval that is nearest to `v`. Powers of two, exact ties and anything out of range go to
+`Utf8Formatter`.
+
+| per value | `Utf8Formatter` | `TryFormatDouble` | |
+|---|---|---|---|
+| serials with seconds | 114.7 ns | 38.2 ns | 3.00x |
+| random `[0, 1000)` | 113.5 ns | 43.8 ns | 2.59x |
+
+Correctness gate: 110M values (serials, log-uniform magnitudes, random bit patterns, powers of ten
+and two with their neighbours, `n/3`, `1/n`), zero mismatches. End to end, 100k rows of
+`int, DateTime with seconds, random double, string`: XLSX 46.7 → 32.7 ms, CSV 17.5 → 11.1 ms.
 
 ### Write-side decomposition of XLSB and XLS — nothing to take
 
