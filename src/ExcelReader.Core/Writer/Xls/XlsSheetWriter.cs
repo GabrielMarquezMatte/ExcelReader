@@ -49,6 +49,7 @@ namespace ExcelReader.Core.Writer.Xls
         private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
+        private int _pendingStyle = -1;
         private XlsRowWriter? _rowWriter;
 
         internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904,
@@ -94,8 +95,36 @@ namespace ExcelReader.Core.Writer.Xls
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, MaxColumn + 1, _state, this);
         }
 
+        internal bool HasPendingStyle
+        {
+            get
+            {
+                return _pendingStyle >= 0;
+            }
+        }
+
+        internal void SetPendingStyle(int styleId)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
+            _pendingStyle = styleId;
+        }
+
+        internal bool ClearPendingStyle()
+        {
+            bool wasPending = _pendingStyle >= 0;
+            _pendingStyle = -1;
+            return wasPending;
+        }
+
         private int EffectiveStyle(int columnIndex)
         {
+            if (_pendingStyle >= 0)
+            {
+                int pending = _pendingStyle;
+                _pendingStyle = -1;
+                return pending;
+            }
             if (_activeRowStyle != 0)
             {
                 return _activeRowStyle;
@@ -234,6 +263,15 @@ namespace ExcelReader.Core.Writer.Xls
             int abstractStyle = EffectiveStyle(col);
             FlushRkRun();
             BiffRecordWriter.WriteBool(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
+            Track(row, col);
+        }
+
+        internal void EmitBlank(int row, int col)
+        {
+            ValidateColumn(col);
+            int abstractStyle = EffectiveStyle(col);
+            FlushRkRun();
+            BiffRecordWriter.WriteBlank(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle));
             Track(row, col);
         }
 

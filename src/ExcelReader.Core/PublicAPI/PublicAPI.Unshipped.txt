@@ -91,3 +91,8 @@ static ExcelReader.Core.Writer.ExcelColor.operator ==(ExcelReader.Core.Writer.Ex
 ~override ExcelReader.Core.Writer.CellBorder.ToString() -> string
 ~override ExcelReader.Core.Writer.ExcelColor.Equals(object obj) -> bool
 ~override ExcelReader.Core.Writer.ExcelColor.ToString() -> string
+ExcelReader.Core.Writer.IRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.IRowWriter!
+ExcelReader.Core.Writer.Csv.CsvRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.Csv.CsvRowWriter!
+ExcelReader.Core.Writer.Xls.XlsRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.Xls.XlsRowWriter!
+ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!
+ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!

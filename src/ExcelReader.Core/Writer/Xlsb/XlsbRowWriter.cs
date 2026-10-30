@@ -58,7 +58,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -77,7 +77,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -98,7 +98,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -117,7 +117,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -137,10 +137,39 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
+        }
+
+        /// <summary>Styles the next cell written, and only that cell, replacing the row and column style. Style 0 forces the general style.</summary>
+        /// <param name="styleId">The style to apply, from <see cref="XlsbWorkbookWriter.AddStyle"/>.</param>
+        /// <returns>This row writer.</returns>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
+        public XlsbRowWriter Style(int styleId)
+        {
+            ThrowIfDisposed();
+            _owner.SetPendingStyle(styleId);
+            return this;
+        }
+
+        IRowWriter IRowWriter.Style(int styleId)
+        {
+            return Style(styleId);
+        }
+
+        private void WriteNull()
+        {
+            if (!_owner.HasPendingStyle)
+            {
+                Skip(1);
+                return;
+            }
+            ThrowIfDisposed();
+            _owner.WriteBlankCell(_columnIndex);
+            _columnIndex++;
         }
 
         /// <inheritdoc/>
@@ -149,6 +178,10 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
+            if (count > 0 && _owner.HasPendingStyle)
+            {
+                WriterStateGuard.ThrowPendingStyle("skipping");
+            }
             if (count > 0 && _columnIndex > ExcelLimits.MaxColumns - count)
             {
                 throw new ExcelLimitExceededException("Columns", ExcelLimits.MaxColumns, (long)_columnIndex + count);
@@ -256,19 +289,24 @@ namespace ExcelReader.Core.Writer.Xlsb
                 return;
             }
             _disposed = true;
-            _owner.NotifyRowEnded();
+            EndRow();
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            if (_disposed)
-            {
-                return ValueTask.CompletedTask;
-            }
-            _disposed = true;
-            _owner.NotifyRowEnded();
+            Dispose();
             return ValueTask.CompletedTask;
+        }
+
+        private void EndRow()
+        {
+            bool wasPending = _owner.ClearPendingStyle();
+            _owner.NotifyRowEnded();
+            if (wasPending)
+            {
+                WriterStateGuard.ThrowPendingStyle("disposing the row");
+            }
         }
     }
 }
