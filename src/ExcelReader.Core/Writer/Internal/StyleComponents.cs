@@ -28,9 +28,9 @@ namespace ExcelReader.Core.Writer.Internal
     {
         internal static readonly StyleLimits Ooxml = new(65_490, 512, int.MaxValue);
 
-        internal static readonly StyleLimits Biff8 = new(4_000, 512, 56) { ReservedFontIndices = 1 };
+        internal static readonly StyleLimits Biff8 = new(4_000, 512, 56) { ReservedFontIndices = 4 };
 
-        // BIFF8 skips font index 4, so that slot counts against MaxFonts.
+        // BIFF8 repeats the default font at indices 1-3 and skips index 4; those slots count against MaxFonts.
         internal int ReservedFontIndices { get; init; }
     }
 
