@@ -43,7 +43,13 @@ namespace ExcelReader.Native.Reading
             try
             {
                 rows = resolved!.GetEnumerator();
-                schema = BuildSchema(SchemaInference.Infer(rows, handle.Workbook.IsDate1904, headerRow, sampleSize, (flags & InferParseText) != 0));
+                ExcelColumnSchema[] columns = SchemaInference.Infer(rows, handle.Workbook.IsDate1904, headerRow, sampleSize, (flags & InferParseText) != 0);
+                if (FindOversizedName(columns) is { } oversized)
+                {
+                    NativeApi.SetLastError($"header name in column {oversized.Index} is {Encoding.UTF8.GetByteCount(oversized.Name!)} bytes, over XL_MAX_COLUMN_NAME_BYTES ({NativeLimits.MaxColumnNameBytes}).");
+                    return NativeStatus.Error;
+                }
+                schema = BuildSchema(columns);
                 return NativeStatus.Ok;
             }
             catch (ArgumentException exception)
@@ -85,6 +91,18 @@ namespace ExcelReader.Native.Reading
             }
             Marshal.FreeHGlobal(schema.Columns);
             schema = default;
+        }
+
+        private static ExcelColumnSchema? FindOversizedName(ExcelColumnSchema[] columns)
+        {
+            foreach (ExcelColumnSchema column in columns)
+            {
+                if (column.Name is not null && Encoding.UTF8.GetByteCount(column.Name) > NativeLimits.MaxColumnNameBytes)
+                {
+                    return column;
+                }
+            }
+            return null;
         }
 
         private static NativeInferredSchema BuildSchema(ExcelColumnSchema[] columns)
