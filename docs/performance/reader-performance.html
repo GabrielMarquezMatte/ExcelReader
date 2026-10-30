@@ -1443,9 +1443,40 @@ three times, min of 25):</p>
 </table>
 <p>BenchmarkDotNet afterwards: XLSX writing 12.261 ms against SpreadCheetah's 15.548 ms, CSV writing
 4.624 ms against Sep's 7.075 ms. XLSB writes doubles in binary and is unaffected.</p>
-<p>Not extended to serials with a time of day: <code>days + seconds/86400</code> has a factor of 3³ in the
-denominator, so its shortest form is ~17 digits and no scale reaches it. Only a full shortest-float
-algorithm (Ryu-class) would, for ~85 ns per such cell. Not built.</p>
+<p>Serials with a time of day (<code>days + seconds/86400</code>, a factor of 3³ in the denominator) have a ~17-digit
+shortest form that no scale reaches. For those, <code>ShortestDouble</code> covers <code>1e-3 &lt;= |v| &lt; 1e15</code>
+without tables: <code>v·10ᵏ</code> is exact as <code>N / 2ˢ</code> in a <code>UInt128</code>, the rounding interval is symmetric
+unless the mantissa is a power of two, and its ends cannot be integers in that range (<code>2ˢ</code> would
+have to divide <code>10ᵏ</code>). So the shortest form is the multiple of the largest power of ten inside the
+interval that is nearest to <code>v</code>. Powers of two, exact ties and anything out of range go to
+<code>Utf8Formatter</code>.</p>
+<table>
+<thead>
+<tr>
+<th>per value</th>
+<th><code>Utf8Formatter</code></th>
+<th><code>TryFormatDouble</code></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>serials with seconds</td>
+<td>114.7 ns</td>
+<td>38.2 ns</td>
+<td>3.00x</td>
+</tr>
+<tr>
+<td>random <code>[0, 1000)</code></td>
+<td>113.5 ns</td>
+<td>43.8 ns</td>
+<td>2.59x</td>
+</tr>
+</tbody>
+</table>
+<p>Correctness gate: 110M values (serials, log-uniform magnitudes, random bit patterns, powers of ten
+and two with their neighbours, <code>n/3</code>, <code>1/n</code>), zero mismatches. End to end, 100k rows of
+<code>int, DateTime with seconds, random double, string</code>: XLSX 46.7 → 32.7 ms, CSV 17.5 → 11.1 ms.</p>
 <h3 id="write-side-decomposition-of-xlsb-and-xls--nothing-to-take">Write-side decomposition of XLSB and XLS — nothing to take</h3>
 <p>Same per-column-type method as above, 50k rows:</p>
 <table>
