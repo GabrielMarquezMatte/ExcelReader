@@ -1,1 +1,93 @@
 #nullable enable
+ExcelReader.Core.Writer.CellBorder
+ExcelReader.Core.Writer.CellBorder.CellBorder() -> void
+ExcelReader.Core.Writer.CellBorder.CellBorder(ExcelReader.Core.Writer.ExcelBorderStyle Style, ExcelReader.Core.Writer.ExcelColor? Color = null) -> void
+ExcelReader.Core.Writer.CellBorder.Color.get -> ExcelReader.Core.Writer.ExcelColor?
+ExcelReader.Core.Writer.CellBorder.Color.init -> void
+ExcelReader.Core.Writer.CellBorder.Deconstruct(out ExcelReader.Core.Writer.ExcelBorderStyle Style, out ExcelReader.Core.Writer.ExcelColor? Color) -> void
+ExcelReader.Core.Writer.CellBorder.Equals(ExcelReader.Core.Writer.CellBorder other) -> bool
+ExcelReader.Core.Writer.CellBorder.Style.get -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.CellBorder.Style.init -> void
+ExcelReader.Core.Writer.CellStyle.Bottom.get -> ExcelReader.Core.Writer.CellBorder?
+ExcelReader.Core.Writer.CellStyle.Bottom.init -> void
+ExcelReader.Core.Writer.CellStyle.FillColor.get -> ExcelReader.Core.Writer.ExcelColor?
+ExcelReader.Core.Writer.CellStyle.FillColor.init -> void
+ExcelReader.Core.Writer.CellStyle.FontColor.get -> ExcelReader.Core.Writer.ExcelColor?
+ExcelReader.Core.Writer.CellStyle.FontColor.init -> void
+ExcelReader.Core.Writer.CellStyle.FontName.get -> string?
+ExcelReader.Core.Writer.CellStyle.FontName.init -> void
+ExcelReader.Core.Writer.CellStyle.FontSize.get -> double?
+ExcelReader.Core.Writer.CellStyle.FontSize.init -> void
+ExcelReader.Core.Writer.CellStyle.HorizontalAlignment.get -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.CellStyle.HorizontalAlignment.init -> void
+ExcelReader.Core.Writer.CellStyle.Indent.get -> int
+ExcelReader.Core.Writer.CellStyle.Indent.init -> void
+ExcelReader.Core.Writer.CellStyle.Left.get -> ExcelReader.Core.Writer.CellBorder?
+ExcelReader.Core.Writer.CellStyle.Left.init -> void
+ExcelReader.Core.Writer.CellStyle.Right.get -> ExcelReader.Core.Writer.CellBorder?
+ExcelReader.Core.Writer.CellStyle.Right.init -> void
+ExcelReader.Core.Writer.CellStyle.Rotation.get -> int
+ExcelReader.Core.Writer.CellStyle.Rotation.init -> void
+ExcelReader.Core.Writer.CellStyle.Strikethrough.get -> bool
+ExcelReader.Core.Writer.CellStyle.Strikethrough.init -> void
+ExcelReader.Core.Writer.CellStyle.Top.get -> ExcelReader.Core.Writer.CellBorder?
+ExcelReader.Core.Writer.CellStyle.Top.init -> void
+ExcelReader.Core.Writer.CellStyle.Underline.get -> bool
+ExcelReader.Core.Writer.CellStyle.Underline.init -> void
+ExcelReader.Core.Writer.CellStyle.VerticalAlignment.get -> ExcelReader.Core.Writer.ExcelVerticalAlignment
+ExcelReader.Core.Writer.CellStyle.VerticalAlignment.init -> void
+ExcelReader.Core.Writer.CellStyle.WrapText.get -> bool
+ExcelReader.Core.Writer.CellStyle.WrapText.init -> void
+ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.DashDot = 9 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.DashDotDot = 11 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.Dashed = 3 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.Dotted = 4 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.Double = 6 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.Hair = 7 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.Medium = 2 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDot = 10 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDotDot = 12 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashed = 8 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.None = 0 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.SlantDashDot = 13 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.Thick = 5 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelBorderStyle.Thin = 1 -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelColor
+ExcelReader.Core.Writer.ExcelColor.B.get -> byte
+ExcelReader.Core.Writer.ExcelColor.B.init -> void
+ExcelReader.Core.Writer.ExcelColor.Deconstruct(out byte R, out byte G, out byte B) -> void
+ExcelReader.Core.Writer.ExcelColor.Equals(ExcelReader.Core.Writer.ExcelColor other) -> bool
+ExcelReader.Core.Writer.ExcelColor.ExcelColor() -> void
+ExcelReader.Core.Writer.ExcelColor.ExcelColor(byte R, byte G, byte B) -> void
+ExcelReader.Core.Writer.ExcelColor.G.get -> byte
+ExcelReader.Core.Writer.ExcelColor.G.init -> void
+ExcelReader.Core.Writer.ExcelColor.R.get -> byte
+ExcelReader.Core.Writer.ExcelColor.R.init -> void
+ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.Center = 2 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.CenterContinuous = 6 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.Distributed = 7 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.Fill = 4 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.General = 0 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.Justify = 5 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.Left = 1 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelHorizontalAlignment.Right = 3 -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelVerticalAlignment
+ExcelReader.Core.Writer.ExcelVerticalAlignment.Bottom = 0 -> ExcelReader.Core.Writer.ExcelVerticalAlignment
+ExcelReader.Core.Writer.ExcelVerticalAlignment.Center = 2 -> ExcelReader.Core.Writer.ExcelVerticalAlignment
+ExcelReader.Core.Writer.ExcelVerticalAlignment.Distributed = 4 -> ExcelReader.Core.Writer.ExcelVerticalAlignment
+ExcelReader.Core.Writer.ExcelVerticalAlignment.Justify = 3 -> ExcelReader.Core.Writer.ExcelVerticalAlignment
+ExcelReader.Core.Writer.ExcelVerticalAlignment.Top = 1 -> ExcelReader.Core.Writer.ExcelVerticalAlignment
+const ExcelReader.Core.Writer.CellStyle.StackedTextRotation = 255 -> int
+override ExcelReader.Core.Writer.CellBorder.GetHashCode() -> int
+override ExcelReader.Core.Writer.ExcelColor.GetHashCode() -> int
+static ExcelReader.Core.Writer.CellBorder.operator !=(ExcelReader.Core.Writer.CellBorder left, ExcelReader.Core.Writer.CellBorder right) -> bool
+static ExcelReader.Core.Writer.CellBorder.operator ==(ExcelReader.Core.Writer.CellBorder left, ExcelReader.Core.Writer.CellBorder right) -> bool
+static ExcelReader.Core.Writer.ExcelColor.FromRgb(int rgb) -> ExcelReader.Core.Writer.ExcelColor
+static ExcelReader.Core.Writer.ExcelColor.operator !=(ExcelReader.Core.Writer.ExcelColor left, ExcelReader.Core.Writer.ExcelColor right) -> bool
+static ExcelReader.Core.Writer.ExcelColor.operator ==(ExcelReader.Core.Writer.ExcelColor left, ExcelReader.Core.Writer.ExcelColor right) -> bool
+~override ExcelReader.Core.Writer.CellBorder.Equals(object obj) -> bool
+~override ExcelReader.Core.Writer.CellBorder.ToString() -> string
+~override ExcelReader.Core.Writer.ExcelColor.Equals(object obj) -> bool
+~override ExcelReader.Core.Writer.ExcelColor.ToString() -> string
