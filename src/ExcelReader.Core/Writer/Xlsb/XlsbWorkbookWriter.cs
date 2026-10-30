@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private readonly CompressionLevel _compression;
         private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
-        private readonly StyleTable _styles = new();
+        private readonly StyleTable _styles = new(StyleLimits.Ooxml);
         private readonly List<XlsbSheetWriter> _sheets = [];
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
 

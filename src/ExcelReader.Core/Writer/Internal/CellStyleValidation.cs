@@ -28,6 +28,18 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 throw new ArgumentException("FontSize must be between 1 and 409.", paramName);
             }
+            if (style.HorizontalAlignment is < ExcelHorizontalAlignment.General or > ExcelHorizontalAlignment.Distributed)
+            {
+                throw new ArgumentException("HorizontalAlignment is not a defined value.", paramName);
+            }
+            if (style.VerticalAlignment is < ExcelVerticalAlignment.Bottom or > ExcelVerticalAlignment.Distributed)
+            {
+                throw new ArgumentException("VerticalAlignment is not a defined value.", paramName);
+            }
+            if (!IsDefined(style.Left) || !IsDefined(style.Right) || !IsDefined(style.Top) || !IsDefined(style.Bottom))
+            {
+                throw new ArgumentException("A border Style is not a defined value.", paramName);
+            }
             if (style.Indent is < 0 or > 15)
             {
                 throw new ArgumentException("Indent must be between 0 and 15.", paramName);
@@ -37,5 +49,8 @@ namespace ExcelReader.Core.Writer.Internal
                 throw new ArgumentException($"Rotation must be between -90 and 90, or {CellStyle.StackedTextRotation} for stacked text.", paramName);
             }
         }
+
+        private static bool IsDefined(CellBorder? border)
+            => border is null || border.Value.Style is >= ExcelBorderStyle.None and <= ExcelBorderStyle.SlantDashDot;
     }
 }

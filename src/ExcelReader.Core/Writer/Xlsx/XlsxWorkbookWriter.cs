@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private readonly CompressionLevel _compression;
         private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
-        private readonly StyleTable _styles = new();
+        private readonly StyleTable _styles = new(StyleLimits.Ooxml);
         private readonly List<(string Name, int SheetId, ExcelSheetVisibility Visibility)> _sheets = [];
         private readonly List<(int SheetId, IReadOnlyList<WrittenTable> Tables)> _sheetTables = [];
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
@@ -237,22 +237,17 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             IReadOnlyList<CellStyle> styles = _styles.Styles;
             Dictionary<string, int> numFmtIds = _styles.AssignCustomNumberFormatIds();
-            Dictionary<(bool Bold, bool Italic), int> fontIds = _styles.AssignFontIds();
-            var fontsByIndex = new (bool Bold, bool Italic)[fontIds.Count];
-            foreach (var (key, index) in fontIds)
-            {
-                fontsByIndex[index] = key;
-            }
+            StyleComponents components = _styles.AssignComponents();
 
             var sb = new StringBuilder();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append(CultureInfo.InvariantCulture, $"<styleSheet xmlns=\"{XlsxConstants.MainNs}\">");
             AppendNumFmts(sb, numFmtIds);
-            AppendFonts(sb, fontsByIndex);
+            AppendFonts(sb, components.Fonts);
             sb.Append("<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>");
             sb.Append("<borders count=\"1\"><border/></borders>");
             sb.Append("<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>");
-            AppendCellXfs(sb, styles, numFmtIds, fontIds);
+            AppendCellXfs(sb, styles, numFmtIds, components);
             sb.Append("</styleSheet>");
             return sb.ToString();
         }
@@ -268,11 +263,12 @@ namespace ExcelReader.Core.Writer.Xlsx
             sb.Append("</numFmts>");
         }
 
-        private static void AppendFonts(StringBuilder sb, (bool Bold, bool Italic)[] fontsByIndex)
+        private static void AppendFonts(StringBuilder sb, IReadOnlyList<FontKey> fonts)
         {
-            sb.Append(CultureInfo.InvariantCulture, $"<fonts count=\"{fontsByIndex.Length}\">");
-            foreach ((bool bold, bool italic) in fontsByIndex)
+            sb.Append(CultureInfo.InvariantCulture, $"<fonts count=\"{fonts.Count}\">");
+            foreach (FontKey font in fonts)
             {
+                (bool bold, bool italic) = (font.Bold, font.Italic);
                 if (!bold && !italic)
                 {
                     sb.Append("<font/>");
@@ -293,7 +289,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         }
 
         private static void AppendCellXfs(StringBuilder sb, IReadOnlyList<CellStyle> styles,
-            Dictionary<string, int> numFmtIds, Dictionary<(bool Bold, bool Italic), int> fontIds)
+            Dictionary<string, int> numFmtIds, StyleComponents components)
         {
             sb.Append(CultureInfo.InvariantCulture, $"<cellXfs count=\"{styles.Count}\">");
             sb.Append("<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>");
@@ -302,7 +298,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             {
                 CellStyle style = styles[i];
                 int numFmtId = style.NumberFormat is not null ? numFmtIds[style.NumberFormat] : 0;
-                int fontId = fontIds[(style.Bold, style.Italic)];
+                int fontId = components.FontId(i);
                 sb.Append(CultureInfo.InvariantCulture, $"<xf numFmtId=\"{numFmtId}\" fontId=\"{fontId}\" fillId=\"0\" borderId=\"0\" xfId=\"0\"");
                 if (style.NumberFormat is not null)
                 {
