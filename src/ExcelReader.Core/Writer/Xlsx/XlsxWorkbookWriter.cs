@@ -244,8 +244,8 @@ namespace ExcelReader.Core.Writer.Xlsx
             sb.Append(CultureInfo.InvariantCulture, $"<styleSheet xmlns=\"{XlsxConstants.MainNs}\">");
             AppendNumFmts(sb, numFmtIds);
             AppendFonts(sb, components.Fonts);
-            sb.Append("<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>");
-            sb.Append("<borders count=\"1\"><border/></borders>");
+            AppendFills(sb, components.Fills);
+            AppendBorders(sb, components.Borders);
             sb.Append("<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>");
             AppendCellXfs(sb, styles, numFmtIds, components);
             sb.Append("</styleSheet>");
@@ -268,24 +268,95 @@ namespace ExcelReader.Core.Writer.Xlsx
             sb.Append(CultureInfo.InvariantCulture, $"<fonts count=\"{fonts.Count}\">");
             foreach (FontKey font in fonts)
             {
-                (bool bold, bool italic) = (font.Bold, font.Italic);
-                if (!bold && !italic)
+                if (font == default)
                 {
                     sb.Append("<font/>");
                     continue;
                 }
                 sb.Append("<font>");
-                if (bold)
+                AppendFlag(sb, "b", font.Bold);
+                AppendFlag(sb, "i", font.Italic);
+                AppendFlag(sb, "strike", font.Strikethrough);
+                AppendFlag(sb, "u", font.Underline);
+                if (font.Size is double size)
                 {
-                    sb.Append("<b/>");
+                    sb.Append(CultureInfo.InvariantCulture, $"<sz val=\"{size}\"/>");
                 }
-                if (italic)
+                AppendColor(sb, "color", font.Color);
+                if (font.Name is not null)
                 {
-                    sb.Append("<i/>");
+                    sb.Append(CultureInfo.InvariantCulture, $"<name val=\"{EscapeAttribute(font.Name)}\"/>");
                 }
                 sb.Append("</font>");
             }
             sb.Append("</fonts>");
+        }
+
+        private static void AppendFlag(StringBuilder sb, string element, bool value)
+        {
+            if (value)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"<{element}/>");
+            }
+        }
+
+        private static void AppendColor(StringBuilder sb, string element, ExcelColor? color)
+        {
+            if (color is ExcelColor c)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"<{element} rgb=\"FF{c.ToRgb():X6}\"/>");
+            }
+        }
+
+        private static void AppendFills(StringBuilder sb, IReadOnlyList<FillKey> fills)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"<fills count=\"{fills.Count}\">");
+            sb.Append("<fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill>");
+            for (int i = 2; i < fills.Count; i++)
+            {
+                sb.Append("<fill><patternFill patternType=\"solid\">");
+                AppendColor(sb, "fgColor", fills[i].Color);
+                sb.Append("</patternFill></fill>");
+            }
+            sb.Append("</fills>");
+        }
+
+        private static void AppendBorders(StringBuilder sb, IReadOnlyList<BorderKey> borders)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"<borders count=\"{borders.Count}\">");
+            foreach (BorderKey border in borders)
+            {
+                if (border == default)
+                {
+                    sb.Append("<border/>");
+                    continue;
+                }
+                sb.Append("<border>");
+                AppendBorderSide(sb, "left", border.Left);
+                AppendBorderSide(sb, "right", border.Right);
+                AppendBorderSide(sb, "top", border.Top);
+                AppendBorderSide(sb, "bottom", border.Bottom);
+                sb.Append("<diagonal/></border>");
+            }
+            sb.Append("</borders>");
+        }
+
+        private static void AppendBorderSide(StringBuilder sb, string element, CellBorder? side)
+        {
+            if (side is not CellBorder border || border.Style == ExcelBorderStyle.None)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"<{element}/>");
+                return;
+            }
+            sb.Append(CultureInfo.InvariantCulture, $"<{element} style=\"{CamelCase(border.Style)}\">");
+            AppendColor(sb, "color", border.Color);
+            sb.Append(CultureInfo.InvariantCulture, $"</{element}>");
+        }
+
+        private static string CamelCase<T>(T value) where T : struct, Enum
+        {
+            string name = value.ToString();
+            return string.Concat(char.ToLowerInvariant(name[0]).ToString(), name.AsSpan(1));
         }
 
         private static void AppendCellXfs(StringBuilder sb, IReadOnlyList<CellStyle> styles,
@@ -299,18 +370,72 @@ namespace ExcelReader.Core.Writer.Xlsx
                 CellStyle style = styles[i];
                 int numFmtId = style.NumberFormat is not null ? numFmtIds[style.NumberFormat] : 0;
                 int fontId = components.FontId(i);
-                sb.Append(CultureInfo.InvariantCulture, $"<xf numFmtId=\"{numFmtId}\" fontId=\"{fontId}\" fillId=\"0\" borderId=\"0\" xfId=\"0\"");
+                int fillId = components.FillId(i);
+                int borderId = components.BorderId(i);
+                sb.Append(CultureInfo.InvariantCulture, $"<xf numFmtId=\"{numFmtId}\" fontId=\"{fontId}\" fillId=\"{fillId}\" borderId=\"{borderId}\" xfId=\"0\"");
                 if (style.NumberFormat is not null)
                 {
                     sb.Append(" applyNumberFormat=\"1\"");
                 }
-                if (style.Bold || style.Italic)
+                AppendApply(sb, "applyFont", fontId);
+                AppendApply(sb, "applyFill", fillId);
+                AppendApply(sb, "applyBorder", borderId);
+                if (!HasAlignment(style))
                 {
-                    sb.Append(" applyFont=\"1\"");
+                    sb.Append("/>");
+                    continue;
                 }
-                sb.Append("/>");
+                sb.Append(" applyAlignment=\"1\">");
+                AppendAlignment(sb, style);
+                sb.Append("</xf>");
             }
             sb.Append("</cellXfs>");
+        }
+
+        private static void AppendApply(StringBuilder sb, string attribute, int id)
+        {
+            if (id != 0)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $" {attribute}=\"1\"");
+            }
+        }
+
+        private static bool HasAlignment(in CellStyle style)
+        {
+            return style.HorizontalAlignment != ExcelHorizontalAlignment.General
+                || style.VerticalAlignment != ExcelVerticalAlignment.Bottom
+                || style.WrapText || style.Indent != 0 || style.Rotation != 0;
+        }
+
+        private static void AppendAlignment(StringBuilder sb, in CellStyle style)
+        {
+            sb.Append("<alignment");
+            if (style.HorizontalAlignment != ExcelHorizontalAlignment.General)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $" horizontal=\"{CamelCase(style.HorizontalAlignment)}\"");
+            }
+            if (style.VerticalAlignment != ExcelVerticalAlignment.Bottom)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $" vertical=\"{CamelCase(style.VerticalAlignment)}\"");
+            }
+            if (style.WrapText)
+            {
+                sb.Append(" wrapText=\"1\"");
+            }
+            if (style.Indent != 0)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $" indent=\"{style.Indent}\"");
+            }
+            if (style.Rotation != 0)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $" textRotation=\"{TextRotation(style.Rotation)}\"");
+            }
+            sb.Append("/>");
+        }
+
+        private static int TextRotation(int rotation)
+        {
+            return rotation < 0 ? 90 - rotation : rotation;
         }
 
         private static string StateAttribute(ExcelSheetVisibility visibility)
