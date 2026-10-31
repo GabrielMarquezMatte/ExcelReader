@@ -135,6 +135,51 @@ namespace ExcelReader.Tests.Writer.Styles
                 XlsNumberFormat(records, BitConverter.ToUInt16(xf, 2)));
         }
 
+        internal static double? RowHeightXlsx(byte[] file, int row)
+        {
+            using var zip = new ZipArchive(new MemoryStream(file), ZipArchiveMode.Read);
+            XElement sheet = XDocument.Load(zip.GetEntry("xl/worksheets/sheet1.xml")!.Open()).Root!;
+            XElement element = sheet.Descendants(Main + "row").ElementAt(row);
+            if (!string.Equals(element.Attribute("customHeight")?.Value, "1", StringComparison.Ordinal))
+            {
+                return null;
+            }
+            return double.Parse(element.Attribute("ht")!.Value, CultureInfo.InvariantCulture);
+        }
+
+        // BrtRowHdr: rw u32, ixfe u32, miyRw u16, then flag bytes; fUnsynced is bit 5 of the byte at offset 11.
+        internal static double? RowHeightXlsb(byte[] file, int row)
+        {
+            byte[] header = XlsbRecords(file, "xl/worksheets/sheet1.bin")
+                .Where(r => r.Id == Brt.RowHdr).Select(r => r.Payload).First(p => BitConverter.ToUInt32(p, 0) == row);
+            if ((header[11] & 0x20) == 0)
+            {
+                return null;
+            }
+            return BitConverter.ToUInt16(header, 8) / 20.0;
+        }
+
+        // ROW: rw, colMic, colMac, miyRw (u16 each), 4 unused bytes, grbit u16 with fUnsynced at 0x40.
+        internal static double? RowHeightXls(byte[] file, int row)
+        {
+            return XlsRowHeight(XlsRowRecords(file).First(p => BitConverter.ToUInt16(p, 0) == row));
+        }
+
+        internal static IEnumerable<byte[]> XlsRowRecords(byte[] file)
+        {
+            return XlsPayloads(XlsRecords(file), BiffRow);
+        }
+
+        internal static double? XlsRowHeight(byte[] rowRecord)
+        {
+            if ((BitConverter.ToUInt16(rowRecord, 12) & 0x40) == 0)
+            {
+                return null;
+            }
+            return (BitConverter.ToUInt16(rowRecord, 6) & 0x7FFF) / 20.0;
+        }
+
+        internal const int BiffRow = 0x0208;
         internal const int BiffFont = 0x0031;
         internal const int BiffXf = 0x00E0;
         internal const int BiffPalette = 0x0092;

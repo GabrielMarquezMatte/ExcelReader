@@ -375,20 +375,22 @@ namespace ExcelReader.Core.Writer.Xls
             WriteU16Record(buffer, BiffRecord.DefColWidth, 8);
         }
 
-        internal static void WriteRow(BiffBuffer buffer, int row, int colMic, int colMac)
+        internal static void WriteRow(BiffBuffer buffer, int row, int colMic, int colMac, int heightTwips)
         {
             int len = buffer.BeginRecord(BiffRecord.Row);
             buffer.WriteU16(row);
             buffer.WriteU16(colMic);
             buffer.WriteU16(colMac);
-            buffer.WriteU16(DefaultRowHeightTwips);
+            buffer.WriteU16(heightTwips == 0 ? DefaultRowHeightTwips : heightTwips);
             buffer.WriteI32(0);
-            buffer.WriteU16(0x0100);
+            buffer.WriteU16(heightTwips == 0 ? RowFlags : RowFlags | RowFlagUnsynced);
             buffer.WriteU16(GeneralStyleXf);
             buffer.EndRecord(len);
         }
 
         private const int GeneralStyleXf = 15;
+        private const int RowFlags = 0x0100;
+        private const int RowFlagUnsynced = 0x0040;
 
         // Cell records are written whole into one span: they are most of a sheet's bytes, and going
         // through BeginRecord/WriteU16/EndRecord field by field measured as most of their cost.

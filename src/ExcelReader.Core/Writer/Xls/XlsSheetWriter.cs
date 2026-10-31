@@ -49,6 +49,7 @@ namespace ExcelReader.Core.Writer.Xls
         private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
+        private int _activeRowHeight;
         private int _pendingStyle = -1;
         private XlsRowWriter? _rowWriter;
 
@@ -183,6 +184,23 @@ namespace ExcelReader.Core.Writer.Xls
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsWorkbookWriter.AddStyle"/>.</exception>
         public XlsRowWriter StartRow(int styleId)
         {
+            return StartRowCore(styleId, heightTwips: 0);
+        }
+
+        /// <summary>
+        /// Begins writing the next row with <paramref name="styleId"/> applied to its cells and a custom
+        /// height, transparently spilling into a continuation sheet once the BIFF8 row cap is reached.
+        /// </summary>
+        /// <param name="styleId">The style to apply to every cell of this row; 0 for none.</param>
+        /// <param name="height">The row height in points, greater than 0 and at most 409.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsWorkbookWriter.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        public XlsRowWriter StartRow(int styleId, double height)
+        {
+            return StartRowCore(styleId, SheetColumnValidation.RowHeightTwips(height));
+        }
+
+        private XlsRowWriter StartRowCore(int styleId, int heightTwips)
+        {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -193,9 +211,10 @@ namespace ExcelReader.Core.Writer.Xls
             {
                 // ponytail: auto-split into continuation sheets; BIFF8 row index is 16-bit so each sheet holds 65536 rows
                 _continuation ??= CreateContinuation();
-                return _continuation.StartRow(styleId);
+                return _continuation.StartRowCore(styleId, heightTwips);
             }
             _activeRowStyle = styleId;
+            _activeRowHeight = heightTwips;
             _rowActive = true;
             _rowHasCells = false;
             _rowCellStart = _cells.Length;
@@ -215,7 +234,7 @@ namespace ExcelReader.Core.Writer.Xls
             }
             if (_rowActive)
             {
-                var extent = new XlsRowExtent(_rowCellStart, _rowColMic, _rowColMax + 1);
+                var extent = new XlsRowExtent(_rowCellStart, _rowColMic, _rowColMax + 1, _activeRowHeight);
                 MemoryMarshal.Write(_rows.GetSpan(Unsafe.SizeOf<XlsRowExtent>()), in extent);
                 _rows.Advance(Unsafe.SizeOf<XlsRowExtent>());
             }
@@ -400,6 +419,13 @@ namespace ExcelReader.Core.Writer.Xls
         }
 
         /// <inheritdoc/>
+        public ValueTask<XlsRowWriter> StartRowAsync(int styleId, double height, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(StartRow(styleId, height));
+        }
+
+        /// <inheritdoc/>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -416,5 +442,5 @@ namespace ExcelReader.Core.Writer.Xls
     }
 
     [StructLayout(LayoutKind.Auto)]
-    internal readonly record struct XlsRowExtent(int CellStart, int ColMic, int ColMac);
+    internal readonly record struct XlsRowExtent(int CellStart, int ColMic, int ColMac, int HeightTwips);
 }

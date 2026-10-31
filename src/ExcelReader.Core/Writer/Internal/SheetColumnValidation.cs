@@ -5,6 +5,9 @@ namespace ExcelReader.Core.Writer.Internal
         // Excel's widest column; BIFF8 stores the width in 16 bits as 256ths of a character.
         private const double MaxColumnWidth = 255;
 
+        // Excel's tallest row, in points; every format stores the height in twips (1/20 point).
+        private const double MaxRowHeight = 409;
+
         internal static void SetColumnStyle(
             ref Dictionary<int, int>? columnStyles, int columnIndex, int styleId, int styleCount, int maxColumns,
             WriterState state, object writer)
@@ -29,6 +32,15 @@ namespace ExcelReader.Core.Writer.Internal
             RequireNotStarted(state, writer);
             columnWidths ??= [];
             columnWidths[columnIndex] = width;
+        }
+
+        internal static int RowHeightTwips(double height)
+        {
+            if (!(height > 0 && height <= MaxRowHeight))
+            {
+                throw new ArgumentOutOfRangeException(nameof(height), height, $"A row height must be greater than 0 and at most {MaxRowHeight} points.");
+            }
+            return Math.Max(1, (int)Math.Round(height * 20));
         }
 
         // Styles are frozen once the first row starts, so cells read this array instead of the dictionary.

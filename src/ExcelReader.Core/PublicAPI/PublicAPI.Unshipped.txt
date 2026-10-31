@@ -96,3 +96,13 @@ ExcelReader.Core.Writer.Csv.CsvRowWriter.Style(int styleId) -> ExcelReader.Core.
 ExcelReader.Core.Writer.Xls.XlsRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.Xls.XlsRowWriter!
 ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!
 ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style(int styleId) -> ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!
+ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRow(int styleId, double height) -> TRow
+ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRowAsync(int styleId, double height, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<TRow>
+ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Csv.CsvRowWriter!
+ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRowAsync(int styleId, double height, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.Csv.CsvRowWriter!>
+ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Xls.XlsRowWriter!
+ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(int styleId, double height, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.Xls.XlsRowWriter!>
+ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!
+ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(int styleId, double height, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!>
+ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!
+ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRowAsync(int styleId, double height, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!>

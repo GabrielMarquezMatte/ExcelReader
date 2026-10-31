@@ -60,6 +60,24 @@ namespace ExcelReader.Core.Writer.Csv
             return StartRowAsync(ct);
         }
 
+        /// <summary>Validates <paramref name="styleId"/> and <paramref name="height"/>, then no-ops on both: CSV has no styles or row heights.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.StartRow(int, double)"/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative, or <paramref name="height"/> is out of range or NaN.</exception>
+        public CsvRowWriter StartRow(int styleId, double height)
+        {
+            SheetColumnValidation.RowHeightTwips(height);
+            return StartRow(styleId);
+        }
+
+        /// <summary>Validates <paramref name="styleId"/> and <paramref name="height"/>, then no-ops on both: CSV has no styles or row heights.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.StartRowAsync(int, double, CancellationToken)"/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative, or <paramref name="height"/> is out of range or NaN.</exception>
+        public ValueTask<CsvRowWriter> StartRowAsync(int styleId, double height, CancellationToken ct = default)
+        {
+            SheetColumnValidation.RowHeightTwips(height);
+            return StartRowAsync(styleId, ct);
+        }
+
         /// <summary>Validates its arguments are not negative, then no-ops: CSV has no column styles.</summary>
         /// <inheritdoc cref="ISheetWriter{TRow}.SetColumnStyle"/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="styleId"/> is negative.</exception>
