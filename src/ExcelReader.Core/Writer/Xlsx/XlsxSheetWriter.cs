@@ -235,20 +235,35 @@ namespace ExcelReader.Core.Writer.Xlsx
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public ValueTask<XlsxRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
         {
+            return StartRowAsyncCore(styleId, heightTwips: 0, ct);
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsxWorkbookWriter.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
+        public ValueTask<XlsxRowWriter> StartRowAsync(int styleId, double height, CancellationToken ct = default)
+        {
+            return StartRowAsyncCore(styleId, SheetColumnValidation.RowHeightTwips(height), ct);
+        }
+
+        private ValueTask<XlsxRowWriter> StartRowAsyncCore(int styleId, int heightTwips, CancellationToken ct)
+        {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             ct.ThrowIfCancellationRequested();
             if (_state == WriterState.Created)
             {
-                return StartFirstRowAsync(styleId, ct);
+                return StartFirstRowAsync(styleId, heightTwips, ct);
             }
-            return ValueTask.FromResult(StartRowCore(styleId));
+            return ValueTask.FromResult(StartRowCore(styleId, heightTwips));
         }
 
-        private async ValueTask<XlsxRowWriter> StartFirstRowAsync(int styleId, CancellationToken ct)
+        private async ValueTask<XlsxRowWriter> StartFirstRowAsync(int styleId, int heightTwips, CancellationToken ct)
         {
             await StartCoreAsync(ct).ConfigureAwait(false);
-            return StartRowCore(styleId);
+            return StartRowCore(styleId, heightTwips);
         }
 
         /// <summary>
@@ -262,7 +277,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public XlsxRowWriter StartRow()
         {
-            return StartRowCore(styleId: 0);
+            return StartRowCore(styleId: 0, heightTwips: 0);
         }
 
         /// <summary>Synchronous counterpart to <see cref="StartRowAsync(int, CancellationToken)"/>.</summary>
@@ -276,14 +291,29 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
-            return StartRowCore(styleId);
+            return StartRowCore(styleId, heightTwips: 0);
         }
 
-        private XlsxRowWriter StartRowCore(int styleId)
+        /// <summary>Synchronous counterpart to <see cref="StartRowAsync(int, double, CancellationToken)"/>.</summary>
+        /// <param name="styleId">The style to apply to every cell of this row; 0 for none.</param>
+        /// <param name="height">The row height in points, greater than 0 and at most 409.</param>
+        /// <returns>The reusable <see cref="XlsxRowWriter"/> for the new row.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsxWorkbookWriter.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
+        public XlsxRowWriter StartRow(int styleId, double height)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
+            return StartRowCore(styleId, SheetColumnValidation.RowHeightTwips(height));
+        }
+
+        private XlsxRowWriter StartRowCore(int styleId, int heightTwips)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             EnsureStarted();
-            int rowNumber = BeginRow(styleId);
+            int rowNumber = BeginRow(styleId, heightTwips);
             _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
             _rowWriter.Reset(rowNumber, styleId);
             return _rowWriter;
@@ -358,7 +388,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             WriterStateGuard.ThrowIfEnded(_state, this);
             if (_tables.End(_rowNumber - 1))
             {
-                BeginRow(styleId: 0);
+                BeginRow(styleId: 0, heightTwips: 0);
                 CloseBufferedRow();
             }
         }
@@ -469,7 +499,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
         }
 
-        private int BeginRow(int styleId)
+        private int BeginRow(int styleId, int heightTwips)
         {
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsxRowWriter));
             if (_rowNumber >= ExcelLimits.MaxRows)
@@ -478,17 +508,27 @@ namespace ExcelReader.Core.Writer.Xlsx
             }
             _rowNumber++;
             _rowActive = true;
-            if (styleId == 0)
+            if (styleId == 0 && heightTwips == 0)
             {
                 _rowBuffer.Write("<row>"u8);
+                return _rowNumber;
             }
-            else
+            _rowBuffer.Write("<row"u8);
+            if (styleId != 0)
             {
-                _rowBuffer.Write("<row s=\""u8);
+                _rowBuffer.Write(" s=\""u8);
                 Utf8Formatter.TryFormat(styleId, _rowBuffer.GetSpan(11), out int written);
                 _rowBuffer.Advance(written);
-                _rowBuffer.Write("\" customFormat=\"1\">"u8);
+                _rowBuffer.Write("\" customFormat=\"1\""u8);
             }
+            if (heightTwips != 0)
+            {
+                _rowBuffer.Write(" ht=\""u8);
+                Utf8Formatter.TryFormat(heightTwips / 20.0, _rowBuffer.GetSpan(32), out int written);
+                _rowBuffer.Advance(written);
+                _rowBuffer.Write("\" customHeight=\"1\""u8);
+            }
+            _rowBuffer.Write(">"u8);
             return _rowNumber;
         }
 

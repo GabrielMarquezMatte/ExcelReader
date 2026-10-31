@@ -40,6 +40,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private int[]? _columnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
+        private int _activeRowHeight;
         private int _pendingStyle = -1;
         private int _dimPayloadPos = -1;
         private int _usedRowFirst = -1;
@@ -229,6 +230,13 @@ namespace ExcelReader.Core.Writer.Xlsb
             return ValueTask.FromResult(StartRow(styleId));
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        public ValueTask<XlsbRowWriter> StartRowAsync(int styleId, double height, CancellationToken ct = default)
+        {
+            return ValueTask.FromResult(StartRow(styleId, height));
+        }
+
         /// <summary>
         /// Synchronous counterpart to <see cref="ISheetWriter{TRow}.StartRow()"/>, for native/unmanaged
         /// callers whose ABI is synchronous.
@@ -245,9 +253,24 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
         public XlsbRowWriter StartRow(int styleId)
         {
+            return StartRowCore(styleId, heightTwips: 0);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="ISheetWriter{TRow}.StartRowAsync(int, double, CancellationToken)"/>, for native/unmanaged
+        /// callers whose ABI is synchronous.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        public XlsbRowWriter StartRow(int styleId, double height)
+        {
+            return StartRowCore(styleId, SheetColumnValidation.RowHeightTwips(height));
+        }
+
+        private XlsbRowWriter StartRowCore(int styleId, int heightTwips)
+        {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
-            BeginRow(styleId);
+            BeginRow(styleId, heightTwips);
             _rowWriter ??= new XlsbRowWriter(this);
             _rowWriter.Reset();
             return _rowWriter;
@@ -256,7 +279,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <summary>Writes an entire row in one call, mapping each element of <paramref name="values"/> to a column starting at 0.</summary>
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
         {
-            BeginRow(styleId: 0);
+            BeginRow(styleId: 0, heightTwips: 0);
             for (int i = 0; i < values.Length; i++)
             {
                 WriteCell(i, values[i]);
@@ -384,7 +407,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriterStateGuard.ThrowIfEnded(_state, this);
             if (_tables.End(_rowNumber))
             {
-                BeginRow(styleId: 0);
+                BeginRow(styleId: 0, heightTwips: 0);
                 _rowActive = false;
             }
         }
@@ -536,7 +559,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             Payload.Dispose();
         }
 
-        private void BeginRow(int styleId)
+        private void BeginRow(int styleId, int heightTwips)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsbRowWriter));
@@ -547,6 +570,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             }
             _rowNumber++;
             _activeRowStyle = styleId;
+            _activeRowHeight = heightTwips;
             _rowColFirst = int.MaxValue;
             _rowColLast = -1;
             _rowHeaderPos = _records.Length;
@@ -555,6 +579,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         }
 
         private const int RowHeaderFixedLength = 17;
+        private const byte RowHeaderUnsynced = 0x20;
         private const int ColumnBlockShift = 10;
 
         private void WriteRowHeader(int rowNumber, int spanCount)
@@ -562,6 +587,11 @@ namespace ExcelReader.Core.Writer.Xlsb
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.RowHdr, RowHeaderFixedLength + (spanCount * 8), out Span<byte> p);
             p.Clear();
             BinaryPrimitives.WriteUInt32LittleEndian(p, (uint)rowNumber);
+            if (_activeRowHeight != 0)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(p.Slice(8, 2), (ushort)_activeRowHeight);
+                p[11] = RowHeaderUnsynced;
+            }
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(13, 4), (uint)spanCount);
         }
 
