@@ -15,13 +15,17 @@ namespace ExcelReader.NetFramework.Writer
 
         private readonly WriterHandle _handle;
         private readonly bool _toMemory;
+        private readonly string? _password;
+        private readonly string? _encryptedPath;
         private bool _finished;
         private bool _sheetOpen;
 
-        private ExcelWorkbookWriter(WriterHandle handle, bool toMemory)
+        private ExcelWorkbookWriter(WriterHandle handle, bool toMemory, string? password = null, string? encryptedPath = null)
         {
             _handle = handle;
             _toMemory = toMemory;
+            _password = password;
+            _encryptedPath = encryptedPath;
         }
 
         /// <summary>Creates a writer that replaces the file at <paramref name="path"/> when it is closed.</summary>
@@ -30,7 +34,7 @@ namespace ExcelReader.NetFramework.Writer
         /// <returns>The open writer.</returns>
         /// <exception cref="ArgumentException">The format cannot be inferred from the extension and <see cref="ExcelWriteOptions.Format"/> is not set.</exception>
         /// <exception cref="ArgumentOutOfRangeException">An option is out of range.</exception>
-        /// <exception cref="NotSupportedException"><see cref="ExcelWriteOptions.Password"/> is set.</exception>
+        /// <exception cref="NotSupportedException"><see cref="ExcelWriteOptions.Password"/> is set and the format is not XLSX or XLSB.</exception>
         public static ExcelWorkbookWriter Create(string path, ExcelWriteOptions? options = null)
         {
             if (path is null)
@@ -40,9 +44,16 @@ namespace ExcelReader.NetFramework.Writer
 
             NativeLoader.EnsureLoaded();
             ExcelFormat format = WriteFormats.FromPath(path, options?.Format);
-            XlWriteOptions native = Prepare(options);
-            byte[] pathBytes = Utf8.NonNullBytes(path, out int pathLength);
+            XlWriteOptions native = WriteFormats.ToNative(options);
+            string? password = WriteFormats.PasswordFor(format, options);
             IntPtr raw = IntPtr.Zero;
+            if (password is not null)
+            {
+                NativeError.ThrowIfFailed(NativeMethods.xl_open_write_handle_to_memory((int)format, &native, &raw));
+                return new ExcelWorkbookWriter(new WriterHandle(raw), false, password, path);
+            }
+
+            byte[] pathBytes = Utf8.NonNullBytes(path, out int pathLength);
             fixed (byte* pathPointer = pathBytes)
             {
                 NativeError.ThrowIfFailed(NativeMethods.xl_open_write_handle(pathPointer, pathLength, (int)format, &native, &raw));
@@ -57,15 +68,16 @@ namespace ExcelReader.NetFramework.Writer
         /// <returns>The open writer; finish it with <see cref="CloseToArray"/> or <see cref="CloseTo"/>.</returns>
         /// <exception cref="ArgumentException"><paramref name="format"/> is <see cref="ExcelFormat.Auto"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException">An option is out of range.</exception>
-        /// <exception cref="NotSupportedException"><see cref="ExcelWriteOptions.Password"/> is set.</exception>
+        /// <exception cref="NotSupportedException"><see cref="ExcelWriteOptions.Password"/> is set and the format is not XLSX or XLSB.</exception>
         public static ExcelWorkbookWriter CreateInMemory(ExcelFormat format, ExcelWriteOptions? options = null)
         {
             NativeLoader.EnsureLoaded();
             WriteFormats.Require(format);
-            XlWriteOptions native = Prepare(options);
+            XlWriteOptions native = WriteFormats.ToNative(options);
+            string? password = WriteFormats.PasswordFor(format, options);
             IntPtr raw = IntPtr.Zero;
             NativeError.ThrowIfFailed(NativeMethods.xl_open_write_handle_to_memory((int)format, &native, &raw));
-            return new ExcelWorkbookWriter(new WriterHandle(raw), true);
+            return new ExcelWorkbookWriter(new WriterHandle(raw), true, password);
         }
 
         /// <summary>Starts a sheet.</summary>
@@ -263,7 +275,13 @@ namespace ExcelReader.NetFramework.Writer
                 throw new InvalidOperationException("A memory writer finishes with CloseToArray or CloseTo.");
             }
 
-            CloseNative();
+            if (_encryptedPath is null)
+            {
+                CloseNative();
+                return;
+            }
+
+            File.WriteAllBytes(_encryptedPath, Finish());
         }
 
         /// <summary>Finishes a memory writer and returns the workbook bytes.</summary>
@@ -278,9 +296,7 @@ namespace ExcelReader.NetFramework.Writer
                 throw new InvalidOperationException("A file writer finishes with Close.");
             }
 
-            byte[] bytes = TakeBytes();
-            CloseNative();
-            return bytes;
+            return Finish();
         }
 
         /// <summary>Finishes a memory writer and copies the workbook bytes to <paramref name="destination"/>, which stays open.</summary>
@@ -318,17 +334,6 @@ namespace ExcelReader.NetFramework.Writer
             Abort();
         }
 
-        private static XlWriteOptions Prepare(ExcelWriteOptions? options)
-        {
-            XlWriteOptions native = WriteFormats.ToNative(options);
-            if (options?.Password is not null)
-            {
-                throw new NotSupportedException("Password output is not supported yet.");
-            }
-
-            return native;
-        }
-
         private static void WriteTableSheet(IntPtr raw, byte* name, int nameLength, NativeWriteTable native, ExcelTableOptions table)
         {
             byte[] tableName = Utf8.NonNullBytes(table.Name, out int tableNameLength);
@@ -352,6 +357,38 @@ namespace ExcelReader.NetFramework.Writer
                     TableFlags = table.Flags(),
                 };
                 NativeError.ThrowIfFailed(NativeMethods.xl_write_sheet(raw, name, nameLength, native.Specs, native.Table, &options));
+            }
+        }
+
+        private byte[] Finish()
+        {
+            byte[] bytes = TakeBytes();
+            CloseNative();
+            if (_password is null)
+            {
+                return bytes;
+            }
+
+            return Encrypt(bytes, _password);
+        }
+
+        private static byte[] Encrypt(byte[] package, string password)
+        {
+            try
+            {
+                byte[] passwordBytes = Utf8.NonNullBytes(password, out int passwordLength);
+                XlBuffer buffer = default;
+                fixed (byte* packagePointer = package)
+                fixed (byte* passwordPointer = passwordBytes)
+                {
+                    NativeError.ThrowIfFailed(NativeMethods.xl_encrypt_package_to_memory(packagePointer, package.Length, passwordPointer, passwordLength, &buffer));
+                }
+
+                return NativeBuffers.TakeArray(ref buffer);
+            }
+            finally
+            {
+                Array.Clear(package, 0, package.Length);
             }
         }
 

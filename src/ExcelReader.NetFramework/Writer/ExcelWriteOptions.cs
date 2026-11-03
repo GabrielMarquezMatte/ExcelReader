@@ -26,7 +26,7 @@ namespace ExcelReader.NetFramework.Writer
         /// <summary>The rows encoded per batch. Zero keeps the native default.</summary>
         public int BatchRows { get; set; }
 
-        /// <summary>The password that encrypts the workbook.</summary>
+        /// <summary>The password that encrypts the workbook. XLSX and XLSB only; the plaintext package is encrypted in memory and never written to disk. Null writes an unencrypted workbook.</summary>
         public string? Password { get; set; }
     }
 }
