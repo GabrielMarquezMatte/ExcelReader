@@ -35,6 +35,12 @@ namespace ExcelReader.NetFramework.Interop
         internal const int XL_OPT_FALSE = 1;
         internal const int XL_OPT_TRUE = 2;
 
+        internal const int XL_TABLE_NO_STYLE = 1;
+        internal const int XL_TABLE_NO_ROW_STRIPES = 2;
+        internal const int XL_TABLE_COLUMN_STRIPES = 4;
+        internal const int XL_TABLE_FIRST_COLUMN = 8;
+        internal const int XL_TABLE_LAST_COLUMN = 16;
+
         internal static int TableSheet(int table)
         {
             return -2 - table;
@@ -142,5 +148,37 @@ namespace ExcelReader.NetFramework.Interop
     {
         internal XlColumnSpec* Columns;
         internal int ColumnCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct XlWriteOptions
+    {
+        internal int StructSize;
+        internal int SheetNameLen;
+        internal byte* SheetName;
+        internal int CsvDelimiter;
+        internal int CsvQuote;
+        internal int Date1904;
+        internal int UseSharedStrings;
+        internal int DegreeOfParallelism;
+        internal int BatchRows;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct XlSheetOptions
+    {
+        internal int StructSize;
+        internal int TableNameLen;
+        internal byte* TableName;
+        internal int TableStyleLen;
+        internal byte* TableStyle;
+        internal int TableFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct XlBuffer
+    {
+        internal byte* Data;
+        internal long Len;
     }
 }
