@@ -383,14 +383,6 @@ namespace ExcelReader.NetFramework.Tests.Writer
         }
 
         [Fact]
-        public void PasswordIsNotSupportedYet()
-        {
-            ExcelWriteOptions options = new ExcelWriteOptions { Password = "secret" };
-            Assert.Throws<NotSupportedException>(() => ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx, options));
-            Assert.Throws<NotSupportedException>(() => ExcelWorkbookWriter.Create(TempPath(".xlsx"), options));
-        }
-
-        [Fact]
         public void CsvDelimiterOptionIsHonoured()
         {
             using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Csv, new ExcelWriteOptions { CsvDelimiter = ';' });

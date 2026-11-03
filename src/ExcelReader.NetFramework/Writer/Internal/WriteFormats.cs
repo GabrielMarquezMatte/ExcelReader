@@ -48,6 +48,17 @@ namespace ExcelReader.NetFramework.Writer.Internal
             return format;
         }
 
+        internal static string? PasswordFor(ExcelFormat format, ExcelWriteOptions? options)
+        {
+            string? password = options?.Password;
+            if (password is not null && format != ExcelFormat.Xlsx && format != ExcelFormat.Xlsb)
+            {
+                throw new NotSupportedException("A password can encrypt XLSX and XLSB output only.");
+            }
+
+            return password;
+        }
+
         internal static unsafe XlWriteOptions ToNative(ExcelWriteOptions? options)
         {
             XlWriteOptions native = new XlWriteOptions { StructSize = sizeof(XlWriteOptions) };
