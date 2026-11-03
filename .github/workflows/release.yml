@@ -114,6 +114,41 @@ jobs:
           path: python/src/excelreader/_lib/*
           if-no-files-found: error
 
+  netframework:
+    name: Test & pack .NET Framework binding
+    needs: [build, native]
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: Download the native library
+        uses: actions/download-artifact@v8
+        with:
+          name: python-lib-windows-latest
+          path: python/src/excelreader/_lib
+
+      - name: Test
+        run: dotnet test --project tests/ExcelReader.NetFramework.Tests/ExcelReader.NetFramework.Tests.csproj -c Release
+
+      - name: Pack
+        run: dotnet pack src/ExcelReader.NetFramework/ExcelReader.NetFramework.csproj -c Release -p:Version=${{ needs.build.outputs.version }} -o ./artifacts
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages-netframework
+          path: ./artifacts/*
+          if-no-files-found: error
+
   cli:
     name: Build excelreader CLI (${{ matrix.os }})
     needs: build
@@ -264,7 +299,7 @@ jobs:
 
   publish:
     name: Publish to NuGet & GitHub Release
-    needs: [build, native, cli, python, musl]
+    needs: [build, native, netframework, cli, python, musl]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -274,8 +309,9 @@ jobs:
       - name: Download NuGet packages
         uses: actions/download-artifact@v8
         with:
-          name: nuget-packages
+          pattern: nuget-packages*
           path: artifacts
+          merge-multiple: true
 
       - name: Download release assets
         uses: actions/download-artifact@v8
