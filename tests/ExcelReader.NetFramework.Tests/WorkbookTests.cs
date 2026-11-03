@@ -90,7 +90,7 @@ namespace ExcelReader.NetFramework.Tests
         [Fact]
         public void CsvMustBeExplicit()
         {
-            string path = System.IO.Path.GetTempFileName() + ".csv";
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
             File.WriteAllText(path, "a;b\r\n1;2\r\n");
             try
             {

@@ -130,12 +130,16 @@ namespace ExcelReader.NetFramework
 
         private static ExcelWorkbook OpenNative(byte[]? path, byte[]? data, ExcelOpenOptions? options)
         {
-            byte[] password = options?.Password is null ? Array.Empty<byte>() : Utf8.Bytes(options.Password);
+            byte[] password = Array.Empty<byte>();
+            if (options?.Password is not null)
+            {
+                password = Utf8.Bytes(options.Password);
+            }
+
             XlOpenOptions native = ToNative(options);
             native.PasswordLen = password.Length;
             IntPtr handle = IntPtr.Zero;
             int format = (int)(options?.Format ?? ExcelFormat.Auto);
-            int status;
             fixed (byte* passwordPointer = password)
             fixed (byte* pathPointer = path)
             fixed (byte* dataPointer = data)
@@ -143,14 +147,15 @@ namespace ExcelReader.NetFramework
                 native.Password = passwordPointer;
                 if (path is null)
                 {
-                    status = NativeMethods.xl_open_memory(dataPointer, data!.Length, format, &native, &handle);
+                    return Wrap(NativeMethods.xl_open_memory(dataPointer, data!.Length, format, &native, &handle), handle);
                 }
-                else
-                {
-                    status = NativeMethods.xl_open_file(pathPointer, path.Length, format, &native, &handle);
-                }
-            }
 
+                return Wrap(NativeMethods.xl_open_file(pathPointer, path.Length, format, &native, &handle), handle);
+            }
+        }
+
+        private static ExcelWorkbook Wrap(int status, IntPtr handle)
+        {
             NativeError.ThrowIfFailed(status);
             return new ExcelWorkbook(new WorkbookHandle(handle));
         }
