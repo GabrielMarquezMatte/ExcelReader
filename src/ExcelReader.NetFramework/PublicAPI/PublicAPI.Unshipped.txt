@@ -89,3 +89,4 @@ override ExcelReader.NetFramework.ExcelCell.Equals(object? obj) -> bool
 override ExcelReader.NetFramework.ExcelCell.GetHashCode() -> int
 static ExcelReader.NetFramework.ExcelCell.operator !=(ExcelReader.NetFramework.ExcelCell left, ExcelReader.NetFramework.ExcelCell right) -> bool
 static ExcelReader.NetFramework.ExcelCell.operator ==(ExcelReader.NetFramework.ExcelCell left, ExcelReader.NetFramework.ExcelCell right) -> bool
+static ExcelReader.NetFramework.ExcelWorkbook.Open(System.IO.Stream! stream, ExcelReader.NetFramework.ExcelOpenOptions? options = null) -> ExcelReader.NetFramework.ExcelWorkbook!

@@ -76,7 +76,7 @@ namespace ExcelReader.NetFramework
                 throw new ArgumentNullException(nameof(path));
             }
 
-            return OpenNative(Utf8.Bytes(path), null, options);
+            return OpenNative(Utf8.Bytes(path), null, null, options);
         }
 
         /// <summary>Opens a workbook from memory. The data is copied by the native library.</summary>
@@ -90,7 +90,24 @@ namespace ExcelReader.NetFramework
                 throw new ArgumentNullException(nameof(data));
             }
 
-            return OpenNative(null, data, options);
+            return OpenNative(null, data, null, options);
+        }
+
+        /// <summary>
+        /// Opens a workbook from a stream. The workbook does not own the stream: the native library stops using it
+        /// once the workbook is open, except for CSV, which reads it until the workbook is disposed.
+        /// </summary>
+        /// <param name="stream">A readable stream positioned at the start of the workbook.</param>
+        /// <param name="options">The open options, or null for the defaults.</param>
+        /// <returns>The open workbook.</returns>
+        public static ExcelWorkbook Open(Stream stream, ExcelOpenOptions? options = null)
+        {
+            if (stream is null)
+            {
+                throw new ArgumentNullException(nameof(stream));
+            }
+
+            return OpenNative(null, null, stream, options);
         }
 
         /// <summary>Gets a sheet by exact, case-sensitive name.</summary>
@@ -128,7 +145,7 @@ namespace ExcelReader.NetFramework
             _handle.Dispose();
         }
 
-        private static ExcelWorkbook OpenNative(byte[]? path, byte[]? data, ExcelOpenOptions? options)
+        private static ExcelWorkbook OpenNative(byte[]? path, byte[]? data, Stream? stream, ExcelOpenOptions? options)
         {
             byte[] password = Array.Empty<byte>();
             if (options?.Password is not null)
@@ -145,6 +162,11 @@ namespace ExcelReader.NetFramework
             fixed (byte* dataPointer = data)
             {
                 native.Password = passwordPointer;
+                if (stream is not null)
+                {
+                    return OpenStream(stream, format, &native);
+                }
+
                 if (path is null)
                 {
                     return Wrap(NativeMethods.xl_open_memory(dataPointer, data!.Length, format, &native, &handle), handle);
@@ -152,6 +174,13 @@ namespace ExcelReader.NetFramework
 
                 return Wrap(NativeMethods.xl_open_file(pathPointer, path.Length, format, &native, &handle), handle);
             }
+        }
+
+        private static ExcelWorkbook OpenStream(Stream stream, int format, XlOpenOptions* options)
+        {
+            XlStream source = StreamSource.Create(stream);
+            IntPtr handle = IntPtr.Zero;
+            return Wrap(NativeMethods.xl_open_stream(&source, format, options, &handle), handle);
         }
 
         private static ExcelWorkbook Wrap(int status, IntPtr handle)
