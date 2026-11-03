@@ -1,0 +1,16 @@
+#nullable enable
+ExcelReader.NetFramework.ExcelReaderException
+ExcelReader.NetFramework.ExcelReaderException.ExcelReaderException() -> void
+ExcelReader.NetFramework.ExcelReaderException.ExcelReaderException(ExcelReader.NetFramework.ExcelStatus status, string! message) -> void
+ExcelReader.NetFramework.ExcelReaderException.ExcelReaderException(string! message) -> void
+ExcelReader.NetFramework.ExcelReaderException.ExcelReaderException(string! message, System.Exception! innerException) -> void
+ExcelReader.NetFramework.ExcelReaderException.Status.get -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.BufferTooSmall = -2 -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.Eof = -1 -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.Error = -5 -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.InvalidArgument = -4 -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.InvalidHandle = -3 -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.Ok = 0 -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.PasswordIncorrect = -7 -> ExcelReader.NetFramework.ExcelStatus
+ExcelReader.NetFramework.ExcelStatus.PasswordRequired = -6 -> ExcelReader.NetFramework.ExcelStatus
