@@ -10,6 +10,7 @@ authors:
   - family-names: Matte
     given-names: Gabriel
     orcid: "https://orcid.org/0009-0004-6041-9062"
+doi: 10.5281/zenodo.23927919
 repository-code: "https://github.com/GabrielMarquezMatte/ExcelReader"
 license: MIT
 keywords:
