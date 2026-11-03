@@ -4,7 +4,7 @@ $smoke = $PSScriptRoot
 $repo = (Resolve-Path (Join-Path $smoke '..\..')).Path
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 
-foreach ($folder in 'feed', 'packages', 'bin', 'obj') {
+foreach ($folder in 'feed', 'packages', 'nuget-cache', 'bin', 'obj') {
     Remove-Item -Recurse -Force (Join-Path $smoke $folder) -ErrorAction SilentlyContinue
 }
 
