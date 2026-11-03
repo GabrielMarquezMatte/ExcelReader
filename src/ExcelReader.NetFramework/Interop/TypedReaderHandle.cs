@@ -1,4 +1,5 @@
-using ExcelReader.NetFramework.Mapping;
+using ExcelReader.NetFramework.Parser.Internal;
+using ExcelReader.NetFramework.Reader;
 using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.NetFramework.Interop
