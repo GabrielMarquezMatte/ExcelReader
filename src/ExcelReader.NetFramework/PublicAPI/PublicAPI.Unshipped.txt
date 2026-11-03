@@ -115,3 +115,42 @@ ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Time = 5 -> ExcelReader.N
 ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Timestamp = 6 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
 ExcelReader.NetFramework.Reader.ExcelSheet.InferSchema(int headerRow = 1, int sampleRows = 1000, bool parseText = false) -> System.Collections.Generic.IReadOnlyList<ExcelReader.NetFramework.Reader.Schema.ExcelColumnSchema!>!
 ExcelReader.NetFramework.Reader.ExcelSheet.ReadBatches<T>(int batchRows, int headerRow = 1) -> System.Collections.Generic.IEnumerable<T[]!>!
+ExcelReader.NetFramework.Writer.ExcelWriteOptions
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.BatchRows.get -> int
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.BatchRows.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvDelimiter.get -> char?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvDelimiter.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvQuote.get -> char?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvQuote.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Date1904.get -> bool?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Date1904.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.DegreeOfParallelism.get -> int
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.DegreeOfParallelism.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.ExcelWriteOptions() -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Format.get -> ExcelReader.NetFramework.Reader.ExcelFormat?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Format.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Password.get -> string?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Password.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.UseSharedStrings.get -> bool?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.UseSharedStrings.set -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Abort() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Close() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CloseTo(System.IO.Stream! destination) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CloseToArray() -> byte[]!
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Dispose() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.EndRow() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.EndSheet() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StartRow() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StartSheet(string! name) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(bool value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(decimal value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(double value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(long value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(string? value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteDate(System.DateTime value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteDateTime(System.DateTime value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteEmpty() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteTime(System.TimeSpan value) -> void
+static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Create(string! path, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
+static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CreateInMemory(ExcelReader.NetFramework.Reader.ExcelFormat format, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
