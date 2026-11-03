@@ -90,3 +90,13 @@ override ExcelReader.NetFramework.ExcelCell.GetHashCode() -> int
 static ExcelReader.NetFramework.ExcelCell.operator !=(ExcelReader.NetFramework.ExcelCell left, ExcelReader.NetFramework.ExcelCell right) -> bool
 static ExcelReader.NetFramework.ExcelCell.operator ==(ExcelReader.NetFramework.ExcelCell left, ExcelReader.NetFramework.ExcelCell right) -> bool
 static ExcelReader.NetFramework.ExcelWorkbook.Open(System.IO.Stream! stream, ExcelReader.NetFramework.ExcelOpenOptions? options = null) -> ExcelReader.NetFramework.ExcelWorkbook!
+ExcelReader.NetFramework.ExcelColumnAttribute
+ExcelReader.NetFramework.ExcelColumnAttribute.ExcelColumnAttribute(string! name) -> void
+ExcelReader.NetFramework.ExcelColumnAttribute.Name.get -> string!
+ExcelReader.NetFramework.ExcelIgnoreAttribute
+ExcelReader.NetFramework.ExcelIgnoreAttribute.ExcelIgnoreAttribute() -> void
+ExcelReader.NetFramework.ExcelRequiredAttribute
+ExcelReader.NetFramework.ExcelRequiredAttribute.AllowEmpty.get -> bool
+ExcelReader.NetFramework.ExcelRequiredAttribute.AllowEmpty.set -> void
+ExcelReader.NetFramework.ExcelRequiredAttribute.ExcelRequiredAttribute() -> void
+ExcelReader.NetFramework.ExcelSheet.Read<T>(int headerRow = 1, int degreeOfParallelism = 0) -> System.Collections.Generic.List<T>!

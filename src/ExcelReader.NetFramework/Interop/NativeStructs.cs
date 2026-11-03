@@ -121,6 +121,11 @@ namespace ExcelReader.NetFramework.Interop
         internal byte* Validity;
         internal byte* Data;
         internal long DataLen;
+
+        internal readonly bool IsValid(int row)
+        {
+            return Validity is null || (Validity[row >> 3] & (1 << (row & 7))) != 0;
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
