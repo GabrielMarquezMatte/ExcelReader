@@ -8,25 +8,15 @@ namespace ExcelReader.NetFramework.Interop
         internal const int AbiVersion = 6;
 
         private const string DllName = "ExcelReader.Native.dll";
-        private static readonly object Gate = new object();
-        private static bool _loaded;
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "LoadLibraryW", ExactSpelling = true)]
         private static extern IntPtr LoadLibraryW(string fileName);
 
+        // Called only from the NativeMethods static constructor, which the CLR runs once.
         internal static void EnsureLoaded()
         {
-            lock (Gate)
-            {
-                if (_loaded)
-                {
-                    return;
-                }
-
-                Load(FindDll());
-                _loaded = true;
-                CheckAbi(NativeMethods.xl_abi_version());
-            }
+            Load(FindDll());
+            CheckAbi(NativeMethods.xl_abi_version());
         }
 
         internal static string ResolvePath(string baseDirectory, bool is64BitProcess)
