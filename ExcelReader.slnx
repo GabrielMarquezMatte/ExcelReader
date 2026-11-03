@@ -4,11 +4,13 @@
     <Project Path="src/ExcelReader.Core/ExcelReader.Core.csproj" />
     <Project Path="src/ExcelReader.Arrow/ExcelReader.Arrow.csproj" />
     <Project Path="src/ExcelReader.Native/ExcelReader.Native.csproj" />
+    <Project Path="src/ExcelReader.NetFramework/ExcelReader.NetFramework.csproj" />
     <Project Path="src/ExcelReader.Generator/ExcelReader.Generator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj" />
     <Project Path="tests/ExcelReader.Tests/ExcelReader.Tests.csproj" />
+    <Project Path="tests/ExcelReader.NetFramework.Tests/ExcelReader.NetFramework.Tests.csproj" />
     <Project Path="tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj" />
     <Project Path="tests/ExcelReader.AotSanity/ExcelReader.AotSanity.csproj" />
     <Project Path="tests/ExcelReader.NativePgoTrainer/ExcelReader.NativePgoTrainer.csproj" />
