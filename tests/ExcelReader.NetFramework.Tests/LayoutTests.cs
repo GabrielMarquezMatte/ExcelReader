@@ -8,11 +8,16 @@ namespace ExcelReader.NetFramework.Tests
         private static void Layout<T>(int size, params (string Field, int Offset)[] fields)
         {
             Assert.Equal(size, Marshal.SizeOf<T>());
-            foreach (var (field, offset) in fields)
+            foreach ((string field, int offset) in fields)
+            {
                 Assert.Equal(offset, (int)Marshal.OffsetOf<T>(field));
+            }
         }
 
-        private static void RequireX64() => Assert.SkipUnless(Environment.Is64BitProcess, "x64 layout");
+        private static void RequireX64()
+        {
+            Assert.SkipUnless(Environment.Is64BitProcess, "x64 layout");
+        }
 
         [Fact]
         public void XlRowCell_Layout()
@@ -77,7 +82,10 @@ namespace ExcelReader.NetFramework.Tests
         }
 
         [Fact]
-        public void XlTableInfo_Layout() => Assert.Equal(28, Marshal.SizeOf<XlTableInfo>());
+        public void XlTableInfo_Layout()
+        {
+            Assert.Equal(28, Marshal.SizeOf<XlTableInfo>());
+        }
 
         [Fact]
         public void X86_PointerSizedFields_Shrink()
