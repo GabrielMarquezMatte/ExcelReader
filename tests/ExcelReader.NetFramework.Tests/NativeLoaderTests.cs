@@ -48,6 +48,23 @@ namespace ExcelReader.NetFramework.Tests
         }
 
         [Fact]
+        public void ProbePathsDecodeEscapedCodeBaseWithHashPercentAndSpace()
+        {
+            string[] expected =
+            {
+                @"C:\app\x64\ExcelReader.Native.dll",
+                @"C:\My C#%20Dir\bin\x64\ExcelReader.Native.dll",
+            };
+            IReadOnlyList<string> paths = NativeLoader.ProbePaths(
+                @"C:\app\",
+                null,
+                "file:///C:/My%20C%23%2520Dir/bin/ExcelReader.NetFramework.dll",
+                string.Empty,
+                true);
+            Assert.Equal(expected, paths);
+        }
+
+        [Fact]
         public void ProbePathsSkipMissingInputs()
         {
             string[] expected = { @"C:\app\x86\ExcelReader.Native.dll" };
