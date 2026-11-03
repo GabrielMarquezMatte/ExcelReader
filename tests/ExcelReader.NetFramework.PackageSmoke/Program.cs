@@ -1,5 +1,6 @@
 using System;
-using ExcelReader.NetFramework;
+using ExcelReader.NetFramework.Parser;
+using ExcelReader.NetFramework.Reader;
 
 namespace PackageSmoke
 {

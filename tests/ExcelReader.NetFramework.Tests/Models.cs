@@ -1,3 +1,5 @@
+using ExcelReader.NetFramework.Parser;
+
 namespace ExcelReader.NetFramework.Tests
 {
     public sealed class Row

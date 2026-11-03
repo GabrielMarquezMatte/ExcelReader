@@ -1,4 +1,5 @@
 using System.Text;
+using ExcelReader.NetFramework.Reader;
 
 namespace ExcelReader.NetFramework.Interop
 {

@@ -33,7 +33,8 @@ process runs on a 64-bit OS. In Visual Studio: Project Properties, Build, Platfo
 ## Read a sheet into objects
 
 ```csharp
-using ExcelReader.NetFramework;
+using ExcelReader.NetFramework.Parser;
+using ExcelReader.NetFramework.Reader;
 
 public sealed class Invoice
 {
@@ -61,6 +62,8 @@ using (ExcelWorkbook workbook = ExcelWorkbook.Open(@"C:\data\invoices.xlsx"))
 `ReadBatches<T>(batchRows)` yields arrays of at most `batchRows` items so the whole sheet never sits in
 memory. `ReadRows()` enumerates raw cells, `InferSchema()` reports column types, `Table(name)` reads an
 Excel table through the same calls, and `ExcelWorkbook.Open` also takes a `byte[]` or a `Stream`.
+
+Namespaces mirror ExcelReader.Core's folders: `ExcelReader.NetFramework.Reader` holds the workbook types, `.Reader.Schema` the schema types and `.Parser` the mapping attributes.
 
 Header matching trims the header text, ignores case, and the first matching column wins. A property
 whose column is absent, or a cell that is empty or does not convert, keeps its default value unless the
