@@ -48,12 +48,12 @@ public sealed class Invoice
 
 using (ExcelWorkbook workbook = ExcelWorkbook.Open(@"C:\data\invoices.xlsx"))
 {
-    List<Invoice> invoices = workbook.Sheet("Invoices").Read<Invoice>();
+    Invoice[] invoices = workbook.Sheet("Invoices").Read<Invoice>();
 }
 ```
 
 `Read<T>(headerRow = 1, degreeOfParallelism = 0)` reads every data row. For big sheets,
-`ReadBatches<T>(batchRows)` yields lists of at most `batchRows` items so the whole sheet never sits in
+`ReadBatches<T>(batchRows)` yields arrays of at most `batchRows` items so the whole sheet never sits in
 memory. `ReadRows()` enumerates raw cells, `InferSchema()` reports column types, `Table(name)` reads an
 Excel table through the same calls, and `ExcelWorkbook.Open` also takes a `byte[]` or a `Stream`.
 

@@ -33,7 +33,7 @@ namespace ExcelReader.NetFramework.Interop
             }
         }
 
-        internal List<T>? Next<T>(PropertyBinder<T>[] bound)
+        internal T[]? Next<T>(PropertyBinder<T>[] bound)
             where T : new()
         {
             bool added = false;
@@ -56,7 +56,7 @@ namespace ExcelReader.NetFramework.Interop
 
                 TableFiller.Fill(bound, in table, items, 0, _rowsRead);
                 _rowsRead = checked(_rowsRead + items.Length);
-                return new List<T>(items);
+                return items;
             }
             finally
             {

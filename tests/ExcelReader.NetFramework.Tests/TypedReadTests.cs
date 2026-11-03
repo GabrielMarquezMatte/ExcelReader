@@ -16,8 +16,8 @@ namespace ExcelReader.NetFramework.Tests
         public void ReadsTypedRows(string file)
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path(file));
-            List<Row> rows = workbook.Sheet(0).Read<Row>();
-            Assert.Equal(RealDataRows, rows.Count);
+            Row[] rows = workbook.Sheet(0).Read<Row>();
+            Assert.Equal(RealDataRows, rows.Length);
             Assert.Equal("Valor1", rows[0].Coluna1);
             Assert.Equal(new DateTime(2026, 1, 1), rows[0].Coluna2);
             Assert.Equal(DateTimeKind.Unspecified, rows[0].Coluna2.Kind);
@@ -29,7 +29,7 @@ namespace ExcelReader.NetFramework.Tests
         public void PropertyNameIsTheDefaultColumnName()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
-            List<DefaultName> rows = workbook.Sheet(0).Read<DefaultName>();
+            DefaultName[] rows = workbook.Sheet(0).Read<DefaultName>();
             Assert.Equal("Valor1", rows[0].Coluna1);
         }
 
@@ -37,7 +37,7 @@ namespace ExcelReader.NetFramework.Tests
         public void AliasResolves()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
-            List<Aliased> rows = workbook.Sheet(0).Read<Aliased>();
+            Aliased[] rows = workbook.Sheet(0).Read<Aliased>();
             Assert.Equal("Valor1", rows[0].Value);
         }
 
@@ -45,7 +45,7 @@ namespace ExcelReader.NetFramework.Tests
         public void IgnoredPropertyIsNotRead()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
-            List<Ignored> rows = workbook.Sheet(0).Read<Ignored>();
+            Ignored[] rows = workbook.Sheet(0).Read<Ignored>();
             Assert.Null(rows[0].Coluna1);
             Assert.Equal(1, rows[0].Coluna3);
         }
@@ -54,8 +54,8 @@ namespace ExcelReader.NetFramework.Tests
         public void MissingOptionalColumnKeepsDefault()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
-            List<WithMissing> rows = workbook.Sheet(0).Read<WithMissing>();
-            Assert.Equal(RealDataRows, rows.Count);
+            WithMissing[] rows = workbook.Sheet(0).Read<WithMissing>();
+            Assert.Equal(RealDataRows, rows.Length);
             Assert.Equal("Valor1", rows[0].Coluna1);
             Assert.All(rows, r => Assert.Equal(0, r.Missing));
         }
@@ -83,7 +83,7 @@ namespace ExcelReader.NetFramework.Tests
         public void NullableGetsNullForEmptyCells()
         {
             using ExcelWorkbook workbook = OpenCsv(QtyCsv);
-            List<NullableQty> rows = workbook.Sheet(0).Read<NullableQty>();
+            NullableQty[] rows = workbook.Sheet(0).Read<NullableQty>();
             Assert.Equal(OneThenNull, rows.Select(r => r.Qty).ToArray());
         }
 
@@ -91,7 +91,7 @@ namespace ExcelReader.NetFramework.Tests
         public void NonNullableGetsDefaultForEmptyCells()
         {
             using ExcelWorkbook workbook = OpenCsv(QtyCsv);
-            List<PlainQty> rows = workbook.Sheet(0).Read<PlainQty>();
+            PlainQty[] rows = workbook.Sheet(0).Read<PlainQty>();
             Assert.Equal(OneThenZero, rows.Select(r => r.Qty).ToArray());
         }
 
@@ -118,7 +118,7 @@ namespace ExcelReader.NetFramework.Tests
         public void RequiredAllowEmptyAccepts()
         {
             using ExcelWorkbook workbook = OpenCsv(QtyCsv);
-            List<RequiredAllowEmptyQty> rows = workbook.Sheet(0).Read<RequiredAllowEmptyQty>();
+            RequiredAllowEmptyQty[] rows = workbook.Sheet(0).Read<RequiredAllowEmptyQty>();
             Assert.Equal(OneThenZero, rows.Select(r => r.Qty).ToArray());
         }
 
@@ -126,7 +126,7 @@ namespace ExcelReader.NetFramework.Tests
         public void EmptyStringIsNull()
         {
             using ExcelWorkbook workbook = OpenCsv("Name,Qty\r\n,1\r\nb,2\r\n");
-            List<NameOnly> rows = workbook.Sheet(0).Read<NameOnly>();
+            NameOnly[] rows = workbook.Sheet(0).Read<NameOnly>();
             Assert.Equal(NullThenB, rows.Select(r => r.Name).ToArray());
         }
 
@@ -136,7 +136,7 @@ namespace ExcelReader.NetFramework.Tests
             byte[] bom = new UTF8Encoding(true).GetPreamble();
             byte[] body = Encoding.UTF8.GetBytes("Name\r\nação 😀\r\n");
             using ExcelWorkbook workbook = ExcelWorkbook.Open(bom.Concat(body).ToArray(), new ExcelOpenOptions { Format = ExcelFormat.Csv });
-            List<NameOnly> rows = workbook.Sheet(0).Read<NameOnly>();
+            NameOnly[] rows = workbook.Sheet(0).Read<NameOnly>();
             Assert.Equal("ação 😀", Assert.Single(rows).Name);
         }
 
@@ -183,8 +183,8 @@ namespace ExcelReader.NetFramework.Tests
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("tables", "tables.xlsx"));
             ExcelSheet table = workbook.Table("Sales");
-            List<ProductOnly> rows = table.Read<ProductOnly>();
-            Assert.Equal(table.ReadRows().Count() - 1, rows.Count);
+            ProductOnly[] rows = table.Read<ProductOnly>();
+            Assert.Equal(table.ReadRows().Count() - 1, rows.Length);
             string? first = table.ReadRows().ElementAt(1).Cells.Single(c => c.Column == 2).Text;
             Assert.NotNull(first);
             Assert.Equal(first, rows[0].Product);
@@ -208,10 +208,10 @@ namespace ExcelReader.NetFramework.Tests
         public void ParallelAndSerialAgree()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
-            List<Row> serial = workbook.Sheet(0).Read<Row>(degreeOfParallelism: 1);
-            List<Row> parallel = workbook.Sheet(0).Read<Row>(degreeOfParallelism: 0);
-            Assert.Equal(serial.Count, parallel.Count);
-            for (int i = 0; i < serial.Count; i++)
+            Row[] serial = workbook.Sheet(0).Read<Row>(degreeOfParallelism: 1);
+            Row[] parallel = workbook.Sheet(0).Read<Row>(degreeOfParallelism: 0);
+            Assert.Equal(serial.Length, parallel.Length);
+            for (int i = 0; i < serial.Length; i++)
             {
                 Assert.Equal(serial[i].Coluna1, parallel[i].Coluna1);
                 Assert.Equal(serial[i].Coluna2, parallel[i].Coluna2);
