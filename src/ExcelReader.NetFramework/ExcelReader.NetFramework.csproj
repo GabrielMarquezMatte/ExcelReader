@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>ExcelReader.NetFramework</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CA5392: the native DLL is loaded by absolute path in NativeLoader before any DllImport resolves. -->
+    <NoWarn>$(NoWarn);CA5392</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageValidationBaselineVersion>7.0.0</PackageValidationBaselineVersion>
+    <PackageId>ExcelReader.NET.Framework</PackageId>
+    <Version>$(PackageValidationBaselineVersion)-dev</Version>
+    <Authors>Gabriel Matte</Authors>
+    <Title>ExcelReader.NET.Framework</Title>
+    <Description>Fast XLSX/XLSB/XLS/CSV reading for .NET Framework 4.7.2+, backed by the ExcelReader native library.</Description>
+    <PackageTags>excel;xlsx;xlsb;xls;csv;netframework;native;interop</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/GabrielMarquezMatte/ExcelReader</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/GabrielMarquezMatte/ExcelReader</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>See the changelog: https://github.com/GabrielMarquezMatte/ExcelReader/releases</PackageReleaseNotes>
+    <Copyright>Copyright (c) Gabriel Matte</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ExcelReaderNativeDll Condition="'$(ExcelReaderNativeDll)' == ''">$(MSBuildThisFileDirectory)..\..\python\src\excelreader\_lib\ExcelReader.Native.dll</ExcelReaderNativeDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExcelReader.NetFramework.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="PublicAPI\PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+
+</Project>
