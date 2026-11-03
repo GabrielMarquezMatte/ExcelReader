@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "ExcelReader"
+abstract: >-
+  High-performance readers and writers for XLSX, XLSB, XLS and CSV on .NET,
+  with bindings for .NET Framework, Python, Rust and C/C++ through a NativeAOT
+  native library.
+authors:
+  - family-names: Matte
+    given-names: Gabriel
+    orcid: "https://orcid.org/0009-0004-6041-9062"
+repository-code: "https://github.com/GabrielMarquezMatte/ExcelReader"
+license: MIT
+keywords:
+  - excel
+  - xlsx
+  - xlsb
+  - xls
+  - csv
+  - spreadsheet
+  - dotnet
+  - python
