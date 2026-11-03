@@ -40,11 +40,11 @@ namespace ExcelReader.NetFramework.Writer
             NativeLoader.EnsureLoaded();
             ExcelFormat format = WriteFormats.FromPath(path, options?.Format);
             XlWriteOptions native = Prepare(options);
-            byte[] pathBytes = Utf8.Bytes(path);
+            byte[] pathBytes = Utf8.NonNullBytes(path, out int pathLength);
             IntPtr raw = IntPtr.Zero;
             fixed (byte* pathPointer = pathBytes)
             {
-                NativeError.ThrowIfFailed(NativeMethods.xl_open_write_handle(pathPointer, pathBytes.Length, (int)format, &native, &raw));
+                NativeError.ThrowIfFailed(NativeMethods.xl_open_write_handle(pathPointer, pathLength, (int)format, &native, &raw));
             }
 
             return new ExcelWorkbookWriter(new WriterHandle(raw), false);
@@ -77,11 +77,11 @@ namespace ExcelReader.NetFramework.Writer
                 throw new ArgumentNullException(nameof(name));
             }
 
-            byte[] bytes = Utf8.Bytes(name);
+            byte[] bytes = Utf8.NonNullBytes(name, out int length);
             using Lease lease = Acquire();
             fixed (byte* namePointer = bytes)
             {
-                NativeError.ThrowIfFailed(NativeMethods.xl_start_sheet(lease.Raw, namePointer, bytes.Length));
+                NativeError.ThrowIfFailed(NativeMethods.xl_start_sheet(lease.Raw, namePointer, length));
             }
         }
 
@@ -117,10 +117,10 @@ namespace ExcelReader.NetFramework.Writer
                 return;
             }
 
-            byte[] bytes = Utf8.Bytes(value);
+            byte[] bytes = Utf8.NonNullBytes(value, out int length);
             fixed (byte* valuePointer = bytes)
             {
-                NativeError.ThrowIfFailed(NativeMethods.xl_write_string(lease.Raw, valuePointer, bytes.Length));
+                NativeError.ThrowIfFailed(NativeMethods.xl_write_string(lease.Raw, valuePointer, length));
             }
         }
 
