@@ -1,3 +1,5 @@
+using ExcelReader.NetFramework.Interop;
+
 namespace ExcelReader.NetFramework
 {
     /// <summary>A sheet or table of an open workbook.</summary>
@@ -13,6 +15,23 @@ namespace ExcelReader.NetFramework
         public ExcelWorkbook Workbook { get; }
 
         internal int Id { get; }
+
+        /// <summary>Lazily enumerates the raw rows of the sheet or table; each enumeration opens its own cursor.</summary>
+        /// <returns>The rows, header included.</returns>
+        public IEnumerable<ExcelRow> ReadRows()
+        {
+            using RowsHandle rows = RowsHandle.Open(Workbook, Id);
+            while (true)
+            {
+                ExcelRow? row = rows.Next();
+                if (row is null)
+                {
+                    yield break;
+                }
+
+                yield return row;
+            }
+        }
 
         /// <summary>Compares two sheets for equality.</summary>
         /// <param name="left">The first sheet.</param>

@@ -68,3 +68,24 @@ static ExcelReader.NetFramework.ExcelSheet.operator !=(ExcelReader.NetFramework.
 static ExcelReader.NetFramework.ExcelSheet.operator ==(ExcelReader.NetFramework.ExcelSheet left, ExcelReader.NetFramework.ExcelSheet right) -> bool
 static ExcelReader.NetFramework.ExcelWorkbook.Open(byte[]! data, ExcelReader.NetFramework.ExcelOpenOptions? options = null) -> ExcelReader.NetFramework.ExcelWorkbook!
 static ExcelReader.NetFramework.ExcelWorkbook.Open(string! path, ExcelReader.NetFramework.ExcelOpenOptions? options = null) -> ExcelReader.NetFramework.ExcelWorkbook!
+ExcelReader.NetFramework.ExcelCell
+ExcelReader.NetFramework.ExcelCell.Column.get -> int
+ExcelReader.NetFramework.ExcelCell.ExcelCell() -> void
+ExcelReader.NetFramework.ExcelCell.Text.get -> string?
+ExcelReader.NetFramework.ExcelCell.Type.get -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType.Bool = 4 -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType.Date = 3 -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType.Empty = 0 -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType.Error = 6 -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType.Formula = 5 -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType.Number = 2 -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelCellType.String = 1 -> ExcelReader.NetFramework.ExcelCellType
+ExcelReader.NetFramework.ExcelRow
+ExcelReader.NetFramework.ExcelRow.Cells.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.NetFramework.ExcelCell>!
+ExcelReader.NetFramework.ExcelSheet.ReadRows() -> System.Collections.Generic.IEnumerable<ExcelReader.NetFramework.ExcelRow!>!
+ExcelReader.NetFramework.ExcelCell.Equals(ExcelReader.NetFramework.ExcelCell other) -> bool
+override ExcelReader.NetFramework.ExcelCell.Equals(object? obj) -> bool
+override ExcelReader.NetFramework.ExcelCell.GetHashCode() -> int
+static ExcelReader.NetFramework.ExcelCell.operator !=(ExcelReader.NetFramework.ExcelCell left, ExcelReader.NetFramework.ExcelCell right) -> bool
+static ExcelReader.NetFramework.ExcelCell.operator ==(ExcelReader.NetFramework.ExcelCell left, ExcelReader.NetFramework.ExcelCell right) -> bool
