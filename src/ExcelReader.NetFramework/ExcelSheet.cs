@@ -82,7 +82,7 @@ namespace ExcelReader.NetFramework
                     items[i] = new T();
                 }
 
-                TableFiller.Fill(bound, in table, items, 0);
+                TableFiller.Fill(bound, in table, items, 0, 0);
                 return new List<T>(items);
             }
             finally

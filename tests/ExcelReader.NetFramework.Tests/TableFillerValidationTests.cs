@@ -12,8 +12,8 @@ namespace ExcelReader.NetFramework.Tests
             ExcelReaderException ex = Assert.Throws<ExcelReaderException>(() => FillWith(Xl.XL_T_I64, 5));
             Assert.Equal(ExcelStatus.Error, ex.Status);
             Assert.Contains("Coluna3", ex.Message, StringComparison.Ordinal);
-            Assert.Contains("5", ex.Message, StringComparison.Ordinal);
-            Assert.Contains("3", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("returned 5 rows", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("expected 3.", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -22,8 +22,8 @@ namespace ExcelReader.NetFramework.Tests
             ExcelReaderException ex = Assert.Throws<ExcelReaderException>(() => FillWith(Xl.XL_T_STRING, 3));
             Assert.Equal(ExcelStatus.Error, ex.Status);
             Assert.Contains("Coluna3", ex.Message, StringComparison.Ordinal);
-            Assert.Contains(Xl.XL_T_STRING.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.Message, StringComparison.Ordinal);
-            Assert.Contains(Xl.XL_T_I64.ToString(System.Globalization.CultureInfo.InvariantCulture), ex.Message, StringComparison.Ordinal);
+            Assert.Contains("column type 0 for", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("expected 1.", ex.Message, StringComparison.Ordinal);
         }
 
         private static void FillWith(int columnType, long columnLength)
@@ -36,7 +36,7 @@ namespace ExcelReader.NetFramework.Tests
                 *column = new XlColumn { Type = columnType, Length = columnLength };
                 XlTable table = new XlTable { ColumnCount = 1, RowCount = 3, Columns = column };
                 Row[] items = { new Row(), new Row(), new Row() };
-                TableFiller.Fill(new[] { binder }, in table, items, 0);
+                TableFiller.Fill(new[] { binder }, in table, items, 0, 0);
             }
             finally
             {

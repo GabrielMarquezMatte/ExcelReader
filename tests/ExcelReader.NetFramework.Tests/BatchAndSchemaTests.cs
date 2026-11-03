@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace ExcelReader.NetFramework.Tests
 {
     public sealed class BatchAndSchemaTests
@@ -51,6 +53,34 @@ namespace ExcelReader.NetFramework.Tests
         }
 
         [Fact]
+        public void BatchesSurviveWorkbookDispose()
+        {
+            ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
+            int total = 0;
+            bool first = true;
+            foreach (List<Row> batch in workbook.Sheet(0).ReadBatches<Row>(30))
+            {
+                total += batch.Count;
+                if (first)
+                {
+                    workbook.Dispose();
+                    first = false;
+                }
+            }
+
+            Assert.Equal(100, total);
+        }
+
+        [Fact]
+        public void RequiredViolationReportsAbsoluteDataRow()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes("Name,Qty\r\na,1\r\nb,2\r\nc,3\r\n,4\r\ne,5\r\n");
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(csv, new ExcelOpenOptions { Format = ExcelFormat.Csv });
+            ExcelReaderException error = Assert.Throws<ExcelReaderException>(() => workbook.Sheet(0).ReadBatches<RequiredName>(2).ToList());
+            Assert.Contains("'Name' is empty in data row 4.", error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void BatchRowsBelowOneIsRejected()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
@@ -86,6 +116,12 @@ namespace ExcelReader.NetFramework.Tests
             ExcelSheet sheet = workbook.Sheet(0);
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.InferSchema(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.InferSchema(1, 0));
+        }
+
+        public sealed class RequiredName
+        {
+            [ExcelRequired]
+            public string? Name { get; set; }
         }
     }
 }

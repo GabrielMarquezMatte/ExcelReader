@@ -4,7 +4,7 @@ namespace ExcelReader.NetFramework.Mapping
 {
     internal static unsafe class TableFiller
     {
-        internal static void Fill<T>(PropertyBinder<T>[] bound, in XlTable table, T[] items, int offset)
+        internal static void Fill<T>(PropertyBinder<T>[] bound, in XlTable table, T[] items, int offset, int rowBase)
         {
             if (table.ColumnCount != bound.Length)
             {
@@ -27,26 +27,26 @@ namespace ExcelReader.NetFramework.Mapping
 
             for (int i = 0; i < bound.Length; i++)
             {
-                bound[i].Fill(items, offset, table.Columns + i);
+                bound[i].Fill(items, offset, rowBase, table.Columns + i);
             }
 
             for (int i = 0; i < bound.Length; i++)
             {
                 if (bound[i].Required && !bound[i].AllowEmpty)
                 {
-                    ThrowOnFirstEmpty(bound[i].PropertyName, table.Columns + i, offset);
+                    ThrowOnFirstEmpty(bound[i].PropertyName, table.Columns + i, rowBase);
                 }
             }
         }
 
-        private static void ThrowOnFirstEmpty(string propertyName, XlColumn* column, int offset)
+        private static void ThrowOnFirstEmpty(string propertyName, XlColumn* column, int rowBase)
         {
             int count = checked((int)column->Length);
             for (int row = 0; row < count; row++)
             {
                 if (IsEmpty(column, row))
                 {
-                    throw new ExcelReaderException(ExcelStatus.InvalidArgument, $"Required property '{propertyName}' is empty in data row {offset + row + 1}.");
+                    throw new ExcelReaderException(ExcelStatus.InvalidArgument, $"Required property '{propertyName}' is empty in data row {rowBase + row + 1}.");
                 }
             }
         }
