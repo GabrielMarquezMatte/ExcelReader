@@ -18,8 +18,14 @@ namespace ExcelReader.NetFramework.Mapping
             List<PropertyBinder<T>> properties = new List<PropertyBinder<T>>();
             foreach (PropertyInfo property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
-                if (Attribute.IsDefined(property, typeof(ExcelIgnoreAttribute)) || property.GetSetMethod() is null)
+                if (Attribute.IsDefined(property, typeof(ExcelIgnoreAttribute)))
                 {
+                    continue;
+                }
+
+                if (property.GetSetMethod() is null)
+                {
+                    RejectMappedGetOnly(property);
                     continue;
                 }
 
@@ -32,6 +38,17 @@ namespace ExcelReader.NetFramework.Mapping
         internal static TypeMap<T> Instance => _instance ??= new TypeMap<T>();
 
         internal IReadOnlyList<PropertyBinder<T>> Properties { get; }
+
+        private static void RejectMappedGetOnly(PropertyInfo property)
+        {
+            if (!Attribute.IsDefined(property, typeof(ExcelRequiredAttribute)) && !Attribute.IsDefined(property, typeof(ExcelColumnAttribute)))
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"Property '{typeof(T).Name}.{property.Name}' is marked [ExcelRequired] or [ExcelColumn] but has no public setter, so it can never be read. Add one, or remove the attribute.");
+        }
 
         private static PropertyBinder<T> Bind(PropertyInfo property)
         {

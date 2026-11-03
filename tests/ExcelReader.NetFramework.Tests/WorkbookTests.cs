@@ -97,6 +97,8 @@ namespace ExcelReader.NetFramework.Tests
                 ExcelOpenOptions options = new ExcelOpenOptions { Format = ExcelFormat.Csv, CsvDelimiter = ';' };
                 using ExcelWorkbook workbook = ExcelWorkbook.Open(path, options);
                 Assert.Single(workbook.Sheets);
+                ExcelReaderException error = Assert.Throws<ExcelReaderException>(() => ExcelWorkbook.Open(path, new ExcelOpenOptions { CsvDelimiter = ';' }));
+                Assert.Equal(ExcelStatus.Error, error.Status);
             }
             finally
             {
@@ -117,6 +119,23 @@ namespace ExcelReader.NetFramework.Tests
             ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
             workbook.Dispose();
             workbook.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => workbook.Sheets);
+        }
+
+        [Fact]
+        public void ExceptionCrossesAppDomainsWithItsStatus()
+        {
+            AppDomain domain = AppDomain.CreateDomain("serialization", null, AppDomain.CurrentDomain.SetupInformation);
+            try
+            {
+                ExcelReaderException error = Assert.Throws<ExcelReaderException>(() => domain.DoCallBack(ThrowPasswordRequired));
+                Assert.Equal(ExcelStatus.PasswordRequired, error.Status);
+                Assert.Equal("locked", error.Message);
+            }
+            finally
+            {
+                AppDomain.Unload(domain);
+            }
         }
 
         [Fact]
@@ -127,6 +146,11 @@ namespace ExcelReader.NetFramework.Tests
             workbook.Dispose();
             Assert.Throws<ObjectDisposedException>(() => workbook.Sheets);
             Assert.Throws<ObjectDisposedException>(() => workbook.Sheet(0));
+        }
+
+        private static void ThrowPasswordRequired()
+        {
+            throw new ExcelReaderException(ExcelStatus.PasswordRequired, "locked");
         }
 
         private static void AssertTable(ExcelWorkbook workbook, string name, int sheet, int firstRow, int firstColumn, int lastRow, int lastColumn, int headers, int totals)
