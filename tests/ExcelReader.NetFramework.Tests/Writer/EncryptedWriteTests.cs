@@ -96,5 +96,37 @@ namespace ExcelReader.NetFramework.Tests.Writer
             writer.Dispose();
             Assert.False(File.Exists(path));
         }
+
+        [Fact]
+        public void EncryptedCloseReplacesExistingFileAndLeavesNoTemp()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                string path = Path.Combine(directory, "out.xlsx");
+                File.WriteAllBytes(path, new byte[] { 1, 2, 3 });
+                using (ExcelWorkbookWriter writer = ExcelWorkbookWriter.Create(path, new ExcelWriteOptions { Password = Secret }))
+                {
+                    writer.WriteSheet("Vendas", Rows());
+                    writer.Close();
+                }
+
+                AssertEncrypted(File.ReadAllBytes(path), ExcelFormat.Xlsx);
+                Assert.Equal(new[] { path }, Directory.GetFiles(directory));
+            }
+            finally
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+
+        [Fact]
+        public void EmptyPasswordThrowsAtCreate()
+        {
+            Assert.Throws<ArgumentException>(() => ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx, new ExcelWriteOptions { Password = "" }));
+            string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".xlsx");
+            Assert.Throws<ArgumentException>(() => ExcelWorkbookWriter.Create(path, new ExcelWriteOptions { Password = "" }));
+        }
     }
 }

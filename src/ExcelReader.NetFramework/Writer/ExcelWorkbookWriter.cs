@@ -281,7 +281,7 @@ namespace ExcelReader.NetFramework.Writer
                 return;
             }
 
-            File.WriteAllBytes(_encryptedPath, Finish());
+            WriteReplacing(_encryptedPath, Finish());
         }
 
         /// <summary>Finishes a memory writer and returns the workbook bytes.</summary>
@@ -301,6 +301,7 @@ namespace ExcelReader.NetFramework.Writer
 
         /// <summary>Finishes a memory writer and copies the workbook bytes to <paramref name="destination"/>, which stays open.</summary>
         /// <param name="destination">The stream to write to.</param>
+        /// <exception cref="ArgumentException"><paramref name="destination"/> is not writable; the writer stays open.</exception>
         /// <exception cref="InvalidOperationException">The writer was created for a file.</exception>
         /// <exception cref="ObjectDisposedException">The writer is already closed, aborted or disposed.</exception>
         public void CloseTo(Stream destination)
@@ -308,6 +309,11 @@ namespace ExcelReader.NetFramework.Writer
             if (destination is null)
             {
                 throw new ArgumentNullException(nameof(destination));
+            }
+
+            if (!destination.CanWrite)
+            {
+                throw new ArgumentException("The stream is not writable.", nameof(destination));
             }
 
             byte[] bytes = CloseToArray();
@@ -357,6 +363,28 @@ namespace ExcelReader.NetFramework.Writer
                     TableFlags = table.Flags(),
                 };
                 NativeError.ThrowIfFailed(NativeMethods.xl_write_sheet(raw, name, nameLength, native.Specs, native.Table, &options));
+            }
+        }
+
+        private static void WriteReplacing(string path, byte[] bytes)
+        {
+            string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+            string temp = Path.Combine(directory, ".excelreader-" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                File.WriteAllBytes(temp, bytes);
+                if (File.Exists(path))
+                {
+                    File.Replace(temp, path, null);
+                    return;
+                }
+
+                File.Move(temp, path);
+            }
+            catch
+            {
+                File.Delete(temp);
+                throw;
             }
         }
 
