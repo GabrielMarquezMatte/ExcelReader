@@ -84,5 +84,65 @@ namespace ExcelReader.NetFramework.Interop
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void xl_free_schema(XlInferredSchema* schema);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_open_write_handle(byte* path, int pathLen, int format, XlWriteOptions* options, IntPtr* outHandle);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_open_write_handle_to_memory(int format, XlWriteOptions* options, IntPtr* outHandle);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_start_sheet(IntPtr handle, byte* name, int nameLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_start_row(IntPtr handle);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_string(IntPtr handle, byte* value, int valueLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_int64(IntPtr handle, long value);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_float64(IntPtr handle, double value);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_bool(IntPtr handle, int value);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_date(IntPtr handle, int daysSinceEpoch);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_time(IntPtr handle, long microsecondsSinceMidnight);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_timestamp(IntPtr handle, long microsecondsSinceEpoch);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_null(IntPtr handle, int type);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_end_row(IntPtr handle);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_end_sheet(IntPtr handle);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_sheet(IntPtr handle, byte* name, int nameLen, XlColumnSpec* specs, XlTable* table, XlSheetOptions* options);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_close_write_handle(IntPtr handle);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_write_handle_bytes(IntPtr handle, XlBuffer* outBuffer);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_abort_write_handle(IntPtr handle);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void xl_free_buffer(XlBuffer* buffer);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_encrypt_package_to_memory(byte* package, int packageLen, byte* password, int passwordLen, XlBuffer* outBuffer);
     }
 }

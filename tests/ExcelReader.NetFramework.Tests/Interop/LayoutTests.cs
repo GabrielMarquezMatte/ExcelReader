@@ -82,6 +82,34 @@ namespace ExcelReader.NetFramework.Tests.Interop
         }
 
         [Fact]
+        public void XlWriteOptions_Layout()
+        {
+            RequireX64();
+            Layout<XlWriteOptions>(40,
+                (nameof(XlWriteOptions.SheetNameLen), 4), (nameof(XlWriteOptions.SheetName), 8),
+                (nameof(XlWriteOptions.CsvDelimiter), 16), (nameof(XlWriteOptions.CsvQuote), 20),
+                (nameof(XlWriteOptions.Date1904), 24), (nameof(XlWriteOptions.UseSharedStrings), 28),
+                (nameof(XlWriteOptions.DegreeOfParallelism), 32), (nameof(XlWriteOptions.BatchRows), 36));
+        }
+
+        [Fact]
+        public void XlSheetOptions_Layout()
+        {
+            RequireX64();
+            Layout<XlSheetOptions>(40,
+                (nameof(XlSheetOptions.TableNameLen), 4), (nameof(XlSheetOptions.TableName), 8),
+                (nameof(XlSheetOptions.TableStyleLen), 16), (nameof(XlSheetOptions.TableStyle), 24),
+                (nameof(XlSheetOptions.TableFlags), 32));
+        }
+
+        [Fact]
+        public void XlBuffer_Layout()
+        {
+            RequireX64();
+            Layout<XlBuffer>(16, (nameof(XlBuffer.Len), 8));
+        }
+
+        [Fact]
         public void XlTableInfo_Layout()
         {
             Assert.Equal(28, Marshal.SizeOf<XlTableInfo>());
