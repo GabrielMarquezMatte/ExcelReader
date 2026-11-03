@@ -72,6 +72,37 @@ namespace ExcelReader.NetFramework.Tests.Writer
             Assert.Equal(expected.Split('|'), rows[0].ToArray());
         }
 
+        [Theory]
+        [InlineData(ExcelFormat.Xlsx, "0:String:|2:String:x")]
+        [InlineData(ExcelFormat.Xlsb, "0:String:|2:String:x")]
+        [InlineData(ExcelFormat.Xls, "0:String:|2:String:x")]
+        [InlineData(ExcelFormat.Csv, "0:Empty:|1:Empty:|2:String:x")]
+        public void EmptyStringAndNullAreDistinctCells(ExcelFormat format, string expected)
+        {
+            using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(format);
+            writer.StartSheet("Data");
+            writer.StartRow();
+            writer.Write(string.Empty);
+            writer.Write((string?)null);
+            writer.Write("x");
+            writer.EndRow();
+            writer.EndSheet();
+
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(writer.CloseToArray(), new ExcelOpenOptions { Format = format });
+            ExcelRow row = workbook.Sheet(0).ReadRows().Single();
+
+            Assert.Equal(expected, string.Join("|", row.Cells.Select(c => c.Column + ":" + c.Type + ":" + c.Text)));
+        }
+
+        [Fact]
+        public void EmptySheetNameReachesNativeAsAnEmptyName()
+        {
+            using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx);
+            ExcelReaderException exception = Assert.Throws<ExcelReaderException>(() => writer.StartSheet(string.Empty));
+            Assert.Equal(ExcelStatus.Error, exception.Status);
+            Assert.DoesNotContain("name_len", exception.Message, StringComparison.Ordinal);
+        }
+
         [Fact]
         public void MultipleSheets()
         {
@@ -333,7 +364,8 @@ namespace ExcelReader.NetFramework.Tests.Writer
             using (ExcelWorkbookWriter fileWriter = ExcelWorkbookWriter.Create(path))
             {
                 Assert.Throws<InvalidOperationException>(() => fileWriter.CloseToArray());
-                Assert.Throws<InvalidOperationException>(() => fileWriter.CloseTo(new MemoryStream()));
+                using MemoryStream stream = new MemoryStream();
+                Assert.Throws<InvalidOperationException>(() => fileWriter.CloseTo(stream));
             }
 
             using ExcelWorkbookWriter memoryWriter = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx);

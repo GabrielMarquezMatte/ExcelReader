@@ -57,16 +57,8 @@ namespace ExcelReader.NetFramework.Writer.Internal
                 return native;
             }
 
-            if (options.DegreeOfParallelism < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(options), options.DegreeOfParallelism, "DegreeOfParallelism cannot be negative.");
-            }
-
-            if (options.BatchRows < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(options), options.BatchRows, "BatchRows cannot be negative.");
-            }
-
+            RequireNotNegative(options.DegreeOfParallelism, nameof(options.DegreeOfParallelism));
+            RequireNotNegative(options.BatchRows, nameof(options.BatchRows));
             native.CsvDelimiter = AsciiOrDefault(options.CsvDelimiter, nameof(options.CsvDelimiter));
             native.CsvQuote = AsciiOrDefault(options.CsvQuote, nameof(options.CsvQuote));
             native.Date1904 = Flag(options.Date1904);
@@ -74,6 +66,14 @@ namespace ExcelReader.NetFramework.Writer.Internal
             native.DegreeOfParallelism = options.DegreeOfParallelism;
             native.BatchRows = options.BatchRows;
             return native;
+        }
+
+        private static void RequireNotNegative(int value, string name)
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(name, value, "The value cannot be negative.");
+            }
         }
 
         private static int Flag(bool? value)

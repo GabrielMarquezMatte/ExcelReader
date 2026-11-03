@@ -9,6 +9,14 @@ namespace ExcelReader.NetFramework.Interop
             return Encoding.UTF8.GetBytes(s);
         }
 
+        internal static byte[] NonNullBytes(string s, out int length)
+        {
+            length = Encoding.UTF8.GetByteCount(s);
+            byte[] bytes = new byte[Math.Max(length, 1)];
+            Encoding.UTF8.GetBytes(s, 0, s.Length, bytes, 0);
+            return bytes;
+        }
+
         internal static unsafe string? Decode(byte* p, int len)
         {
             if (len == 0)
