@@ -34,7 +34,10 @@ namespace ExcelReader.NetFramework.Interop
         internal const int XL_OPT_FALSE = 1;
         internal const int XL_OPT_TRUE = 2;
 
-        internal static int TableSheet(int table) => -2 - table;
+        internal static int TableSheet(int table)
+        {
+            return -2 - table;
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

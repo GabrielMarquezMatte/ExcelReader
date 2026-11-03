@@ -6,7 +6,10 @@ namespace ExcelReader.NetFramework.Interop
     {
         private const string Lib = "ExcelReader.Native.dll";
 
-        static NativeMethods() => NativeLoader.EnsureLoaded();
+        static NativeMethods()
+        {
+            NativeLoader.EnsureLoaded();
+        }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int xl_abi_version();

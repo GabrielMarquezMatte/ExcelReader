@@ -6,17 +6,25 @@ namespace ExcelReader.NetFramework.Interop
     {
         internal static void ThrowIfFailed(int status)
         {
-            if (status == (int)ExcelStatus.Ok) return;
+            if (status == (int)ExcelStatus.Ok)
+            {
+                return;
+            }
+
             throw Create(status);
         }
 
         internal static ExcelReaderException Create(int status)
         {
-            var typed = (ExcelStatus)status;
-            var length = 0;
-            var pointer = NativeMethods.xl_last_error_ptr(&length);
-            var message = pointer == null || length <= 0 ? string.Empty : Encoding.UTF8.GetString(pointer, length);
-            return new ExcelReaderException(typed, message.Length == 0 ? $"Native call failed with status {typed}." : message);
+            ExcelStatus typed = (ExcelStatus)status;
+            int length = 0;
+            byte* pointer = NativeMethods.xl_last_error_ptr(&length);
+            if (pointer is null || length <= 0)
+            {
+                return new ExcelReaderException(typed, $"Native call failed with status {typed}.");
+            }
+
+            return new ExcelReaderException(typed, Encoding.UTF8.GetString(pointer, length));
         }
     }
 }
