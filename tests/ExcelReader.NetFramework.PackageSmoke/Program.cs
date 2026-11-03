@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using ExcelReader.NetFramework;
 
 namespace PackageSmoke
@@ -15,9 +14,9 @@ namespace PackageSmoke
         private static int Main(string[] args)
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(args[0]);
-            List<Row> rows = workbook.Sheet(0).Read<Row>();
-            Console.WriteLine(rows.Count);
-            if (rows.Count != 100)
+            Row[] rows = workbook.Sheet(0).Read<Row>();
+            Console.WriteLine(rows.Length);
+            if (rows.Length != 100)
             {
                 return 1;
             }

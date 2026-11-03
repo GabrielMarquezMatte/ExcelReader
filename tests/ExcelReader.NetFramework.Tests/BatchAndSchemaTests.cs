@@ -11,13 +11,13 @@ namespace ExcelReader.NetFramework.Tests
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
             ExcelSheet sheet = workbook.Sheet(0);
-            List<List<Row>> batches = sheet.ReadBatches<Row>(30).ToList();
-            Assert.Equal(ExpectedBatchSizes, batches.Select(b => b.Count).ToArray());
+            List<Row[]> batches = sheet.ReadBatches<Row>(30).ToList();
+            Assert.Equal(ExpectedBatchSizes, batches.Select(b => b.Length).ToArray());
 
             List<Row> all = batches.SelectMany(b => b).ToList();
-            List<Row> expected = sheet.Read<Row>();
-            Assert.Equal(expected.Count, all.Count);
-            for (int i = 0; i < expected.Count; i++)
+            Row[] expected = sheet.Read<Row>();
+            Assert.Equal(expected.Length, all.Count);
+            for (int i = 0; i < expected.Length; i++)
             {
                 Assert.Equal(expected[i].Coluna1, all[i].Coluna1);
                 Assert.Equal(expected[i].Coluna2, all[i].Coluna2);
@@ -30,9 +30,9 @@ namespace ExcelReader.NetFramework.Tests
         public void BatchLargerThanSheetIsOneBatch()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
-            List<List<Row>> batches = workbook.Sheet(0).ReadBatches<Row>(1000).ToList();
+            List<Row[]> batches = workbook.Sheet(0).ReadBatches<Row>(1000).ToList();
             Assert.Single(batches);
-            Assert.Equal(100, batches[0].Count);
+            Assert.Equal(100, batches[0].Length);
         }
 
         [Fact]
@@ -42,14 +42,14 @@ namespace ExcelReader.NetFramework.Tests
             ExcelSheet sheet = workbook.Sheet(0);
             for (int i = 0; i < 200; i++)
             {
-                foreach (List<Row> batch in sheet.ReadBatches<Row>(10))
+                foreach (Row[] batch in sheet.ReadBatches<Row>(10))
                 {
-                    Assert.Equal(10, batch.Count);
+                    Assert.Equal(10, batch.Length);
                     break;
                 }
             }
 
-            Assert.Equal(100, sheet.Read<Row>().Count);
+            Assert.Equal(100, sheet.Read<Row>().Length);
         }
 
         [Fact]
@@ -58,9 +58,9 @@ namespace ExcelReader.NetFramework.Tests
             ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
             int total = 0;
             bool first = true;
-            foreach (List<Row> batch in workbook.Sheet(0).ReadBatches<Row>(30))
+            foreach (Row[] batch in workbook.Sheet(0).ReadBatches<Row>(30))
             {
-                total += batch.Count;
+                total += batch.Length;
                 if (first)
                 {
                     workbook.Dispose();
@@ -106,7 +106,7 @@ namespace ExcelReader.NetFramework.Tests
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
             ExcelSheet sheet = workbook.Sheet(0);
             sheet.InferSchema();
-            Assert.Equal(100, sheet.Read<Row>().Count);
+            Assert.Equal(100, sheet.Read<Row>().Length);
         }
 
         [Fact]

@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.NetFramework.Interop;
 using ExcelReader.NetFramework.Mapping;
 
@@ -46,9 +45,7 @@ namespace ExcelReader.NetFramework
         /// <returns>One item per data row, in sheet order.</returns>
         /// <exception cref="NotSupportedException">A property of <typeparamref name="T"/> has an unsupported type.</exception>
         /// <exception cref="ExcelReaderException">A required column or value is missing, or a value does not fit its property.</exception>
-        [SuppressMessage("Design", "CA1002", Justification = "The caller owns the result; List<T> is the documented return type.")]
-        [SuppressMessage("Design", "MA0016", Justification = "The caller owns the result; List<T> is the documented return type.")]
-        public unsafe List<T> Read<T>(int headerRow = 1, int degreeOfParallelism = 0)
+        public unsafe T[] Read<T>(int headerRow = 1, int degreeOfParallelism = 0)
             where T : new()
         {
             if (headerRow < 1)
@@ -83,7 +80,7 @@ namespace ExcelReader.NetFramework
                 }
 
                 TableFiller.Fill(bound, in table, items, 0, 0);
-                return new List<T>(items);
+                return items;
             }
             finally
             {
@@ -106,9 +103,7 @@ namespace ExcelReader.NetFramework
         /// <returns>The batches, in sheet order.</returns>
         /// <exception cref="NotSupportedException">A property of <typeparamref name="T"/> has an unsupported type.</exception>
         /// <exception cref="ExcelReaderException">A required column or value is missing, or a value does not fit its property.</exception>
-        [SuppressMessage("Design", "CA1002", Justification = "The caller owns each batch; List<T> is the documented element type.")]
-        [SuppressMessage("Design", "MA0016", Justification = "The caller owns each batch; List<T> is the documented element type.")]
-        public IEnumerable<List<T>> ReadBatches<T>(int batchRows, int headerRow = 1)
+        public IEnumerable<T[]> ReadBatches<T>(int batchRows, int headerRow = 1)
             where T : new()
         {
             if (batchRows < 1)
@@ -169,7 +164,7 @@ namespace ExcelReader.NetFramework
             }
         }
 
-        private IEnumerable<List<T>> ReadBatchesCore<T>(int batchRows, int headerRow)
+        private IEnumerable<T[]> ReadBatchesCore<T>(int batchRows, int headerRow)
             where T : new()
         {
             TypeMap<T> map = TypeMap<T>.Instance;
@@ -183,7 +178,7 @@ namespace ExcelReader.NetFramework
             using TypedReaderHandle reader = TypedReaderHandle.Open(Workbook, Id, specs, headerRow, batchRows);
             while (true)
             {
-                List<T>? batch = reader.Next(bound);
+                T[]? batch = reader.Next(bound);
                 if (batch is null)
                 {
                     yield break;
