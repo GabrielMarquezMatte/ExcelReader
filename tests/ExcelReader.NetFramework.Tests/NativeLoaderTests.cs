@@ -24,7 +24,90 @@ namespace ExcelReader.NetFramework.Tests
         [Fact]
         public void NativeLibraryLoadsAndReportsAbi()
         {
+            NativeLoader.EnsureLoaded();
             Assert.Equal(6, NativeMethods.xl_abi_version());
+        }
+
+        [Fact]
+        public void ProbePathsCoverShadowCopyHosts()
+        {
+            string[] expected =
+            {
+                @"C:\site\x64\ExcelReader.Native.dll",
+                @"C:\site\bin\x64\ExcelReader.Native.dll",
+                @"C:\site\lib\x64\ExcelReader.Native.dll",
+                @"C:\Temp\shadow\ab12\x64\ExcelReader.Native.dll",
+            };
+            IReadOnlyList<string> paths = NativeLoader.ProbePaths(
+                @"C:\site\",
+                "bin; lib;",
+                "file:///C:/Site/Bin/ExcelReader.NetFramework.DLL",
+                @"C:\Temp\shadow\ab12\ExcelReader.NetFramework.dll",
+                true);
+            Assert.Equal(expected, paths);
+        }
+
+        [Fact]
+        public void ProbePathsSkipMissingInputs()
+        {
+            string[] expected = { @"C:\app\x86\ExcelReader.Native.dll" };
+            Assert.Equal(expected, NativeLoader.ProbePaths(@"C:\app\", null, null, string.Empty, false));
+            Assert.Equal(expected, NativeLoader.ProbePaths(@"C:\app\", null, "file:///C:/app/ExcelReader.NetFramework.dll", @"C:\app\ExcelReader.NetFramework.dll", false));
+        }
+
+        [Fact]
+        public void NotFoundMessageListsEveryProbedPath()
+        {
+            string[] probed = { @"C:\one\x64\ExcelReader.Native.dll", @"C:\two\x64\ExcelReader.Native.dll" };
+            PlatformNotSupportedException ex = NativeLoader.NotFound(probed);
+            Assert.Contains(probed[0], ex.Message, StringComparison.Ordinal);
+            Assert.Contains(probed[1], ex.Message, StringComparison.Ordinal);
+            Assert.Contains("PlatformTarget", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void LoadFailureIsCachedAndRethrownWithItsOwnType()
+        {
+            int calls = 0;
+            LoadGuard guard = new LoadGuard(() =>
+            {
+                calls++;
+                throw new PlatformNotSupportedException("no native library");
+            });
+            PlatformNotSupportedException first = Assert.Throws<PlatformNotSupportedException>(guard.Ensure);
+            PlatformNotSupportedException second = Assert.Throws<PlatformNotSupportedException>(guard.Ensure);
+            Assert.Equal("no native library", first.Message);
+            Assert.Equal(first.Message, second.Message);
+            Assert.Equal(1, calls);
+        }
+
+        [Fact]
+        public void ConcurrentCallersLoadOnce()
+        {
+            int calls = 0;
+            LoadGuard guard = new LoadGuard(() =>
+            {
+                Interlocked.Increment(ref calls);
+                Thread.Sleep(50);
+            });
+            using Barrier barrier = new Barrier(8);
+            Thread[] threads = new Thread[8];
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i] = new Thread(() =>
+                {
+                    barrier.SignalAndWait();
+                    guard.Ensure();
+                });
+                threads[i].Start();
+            }
+
+            foreach (Thread thread in threads)
+            {
+                thread.Join();
+            }
+
+            Assert.Equal(1, calls);
         }
 
         [Fact]
@@ -53,6 +136,7 @@ namespace ExcelReader.NetFramework.Tests
         [Fact]
         public void ThrowIfFailedThrowsWithTheStatus()
         {
+            NativeLoader.EnsureLoaded();
             ExcelReaderException ex = Assert.Throws<ExcelReaderException>(() => NativeError.ThrowIfFailed((int)ExcelStatus.InvalidHandle));
             Assert.Equal(ExcelStatus.InvalidHandle, ex.Status);
         }
@@ -60,6 +144,7 @@ namespace ExcelReader.NetFramework.Tests
         [Fact]
         public unsafe void NativeFailureCarriesTheNativeMessage()
         {
+            NativeLoader.EnsureLoaded();
             byte[] path = Encoding.UTF8.GetBytes(Fixtures.Path("missing.xlsx"));
             IntPtr handle = IntPtr.Zero;
             int status;
@@ -78,6 +163,7 @@ namespace ExcelReader.NetFramework.Tests
         [Fact]
         public unsafe void ThrowIfFailedAcceptsARealSuccessfulCall()
         {
+            NativeLoader.EnsureLoaded();
             byte[] path = Encoding.UTF8.GetBytes(Fixtures.Path("RealExcel.xlsx"));
             IntPtr handle = IntPtr.Zero;
             int status;

@@ -4,12 +4,8 @@ namespace ExcelReader.NetFramework.Interop
 {
     internal static unsafe class NativeMethods
     {
+        // Resolves only after NativeLoader.EnsureLoaded has loaded the DLL by absolute path.
         private const string Lib = "ExcelReader.Native.dll";
-
-        static NativeMethods()
-        {
-            NativeLoader.EnsureLoaded();
-        }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int xl_abi_version();

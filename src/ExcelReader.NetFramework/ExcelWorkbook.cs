@@ -147,6 +147,7 @@ namespace ExcelReader.NetFramework
 
         private static ExcelWorkbook OpenNative(byte[]? path, byte[]? data, Stream? stream, ExcelOpenOptions? options)
         {
+            NativeLoader.EnsureLoaded();
             byte[] password = Array.Empty<byte>();
             if (options?.Password is not null)
             {
