@@ -25,7 +25,7 @@ namespace ExcelReader.NetFramework.Mapping
 
         internal bool AllowEmpty { get; }
 
-        internal abstract unsafe void Fill(T[] items, int offset, XlColumn* column);
+        internal abstract unsafe void Fill(T[] items, int offset, int rowBase, XlColumn* column);
     }
 
     internal sealed unsafe class PropertyBinder<T, TValue> : PropertyBinder<T>
@@ -42,7 +42,7 @@ namespace ExcelReader.NetFramework.Mapping
             _set = Expression.Lambda<Action<T, TValue>>(Expression.Assign(Expression.Property(target, property), value), target, value).Compile();
         }
 
-        internal override void Fill(T[] items, int offset, XlColumn* column)
+        internal override void Fill(T[] items, int offset, int rowBase, XlColumn* column)
         {
             int count = checked((int)column->Length);
             int row = 0;
@@ -58,7 +58,7 @@ namespace ExcelReader.NetFramework.Mapping
             }
             catch (OverflowException)
             {
-                throw new ExcelReaderException(ExcelStatus.InvalidArgument, $"The value in data row {offset + row + 1} does not fit property '{PropertyName}' ({typeof(TValue).Name}).");
+                throw new ExcelReaderException(ExcelStatus.InvalidArgument, $"The value in data row {rowBase + row + 1} does not fit property '{PropertyName}' ({typeof(TValue).Name}).");
             }
         }
     }

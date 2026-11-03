@@ -5,6 +5,8 @@ namespace ExcelReader.NetFramework.Interop
 {
     internal sealed unsafe class TypedReaderHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
+        private int _rowsRead;
+
         internal TypedReaderHandle() : base(true)
         {
         }
@@ -52,7 +54,8 @@ namespace ExcelReader.NetFramework.Interop
                     items[i] = new T();
                 }
 
-                TableFiller.Fill(bound, in table, items, 0);
+                TableFiller.Fill(bound, in table, items, 0, _rowsRead);
+                _rowsRead = checked(_rowsRead + items.Length);
                 return new List<T>(items);
             }
             finally
