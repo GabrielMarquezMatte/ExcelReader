@@ -80,7 +80,11 @@ namespace ExcelReader.Core.Writer.Xlsx
         internal bool UseSharedStrings => _owner.UseSharedStrings;
 
         internal bool Date1904 => _owner.Date1904;
-        internal int DateStyle(int styleId) => _owner.DateStyle(styleId);
+        internal int DateStyle(int styleId)
+        {
+            return _owner.DateStyle(styleId);
+        }
+
         internal bool ResourcesReleased => _stream is null && _rowBuffer.IsReleased;
 
         internal int GetSharedStringIndex(string value)
