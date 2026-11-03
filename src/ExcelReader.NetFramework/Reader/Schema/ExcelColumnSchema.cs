@@ -1,5 +1,3 @@
-using ExcelReader.NetFramework.Parser.Internal;
-
 namespace ExcelReader.NetFramework.Reader.Schema
 {
     /// <summary>One column of an inferred schema.</summary>

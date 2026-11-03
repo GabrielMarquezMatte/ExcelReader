@@ -1,5 +1,3 @@
-using ExcelReader.NetFramework.Parser.Internal;
-
 namespace ExcelReader.NetFramework.Reader
 {
     /// <summary>The file format of a workbook.</summary>

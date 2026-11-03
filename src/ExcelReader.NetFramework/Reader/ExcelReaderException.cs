@@ -1,5 +1,4 @@
 using System.Runtime.Serialization;
-using ExcelReader.NetFramework.Parser.Internal;
 
 namespace ExcelReader.NetFramework.Reader
 {

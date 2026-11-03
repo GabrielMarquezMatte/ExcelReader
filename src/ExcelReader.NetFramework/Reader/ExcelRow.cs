@@ -1,5 +1,3 @@
-using ExcelReader.NetFramework.Parser.Internal;
-
 namespace ExcelReader.NetFramework.Reader
 {
     /// <summary>A raw row: the non-empty cells the native reader reported.</summary>

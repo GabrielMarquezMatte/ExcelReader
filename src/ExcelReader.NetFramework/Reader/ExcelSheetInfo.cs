@@ -1,5 +1,3 @@
-using ExcelReader.NetFramework.Parser.Internal;
-
 namespace ExcelReader.NetFramework.Reader
 {
     /// <summary>The name and position of a sheet.</summary>
