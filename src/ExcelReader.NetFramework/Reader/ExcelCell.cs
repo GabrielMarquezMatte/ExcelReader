@@ -1,5 +1,3 @@
-using ExcelReader.NetFramework.Parser.Internal;
-
 namespace ExcelReader.NetFramework.Reader
 {
     /// <summary>A raw cell of a row.</summary>

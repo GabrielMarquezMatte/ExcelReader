@@ -1,5 +1,3 @@
-using ExcelReader.NetFramework.Parser.Internal;
-
 namespace ExcelReader.NetFramework.Reader
 {
     /// <summary>Options for opening a workbook. A null value keeps the native default.</summary>

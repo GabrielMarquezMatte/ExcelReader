@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using ExcelReader.NetFramework.Parser.Internal;
 
 namespace ExcelReader.NetFramework.Reader.Schema
 {

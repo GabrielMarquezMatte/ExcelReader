@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using ExcelReader.NetFramework.Interop;
-using ExcelReader.NetFramework.Parser.Internal;
 
 namespace ExcelReader.NetFramework.Reader
 {

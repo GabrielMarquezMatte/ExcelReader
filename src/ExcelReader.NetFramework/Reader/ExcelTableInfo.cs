@@ -1,5 +1,3 @@
-using ExcelReader.NetFramework.Parser.Internal;
-
 namespace ExcelReader.NetFramework.Reader
 {
     /// <summary>The name and range of an Excel table. Rows and columns are zero-based and include the header and totals rows.</summary>
