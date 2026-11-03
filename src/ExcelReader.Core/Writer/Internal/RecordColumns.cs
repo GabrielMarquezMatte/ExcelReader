@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Writer.Internal
                 Type core = underlying ?? pt;
                 // char is left out: its UTF-8 TryFormat throws on a lone surrogate.
                 if (!core.IsValueType || core.Assembly != typeof(object).Assembly || core == typeof(char)
-                    ||!typeof(IUtf8SpanFormattable).IsAssignableFrom(core) || !typeof(IFormattable).IsAssignableFrom(core))
+                    || !typeof(IUtf8SpanFormattable).IsAssignableFrom(core) || !typeof(IFormattable).IsAssignableFrom(core))
                 {
                     return null;
                 }
