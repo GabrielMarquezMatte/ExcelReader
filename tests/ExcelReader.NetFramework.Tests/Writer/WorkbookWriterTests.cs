@@ -148,6 +148,16 @@ namespace ExcelReader.NetFramework.Tests.Writer
         }
 
         [Fact]
+        public void CloseToReadOnlyStreamThrowsAndKeepsWriterUsable()
+        {
+            using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx);
+            writer.WriteSheet("S", new List<WriteRow> { new WriteRow { Name = "a", When = new DateTime(2026, 1, 1) } });
+            using MemoryStream readOnly = new MemoryStream(Array.Empty<byte>(), false);
+            Assert.Throws<ArgumentException>(() => writer.CloseTo(readOnly));
+            Assert.NotEmpty(writer.CloseToArray());
+        }
+
+        [Fact]
         public void CloseToStreamMatchesCloseToArrayAndLeavesStreamOpen()
         {
             byte[] array;

@@ -51,6 +51,11 @@ namespace ExcelReader.NetFramework.Writer.Internal
         internal static string? PasswordFor(ExcelFormat format, ExcelWriteOptions? options)
         {
             string? password = options?.Password;
+            if (password is not null && password.Length == 0)
+            {
+                throw EmptyPassword(nameof(options.Password));
+            }
+
             if (password is not null && format != ExcelFormat.Xlsx && format != ExcelFormat.Xlsb)
             {
                 throw new NotSupportedException("A password can encrypt XLSX and XLSB output only.");
@@ -77,6 +82,11 @@ namespace ExcelReader.NetFramework.Writer.Internal
             native.DegreeOfParallelism = options.DegreeOfParallelism;
             native.BatchRows = options.BatchRows;
             return native;
+        }
+
+        private static ArgumentException EmptyPassword(string name)
+        {
+            return new ArgumentException("The password cannot be empty.", name);
         }
 
         private static void RequireNotNegative(int value, string name)
