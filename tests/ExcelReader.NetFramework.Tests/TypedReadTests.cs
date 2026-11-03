@@ -179,6 +179,31 @@ namespace ExcelReader.NetFramework.Tests
         }
 
         [Fact]
+        public void GetOnlyRequiredPropertyThrows()
+        {
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => workbook.Sheet(0).Read<GetOnlyRequired>());
+            Assert.Contains(nameof(GetOnlyRequired) + "." + nameof(GetOnlyRequired.Coluna1), error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void GetOnlyColumnPropertyThrows()
+        {
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => workbook.Sheet(0).Read<GetOnlyColumn>());
+            Assert.Contains(nameof(GetOnlyColumn) + "." + nameof(GetOnlyColumn.Value), error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void PlainGetOnlyPropertyIsIgnored()
+        {
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
+            GetOnlyPlain[] rows = workbook.Sheet(0).Read<GetOnlyPlain>();
+            Assert.Equal("Valor1", rows[0].Coluna1);
+            Assert.Null(rows[0].Coluna2);
+        }
+
+        [Fact]
         public void TableReadUsesTableRange()
         {
             using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("tables", "tables.xlsx"));
@@ -339,6 +364,25 @@ namespace ExcelReader.NetFramework.Tests
             public Guid Id { get; set; }
 
             public string? Coluna1 { get; set; }
+        }
+
+        public sealed class GetOnlyRequired
+        {
+            [ExcelRequired]
+            public string? Coluna1 { get; }
+        }
+
+        public sealed class GetOnlyColumn
+        {
+            [ExcelColumn("Coluna1")]
+            public string? Value { get; }
+        }
+
+        public sealed class GetOnlyPlain
+        {
+            public string? Coluna1 { get; set; }
+
+            public string? Coluna2 { get; }
         }
 
         public sealed class ProductOnly

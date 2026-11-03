@@ -1,8 +1,13 @@
+using System.Runtime.Serialization;
+
 namespace ExcelReader.NetFramework
 {
     /// <summary>A native call failed.</summary>
+    [Serializable]
     public sealed class ExcelReaderException : Exception
     {
+        private const string StatusKey = "Status";
+
         /// <summary>The native status code that caused the failure.</summary>
         public ExcelStatus Status { get; }
 
@@ -31,6 +36,18 @@ namespace ExcelReader.NetFramework
         public ExcelReaderException(ExcelStatus status, string message) : base(message)
         {
             Status = status;
+        }
+
+        private ExcelReaderException(SerializationInfo info, StreamingContext context) : base(info, context)
+        {
+            Status = (ExcelStatus)info.GetInt32(StatusKey);
+        }
+
+        /// <inheritdoc />
+        public override void GetObjectData(SerializationInfo info, StreamingContext context)
+        {
+            base.GetObjectData(info, context);
+            info.AddValue(StatusKey, (int)Status);
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Text;
 using ExcelReader.NetFramework.Interop;
 
 namespace ExcelReader.NetFramework.Tests
@@ -34,12 +35,14 @@ namespace ExcelReader.NetFramework.Tests
         }
 
         [Fact]
-        public void HeaderReaderTrimsAndIgnoresCase()
+        public void HeaderReaderTrimsIgnoresCaseAndKeepsFirstOccurrence()
         {
-            using ExcelWorkbook workbook = ExcelWorkbook.Open(Fixtures.Path("RealExcel.xlsx"));
+            byte[] csv = Encoding.UTF8.GetBytes(" Name ,name,Qty\r\na,b,1\r\n");
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(csv, new ExcelOpenOptions { Format = ExcelFormat.Csv });
             Dictionary<string, int> header = HeaderReader.Read(workbook.Sheet(0), 1);
-            Assert.True(header.ContainsKey("coluna1"));
-            Assert.Equal(header["Coluna1"], header["coluna1"]);
+            Assert.Equal(2, header.Count);
+            Assert.Equal(0, header["name"]);
+            Assert.Equal(2, header["QTY"]);
         }
 
         [Fact]

@@ -5,6 +5,7 @@ ExcelReader.NetFramework.ExcelReaderException.ExcelReaderException(ExcelReader.N
 ExcelReader.NetFramework.ExcelReaderException.ExcelReaderException(string! message) -> void
 ExcelReader.NetFramework.ExcelReaderException.ExcelReaderException(string! message, System.Exception! innerException) -> void
 ExcelReader.NetFramework.ExcelReaderException.Status.get -> ExcelReader.NetFramework.ExcelStatus
+override ExcelReader.NetFramework.ExcelReaderException.GetObjectData(System.Runtime.Serialization.SerializationInfo! info, System.Runtime.Serialization.StreamingContext context) -> void
 ExcelReader.NetFramework.ExcelStatus
 ExcelReader.NetFramework.ExcelStatus.BufferTooSmall = -2 -> ExcelReader.NetFramework.ExcelStatus
 ExcelReader.NetFramework.ExcelStatus.Eof = -1 -> ExcelReader.NetFramework.ExcelStatus
