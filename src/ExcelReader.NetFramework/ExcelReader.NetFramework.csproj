@@ -43,7 +43,7 @@
   <ItemGroup>
     <None Update="README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
-    <None Include="$(ExcelReaderNativeDll)" Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
+    <None Include="$(ExcelReaderNativeDll)" Condition="Exists('$(ExcelReaderNativeDll)')" Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
     <None Include="build\ExcelReader.NET.Framework.targets" Pack="true" PackagePath="build/net472/;buildTransitive/net472/" />
   </ItemGroup>
 

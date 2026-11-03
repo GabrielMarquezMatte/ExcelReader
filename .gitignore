@@ -517,4 +517,5 @@ tests/ExcelReader.NetFramework.PackageSmoke/feed/
 tests/ExcelReader.NetFramework.PackageSmoke/packages/
 tests/ExcelReader.NetFramework.PackageSmoke/bin/
 tests/ExcelReader.NetFramework.PackageSmoke/obj/
+tests/ExcelReader.NetFramework.PackageSmoke/nuget-cache/
 !src/ExcelReader.NetFramework/build/

@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="$(ExcelReaderNativeDll)" Link="x64\ExcelReader.Native.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(ExcelReaderNativeDll)" Condition="Exists('$(ExcelReaderNativeDll)')" Link="x64\ExcelReader.Native.dll" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\RealExcel.xlsx" Link="data\RealExcel.xlsx" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\RealExcel.xlsb" Link="data\RealExcel.xlsb" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\ExcelReader.Tests\data\tables\*.*" Link="data\tables\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
