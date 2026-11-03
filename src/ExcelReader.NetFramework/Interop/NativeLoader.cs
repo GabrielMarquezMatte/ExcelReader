@@ -104,7 +104,7 @@ namespace ExcelReader.NetFramework.Interop
         {
             Assembly assembly = typeof(NativeLoader).Assembly;
             AppDomain domain = AppDomain.CurrentDomain;
-            IReadOnlyList<string> probed = ProbePaths(domain.BaseDirectory, domain.RelativeSearchPath, assembly.CodeBase, assembly.Location, Environment.Is64BitProcess);
+            IReadOnlyList<string> probed = ProbePaths(domain.BaseDirectory, domain.RelativeSearchPath, assembly.EscapedCodeBase, assembly.Location, Environment.Is64BitProcess);
             string? found = probed.FirstOrDefault(File.Exists);
             if (found is null)
             {
