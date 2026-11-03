@@ -37,14 +37,19 @@ namespace ExcelReader.NetFramework
         /// <summary>
         /// Reads every data row into a new <typeparamref name="T"/>, matching public settable properties to header
         /// columns by <see cref="ExcelColumnAttribute"/> names or the property name. Properties whose column is
-        /// absent, and cells that are empty or do not convert, keep the default value.
+        /// absent, and cells that are empty or do not convert, keep the default value. Decimal properties are read
+        /// through a double, so digits beyond about 15 significant figures are lost.
         /// </summary>
         /// <typeparam name="T">A class with a public parameterless constructor.</typeparam>
         /// <param name="headerRow">The 1-based row holding the column headers; data starts on the next row.</param>
         /// <param name="degreeOfParallelism">The number of threads to parse with; 0 uses the processor count.</param>
         /// <returns>One item per data row, in sheet order.</returns>
         /// <exception cref="NotSupportedException">A property of <typeparamref name="T"/> has an unsupported type.</exception>
-        /// <exception cref="ExcelReaderException">A required column or value is missing, or a value does not fit its property.</exception>
+        /// <exception cref="InvalidOperationException">A property with <see cref="ExcelRequiredAttribute"/> or <see cref="ExcelColumnAttribute"/> has no public setter.</exception>
+        /// <exception cref="ExcelReaderException">
+        /// No property of <typeparamref name="T"/> matches a header column, a required column or value is missing, or a
+        /// value does not fit its property.
+        /// </exception>
         public unsafe T[] Read<T>(int headerRow = 1, int degreeOfParallelism = 0)
             where T : new()
         {
@@ -102,7 +107,11 @@ namespace ExcelReader.NetFramework
         /// <param name="headerRow">The 1-based row holding the column headers; data starts on the next row.</param>
         /// <returns>The batches, in sheet order.</returns>
         /// <exception cref="NotSupportedException">A property of <typeparamref name="T"/> has an unsupported type.</exception>
-        /// <exception cref="ExcelReaderException">A required column or value is missing, or a value does not fit its property.</exception>
+        /// <exception cref="InvalidOperationException">A property with <see cref="ExcelRequiredAttribute"/> or <see cref="ExcelColumnAttribute"/> has no public setter.</exception>
+        /// <exception cref="ExcelReaderException">
+        /// No property of <typeparamref name="T"/> matches a header column, a required column or value is missing, or a
+        /// value does not fit its property.
+        /// </exception>
         public IEnumerable<T[]> ReadBatches<T>(int batchRows, int headerRow = 1)
             where T : new()
         {
@@ -148,7 +157,12 @@ namespace ExcelReader.NetFramework
                 for (int i = 0; i < schema.ColumnCount; i++)
                 {
                     XlColumnSpec spec = schema.Columns[i];
-                    string? name = spec.NameCount > 0 ? Utf8.Decode(spec.Names[0], spec.NameLens[0]) : null;
+                    string? name = null;
+                    if (spec.NameCount > 0)
+                    {
+                        name = Utf8.Decode(spec.Names[0], spec.NameLens[0]);
+                    }
+
                     columns.Add(new ExcelColumnSchema(name, (ExcelColumnType)spec.Type, spec.Nullable != 0));
                 }
 

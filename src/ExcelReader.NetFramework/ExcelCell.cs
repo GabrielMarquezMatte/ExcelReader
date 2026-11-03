@@ -16,7 +16,10 @@ namespace ExcelReader.NetFramework
         /// <summary>The kind of value the cell holds.</summary>
         public ExcelCellType Type { get; }
 
-        /// <summary>The cell text, or null when the cell is empty.</summary>
+        /// <summary>
+        /// The cell text, or null when the cell is empty. For a <see cref="ExcelCellType.Date"/> cell it is the Excel
+        /// serial number, counted in the workbook's date system (see <see cref="ExcelWorkbook.IsDate1904"/>).
+        /// </summary>
         public string? Text { get; }
 
         /// <summary>Compares two cells for equality.</summary>
