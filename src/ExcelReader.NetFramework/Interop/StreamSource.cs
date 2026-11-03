@@ -51,6 +51,11 @@ namespace ExcelReader.NetFramework.Interop
                 StreamSource source = (StreamSource)GCHandle.FromIntPtr(userData).Target!;
                 int count = (int)Math.Min(length, source._buffer.Length);
                 int read = source._stream.Read(source._buffer, 0, count);
+                if (read < 0 || read > count)
+                {
+                    throw new InvalidDataException($"{source._stream.GetType().Name}.Read returned {read} for a request of {count} bytes.");
+                }
+
                 Marshal.Copy(source._buffer, 0, (IntPtr)buffer, read);
                 return read;
             }
@@ -61,10 +66,18 @@ namespace ExcelReader.NetFramework.Interop
             }
         }
 
+        [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+            Justification = "An exception must not cross the native callback boundary.")]
         private static void Release(IntPtr userData)
         {
-            GCHandle.FromIntPtr(userData).Free();
             Interlocked.Increment(ref _releaseCount);
+            try
+            {
+                GCHandle.FromIntPtr(userData).Free();
+            }
+            catch (Exception)
+            {
+            }
         }
 
         [SuppressMessage("Design", "CA1031:Do not catch general exception types",
