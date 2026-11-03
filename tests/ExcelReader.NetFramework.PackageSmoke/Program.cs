@@ -1,6 +1,7 @@
 using System;
 using ExcelReader.NetFramework.Parser;
 using ExcelReader.NetFramework.Reader;
+using ExcelReader.NetFramework.Writer;
 
 namespace PackageSmoke
 {
@@ -22,7 +23,17 @@ namespace PackageSmoke
                 return 1;
             }
 
-            return rows[0].Coluna1 == "Valor1" ? 0 : 2;
+            if (rows[0].Coluna1 != "Valor1")
+            {
+                return 2;
+            }
+
+            using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx);
+            writer.WriteSheet("Copy", rows);
+            byte[] bytes = writer.CloseToArray();
+            using ExcelWorkbook copy = ExcelWorkbook.Open(bytes);
+            Row[] copied = copy.Sheet("Copy").Read<Row>();
+            return copied.Length == 100 && copied[0].Coluna1 == "Valor1" ? 0 : 3;
         }
     }
 }

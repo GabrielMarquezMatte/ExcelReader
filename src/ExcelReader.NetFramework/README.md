@@ -96,6 +96,66 @@ throws `InvalidOperationException`.
 Each value type also works as `Nullable<T>` (`int?`, `DateTime?`, ...), which stays `null` for an empty
 cell. Any other type, including enums and structs, throws `NotSupportedException`.
 
+## Write
+
+```csharp
+using ExcelReader.NetFramework.Reader;
+using ExcelReader.NetFramework.Writer;
+
+// Typed: a list becomes a sheet. The format comes from the extension.
+using (ExcelWorkbookWriter writer = ExcelWorkbookWriter.Create(@"\\server\share\sales.xlsx"))
+{
+    writer.WriteSheet("Sales", sales, new ExcelTableOptions { Name = "Sales" });
+    writer.Close();
+}
+
+// Download: build in memory, copy to the response
+using (ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx))
+{
+    writer.WriteSheet("Sales", sales);
+    writer.CloseTo(Response.OutputStream);   // or byte[] file = writer.CloseToArray();
+}
+
+// Cell by cell, mixed with a typed sheet
+using (ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx))
+{
+    writer.StartSheet("Summary");
+    writer.StartRow();
+    writer.Write("Total");
+    writer.Write(1234.5);
+    writer.EndRow();
+    writer.EndSheet();
+
+    writer.WriteSheet("Sales", sales);
+
+    byte[] file = writer.CloseToArray();
+}
+```
+
+`Create(path, options)` picks the format from `.xlsx`, `.xlsb`, `.xls` or `.csv` (or
+`ExcelWriteOptions.Format`); `CreateInMemory(format, options)` writes to memory. `Close()` finishes a path
+writer; `CloseToArray()` and `CloseTo(Stream)` finish an in-memory one and do not close the stream.
+`Abort()` discards everything. **`Dispose` without `Close` also discards the output**: no file appears at
+a new path and an existing file is left intact, so an exception mid-generation never leaves a half-written
+workbook.
+
+Cell methods: `Write(string)`, `Write(long)`, `Write(double)`, `Write(decimal)`, `Write(bool)`,
+`WriteDate`, `WriteTime`, `WriteDateTime` and `WriteEmpty`. `int`, `short` and `byte` go through
+`Write(long)`. `WriteSheet<T>` is only valid between sheets, not while one is open.
+
+`WriteSheet<T>` maps the same property types as reading (see above), with the same notes. The header is
+the first `[ExcelColumn]` name or the property name, `[ExcelIgnore]` properties are skipped, and columns
+follow declaration order, base class first. A `null` writes a blank cell. `DateTime` writes date and
+time, so a date-only column shows `00:00`. `TimeSpan` must be within `[0, 24h)`.
+
+- CSV cannot tell an empty string from `null`: both write an empty field. XLSX, XLSB and XLS keep `""`
+  as an empty string cell, distinct from `null` (no cell). CSV has no sheet names; read one back with
+  `Sheet(0)`.
+- `ExcelTableOptions` (Excel tables) and `ExcelWriteOptions.Password` need XLSX or XLSB; other formats
+  throw `NotSupportedException`. A path writer with a password builds in memory and writes the encrypted
+  bytes on `Close`.
+- No cell formatting, formulas or charts.
+
 ## Threading
 
 Calls on one `ExcelWorkbook` can run on several threads at once, and `Read<T>` itself parses on
