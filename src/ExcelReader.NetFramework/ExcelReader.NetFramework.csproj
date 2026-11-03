@@ -41,9 +41,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Update="README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(ExcelReaderNativeDll)" Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
+    <None Include="build\ExcelReader.NET.Framework.targets" Pack="true" PackagePath="build/net472/;buildTransitive/net472/" />
   </ItemGroup>
+
+  <Target Name="RequireNativeDll" BeforeTargets="GenerateNuspec" Condition="!Exists('$(ExcelReaderNativeDll)')">
+    <Error Text="The native library '$(ExcelReaderNativeDll)' does not exist. Run 'python python/scripts/build_native.py' or pass -p:ExcelReaderNativeDll=&lt;path&gt;." />
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.NetFramework.Tests" />
