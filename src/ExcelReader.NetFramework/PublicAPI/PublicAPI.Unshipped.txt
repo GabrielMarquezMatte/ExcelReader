@@ -154,3 +154,20 @@ ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteEmpty() -> void
 ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteTime(System.TimeSpan value) -> void
 static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Create(string! path, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
 static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CreateInMemory(ExcelReader.NetFramework.Reader.ExcelFormat format, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteSheet<T>(string! name, System.Collections.Generic.IEnumerable<T>! rows, ExcelReader.NetFramework.Writer.ExcelTableOptions? table = null) -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ExcelTableOptions() -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeFirstColumn.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeFirstColumn.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeLastColumn.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeLastColumn.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Name.get -> string!
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Name.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.NoStyle.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.NoStyle.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowColumnStripes.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowColumnStripes.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowRowStripes.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowRowStripes.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Style.get -> string?
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Style.set -> void
