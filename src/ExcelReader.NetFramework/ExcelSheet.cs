@@ -95,6 +95,104 @@ namespace ExcelReader.NetFramework
             }
         }
 
+        /// <summary>
+        /// Lazily reads the data rows into batches of at most <paramref name="batchRows"/> items of <typeparamref name="T"/>,
+        /// with the same column matching as <see cref="Read{T}"/>. The native reader opens on the first batch and closes
+        /// when the enumeration ends or is disposed.
+        /// </summary>
+        /// <typeparam name="T">A class with a public parameterless constructor.</typeparam>
+        /// <param name="batchRows">The maximum number of rows per batch; at least 1.</param>
+        /// <param name="headerRow">The 1-based row holding the column headers; data starts on the next row.</param>
+        /// <returns>The batches, in sheet order.</returns>
+        /// <exception cref="NotSupportedException">A property of <typeparamref name="T"/> has an unsupported type.</exception>
+        /// <exception cref="ExcelReaderException">A required column or value is missing, or a value does not fit its property.</exception>
+        [SuppressMessage("Design", "CA1002", Justification = "The caller owns each batch; List<T> is the documented element type.")]
+        [SuppressMessage("Design", "MA0016", Justification = "The caller owns each batch; List<T> is the documented element type.")]
+        public IEnumerable<List<T>> ReadBatches<T>(int batchRows, int headerRow = 1)
+            where T : new()
+        {
+            if (batchRows < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(batchRows), batchRows, "A batch needs at least one row.");
+            }
+
+            if (headerRow < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(headerRow), headerRow, "Typed reads match columns by name and need a header row of 1 or more.");
+            }
+
+            return ReadBatchesCore<T>(batchRows, headerRow);
+        }
+
+        /// <summary>Infers the type and nullability of each column from the first rows of the sheet.</summary>
+        /// <param name="headerRow">The 1-based row holding the column headers; 0 when the sheet has none.</param>
+        /// <param name="sampleRows">The number of data rows to sample; at least 1.</param>
+        /// <param name="parseText">True to also infer numbers, booleans and dates from text cells.</param>
+        /// <returns>One entry per column, in column order.</returns>
+        public unsafe IReadOnlyList<ExcelColumnSchema> InferSchema(int headerRow = 1, int sampleRows = 1000, bool parseText = false)
+        {
+            if (headerRow < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(headerRow), headerRow, "Use 0 for no header row or the 1-based header row.");
+            }
+
+            if (sampleRows < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(sampleRows), sampleRows, "Sample at least one row.");
+            }
+
+            WorkbookHandle handle = Workbook.Handle;
+            bool added = false;
+            XlInferredSchema schema = default;
+            try
+            {
+                handle.DangerousAddRef(ref added);
+                int flags = parseText ? Xl.XL_INFER_PARSE_TEXT : 0;
+                NativeError.ThrowIfFailed(NativeMethods.xl_infer_schema(handle.DangerousGetHandle(), Id, headerRow, sampleRows, flags, &schema));
+                List<ExcelColumnSchema> columns = new List<ExcelColumnSchema>(schema.ColumnCount);
+                for (int i = 0; i < schema.ColumnCount; i++)
+                {
+                    XlColumnSpec spec = schema.Columns[i];
+                    string? name = spec.NameCount > 0 ? Utf8.Decode(spec.Names[0], spec.NameLens[0]) : null;
+                    columns.Add(new ExcelColumnSchema(name, (ExcelColumnType)spec.Type, spec.Nullable != 0));
+                }
+
+                return columns;
+            }
+            finally
+            {
+                NativeMethods.xl_free_schema(&schema);
+                if (added)
+                {
+                    handle.DangerousRelease();
+                }
+            }
+        }
+
+        private IEnumerable<List<T>> ReadBatchesCore<T>(int batchRows, int headerRow)
+            where T : new()
+        {
+            TypeMap<T> map = TypeMap<T>.Instance;
+            Dictionary<string, int> header = HeaderReader.Read(this, headerRow);
+            using NativeSpecs specs = NativeSpecs.Create(map, header, out PropertyBinder<T>[] bound);
+            if (bound.Length == 0)
+            {
+                throw new ExcelReaderException(ExcelStatus.InvalidArgument, $"None of the columns of '{typeof(T).Name}' is in header row {headerRow}.");
+            }
+
+            using TypedReaderHandle reader = TypedReaderHandle.Open(Workbook, Id, specs, headerRow, batchRows);
+            while (true)
+            {
+                List<T>? batch = reader.Next(bound);
+                if (batch is null)
+                {
+                    yield break;
+                }
+
+                yield return batch;
+            }
+        }
+
         /// <summary>Compares two sheets for equality.</summary>
         /// <param name="left">The first sheet.</param>
         /// <param name="right">The second sheet.</param>

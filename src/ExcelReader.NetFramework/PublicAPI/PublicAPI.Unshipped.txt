@@ -100,3 +100,17 @@ ExcelReader.NetFramework.ExcelRequiredAttribute.AllowEmpty.get -> bool
 ExcelReader.NetFramework.ExcelRequiredAttribute.AllowEmpty.set -> void
 ExcelReader.NetFramework.ExcelRequiredAttribute.ExcelRequiredAttribute() -> void
 ExcelReader.NetFramework.ExcelSheet.Read<T>(int headerRow = 1, int degreeOfParallelism = 0) -> System.Collections.Generic.List<T>!
+ExcelReader.NetFramework.ExcelColumnSchema
+ExcelReader.NetFramework.ExcelColumnSchema.Name.get -> string?
+ExcelReader.NetFramework.ExcelColumnSchema.Nullable.get -> bool
+ExcelReader.NetFramework.ExcelColumnSchema.Type.get -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType.Bool = 3 -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType.Date = 4 -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType.Double = 2 -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType.Int64 = 1 -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType.String = 0 -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType.Time = 5 -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelColumnType.Timestamp = 6 -> ExcelReader.NetFramework.ExcelColumnType
+ExcelReader.NetFramework.ExcelSheet.InferSchema(int headerRow = 1, int sampleRows = 1000, bool parseText = false) -> System.Collections.Generic.IReadOnlyList<ExcelReader.NetFramework.ExcelColumnSchema!>!
+ExcelReader.NetFramework.ExcelSheet.ReadBatches<T>(int batchRows, int headerRow = 1) -> System.Collections.Generic.IEnumerable<System.Collections.Generic.List<T>!>!
