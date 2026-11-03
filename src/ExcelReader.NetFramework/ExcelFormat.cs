@@ -15,7 +15,10 @@ namespace ExcelReader.NetFramework
         /// <summary>Binary Office Open XML workbook.</summary>
         Xlsb = 3,
 
-        /// <summary>Delimited text. Never detected, it must be requested.</summary>
+        /// <summary>
+        /// Delimited text. <see cref="Auto"/> never picks it for a path or bytes, so request it there; for a stream,
+        /// <see cref="Auto"/> reads anything without a ZIP or OLE2 signature as CSV.
+        /// </summary>
         Csv = 4,
     }
 }

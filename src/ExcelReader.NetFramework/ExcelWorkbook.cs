@@ -94,8 +94,10 @@ namespace ExcelReader.NetFramework
         }
 
         /// <summary>
-        /// Opens a workbook from a stream. The workbook does not own the stream: the native library stops using it
-        /// once the workbook is open, except for CSV, which reads it until the workbook is disposed.
+        /// Opens a workbook from a stream. The workbook does not own the stream. An XLSX, XLSB or XLS stream is read
+        /// whole into memory while the workbook opens, and the stream is not used afterwards. A CSV stream is read
+        /// lazily until the workbook is disposed, so only one row cursor can read it at a time. With
+        /// <see cref="ExcelFormat.Auto"/>, a stream without a ZIP or OLE2 signature is read as CSV.
         /// </summary>
         /// <param name="stream">A readable stream positioned at the start of the workbook.</param>
         /// <param name="options">The open options, or null for the defaults.</param>

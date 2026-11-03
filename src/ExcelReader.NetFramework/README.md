@@ -8,13 +8,18 @@ the ExcelReader NativeAOT library, with no managed package dependencies and no O
     Install-Package ExcelReader.NET.Framework
 
 or `dotnet add package ExcelReader.NET.Framework`. The package copies `ExcelReader.Native.dll` into an
-`x64` folder next to your executable at build time (also on publish). The library looks for it in
-`<application directory>\x64\`, then beside `ExcelReader.NetFramework.dll`.
+`x64` folder of the build output. On first use the library looks for `x64\ExcelReader.Native.dll`
+under each of these folders, in order:
+
+1. the application base directory (`AppDomain.BaseDirectory`);
+2. each private bin path (`AppDomain.RelativeSearchPath`, e.g. `bin` for an ASP.NET site);
+3. the original folder of `ExcelReader.NetFramework.dll` (`Assembly.CodeBase`, before shadow copying);
+4. the folder `ExcelReader.NetFramework.dll` was loaded from (`Assembly.Location`).
 
 ## x64 process required in this version
 
 Only the x64 native library ships in this version. A 32-bit process fails on first use with a
-`PlatformNotSupportedException` that names the folder it expected. Make sure the process is 64-bit:
+`PlatformNotSupportedException` that lists every path it probed. Make sure the process is 64-bit:
 
 ```xml
 <PropertyGroup>
@@ -34,7 +39,7 @@ public sealed class Invoice
 {
     [ExcelColumn("Invoice No")]
     [ExcelRequired]
-    public string? Number { get; set; }
+    public string Number { get; set; }
 
     public DateTime? Issued { get; set; }
 
@@ -70,7 +75,9 @@ property is `[ExcelRequired]`.
 | `[ExcelRequired(AllowEmpty = true)]` | Only the column's presence is required. |
 | `[ExcelIgnore]` | The property is not read. |
 
-Only public properties with a setter are considered, on a class with a public parameterless constructor.
+Only public properties with a setter are read, on a class with a public parameterless constructor. A
+property without a setter is skipped, unless it has `[ExcelColumn]` or `[ExcelRequired]`: then the read
+throws `InvalidOperationException`.
 
 ## Supported property types
 
@@ -78,7 +85,7 @@ Only public properties with a setter are considered, on a class with a public pa
 |---|---|
 | `string` | Cell text. |
 | `long`, `int`, `short`, `byte` | Whole numbers; a value outside the type's range throws. |
-| `double`, `float`, `decimal` | Numbers (`decimal` is converted from the double the native reader produces). |
+| `double`, `float`, `decimal` | Numbers. `decimal` is converted from the double the native reader produces, so digits beyond about 15 significant figures are lost. |
 | `bool` | Boolean cells. |
 | `DateTime` | Date and date-time cells. |
 | `TimeSpan` | Time-of-day cells. |
@@ -90,8 +97,9 @@ cell. Any other type, including enums and structs, throws `NotSupportedException
 
 Calls on one `ExcelWorkbook` can run on several threads at once, and `Read<T>` itself parses on
 several threads (`degreeOfParallelism`, default: every processor). A single `ReadRows()` or
-`ReadBatches<T>()` enumeration belongs to one thread at a time. Dispose the workbook when you are done;
-enumerations already running keep the native data they need alive until they finish.
+`ReadBatches<T>()` enumeration belongs to one thread at a time. A CSV opened from a `Stream` is read as
+it arrives, so it allows one row cursor at a time. Dispose the workbook when you are done; enumerations
+already running keep the native data they need alive until they finish.
 
 ## More
 

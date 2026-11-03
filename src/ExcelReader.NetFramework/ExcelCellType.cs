@@ -15,7 +15,10 @@ namespace ExcelReader.NetFramework
         /// <summary>A number.</summary>
         Number = 2,
 
-        /// <summary>A date or time.</summary>
+        /// <summary>
+        /// A date or time. The cell text is the Excel serial number in the workbook's date system
+        /// (see <see cref="ExcelWorkbook.IsDate1904"/>).
+        /// </summary>
         Date = 3,
 
         /// <summary>A boolean.</summary>
