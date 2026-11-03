@@ -13,6 +13,20 @@ namespace ExcelReader.NetFramework.Mapping
 
             for (int i = 0; i < bound.Length; i++)
             {
+                XlColumn* column = table.Columns + i;
+                if (column->Length != table.RowCount)
+                {
+                    throw new ExcelReaderException(ExcelStatus.Error, $"The native library returned {column->Length} rows for property '{bound[i].PropertyName}', expected {table.RowCount}.");
+                }
+
+                if (column->Type != bound[i].NativeType)
+                {
+                    throw new ExcelReaderException(ExcelStatus.Error, $"The native library returned column type {column->Type} for property '{bound[i].PropertyName}', expected {bound[i].NativeType}.");
+                }
+            }
+
+            for (int i = 0; i < bound.Length; i++)
+            {
                 bound[i].Fill(items, offset, table.Columns + i);
             }
 

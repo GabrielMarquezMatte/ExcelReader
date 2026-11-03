@@ -17,6 +17,7 @@ namespace ExcelReader.NetFramework.Interop
         internal const int XL_T_DATE = 4;
         internal const int XL_T_TIME = 5;
         internal const int XL_T_TIMESTAMP = 6;
+        internal const int XL_INFER_PARSE_TEXT = 1;
 
         internal const int XL_CELL_EMPTY = 0;
         internal const int XL_CELL_STRING = 1;
