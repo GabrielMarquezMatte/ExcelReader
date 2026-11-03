@@ -16,6 +16,7 @@ namespace ExcelReader.NetFramework.Writer
         private readonly WriterHandle _handle;
         private readonly bool _toMemory;
         private bool _finished;
+        private bool _sheetOpen;
 
         private ExcelWorkbookWriter(WriterHandle handle, bool toMemory)
         {
@@ -83,6 +84,8 @@ namespace ExcelReader.NetFramework.Writer
             {
                 NativeError.ThrowIfFailed(NativeMethods.xl_start_sheet(lease.Raw, namePointer, length));
             }
+
+            _sheetOpen = true;
         }
 
         /// <summary>Starts a row in the open sheet.</summary>
@@ -104,6 +107,63 @@ namespace ExcelReader.NetFramework.Writer
         {
             using Lease lease = Acquire();
             NativeError.ThrowIfFailed(NativeMethods.xl_end_sheet(lease.Raw));
+            _sheetOpen = false;
+        }
+
+        /// <summary>
+        /// Writes a whole sheet from <paramref name="rows"/>: a header row, then one row per item. Columns are the public readable
+        /// properties of <typeparamref name="T"/> without <see cref="Parser.ExcelIgnoreAttribute"/>, in declaration order (base type first);
+        /// each header is the first <see cref="Parser.ExcelColumnAttribute"/> name, or the property name.
+        /// </summary>
+        /// <typeparam name="T">The row type. Supported property types: string, long, int, short, byte, double, float, decimal, bool,
+        /// <see cref="DateTime"/> (written as a date and time, its <see cref="DateTime.Kind"/> ignored), <see cref="TimeSpan"/> (a time of day), and nullable forms of those.</typeparam>
+        /// <param name="name">The sheet name: at most 31 characters, unique, without the characters Excel forbids.</param>
+        /// <param name="rows">The rows, enumerated once.</param>
+        /// <param name="table">Writes the sheet as an Excel table (XLSX and XLSB only), or null for a plain sheet.</param>
+        /// <exception cref="ArgumentException"><paramref name="table"/> has no <see cref="ExcelTableOptions.Name"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">A <see cref="TimeSpan"/> value is negative or at least one day.</exception>
+        /// <exception cref="InvalidOperationException">A sheet started with <see cref="StartSheet"/> is still open.</exception>
+        /// <exception cref="NotSupportedException">A property of <typeparamref name="T"/> has an unsupported type.</exception>
+        /// <exception cref="ExcelReaderException">The name or table is invalid, or the format cannot hold a table.</exception>
+        /// <exception cref="ObjectDisposedException">The writer is already closed, aborted or disposed.</exception>
+        public void WriteSheet<T>(string name, IEnumerable<T> rows, ExcelTableOptions? table = null)
+        {
+            if (name is null)
+            {
+                throw new ArgumentNullException(nameof(name));
+            }
+
+            if (rows is null)
+            {
+                throw new ArgumentNullException(nameof(rows));
+            }
+
+            if (table is not null && string.IsNullOrEmpty(table.Name))
+            {
+                throw new ArgumentException("An Excel table needs a name.", nameof(table));
+            }
+
+            ThrowIfFinished();
+            if (_sheetOpen)
+            {
+                throw new InvalidOperationException("A sheet is open; call EndSheet before writing a whole sheet.");
+            }
+
+            WriteMap<T> map = WriteMap<T>.Instance;
+            T[] items = rows.ToArray();
+            byte[] nameBytes = Utf8.NonNullBytes(name, out int nameLength);
+            using NativeWriteTable native = NativeWriteTable.Create(map, items);
+            using Lease lease = Acquire();
+            fixed (byte* namePointer = nameBytes)
+            {
+                if (table is null)
+                {
+                    NativeError.ThrowIfFailed(NativeMethods.xl_write_sheet(lease.Raw, namePointer, nameLength, native.Specs, native.Table, null));
+                    return;
+                }
+
+                WriteTableSheet(lease.Raw, namePointer, nameLength, native, table);
+            }
         }
 
         /// <summary>Writes a text cell; null writes a blank cell.</summary>
@@ -267,6 +327,32 @@ namespace ExcelReader.NetFramework.Writer
             }
 
             return native;
+        }
+
+        private static void WriteTableSheet(IntPtr raw, byte* name, int nameLength, NativeWriteTable native, ExcelTableOptions table)
+        {
+            byte[] tableName = Utf8.NonNullBytes(table.Name, out int tableNameLength);
+            byte[]? style = null;
+            int styleLength = 0;
+            if (table.Style is not null)
+            {
+                style = Utf8.NonNullBytes(table.Style, out styleLength);
+            }
+
+            fixed (byte* tableNamePointer = tableName)
+            fixed (byte* stylePointer = style)
+            {
+                XlSheetOptions options = new XlSheetOptions
+                {
+                    StructSize = sizeof(XlSheetOptions),
+                    TableNameLen = tableNameLength,
+                    TableName = tableNamePointer,
+                    TableStyleLen = styleLength,
+                    TableStyle = stylePointer,
+                    TableFlags = table.Flags(),
+                };
+                NativeError.ThrowIfFailed(NativeMethods.xl_write_sheet(raw, name, nameLength, native.Specs, native.Table, &options));
+            }
         }
 
         private byte[] TakeBytes()
