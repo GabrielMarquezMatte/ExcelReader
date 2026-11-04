@@ -213,6 +213,48 @@ namespace xl
         bool last_column = false;                                    ///< Emphasize the last column.
     };
 
+    /// @brief One edge of a cell's border.
+    struct Border
+    {
+        int32_t style = XL_BORDER_NONE; ///< An `XL_BORDER_*` constant; `XL_BORDER_NONE` draws no edge.
+        int32_t color = -1;             ///< 0xRRGGBB, or -1 for automatic.
+    };
+
+    /// @brief A cell format for WriterHandle: number format, font, fill, alignment and borders.
+    ///
+    /// A default-constructed style is the general style. Colors are 0xRRGGBB, or -1 for unset; any other
+    /// negative or above 0xFFFFFF fails the call with `XL_INVALID_ARGUMENT`, as does an out-of-range
+    /// enum, size, indent or rotation. Strings are borrowed: they must outlive the call they are passed to.
+    struct CellStyle
+    {
+        std::string_view number_format{};    ///< An Excel number-format code; empty for General.
+        std::string_view font_name{};        ///< 1-31 characters; empty for the default font.
+        int32_t font_flags = 0;              ///< `XL_FONT_*` flags, or'ed together.
+        double font_size = 0;                ///< Points, 1-409; 0 for the default size.
+        int32_t font_color = -1;
+        int32_t fill_color = -1;             ///< Solid background.
+        int32_t horizontal_alignment = XL_HALIGN_GENERAL;
+        int32_t vertical_alignment = XL_VALIGN_BOTTOM;
+        bool wrap_text = false;
+        int32_t indent = 0;                  ///< 0-15.
+        int32_t rotation = 0;                ///< Degrees, -90 to 90, or 255 for stacked text.
+        Border left{};
+        Border right{};
+        Border top{};
+        Border bottom{};
+    };
+
+    /// @brief Styles and widths for a whole-sheet typed write: WriterHandle::write_columns and write_sheet.
+    ///
+    /// Column styles reach the data cells only, never the header row; a style without a number format keeps
+    /// a date, time or timestamp column's format.
+    struct SheetStyles
+    {
+        std::vector<std::optional<CellStyle>> column_styles{}; ///< By column index; empty or missing entries leave a column unstyled.
+        std::vector<double> column_widths{};                   ///< Characters, 0-255, by column index; 0 keeps the default.
+        std::optional<CellStyle> header_style{};               ///< The header row's style.
+    };
+
     /// @brief One Excel table's place in a workbook. Rows and columns are 0-based and include the
     /// header and totals rows. Read its cells through Workbook::table.
     struct TableInfo
@@ -254,6 +296,30 @@ namespace xl
             opts.password = options.password.empty() ? nullptr : reinterpret_cast<const uint8_t *>(options.password.data());
             opts.password_len = static_cast<int32_t>(options.password.size());
             return opts;
+        }
+
+        inline xl_cell_style to_c(const CellStyle &style) noexcept
+        {
+            xl_cell_style raw{};
+            raw.struct_size = sizeof(xl_cell_style);
+            raw.number_format = style.number_format.empty() ? nullptr : reinterpret_cast<const uint8_t *>(style.number_format.data());
+            raw.number_format_len = static_cast<int32_t>(style.number_format.size());
+            raw.font_name = style.font_name.empty() ? nullptr : reinterpret_cast<const uint8_t *>(style.font_name.data());
+            raw.font_name_len = static_cast<int32_t>(style.font_name.size());
+            raw.font_flags = style.font_flags;
+            raw.font_size = style.font_size;
+            raw.font_color = style.font_color;
+            raw.fill_color = style.fill_color;
+            raw.horizontal_alignment = style.horizontal_alignment;
+            raw.vertical_alignment = style.vertical_alignment;
+            raw.wrap_text = style.wrap_text ? 1 : 0;
+            raw.indent = style.indent;
+            raw.rotation = style.rotation;
+            raw.left = {style.left.style, style.left.color};
+            raw.right = {style.right.style, style.right.color};
+            raw.top = {style.top.style, style.top.color};
+            raw.bottom = {style.bottom.style, style.bottom.color};
+            return raw;
         }
 
         inline xl_sheet_options to_c(const TableOptions &table) noexcept
@@ -2294,6 +2360,52 @@ namespace xl
             out.assign(buffer.data, buffer.data + buffer.len);
         }
 
+        struct SheetOptionsStorage
+        {
+            xl_sheet_options raw{};
+            std::vector<xl_cell_style> styles{};
+            std::vector<const xl_cell_style *> pointers{};
+            std::vector<double> widths{};
+            xl_cell_style header{};
+
+            SheetOptionsStorage(const std::optional<TableOptions> &table, const SheetStyles &sheet, size_t columns)
+            {
+                if (table)
+                {
+                    raw = to_c(*table);
+                }
+                raw.struct_size = sizeof(xl_sheet_options);
+                if (!sheet.column_styles.empty())
+                {
+                    styles.reserve(columns);
+                    pointers.assign(columns, nullptr);
+                    for (size_t i = 0; i < columns && i < sheet.column_styles.size(); ++i)
+                    {
+                        if (sheet.column_styles[i])
+                        {
+                            styles.push_back(to_c(*sheet.column_styles[i]));
+                            pointers[i] = &styles.back();
+                        }
+                    }
+                    raw.column_styles = pointers.data();
+                }
+                if (!sheet.column_widths.empty())
+                {
+                    widths.assign(columns, 0.0);
+                    std::copy_n(sheet.column_widths.begin(), std::min(columns, sheet.column_widths.size()), widths.begin());
+                    raw.column_widths = widths.data();
+                }
+                if (sheet.header_style)
+                {
+                    header = to_c(*sheet.header_style);
+                    raw.header_style = &header;
+                }
+            }
+
+            SheetOptionsStorage(const SheetOptionsStorage &) = delete;
+            SheetOptionsStorage &operator=(const SheetOptionsStorage &) = delete;
+        };
+
         template <typename Call>
         std::expected<void, Error> write_table(std::span<const ColumnRef> columns, Call &&call)
         {
@@ -2327,42 +2439,6 @@ namespace xl
             return {};
         }
 
-    }
-
-    /// @brief Writes columns as one sheet, copying nothing.
-    /// @param path File to create.
-    /// @param columns Columns of equal length, borrowed for the call. Either every column has a name,
-    /// written as a header row, or none does.
-    /// @param options Format, sheet name, CSV dialect and format toggles. `XL_FORMAT_AUTO` takes the
-    /// format from the path's extension.
-    inline std::expected<void, Error> write_columns(std::string_view path, std::span<const ColumnRef> columns,
-                                                    const WriteOptions &options = {})
-    {
-        const int32_t format = options.format == XL_FORMAT_AUTO ? detail::format_from_path(path) : options.format;
-        const xl_write_options raw = detail::to_c(options);
-        return detail::write_table(columns, [&](const xl_column_spec *specs, const xl_table *table)
-                                   { return xl_write_typed(reinterpret_cast<const uint8_t *>(path.data()),
-                                                           static_cast<int32_t>(path.size()), format, specs, table,
-                                                           &raw); });
-    }
-
-    /// @brief write_columns into memory.
-    /// @param out Replaced with the file's bytes; untouched on failure.
-    /// @param columns As for the path overload.
-    /// @param options As for the path overload, except that `format` must name a format.
-    inline std::expected<void, Error> write_columns(std::vector<uint8_t> &out, std::span<const ColumnRef> columns,
-                                                    const WriteOptions &options = {})
-    {
-        const xl_write_options raw = detail::to_c(options);
-        return detail::write_table(columns, [&](const xl_column_spec *specs, const xl_table *table)
-                                   {
-                                       xl_buffer buffer{};
-                                       const int32_t status = xl_write_typed_to_memory(options.format, specs, table, &raw, &buffer);
-                                       if (status == XL_OK)
-                                       {
-                                           detail::take_buffer(buffer, out);
-                                       }
-                                       return status; });
     }
 
     /// @brief Encrypts a finished XLSX or XLSB.
@@ -2685,30 +2761,6 @@ namespace xl
 
     }
 
-    /// @brief Writes rows as one sheet.
-    /// @param path File to create.
-    /// @param rows Input range of a row type with an ExcelMapper, the mapping parse reads with.
-    /// An empty std::optional field writes a blank cell.
-    /// @param options As for write_columns.
-    template <std::ranges::input_range R>
-    std::expected<void, Error> write_sheet(std::string_view path, R &&rows, const WriteOptions &options = {})
-    {
-        return detail::write_rows(std::forward<R>(rows), [&](std::span<const ColumnRef> columns)
-                                  { return write_columns(path, columns, options); });
-    }
-
-    /// @brief write_sheet into memory.
-    /// @param out Replaced with the file's bytes; untouched on failure.
-    /// @param rows As for the path overload.
-    /// @param options As for the path overload, except that `format` must name a format.
-    template <std::ranges::input_range R>
-    std::expected<void, Error> write_sheet(std::vector<uint8_t> &out, R &&rows, const WriteOptions &options = {})
-    {
-        return detail::write_rows(std::forward<R>(rows), [&](std::span<const ColumnRef> columns)
-                                  { return write_columns(out, columns, options); });
-    }
-
-
     /// @brief Writes a workbook as calls arrive instead of building it in memory first.
     ///
     /// Per sheet: start_sheet, then for each row start_row, one write per cell from left to right, and
@@ -2773,34 +2825,84 @@ namespace xl
         /// @brief Ends the current sheet.
         std::expected<void, Error> end_sheet() { return status_result(xl_end_sheet(handle_)); }
 
-        /// @brief Writes columns as a whole sheet, as write_columns does, in one call instead of one per cell.
+        /// @brief Writes columns as a whole sheet, in one call instead of one per cell.
         ///
         /// Uses the parallelism of the options the handle was opened with; their sheet name does not
         /// apply. Fails while a sheet started with start_sheet is open.
         /// @param name The sheet's name.
-        /// @param columns As for write_columns.
+        /// @param columns Columns of equal length, borrowed for the call. Either every column has a name,
+        /// written as a header row, or none does.
         /// @param table Writes the sheet as an Excel table (XLSX/XLSB only, every column named).
+        /// @param styles Column styles and widths, and the header row's style.
         std::expected<void, Error> write_columns(std::string_view name, std::span<const ColumnRef> columns,
-                                                 const std::optional<TableOptions> &table = std::nullopt)
+                                                 const std::optional<TableOptions> &table = std::nullopt,
+                                                 const SheetStyles &styles = {})
         {
-            const std::optional<xl_sheet_options> options =
-                table ? std::optional<xl_sheet_options>(detail::to_c(*table)) : std::nullopt;
             return detail::write_table(columns, [&](const xl_column_spec *specs, const xl_table *raw)
-                                       { return xl_write_sheet(handle_, reinterpret_cast<const uint8_t *>(name.data()),
-                                                               static_cast<int32_t>(name.size()), specs, raw,
-                                                               options ? &*options : nullptr); });
+                                       {
+                                           const detail::SheetOptionsStorage options(table, styles, columns.size());
+                                           return xl_write_sheet(handle_, reinterpret_cast<const uint8_t *>(name.data()),
+                                                                 static_cast<int32_t>(name.size()), specs, raw, &options.raw); });
         }
 
-        /// @brief Writes rows as a whole sheet, as write_sheet does, on top of write_columns.
+        /// @brief Writes rows as a whole sheet, on top of write_columns.
         /// @param name The sheet's name.
-        /// @param rows As for write_sheet.
+        /// @param rows Input range of a row type with an ExcelMapper, the mapping parse reads with.
+        /// An empty std::optional field writes a blank cell.
         /// @param table As for write_columns.
+        /// @param styles As for write_columns.
         template <std::ranges::input_range R>
         std::expected<void, Error> write_sheet(std::string_view name, R &&rows,
-                                               const std::optional<TableOptions> &table = std::nullopt)
+                                               const std::optional<TableOptions> &table = std::nullopt,
+                                               const SheetStyles &styles = {})
         {
             return detail::write_rows(std::forward<R>(rows), [&](std::span<const ColumnRef> columns)
-                                      { return write_columns(name, columns, table); });
+                                      { return write_columns(name, columns, table, styles); });
+        }
+
+        /// @brief Registers a style and returns its id; an equal style returns the same id.
+        ///
+        /// Id 0 is the general style and needs no registering. An invalid value fails with
+        /// `XL_INVALID_ARGUMENT` and a format limit (fonts, styles, XLS colors) with `XL_ERROR`;
+        /// neither affects the handle. CSV accepts every style call and ignores it.
+        std::expected<int32_t, Error> add_style(const CellStyle &style)
+        {
+            const xl_cell_style raw = detail::to_c(style);
+            int32_t id = 0;
+            const int32_t status = xl_add_style(handle_, &raw, &id);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return id;
+        }
+
+        /// @brief Styles a column. After start_sheet and before the sheet's first row.
+        std::expected<void, Error> set_column_style(int32_t column, int32_t style_id)
+        {
+            return status_result(xl_set_column_style(handle_, column, style_id));
+        }
+
+        /// @brief Sets a column width in characters, 0-255. After start_sheet and before the sheet's first row.
+        std::expected<void, Error> set_column_width(int32_t column, double width)
+        {
+            return status_result(xl_set_column_width(handle_, column, width));
+        }
+
+        /// @brief Starts a row whose every cell takes a style, beating the column styles.
+        /// @param style_id An id from add_style.
+        /// @param height In points, at most 409; 0 for the default.
+        std::expected<void, Error> start_row(int32_t style_id, double height = 0)
+        {
+            return status_result(xl_start_row_styled(handle_, style_id, height));
+        }
+
+        /// @brief Styles the next cell written, and only that one, over the row and column styles.
+        ///
+        /// write_null then writes a styled blank; end_row with a style pending fails.
+        std::expected<void, Error> style_next_cell(int32_t style_id)
+        {
+            return status_result(xl_style_next_cell(handle_, style_id));
         }
 
         /// @brief Writes the next cell.
@@ -2948,6 +3050,96 @@ namespace xl
         xl_writer_handle *handle_ = nullptr;
         std::vector<uint8_t> *out_ = nullptr;
     };
+
+
+    namespace detail
+    {
+
+        template <typename Open, typename Write>
+        std::expected<void, Error> write_one_sheet(const WriteOptions &options, Open &&open, Write &&write)
+        {
+            std::expected<WriterHandle, Error> writer = open();
+            if (!writer.has_value())
+            {
+                return std::unexpected(std::move(writer.error()));
+            }
+            const std::string_view name = options.sheet_name.empty() ? std::string_view("Sheet1") : options.sheet_name;
+            std::expected<void, Error> written = write(*writer, name);
+            if (!written.has_value())
+            {
+                return written;
+            }
+            return writer->finish();
+        }
+
+    }
+
+    /// @brief Writes columns as one sheet, copying nothing.
+    /// @deprecated Use WriterHandle::write_columns, which also takes cell styles.
+    /// @param path File to create.
+    /// @param columns Columns of equal length, borrowed for the call. Either every column has a name,
+    /// written as a header row, or none does.
+    /// @param options Format, sheet name, CSV dialect and format toggles. `XL_FORMAT_AUTO` takes the
+    /// format from the path extension.
+    [[deprecated("Use WriterHandle::write_columns")]]
+    inline std::expected<void, Error> write_columns(std::string_view path, std::span<const ColumnRef> columns,
+                                                    const WriteOptions &options = {})
+    {
+        return detail::write_one_sheet(
+            options, [&]
+            { return WriterHandle::open(path, options); },
+            [&](WriterHandle &writer, std::string_view name)
+            { return writer.write_columns(name, columns); });
+    }
+
+    /// @brief write_columns into memory.
+    /// @deprecated Use WriterHandle::write_columns on a handle opened over a vector.
+    /// @param out Replaced with the file bytes; untouched on failure.
+    /// @param columns As for the path overload.
+    /// @param options As for the path overload, except that `format` must name a format.
+    [[deprecated("Use WriterHandle::write_columns")]]
+    inline std::expected<void, Error> write_columns(std::vector<uint8_t> &out, std::span<const ColumnRef> columns,
+                                                    const WriteOptions &options = {})
+    {
+        return detail::write_one_sheet(
+            options, [&]
+            { return WriterHandle::open(out, options); },
+            [&](WriterHandle &writer, std::string_view name)
+            { return writer.write_columns(name, columns); });
+    }
+
+    /// @brief Writes rows as one sheet.
+    /// @deprecated Use WriterHandle::write_sheet.
+    /// @param path File to create.
+    /// @param rows Input range of a row type with an ExcelMapper, the mapping parse reads with.
+    /// An empty std::optional field writes a blank cell.
+    /// @param options As for write_columns.
+    template <std::ranges::input_range R>
+    [[deprecated("Use WriterHandle::write_sheet")]]
+    std::expected<void, Error> write_sheet(std::string_view path, R &&rows, const WriteOptions &options = {})
+    {
+        return detail::write_one_sheet(
+            options, [&]
+            { return WriterHandle::open(path, options); },
+            [&](WriterHandle &writer, std::string_view name)
+            { return writer.write_sheet(name, std::forward<R>(rows)); });
+    }
+
+    /// @brief write_sheet into memory.
+    /// @deprecated Use WriterHandle::write_sheet on a handle opened over a vector.
+    /// @param out Replaced with the file bytes; untouched on failure.
+    /// @param rows As for the path overload.
+    /// @param options As for the path overload, except that `format` must name a format.
+    template <std::ranges::input_range R>
+    [[deprecated("Use WriterHandle::write_sheet")]]
+    std::expected<void, Error> write_sheet(std::vector<uint8_t> &out, R &&rows, const WriteOptions &options = {})
+    {
+        return detail::write_one_sheet(
+            options, [&]
+            { return WriterHandle::open(out, options); },
+            [&](WriterHandle &writer, std::string_view name)
+            { return writer.write_sheet(name, std::forward<R>(rows)); });
+    }
 
 
     /// @brief A fold over CSV records.
