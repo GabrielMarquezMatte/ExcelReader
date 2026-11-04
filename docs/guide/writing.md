@@ -190,11 +190,11 @@ Limits are checked when a style is added: at most 512 fonts in every format, 65,
 
 The native writer handle (ABI 7) takes the same styles: `xl_add_style` registers one, and `xl_set_column_style`, `xl_start_row_styled` and `xl_style_next_cell` apply it; `xl_sheet_options` carries column styles, widths and a header style for a typed `xl_write_sheet`. Column styles reach a typed sheet's data cells, never its header. A column or overlay style without a number format keeps the date/time format of a date, time or timestamp column; an explicit number format wins. Each README has a "Cell styles" section:
 
-- [C++](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/cpp/README.md#cell-styles)
-- [Python](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/python/README.md#cell-styles)
-- [Rust](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/rust/excelreader/README.md#cell-styles)
-- [.NET Framework](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.NetFramework/README.md#cell-styles)
-- [C ABI](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Native/README.md#cell-styles)
+- [C++](../../cpp/README.md#cell-styles)
+- [Python](../../python/README.md#cell-styles)
+- [Rust](../../rust/excelreader/README.md#cell-styles)
+- [.NET Framework](../../src/ExcelReader.NetFramework/README.md#cell-styles)
+- [C ABI](../../src/ExcelReader.Native/README.md#cell-styles)
 
 ## Read and write XLSB workbooks (BIFF12)
 
