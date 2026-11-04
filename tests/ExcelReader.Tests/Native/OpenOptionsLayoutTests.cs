@@ -130,6 +130,26 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void SheetOptionsLayoutMatchesTheHeader()
+        {
+            NativeSheetOptionsRaw options = default;
+            byte* start = (byte*)&options;
+
+            Assert.Equal(64, sizeof(NativeSheetOptionsRaw));
+            Assert.Equal(40, NativeSheetOptionsRaw.V6Size);
+            Assert.Equal(
+                [0, 4, 8, 16, 24, 32, 40, 48, 56],
+                [
+                    (int)((byte*)&options.StructSize - start), (int)((byte*)&options.TableNameLen - start),
+                    (int)((byte*)&options.TableName - start), (int)((byte*)&options.TableStyleLen - start),
+                    (int)((byte*)&options.TableStyle - start), (int)((byte*)&options.TableFlags - start),
+                    (int)((byte*)&options.ColumnStyles - start), (int)((byte*)&options.ColumnWidths - start),
+                    (int)((byte*)&options.HeaderStyle - start),
+                ]);
+            Assert.Equal(40, sizeof(NativeWriteOptionsRaw));
+        }
+
+        [Fact]
         public void AbiVersionIsSeven()
         {
             Assert.Equal(7, ((delegate* unmanaged<int>)&Exports.AbiVersion)());

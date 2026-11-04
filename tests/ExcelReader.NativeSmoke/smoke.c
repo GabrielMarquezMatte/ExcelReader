@@ -149,6 +149,13 @@ XL_STATIC_ASSERT(offsetof(xl_cell_style, top) == 84, cell_style_top);
 XL_STATIC_ASSERT(offsetof(xl_cell_style, bottom) == 92, cell_style_bottom);
 XL_STATIC_ASSERT(sizeof(xl_cell_style) == 104, cell_style_size);
 
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, table_flags) == 32, sheet_options_table_flags);
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, column_styles) == 40, sheet_options_column_styles);
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, column_widths) == 48, sheet_options_column_widths);
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, header_style) == 56, sheet_options_header_style);
+XL_STATIC_ASSERT(sizeof(xl_sheet_options) == 64, sheet_options_size);
+XL_STATIC_ASSERT(sizeof(xl_write_options) == 40, write_options_size);
+
 
 static xl_lib_handle load_library(const char* path)
 {

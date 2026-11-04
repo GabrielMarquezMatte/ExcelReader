@@ -64,7 +64,7 @@ namespace ExcelReader.Native.Writer
 
         protected abstract void Dispose(bool disposing);
 
-        internal abstract void WriteSheet(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader, NativeExcelTable? excelTable);
+        internal abstract void WriteSheet(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader, NativeExcelTable? excelTable, NativeSheetStyles? styles = null);
 
         internal static NativeWriterHandle Create(Stream stream, int format, NativeWriteOptions options)
         {
@@ -253,7 +253,7 @@ namespace ExcelReader.Native.Writer
             _sheet = null;
         }
 
-        internal override void WriteSheet(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader, NativeExcelTable? excelTable)
+        internal override void WriteSheet(string name, NativeColumnSpec[] specs, NativeTable table, bool hasHeader, NativeExcelTable? excelTable, NativeSheetStyles? styles = null)
         {
             if (_sheet is not null)
             {
@@ -263,10 +263,12 @@ namespace ExcelReader.Native.Writer
             {
                 throw new NotSupportedException("Excel tables can only be written to XLSX or XLSB.");
             }
+            // Registered before the sheet exists, so a style limit fails without leaving a half-written sheet.
+            SheetStyleIds styleIds = WriteApi.RegisterSheetStyles(_workbook, styles, table);
             _sheet = _workbook.AddSheet(name);
             try
             {
-                WriteApi.WriteSheetBody(_workbook, _sheet, specs, table, hasHeader, excelTable, _parallel, _writeParallel);
+                WriteApi.WriteSheetBody(_workbook, _sheet, specs, table, hasHeader, excelTable, styleIds, _parallel, _writeParallel);
                 EndSheet();
             }
             catch (Exception exception)

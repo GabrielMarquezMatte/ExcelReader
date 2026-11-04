@@ -280,7 +280,8 @@ namespace ExcelReader.Native
             }
             try
             {
-                if (!NativeExcelTable.TryRead(options, out NativeExcelTable? excelTable, out string? optionsError))
+                if (!NativeExcelTable.TryRead(options, out NativeExcelTable? excelTable, out string? optionsError)
+                    || !NativeSheetStyles.TryRead(options, table->ColumnCount, out NativeSheetStyles? styles, out optionsError))
                 {
                     NativeApi.SetLastError(optionsError);
                     return NativeStatus.InvalidArgument;
@@ -300,7 +301,7 @@ namespace ExcelReader.Native
                     NativeApi.SetLastError("an Excel table needs every column named: its header row holds the column names.");
                     return NativeStatus.InvalidArgument;
                 }
-                writerHandle.WriteSheet(Encoding.UTF8.GetString(name, nameLength), decoded, *table, hasHeader, excelTable);
+                writerHandle.WriteSheet(Encoding.UTF8.GetString(name, nameLength), decoded, *table, hasHeader, excelTable, styles);
                 NativeApi.ClearLastError();
                 return NativeStatus.Ok;
             }
