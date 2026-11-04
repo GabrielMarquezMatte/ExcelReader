@@ -142,7 +142,7 @@ namespace ExcelReader.Core.Writer.Xls
         void IStyleBinder.PushColumnStyleOverlay(ReadOnlySpan<int> styleIds, int firstColumn)
         {
             _baseColumnStyleLookup = _columnStyleLookup;
-            _columnStyleLookup = SheetColumnValidation.Overlay(_columnStyleLookup, styleIds, firstColumn);
+            _columnStyleLookup = SheetColumnValidation.Overlay(_columnStyleLookup, styleIds, firstColumn, _owner.InheritNumberFormat);
             _continuation?.SwapColumnStyleLookup(_columnStyleLookup);
         }
 

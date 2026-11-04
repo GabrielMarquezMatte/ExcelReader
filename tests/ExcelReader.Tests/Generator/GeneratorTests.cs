@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Reflection;
 using ExcelReader.Generator;
+using ExcelReader.Tests.Writer.Styles;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -1059,6 +1060,58 @@ namespace ExcelReader.Tests.Generator
             Assert.Contains(".Column(\"Amount\"", generated, StringComparison.Ordinal);
             Assert.Contains("ToCellStyle()", generated, StringComparison.Ordinal);
             Assert.DoesNotContain(".Column(\"Name\", static (row, m) => row.Write(m.Name), new", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task GeneratedStyledColumnKeepsTheColumnNumberFormat()
+        {
+            const string source = """
+                using System;
+                using System.IO;
+                using System.Threading.Tasks;
+                using ExcelReader.Core.Parser;
+                using ExcelReader.Core.Writer;
+                using ExcelReader.Core.Writer.Xlsx;
+
+                namespace GeneratorTests.StyledFormat
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        public string Name { get; set; } = "";
+
+                        [ExcelStyle(Bold = true)]
+                        public DateTime When { get; set; }
+                    }
+
+                    public static class TestRunner
+                    {
+                        public static async Task<byte[]> RunAsync()
+                        {
+                            var stream = new MemoryStream();
+                            await using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(stream, leaveOpen: true))
+                            {
+                                XlsxSheetWriter sheet = workbook.AddSheet("S1");
+                                sheet.SetColumnStyle(1, workbook.AddStyle(new CellStyle { NumberFormat = "yyyy-mm-dd hh:mm:ss" }));
+                                await sheet.WriteRecordsAsync(new[] { new Model { Name = "a", When = new DateTime(2026, 1, 2, 3, 4, 5) } }, ExcelRecordLayout.Generated<Model>());
+                                await sheet.EndAsync();
+                                await workbook.EndAsync();
+                            }
+                            return stream.ToArray();
+                        }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            (EmitResult Emit, byte[] AssemblyBytes) emitted = result.EmitToBytes();
+            Assert.True(emitted.Emit.Success, string.Join(Environment.NewLine, emitted.Emit.Diagnostics.Select(static d => d.ToString())));
+            Assembly assembly = Assembly.Load(emitted.AssemblyBytes);
+            MethodInfo method = assembly.GetType("GeneratorTests.StyledFormat.TestRunner")!.GetMethod("RunAsync")!;
+            byte[] file = await (Task<byte[]>)method.Invoke(null, null)!;
+            ProbedStyle data = StyleProbe.Xlsx(file, 1, 1);
+            Assert.True(data.Bold);
+            Assert.Equal("yyyy-mm-dd hh:mm:ss", data.NumberFormat);
         }
 
         [Theory]
