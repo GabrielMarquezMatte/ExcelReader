@@ -82,6 +82,14 @@ earlier header. The Rust, Python and C++ bindings check the ABI version when the
 `xl_write_options` grew from 32 to 40 bytes after 7.0 (`degree_of_parallelism` and `batch_rows`,
 appended); the 7.0 size is still accepted and writes serially, so the ABI version stayed 6.
 
+7.4 raises the version to 7 although the change is additive: new `xl_cell_style` and `xl_border`
+types, five style exports, and `xl_sheet_options` grown from 40 to 64 bytes (the 40-byte size is still
+accepted). The bindings check the exact ABI version and their style APIs call the new exports, so a
+binding refuses an ABI-6 library up front instead of failing later with a missing symbol. ABI-6
+callers keep working unchanged against the 7 library. `xl_write_typed` and `xl_write_typed_to_memory`
+are deprecated in 7.4 and removed in 8.0: use the writer handle (`xl_open_write_handle*` +
+`xl_write_sheet`). The bindings' one-shot helpers are deprecated the same way.
+
 7.x also added `xl_rows_foreach` and `xl_aggregate`. They are new exports only, so the ABI version
 stayed 6; a binding built against them fails with a missing-symbol error when it loads an older
 ABI-6 library that lacks them.

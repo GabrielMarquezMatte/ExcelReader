@@ -9,6 +9,7 @@
 [![NuGet](https://img.shields.io/nuget/v/ExcelReader.NET.svg)](https://www.nuget.org/packages/ExcelReader.NET)
 [![Downloads](https://img.shields.io/nuget/dt/ExcelReader.NET.svg)](https://www.nuget.org/packages/ExcelReader.NET)
 [![License](https://img.shields.io/github/license/GabrielMarquezMatte/ExcelReader.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23927919.svg)](https://doi.org/10.5281/zenodo.23927919)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-GitHub%20Pages-informational)](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/)
 
 High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, `.xls`, and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
@@ -125,22 +126,26 @@ with open_workbook("book.xlsx") as workbook:
         print([cell.value for cell in row])
 ```
 
-Writing goes through one export, `xl_write_typed`: a whole sheet in a single call, from columnar
-buffers the ABI borrows rather than copies. All three bindings expose it — Python as
-`write_workbook`/`write_arrow`/`write_pandas`/`write_polars`, C++ as `xl::write_columns` and
-`xl::write_sheet<T>`, Rust as `writer::write_columns` and `writer::write_sheet`. In C++ and Rust the
-same struct mapping drives both directions, so reading a sheet and writing it back needs one
-mapping, not two:
+Writing goes through the writer handle (`xl_open_write_handle*` + `xl_write_sheet`): a whole sheet
+per call, from columnar buffers the ABI borrows rather than copies, or cell by cell, with cell styles.
+All three bindings expose it — Python as `open_writer` (`write_sheet`, from a `TypedTable`, an Arrow
+table or a DataFrame, and `write_row`), C++ as `xl::WriterHandle` (`write_columns` and
+`write_sheet<T>`), Rust as `WriterHandle` (`write_sheet`). The one-shot `xl_write_typed` and its
+free-function wrappers are deprecated since 7.4 and go away in 8.0. In C++ and Rust the same struct
+mapping drives both directions, so reading a sheet and writing it back needs one mapping, not two:
 
 ```rust
-use excelreader::writer::write_sheet;
-use excelreader::XL_FORMAT_XLSX;
+use excelreader::{WriteOptions, WriterHandle};
 
-write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
+let mut handle = WriterHandle::create("out.xlsx", &WriteOptions::new())?;
+handle.write_sheet("Sheet1", &rows, None)?;
+handle.finish()?;
 ```
 
 ```cpp
-auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
+auto writer = xl::WriterHandle::open("out.xlsx").value();   // format inferred from the extension
+writer.write_sheet("Sheet1", rows);
+auto written = writer.finish();
 ```
 
 Row-by-row decoded reads are available from all three bindings — Python as `Sheet.rows()`, C++

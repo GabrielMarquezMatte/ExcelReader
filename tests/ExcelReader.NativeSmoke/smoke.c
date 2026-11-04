@@ -127,6 +127,35 @@ XL_STATIC_ASSERT(offsetof(xl_stream, read) == 16, stream_read);
 XL_STATIC_ASSERT(offsetof(xl_stream, release) == 24, stream_release);
 XL_STATIC_ASSERT(sizeof(xl_stream) == 32, stream_size);
 
+XL_STATIC_ASSERT(offsetof(xl_border, color) == 4, border_color);
+XL_STATIC_ASSERT(sizeof(xl_border) == 8, border_size);
+
+XL_STATIC_ASSERT(offsetof(xl_cell_style, number_format_len) == 4, cell_style_number_format_len);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, number_format) == 8, cell_style_number_format);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, font_name) == 16, cell_style_font_name);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, font_name_len) == 24, cell_style_font_name_len);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, font_flags) == 28, cell_style_font_flags);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, font_size) == 32, cell_style_font_size);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, font_color) == 40, cell_style_font_color);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, fill_color) == 44, cell_style_fill_color);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, horizontal_alignment) == 48, cell_style_horizontal_alignment);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, vertical_alignment) == 52, cell_style_vertical_alignment);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, wrap_text) == 56, cell_style_wrap_text);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, indent) == 60, cell_style_indent);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, rotation) == 64, cell_style_rotation);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, left) == 68, cell_style_left);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, right) == 76, cell_style_right);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, top) == 84, cell_style_top);
+XL_STATIC_ASSERT(offsetof(xl_cell_style, bottom) == 92, cell_style_bottom);
+XL_STATIC_ASSERT(sizeof(xl_cell_style) == 104, cell_style_size);
+
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, table_flags) == 32, sheet_options_table_flags);
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, column_styles) == 40, sheet_options_column_styles);
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, column_widths) == 48, sheet_options_column_widths);
+XL_STATIC_ASSERT(offsetof(xl_sheet_options, header_style) == 56, sheet_options_header_style);
+XL_STATIC_ASSERT(sizeof(xl_sheet_options) == 64, sheet_options_size);
+XL_STATIC_ASSERT(sizeof(xl_write_options) == 40, write_options_size);
+
 
 static xl_lib_handle load_library(const char* path)
 {

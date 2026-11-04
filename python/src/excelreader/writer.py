@@ -1,7 +1,7 @@
 """Writing a columnar table to a workbook file or a binary stream. Read cursors live in reader.py; this module has none.
 
-Everything here funnels into the single `xl_write_typed` export. Each column's buffer is copied once
-into a ctypes block that this module owns for the duration of the call: `xl_write_typed` borrows
+Everything here funnels into `SheetWriter.write_sheet`. Each column's buffer is copied once
+into a ctypes block that this module owns for the duration of the call: the native side borrows
 whatever it is handed and never frees it, so the pointers it reads must outlive the call and must not
 be invalidated by anything Python does to the original object meanwhile. Budget for one extra copy of
 the data being written.
@@ -13,6 +13,7 @@ import ctypes
 import io
 import os
 import sys
+import warnings
 from array import array
 from pathlib import Path
 from typing import IO, Any, Union
@@ -130,7 +131,7 @@ def _marshal(
     types: list[ColumnType],
     options: WriteOptions | None,
 ) -> tuple[Any, Any, Any, list[Any]]:
-    """Lowers a TypedTable into the native structs xl_write_typed* expect.
+    """Lowers a TypedTable into the native structs xl_write_sheet expects.
 
     Returns the specs array, the NativeTable, the NativeWriteOptions, and a keepalive list whose
     contents must outlive the native call — dropping it early frees buffers the call is still
@@ -185,21 +186,23 @@ def write_workbook(
     returns that it took only part; the object is not closed.
 
     The column names become the header row. `options` sets the sheet name and CSV dialect; see
-    `WriteOptions`. For several sheets, use `SheetWriter.write_sheet`.
+    `WriteOptions`.
+
+    Deprecated: use `open_writer()` and `SheetWriter.write_sheet`, which also write several sheets
+    and take cell styles. This function is a thin wrapper over them and will be removed in 8.0.
     """
+    warnings.warn(
+        "write_workbook() is deprecated since 7.4 and will be removed in 8.0; "
+        "use open_writer() and SheetWriter.write_sheet()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    from excelreader.writer_handle import open_writer
+
     table, types = _typed_table(data, types)
-    if isinstance(destination, (str, os.PathLike)):
-        _write_file(Path(destination), table, types, format, options)
-        return
-    if not hasattr(destination, "write"):
-        raise TypeError(
-            f"destination must be a path or an object with write(); got {type(destination).__name__}"
-        )
-    if format is None:
-        raise ValueError(
-            f"format= is required when writing to an object with write(); one of {sorted(_FORMAT_NAMES)}"
-        )
-    _write_all(destination, _write_memory(table, types, format, options))
+    options = options or WriteOptions()
+    with open_writer(destination, format, options=options) as writer:
+        writer.write_sheet(options.sheet_name or "Sheet1", table, types)
 
 
 def _typed_table(data: Any, types: list[ColumnType] | None) -> tuple[TypedTable, list[ColumnType]]:
@@ -234,45 +237,6 @@ def _write_all(destination: IO[bytes], data: bytes) -> None:
         offset += written
 
 
-def _write_file(
-    path: Path, table: TypedTable, types: list[ColumnType], format: str | None, options: WriteOptions | None
-) -> None:
-    format_id = _resolve_write_format(format, path)
-    specs, native_table, raw_options, keepalive = _marshal(table, types, options)
-    encoded = str(path).encode("utf-8")
-    lib = _native.load_library()
-    _check(
-        lib.xl_write_typed(
-            encoded, _native.int32_len(encoded), format_id, specs, ctypes.byref(native_table), ctypes.byref(raw_options)
-        )
-    )
-    del keepalive
-
-
-def _write_memory(
-    table: TypedTable, types: list[ColumnType], format: str, options: WriteOptions | None
-) -> bytes:
-    try:
-        format_id = _FORMAT_NAMES[format.lower()]
-    except KeyError:
-        raise ValueError(f"unknown format {format!r}; expected one of {sorted(_FORMAT_NAMES)}") from None
-    specs, native_table, raw_options, keepalive = _marshal(table, types, options)
-    buffer = _native.NativeBuffer()
-    lib = _native.load_library()
-    _check(
-        lib.xl_write_typed_to_memory(
-            format_id, specs, ctypes.byref(native_table), ctypes.byref(raw_options), ctypes.byref(buffer)
-        )
-    )
-    try:
-        if not buffer.data or buffer.len <= 0:
-            return b""
-        return ctypes.string_at(buffer.data, buffer.len)
-    finally:
-        lib.xl_free_buffer(ctypes.byref(buffer))
-        del keepalive
-
-
 _ARROW_TYPES = {
     "string": ColumnType.STRING,
     "large_string": ColumnType.STRING,
@@ -305,7 +269,7 @@ def _arrow_column_type(field: Any) -> ColumnType:
         return _ARROW_TYPES[key]
     except KeyError:
         raise ValueError(
-            f"column {field.name!r} has Arrow type {key!r}, which xl_write_typed cannot write; "
+            f"column {field.name!r} has Arrow type {key!r}, which cannot be written; "
             f"cast it to one of {sorted({str(t) for t in _ARROW_TYPES})} first"
         ) from None
 

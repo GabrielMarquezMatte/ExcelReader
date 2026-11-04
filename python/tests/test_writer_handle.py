@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 import datetime
+import io
+import re
+import zipfile
+from array import array
 
 import pytest
 
 from excelreader import (
+    Border,
+    BorderStyle,
+    CellStyle,
+    HorizontalAlignment,
+    StringColumn,
+    TypedTable,
     CellType,
     ColumnSpec,
     ColumnType,
@@ -315,6 +325,7 @@ def test_a_writer_over_a_stream_needs_a_format_and_a_write_method():
         open_writer(42, "xlsx")
 
 
+@pytest.mark.filterwarnings("ignore:write_workbook:DeprecationWarning")
 def test_write_workbook_to_a_bytesio_matches_write_workbook_to_a_file(tmp_path, xlsx_path):
     import io
 
@@ -438,3 +449,133 @@ def test_write_sheet_writes_arrow_data_to_a_bytesio():
         assert [sheet.name for sheet in workbook.sheets] == ["A", "B"]
         assert _parsed(workbook.sheets[0]) == (["widget"], [3])
         assert _parsed(workbook.sheets[1]) == (["gadget", "gizmo"], [7, 9])
+
+
+def _styled_table():
+    return TypedTable(
+        row_count=2,
+        names=["name", "qty", "at"],
+        columns=[StringColumn(array("i", [0, 1, 2]), b"ab"), array("q", [3, 7]), array("q", [3_600_000_000, 7_200_000_000])],
+        validity=[None, None, None],
+    )
+
+
+_STYLED_TYPES = [ColumnType.STRING, ColumnType.I64, ColumnType.TIME]
+
+
+def _xlsx_parts(payload):
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        return archive.read("xl/styles.xml").decode(), archive.read("xl/worksheets/sheet1.xml").decode()
+
+
+def _row_styles(sheet_xml):
+    rows = re.findall(r"<row[^>]*>(.*?)</row>", sheet_xml)
+    return [re.findall(r'<c(?: s="(\d+)")?', row) for row in rows]
+
+
+def test_write_sheet_styles_data_cells_but_not_the_header():
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
+        writer.write_sheet(
+            "S", _styled_table(), _STYLED_TYPES,
+            column_styles={"qty": CellStyle(bold=True), "at": CellStyle(bold=True)},
+            column_widths={"name": 20},
+        )
+
+    styles, sheet = _xlsx_parts(buffer.getvalue())
+    header, first, _ = _row_styles(sheet)
+    assert "<b/>" in styles
+    assert header[:2] == ["", ""]
+    assert header[2] != first[2]
+    assert first[0] == "" and first[1] != "" and first[2] != ""
+    assert 'width="20"' in sheet
+
+
+def test_write_sheet_header_style_reaches_only_the_header():
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
+        writer.write_sheet("S", _styled_table(), _STYLED_TYPES, header_style=CellStyle(fill_color=0xFF0000))
+
+    styles, sheet = _xlsx_parts(buffer.getvalue())
+    header, first, _ = _row_styles(sheet)
+    assert 'rgb="FFFF0000"' in styles
+    assert all(header) and len(set(header)) == 1
+    assert first[0] == "" and first[1] == ""
+
+
+def test_write_sheet_bold_time_column_keeps_its_time_format():
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
+        writer.write_sheet("S", _styled_table(), _STYLED_TYPES, column_styles={"at": CellStyle(bold=True)})
+
+    styles, _ = _xlsx_parts(buffer.getvalue())
+    assert re.search(r'<xf numFmtId="164"[^>]*fontId="1"', styles)
+    assert 'formatCode="hh:mm:ss"' in styles
+
+
+def test_write_sheet_rejects_an_unknown_column_name_before_writing():
+    with open_writer(io.BytesIO(), "xlsx") as writer:
+        with pytest.raises(ValueError, match="nope"):
+            writer.write_sheet("S", _styled_table(), _STYLED_TYPES, column_styles={"nope": CellStyle(bold=True)})
+        with pytest.raises(ValueError, match="nope"):
+            writer.write_sheet("S", _styled_table(), _STYLED_TYPES, column_widths={"nope": 5})
+        writer.write_sheet("S", _styled_table(), _STYLED_TYPES)
+
+
+def test_write_sheet_rejects_an_invalid_color_and_stays_usable():
+    with open_writer(io.BytesIO(), "xlsx") as writer:
+        with pytest.raises(ExcelReaderError):
+            writer.write_sheet("S", _styled_table(), _STYLED_TYPES, header_style=CellStyle(fill_color=0x1000000))
+        writer.write_sheet("S", _styled_table(), _STYLED_TYPES)
+
+
+def test_add_style_dedupes_and_id_zero_needs_no_registering():
+    with open_writer(io.BytesIO(), "xlsx") as writer:
+        first = writer.add_style(CellStyle(bold=True, horizontal_alignment=HorizontalAlignment.CENTER))
+        assert writer.add_style(CellStyle(bold=True, horizontal_alignment=HorizontalAlignment.CENTER)) == first
+        assert first != 0
+        assert writer.add_style(CellStyle(italic=True)) != first
+        with pytest.raises(ExcelReaderError):
+            writer.add_style(CellStyle(left=Border(BorderStyle.THIN, 0x1000000)))
+        writer.start_sheet("S")
+        writer.write_row(["x"], style_id=0)
+
+
+def test_write_row_applies_row_height_row_style_and_per_cell_styles():
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
+        bold = writer.add_style(CellStyle(bold=True))
+        italic = writer.add_style(CellStyle(italic=True))
+        writer.start_sheet("S")
+        writer.set_column_width(0, 12)
+        writer.write_row(["a", "b", None], cell_styles=[None, bold, italic], height=30)
+        writer.write_row(["c", "d"], style_id=italic)
+        writer.end_sheet()
+
+    styles, sheet = _xlsx_parts(buffer.getvalue())
+    plain, row_styled = _row_styles(sheet)
+    assert "<i/>" in styles and "<b/>" in styles
+    assert plain == ["", str(bold), str(italic)]
+    assert row_styled == [str(italic), str(italic)]
+    assert 'ht="30"' in sheet and 'width="12"' in sheet
+
+
+def test_write_row_rejects_cell_styles_of_the_wrong_length():
+    with open_writer(io.BytesIO(), "xlsx") as writer:
+        writer.start_sheet("S")
+        with pytest.raises(ValueError, match="cell_styles"):
+            writer.write_row(["a", "b"], cell_styles=[None])
+        writer.write_row(["a", "b"])
+
+
+def test_write_row_with_a_bad_cell_style_closes_the_row():
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
+        writer.start_sheet("S")
+        with pytest.raises(ExcelReaderError):
+            writer.write_row(["a", "b"], cell_styles=[None, 999])
+        writer.write_row(["c", "d"])
+        writer.end_sheet()
+
+    _, sheet = _xlsx_parts(buffer.getvalue())
+    assert [len(row) for row in _row_styles(sheet)] == [1, 2]

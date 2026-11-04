@@ -19,9 +19,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use excelreader::ReadOptions;
-use excelreader::{
-    write_columns, write_sheet, Column, ColumnData, Date, ExcelMapper, Workbook, WriteOptions,
-};
+use excelreader::{Column, ColumnData, Date, ExcelMapper, Workbook, WriteOptions, WriterHandle};
 use std::path::{Path, PathBuf};
 
 const FIXTURE: &str = "../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx";
@@ -112,8 +110,11 @@ fn benchmark_write(criterion: &mut Criterion) {
     group.bench_function("columns", |b| {
         let path = output_path("columns.xlsx");
         b.iter(|| {
-            write_columns(&path, std::hint::black_box(&borrowed), &options)
+            let mut handle = WriterHandle::create(&path, &options).expect("create must succeed");
+            handle
+                .write_columns("Sheet1", std::hint::black_box(&borrowed), None)
                 .expect("write_columns must succeed");
+            handle.finish().expect("finish must succeed");
         });
         std::fs::remove_file(&path).ok();
     });
@@ -121,8 +122,11 @@ fn benchmark_write(criterion: &mut Criterion) {
     group.bench_function("sheet", |b| {
         let path = output_path("sheet.xlsx");
         b.iter(|| {
-            write_sheet(&path, std::hint::black_box(&rows), &options)
+            let mut handle = WriterHandle::create(&path, &options).expect("create must succeed");
+            handle
+                .write_sheet("Sheet1", std::hint::black_box(&rows), None)
                 .expect("write_sheet must succeed");
+            handle.finish().expect("finish must succeed");
         });
         std::fs::remove_file(&path).ok();
     });

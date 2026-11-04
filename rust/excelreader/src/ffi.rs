@@ -34,7 +34,7 @@ pub const XL_CELL_ERROR: i32 = 6;
 
 /// ABI revision this crate is compiled against. Every constructor refuses to proceed when the loaded
 /// library's `xl_abi_version()` disagrees - see `workbook::check_abi_version`.
-pub const XL_ABI_VERSION: i32 = 6;
+pub const XL_ABI_VERSION: i32 = 7;
 
 pub const XL_T_STRING: i32 = 0;
 pub const XL_T_I64: i32 = 1;
@@ -185,7 +185,46 @@ pub struct XlSheetOptions {
     pub table_style_len: i32,
     pub table_style: *const u8,
     pub table_flags: i32,
+    pub column_styles: *const *const XlCellStyle,
+    pub column_widths: *const f64,
+    pub header_style: *const XlCellStyle,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct XlBorder {
+    pub style: i32,
+    pub color: i32,
+}
+
+/// Mirrors `xl_cell_style`; field order is the C struct's, padding included.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct XlCellStyle {
+    pub struct_size: i32,
+    pub number_format_len: i32,
+    pub number_format: *const u8,
+    pub font_name: *const u8,
+    pub font_name_len: i32,
+    pub font_flags: i32,
+    pub font_size: f64,
+    pub font_color: i32,
+    pub fill_color: i32,
+    pub horizontal_alignment: i32,
+    pub vertical_alignment: i32,
+    pub wrap_text: i32,
+    pub indent: i32,
+    pub rotation: i32,
+    pub left: XlBorder,
+    pub right: XlBorder,
+    pub top: XlBorder,
+    pub bottom: XlBorder,
+}
+
+pub const XL_FONT_BOLD: i32 = 1;
+pub const XL_FONT_ITALIC: i32 = 2;
+pub const XL_FONT_UNDERLINE: i32 = 4;
+pub const XL_FONT_STRIKETHROUGH: i32 = 8;
 
 #[repr(C)]
 pub struct XlColumnSpec {
@@ -223,9 +262,9 @@ pub struct XlInferredSchema {
     pub column_count: i32,
 }
 
-/// Mirrors `xl_buffer`: an owned block of native memory returned by `xl_write_typed_to_memory` or
-/// `xl_write_handle_bytes`. Released with `xl_free_buffer` - see `workbook::buffer_to_vec`, the one
-/// place this crate touches the raw struct directly.
+/// Mirrors `xl_buffer`: an owned block of native memory returned by `xl_write_handle_bytes`.
+/// Released with `xl_free_buffer` - see `workbook::buffer_to_vec`, the one place this crate touches
+/// the raw struct directly.
 #[repr(C)]
 pub struct XlBuffer {
     pub data: *mut u8,
@@ -463,28 +502,9 @@ extern "C" {
     ) -> c_int;
 
     pub fn xl_free_schema(schema: *mut XlInferredSchema);
-    pub fn xl_write_typed(
-        path: *const u8,
-        path_len: i32,
-        format: i32,
-        specs: *const XlColumnSpec,
-        table: *const XlTable,
-        options: *const XlWriteOptions,
-    ) -> c_int;
 
-    /// Same as `xl_write_typed`, except the result is returned as `out_buffer` instead of being
-    /// written to a path. Only read `*out_buffer` when the call returns `XL_OK`; on failure it is
-    /// zeroed, and `xl_free_buffer` on a zeroed buffer is a no-op.
-    pub fn xl_write_typed_to_memory(
-        format: i32,
-        specs: *const XlColumnSpec,
-        table: *const XlTable,
-        options: *const XlWriteOptions,
-        out_buffer: *mut XlBuffer,
-    ) -> c_int;
-
-    /// Releases a buffer returned by `xl_write_typed_to_memory` or `xl_write_handle_bytes` and
-    /// resets it to zero. Safe on a zeroed value.
+    /// Releases a buffer returned by `xl_write_handle_bytes` and resets it to zero. Safe on a
+    /// zeroed value.
     pub fn xl_free_buffer(buffer: *mut XlBuffer);
 
     /// Reads the plaintext XLSX/XLSB package at `package_path` and writes its agile-encrypted
@@ -527,6 +547,17 @@ extern "C" {
 
     pub fn xl_end_row(handle: *mut XlWriterHandle) -> c_int;
     pub fn xl_end_sheet(handle: *mut XlWriterHandle) -> c_int;
+
+    pub fn xl_add_style(
+        handle: *mut XlWriterHandle,
+        style: *const XlCellStyle,
+        out_style_id: *mut i32,
+    ) -> c_int;
+    pub fn xl_set_column_style(handle: *mut XlWriterHandle, column: i32, style_id: i32) -> c_int;
+    pub fn xl_set_column_width(handle: *mut XlWriterHandle, column: i32, width: f64) -> c_int;
+    pub fn xl_start_row_styled(handle: *mut XlWriterHandle, style_id: i32, height: f64) -> c_int;
+    pub fn xl_style_next_cell(handle: *mut XlWriterHandle, style_id: i32) -> c_int;
+
     pub fn xl_write_sheet(
         handle: *mut XlWriterHandle,
         name: *const u8,
@@ -628,5 +659,32 @@ mod tests {
         assert_eq!(std::mem::offset_of!(XlCellView, number), 24);
         assert_eq!(std::mem::size_of::<XlAggregation>(), 48);
         assert_eq!(std::mem::offset_of!(XlAggregation, accumulate), 16);
+    }
+
+    #[test]
+    fn style_structs_match_the_c_layout() {
+        assert_eq!(std::mem::size_of::<XlCellStyle>(), 104);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, number_format), 8);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, font_name), 16);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, font_name_len), 24);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, font_flags), 28);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, font_size), 32);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, font_color), 40);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, fill_color), 44);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, horizontal_alignment), 48);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, vertical_alignment), 52);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, wrap_text), 56);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, indent), 60);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, rotation), 64);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, left), 68);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, right), 76);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, top), 84);
+        assert_eq!(std::mem::offset_of!(XlCellStyle, bottom), 92);
+        assert_eq!(std::mem::size_of::<XlBorder>(), 8);
+        assert_eq!(std::mem::size_of::<XlSheetOptions>(), 64);
+        assert_eq!(std::mem::offset_of!(XlSheetOptions, table_flags), 32);
+        assert_eq!(std::mem::offset_of!(XlSheetOptions, column_styles), 40);
+        assert_eq!(std::mem::offset_of!(XlSheetOptions, column_widths), 48);
+        assert_eq!(std::mem::offset_of!(XlSheetOptions, header_style), 56);
     }
 }

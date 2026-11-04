@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use excelreader::{
     encrypt_package, write_columns, Column, ColumnData, ErrorKind, OpenOptions, Workbook,
     WriteOptions,

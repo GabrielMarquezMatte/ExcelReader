@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Writer.Internal
@@ -8,9 +7,8 @@ namespace ExcelReader.Core.Writer.Internal
         internal static readonly CellStyle DateStyle = new() { NumberFormat = "mm-dd-yy" };
 
         // Excel refuses a workbook with more custom number formats than this (its documented limit
-        // is "between 200 and 250"), and a BIFF12 format string longer than 255 characters.
+        // is "between 200 and 250").
         private const int MaxCustomNumberFormats = 200;
-        private const int MaxNumberFormatLength = 255;
 
         private readonly Dictionary<CellStyle, int> _indices = [];
         private readonly List<CellStyle> _styles = [];
@@ -18,8 +16,14 @@ namespace ExcelReader.Core.Writer.Internal
         private readonly Lock _dateVariantGate = new();
         private int[] _dateVariants = [];
 
-        internal StyleTable()
+        private readonly StyleLimits _limits;
+        private readonly HashSet<FontKey> _fonts = [default];
+        private readonly List<ExcelColor> _palette = [];
+        private readonly HashSet<ExcelColor> _paletteSet = [];
+
+        internal StyleTable(StyleLimits limits)
         {
+            _limits = limits;
             _styles.Add(default);
             _indices[default] = 0;
             _styles.Add(DateStyle);
@@ -27,6 +31,8 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         internal IReadOnlyList<CellStyle> Styles => _styles;
+
+        internal IReadOnlyList<ExcelColor> PaletteColors => _palette;
 
         internal int Count => _styles.Count;
 
@@ -36,16 +42,18 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 return index;
             }
-            if (style.NumberFormat is { Length: > MaxNumberFormatLength })
-            {
-                throw new ArgumentException(
-                    $"A number format cannot be longer than {MaxNumberFormatLength} characters ({style.NumberFormat.Length} chars).", nameof(style));
-            }
-            if (style.NumberFormat is { } numberFormat && WriterStateGuard.HasUnwritableCharacter(numberFormat))
-            {
-                throw new ArgumentException("A number format cannot contain control characters, U+FFFE or U+FFFF.", nameof(style));
-            }
+            CellStyleValidation.Validate(style, nameof(style));
+            CheckLimits(style, out bool newFont, out List<ExcelColor>? newColors);
             ClaimNumberFormat(style.NumberFormat);
+            if (newFont)
+            {
+                _fonts.Add(FontKey.Of(style));
+            }
+            foreach (ExcelColor color in newColors ?? [])
+            {
+                _palette.Add(color);
+                _paletteSet.Add(color);
+            }
             index = _styles.Count;
             _styles.Add(style);
             _indices[style] = index;
@@ -83,6 +91,25 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        // Runs once per overlay push, before any worker starts; the gate keeps it safe next to DateVariant's registrations.
+        internal int InheritNumberFormat(int overlayStyleId, int columnStyleId)
+        {
+            if (columnStyleId == 0)
+            {
+                return overlayStyleId;
+            }
+            lock (_dateVariantGate)
+            {
+                CellStyle overlay = _styles[overlayStyleId];
+                string? columnFormat = _styles[columnStyleId].NumberFormat;
+                if (overlay.NumberFormat is not null || columnFormat is null)
+                {
+                    return overlayStyleId;
+                }
+                return Add(overlay with { NumberFormat = columnFormat });
+            }
+        }
+
         private void ClaimNumberFormat(string? format)
         {
             if (format is null || _customFormats.Contains(format))
@@ -112,20 +139,72 @@ namespace ExcelReader.Core.Writer.Internal
             return ids;
         }
 
-        internal Dictionary<(bool Bold, bool Italic), int> AssignFontIds()
+        internal StyleComponents AssignComponents()
         {
-            var ids = new Dictionary<(bool Bold, bool Italic), int> { [(false, false)] = 0 };
-            int next = 1;
-            foreach (ref readonly CellStyle style in CollectionsMarshal.AsSpan(_styles))
+            var fonts = new List<FontKey> { default };
+            var fills = new List<FillKey> { default, default };
+            var borders = new List<BorderKey> { default };
+            var fontIndex = new Dictionary<FontKey, int> { [default] = 0 };
+            var fillIndex = new Dictionary<FillKey, int> { [default] = 0 };
+            var borderIndex = new Dictionary<BorderKey, int> { [default] = 0 };
+            int[] fontIds = new int[_styles.Count];
+            int[] fillIds = new int[_styles.Count];
+            int[] borderIds = new int[_styles.Count];
+            for (int i = 0; i < _styles.Count; i++)
             {
-                (bool, bool) key = (style.Bold, style.Italic);
-                if (!ids.ContainsKey(key))
-                {
-                    ids[key] = next;
-                    next++;
-                }
+                CellStyle style = _styles[i];
+                fontIds[i] = IdOf(FontKey.Of(style), fonts, fontIndex);
+                fillIds[i] = style.FillColor is null ? 0 : IdOf(new FillKey(style.FillColor), fills, fillIndex);
+                borderIds[i] = IdOf(BorderKey.Of(style), borders, borderIndex);
             }
-            return ids;
+            return new StyleComponents(fonts, fills, borders, fontIds, fillIds, borderIds);
+        }
+
+        private static int IdOf<TKey>(TKey key, List<TKey> list, Dictionary<TKey, int> index)
+            where TKey : notnull
+        {
+            if (index.TryGetValue(key, out int id))
+            {
+                return id;
+            }
+            id = list.Count;
+            list.Add(key);
+            index[key] = id;
+            return id;
+        }
+
+        private void CheckLimits(in CellStyle style, out bool newFont, out List<ExcelColor>? newColors)
+        {
+            if (_styles.Count + 1 > _limits.MaxCellXfs)
+            {
+                throw new ExcelLimitExceededException("CellStyles", _limits.MaxCellXfs, _styles.Count + 1L);
+            }
+            newFont = !_fonts.Contains(FontKey.Of(style));
+            if (newFont && _fonts.Count + 1 + _limits.ReservedFontIndices > _limits.MaxFonts)
+            {
+                throw new ExcelLimitExceededException("Fonts", _limits.MaxFonts, _fonts.Count + 1L + _limits.ReservedFontIndices);
+            }
+            newColors = null;
+            CollectNewColor(style.FontColor, ref newColors);
+            CollectNewColor(style.FillColor, ref newColors);
+            CollectNewColor(style.Left?.Color, ref newColors);
+            CollectNewColor(style.Right?.Color, ref newColors);
+            CollectNewColor(style.Top?.Color, ref newColors);
+            CollectNewColor(style.Bottom?.Color, ref newColors);
+            if (newColors is not null && _palette.Count + newColors.Count > _limits.MaxPaletteColors)
+            {
+                throw new ExcelLimitExceededException("Colors", _limits.MaxPaletteColors, _palette.Count + (long)newColors.Count);
+            }
+        }
+
+        private void CollectNewColor(ExcelColor? color, ref List<ExcelColor>? fresh)
+        {
+            if (color is not { } value || _paletteSet.Contains(value) || fresh?.Contains(value) == true)
+            {
+                return;
+            }
+            fresh ??= [];
+            fresh.Add(value);
         }
     }
 }

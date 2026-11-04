@@ -16,8 +16,30 @@ namespace ExcelReader.Core.Writer
         {
         }
 
-        internal abstract (string[] Headers, Action<TRow, T> WriteRow) Columns<TRow>()
+        internal abstract (string[] Headers, Action<TRow, T> WriteRow, CellStyle?[]? ColumnStyles) Columns<TRow>()
             where TRow : IRowWriter;
+
+        internal virtual CellStyle? HeaderStyle => null;
+
+        /// <summary>Returns a layout with the same columns whose header row is written in <paramref name="style"/>.</summary>
+        /// <param name="style">The style of every header cell; it replaces any column style on them.</param>
+        /// <returns>The new layout.</returns>
+        /// <exception cref="ArgumentException">A value of <paramref name="style"/> is out of range.</exception>
+        public ExcelRecordLayout<T> WithHeaderStyle(CellStyle style)
+        {
+            CellStyleValidation.Validate(in style, nameof(style));
+            return new HeaderStyled(this, style);
+        }
+
+        private sealed class HeaderStyled(ExcelRecordLayout<T> inner, CellStyle style) : ExcelRecordLayout<T>
+        {
+            internal override CellStyle? HeaderStyle => style;
+
+            internal override (string[] Headers, Action<TRow, T> WriteRow, CellStyle?[]? ColumnStyles) Columns<TRow>()
+            {
+                return inner.Columns<TRow>();
+            }
+        }
     }
 
     /// <summary>Creates <see cref="ExcelRecordLayout{T}"/> instances.</summary>
@@ -26,7 +48,7 @@ namespace ExcelReader.Core.Writer
         /// <summary>
         /// Creates a layout with one column per public readable, non-indexer property of <typeparamref name="T"/>
         /// (excluding any marked <c>[ExcelIgnore]</c>), headed by its <c>[ExcelColumn]</c> name or, failing
-        /// that, the property name, found by reflection.
+        /// that, the property name, found by reflection. A property's <c>[ExcelStyle]</c> styles its data cells.
         /// </summary>
         /// <remarks>
         /// Not compatible with Native AOT, and trimming can remove the properties it reads. Use
@@ -34,11 +56,12 @@ namespace ExcelReader.Core.Writer
         /// </remarks>
         /// <typeparam name="T">The record type.</typeparam>
         /// <returns>The layout.</returns>
+        /// <exception cref="ArgumentException">An <c>[ExcelStyle]</c> value is out of range.</exception>
         [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         public static ExcelRecordLayout<T> FromAttributes<T>()
         {
-            return Reflected<T>.Instance;
+            return Reflected<T>.Instance ??= new Reflected<T>(RecordColumns<T>.BuildStyles());
         }
 
         /// <summary>Creates a layout from the map the <c>[ExcelSerializable]</c> source generator emitted for <typeparamref name="T"/>. Trimming and AOT safe.</summary>
@@ -50,15 +73,16 @@ namespace ExcelReader.Core.Writer
             return Mapped<T>.Instance;
         }
 
-        private sealed class Reflected<T> : ExcelRecordLayout<T>
+        // Built outside a static initializer so an invalid [ExcelStyle] throws ArgumentException, not TypeInitializationException.
+        private sealed class Reflected<T>(CellStyle?[]? styles) : ExcelRecordLayout<T>
         {
-            internal static readonly Reflected<T> Instance = new();
+            internal static Reflected<T>? Instance;
 
             [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Only reachable through FromAttributes, which carries RequiresUnreferencedCode.")]
             [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Only reachable through FromAttributes, which carries RequiresDynamicCode.")]
-            internal override (string[] Headers, Action<TRow, T> WriteRow) Columns<TRow>()
+            internal override (string[] Headers, Action<TRow, T> WriteRow, CellStyle?[]? ColumnStyles) Columns<TRow>()
             {
-                return (RecordColumns<T>.Headers, RecordColumns<T>.WriteRow);
+                return (RecordColumns<T>.Headers, RecordColumns<T>.WriteRow, styles);
             }
         }
 
@@ -67,9 +91,9 @@ namespace ExcelReader.Core.Writer
         {
             internal static readonly Mapped<T> Instance = new();
 
-            internal override (string[] Headers, Action<TRow, T> WriteRow) Columns<TRow>()
+            internal override (string[] Headers, Action<TRow, T> WriteRow, CellStyle?[]? ColumnStyles) Columns<TRow>()
             {
-                return (MappedRecordColumns<T, TRow>.Headers, MappedRecordColumns<T, TRow>.WriteRow);
+                return (MappedRecordColumns<T, TRow>.Headers, MappedRecordColumns<T, TRow>.WriteRow, MappedRecordColumns<T, TRow>.Styles);
             }
         }
     }
@@ -81,6 +105,8 @@ namespace ExcelReader.Core.Writer
         private static readonly ExcelRecordMapBuilder<T, TRow> _builder = Build();
 
         internal static string[] Headers { get; } = _builder.Headers();
+
+        internal static CellStyle?[]? Styles { get; } = _builder.Styles();
 
         internal static void WriteRow(TRow row, T record)
         {

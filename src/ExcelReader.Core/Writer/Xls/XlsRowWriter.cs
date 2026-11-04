@@ -33,7 +33,38 @@ namespace ExcelReader.Core.Writer.Xls
             if (value is not null)
             {
                 _owner.EmitLabel(_rowNumber, _columnIndex, value);
+                _columnIndex++;
+                return;
             }
+            WriteNull();
+        }
+
+        /// <summary>Styles the next cell written, and only that cell, replacing the row and column style. Style 0 forces the general style.</summary>
+        /// <param name="styleId">The style to apply, from <see cref="XlsWorkbookWriter.AddStyle"/>.</param>
+        /// <returns>This row writer.</returns>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsWorkbookWriter.AddStyle"/>.</exception>
+        public XlsRowWriter Style(int styleId)
+        {
+            ThrowIfDisposed();
+            _owner.SetPendingStyle(styleId);
+            return this;
+        }
+
+        IRowWriter IRowWriter.Style(int styleId)
+        {
+            return Style(styleId);
+        }
+
+        private void WriteNull()
+        {
+            if (!_owner.HasPendingStyle)
+            {
+                Skip(1);
+                return;
+            }
+            ThrowIfDisposed();
+            _owner.EmitBlank(_rowNumber, _columnIndex);
             _columnIndex++;
         }
 
@@ -58,7 +89,7 @@ namespace ExcelReader.Core.Writer.Xls
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -77,7 +108,7 @@ namespace ExcelReader.Core.Writer.Xls
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -99,7 +130,7 @@ namespace ExcelReader.Core.Writer.Xls
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -119,7 +150,7 @@ namespace ExcelReader.Core.Writer.Xls
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -140,7 +171,7 @@ namespace ExcelReader.Core.Writer.Xls
         {
             if (value is null)
             {
-                Skip(1);
+                WriteNull();
                 return;
             }
             Write(value.Value);
@@ -152,6 +183,10 @@ namespace ExcelReader.Core.Writer.Xls
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
+            if (count > 0 && _owner.HasPendingStyle)
+            {
+                WriterStateGuard.ThrowPendingStyle("skipping");
+            }
             if (count > 0 && _columnIndex > XlsSheetWriter.MaxColumn - count + 1)
             {
                 throw new InvalidOperationException($"BIFF8 worksheets are limited to {XlsSheetWriter.MaxColumn + 1} columns.");
@@ -167,10 +202,16 @@ namespace ExcelReader.Core.Writer.Xls
         /// <inheritdoc/>
         public void Dispose()
         {
-            if (!_disposed)
+            if (_disposed)
             {
-                _disposed = true;
-                _owner.NotifyRowEnded();
+                return;
+            }
+            _disposed = true;
+            bool wasPending = _owner.ClearPendingStyle();
+            _owner.NotifyRowEnded();
+            if (wasPending)
+            {
+                WriterStateGuard.ThrowPendingStyle("disposing the row");
             }
         }
 

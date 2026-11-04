@@ -243,8 +243,9 @@ with open_workbook("sales.csv") as workbook:
 
 ### Writing
 
-`write_workbook()` writes a `TypedTable` (what `parse()` returns) back out as a single sheet,
-through the same `xl_write_typed` native export — one-shot, no writer handle before or after the call:
+`write_workbook()` writes a `TypedTable` (what `parse()` returns) back out as a single sheet in one
+call. It is deprecated (it emits a `DeprecationWarning`, and goes in 8.0): it wraps `open_writer()` and
+`SheetWriter.write_sheet`, described under "Several sheets", which also take cell styles:
 
 ```python
 from excelreader import ColumnType, write_workbook
@@ -311,7 +312,7 @@ write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallel
 
 **Phase-1 limits, stated plainly:** `write_workbook` writes a single sheet (for several, see
 `write_sheet` below); the whole table must already be in memory (no streaming/chunked writes); no
-styling beyond the temporal number formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns.
+styling beyond the temporal number formats applied to DATE/TIME/TIMESTAMP columns.
 `format="auto"` is not accepted — sniffing reads a file's existing signature bytes, and a file being
 created has none.
 
@@ -343,6 +344,38 @@ from excelreader import TableOptions
 
 writer.write_sheet("Sales", sales_df, table=TableOptions("Sales", style="TableStyleLight9", column_stripes=True))
 ```
+
+### Cell styles
+
+`write_sheet` styles by column name; every argument is optional. Column styles reach the data cells
+only, never the header row, and a style without a `number_format` keeps a DATE/TIME/TIMESTAMP column's
+format. Widths are in characters. An unknown column name raises `ValueError`; an invalid value (a color
+above `0xFFFFFF`, say) raises `ExcelReaderError`.
+
+```python
+from excelreader import Border, BorderStyle, CellStyle, HorizontalAlignment
+
+writer.write_sheet(
+    "Sales", sales_df,
+    header_style=CellStyle(bold=True, fill_color=0xDDEBF7, bottom=Border(BorderStyle.THIN)),
+    column_styles={"total": CellStyle(number_format="#,##0.00", horizontal_alignment=HorizontalAlignment.RIGHT)},
+    column_widths={"customer": 30},
+)
+```
+
+Colors are `0xRRGGBB` ints, `None` for unset. For streamed rows, register styles on the writer and
+refer to them by id (an equal style gets the same id; id 0 is General and needs no registering):
+
+```python
+bold = writer.add_style(CellStyle(bold=True))
+writer.start_sheet("Log")
+writer.set_column_width(0, 24)        # before the sheet's first row
+writer.set_column_style(1, bold)
+writer.write_row(["Title", 1], style_id=bold, height=30)   # style_id beats column styles
+writer.write_row(["x", 2], cell_styles=[None, bold])       # one entry per value, None leaves it alone
+writer.end_sheet()
+```
+
 
 ## Writing a sheet row by row
 

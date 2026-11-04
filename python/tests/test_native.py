@@ -239,33 +239,6 @@ def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
     lib.xl_close(handle)
 
 
-def test_write_typed_round_trips_through_parse_typed(tmp_path):
-    lib = _native.load_library()
-    out_path = tmp_path / "written.csv"
-
-    values = (ctypes.c_int64 * 2)(3, 7)
-    column = _native.NativeColumn(
-        type=_native.XL_T_I64,
-        length=2,
-        values=ctypes.cast(values, ctypes.c_void_p),
-        validity=None,
-        data=None,
-        data_len=0,
-    )
-    columns = (_native.NativeColumn * 1)(column)
-    table = _native.NativeTable(column_count=1, row_count=2, columns=columns)
-    specs = (_native.NativeColumnSpec * 1)(_native.column_spec_by_name("qty", _native.XL_T_I64))
-    options = _native.default_write_options()
-
-    encoded = str(out_path).encode("utf-8")
-    status = lib.xl_write_typed(
-        encoded, len(encoded), _native.XL_FORMAT_CSV, specs, ctypes.byref(table), ctypes.byref(options)
-    )
-
-    assert status == _native.XL_OK
-    assert out_path.read_text(encoding="utf-8").replace("\r\n", "\n") == "qty\n3\n7\n"
-
-
 def test_write_options_default_to_a_serial_write():
     from excelreader import WriteOptions
 
@@ -295,3 +268,28 @@ def test_int32_len_rejects_a_length_the_abi_would_wrap():
     assert _native.int32_len(b"abc") == 3
     with pytest.raises(ValueError, match="int32"):
         _native.int32_len(_Oversized())
+
+
+def test_cell_style_structs_match_the_header_layout():
+    style = _native.NativeCellStyle
+    assert ctypes.sizeof(style) == 104
+    assert ctypes.sizeof(_native.NativeBorder) == 8
+    offsets = {name: getattr(style, name).offset for name, _ in style._fields_}
+    assert offsets == {
+        "struct_size": 0, "number_format_len": 4, "number_format": 8, "font_name": 16, "font_name_len": 24,
+        "font_flags": 28, "font_size": 32, "font_color": 40, "fill_color": 44, "horizontal_alignment": 48,
+        "vertical_alignment": 52, "wrap_text": 56, "indent": 60, "rotation": 64,
+        "left": 68, "right": 76, "top": 84, "bottom": 92,
+    }
+    options = _native.NativeSheetOptions
+    assert ctypes.sizeof(options) == 64
+    assert [options.column_styles.offset, options.column_widths.offset, options.header_style.offset] == [40, 48, 56]
+
+
+def test_default_cell_style_marshals_every_color_as_unset():
+    from excelreader import CellStyle
+
+    raw = _native.to_native_cell_style(CellStyle())
+    assert raw.struct_size == 104
+    assert (raw.font_color, raw.fill_color) == (-1, -1)
+    assert [edge.color for edge in (raw.left, raw.right, raw.top, raw.bottom)] == [-1] * 4

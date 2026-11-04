@@ -57,7 +57,7 @@ namespace ExcelReader.Core.Writer.Xls
                 int rowsFrame = _frame.Length;
                 for (int i = first; i < first + count; i++)
                 {
-                    BiffRecordWriter.WriteRow(_frame, i, rows[i].ColMic, rows[i].ColMac);
+                    BiffRecordWriter.WriteRow(_frame, i, rows[i].ColMic, rows[i].ColMac, rows[i].HeightTwips);
                 }
                 AddFrame(rowsFrame);
                 _segments.Add(new Segment(Cells: true, cellsStart, cellsEnd - cellsStart));

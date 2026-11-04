@@ -80,7 +80,9 @@ Writing has two layers. The one-shot export, `xl_write_typed` (plus its in-memor
 caller sets `options->struct_size = sizeof(xl_write_options)` before the call, and a mismatched value
 is rejected with `XL_INVALID_ARGUMENT` before anything else is inspected. It is single-sheet,
 whole-table-in-memory, no styling beyond the temporal number formats — see `include/excelreader.h` for
-the full contract.
+the full contract. Both are deprecated since 7.4 and removed in 8.0: they keep working unchanged, but
+new code should open a writer handle (`xl_open_write_handle`/`xl_open_write_handle_to_memory`) and call
+`xl_write_sheet`, which writes the same sheet and also takes styles.
 
 For XLSX and XLSB, `degree_of_parallelism` and `batch_rows` format and compress row batches on
 several threads: `degree_of_parallelism` `0` uses every processor and `1` writes serially;
@@ -97,14 +99,46 @@ each containing `xl_start_row`..`xl_end_row` with one `xl_write_string`/`xl_writ
 `xl_write_float64`/`xl_write_bool`/`xl_write_date`/`xl_write_time`/`xl_write_timestamp`/`xl_write_null`
 call per cell, then `xl_close_write_handle`. Between sheets, `xl_write_sheet` writes a whole
 `xl_table` as one sheet, as `xl_write_typed` does, using the handle's `degree_of_parallelism` and
-`batch_rows`; it fails while a sheet is open. Its `xl_sheet_options*` (NULL for a plain sheet, same
-`struct_size` contract) can write the sheet as an Excel table: `table_name`, `table_style` (NULL keeps
+`batch_rows`; it fails while a sheet is open. Its `xl_sheet_options*` (NULL for a plain sheet;
+`struct_size` is `sizeof(xl_sheet_options)`, or 40 for the ABI 6 layout without the style fields) can
+style it (see Cell styles below) and write it as an Excel table: `table_name`, `table_style` (NULL keeps
 `TableStyleMedium2`) and `XL_TABLE_*` flags for no style, row and column stripes and first- and
 last-column emphasis. A table needs every column named and an XLSX or XLSB handle. `xl_write_handle_bytes` reads back a memory-backed
 handle's bytes so far without releasing it. `xl_abort_write_handle` releases a handle and discards its
 output instead, leaving an existing file at the path as it was. A failed `xl_write_sheet` leaves the
 handle with no output: closing it or reading its bytes then fails, so abort it. Both write paths release their buffers with
 `xl_free_buffer` (`xl_table`/`xl_inferred_schema` keep their own `xl_free_table`/`xl_free_schema`).
+
+### Cell styles
+
+A writer handle styles cells with ids from `xl_add_style`, which takes an `xl_cell_style` (same
+`struct_size` contract): number format, font name, size, color and `XL_FONT_*` flags, fill color,
+`xl_border` edges (`XL_BORDER_*` with a color), `XL_HALIGN_*`/`XL_VALIGN_*` alignment, wrap, indent
+and rotation. Colors are `0xRRGGBB` with `-1` for unset, so a zeroed struct must set its unused colors
+to `-1`; strings are UTF-8 with a length, and a NULL pointer or a length of 0 leaves them unset. An
+equal style returns the same id, and id 0 is the general style without registering anything. Then:
+
+- `xl_set_column_style` and `xl_set_column_width` go after `xl_start_sheet` and before the sheet's
+  first row.
+- `xl_start_row_styled(handle, style_id, height)` opens a row whose style beats the column styles;
+  `height` is in points, 0 for the default.
+- `xl_style_next_cell` styles only the next cell written, over the row and column styles;
+  `xl_write_null` then writes a styled blank, and `xl_end_row` with a style still pending fails.
+
+An invalid value returns `XL_INVALID_ARGUMENT`; a format limit (512 fonts, the XLSX/XLSB or XLS style
+count, XLS's 56 colors) returns `XL_ERROR` with the Core message. Neither affects the handle, so the
+next call can go on writing. A call out of order returns `XL_ERROR`, as the other handle calls do. CSV
+accepts every style call and writes the same bytes as without them. Nothing is inherited on this path:
+a column written with `xl_write_time` or `xl_write_timestamp` whose style has no number format shows
+the number, or the date alone.
+
+`xl_write_sheet` takes its styles as values in `xl_sheet_options`, not ids: `column_styles` and
+`column_widths` (each `table->column_count` entries, or NULL for none; a NULL entry or a width of 0
+keeps the default) and `header_style`. Column styles reach the data cells only, never the header row,
+in a plain sheet and in a table alike, and a column style without a number format keeps the
+DATE/TIME/TIMESTAMP column's format, so a bold TIME column still shows `hh:mm:ss`. Parallel writes
+keep them. The styles are checked and registered before the sheet is added: an invalid one returns
+`XL_INVALID_ARGUMENT`, a format limit `XL_ERROR`, and the handle stays usable.
 
 ## Callback reads
 

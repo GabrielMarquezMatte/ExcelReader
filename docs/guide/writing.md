@@ -58,7 +58,7 @@ A workbook whose sheets are *all* hidden is rejected when it is ended (`InvalidO
 
 ## Cell styles on write
 
-Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a [`CellStyle`](xref:ExcelReader.Core.Writer.CellStyle) once with `AddStyle` and apply its returned index to a column (before the first row) or to a whole row (when starting it):
+Every `IWorkbookWriter<TSheet>` supports column-, row- and cell-level styling: number format, font (bold, italic, underline, strikethrough, name, size, color), solid fill, per-edge borders, alignment, wrap, indent and rotation. Register a [`CellStyle`](xref:ExcelReader.Core.Writer.CellStyle) once with `AddStyle` and apply its returned index to a column (before the first row) or to a whole row (when starting it):
 
 <!-- snippet: writing-styles -->
 ```csharp
@@ -90,7 +90,111 @@ await workbook.EndAsync();
 
 `AddStyle` deduplicates by value: registering the same `CellStyle` twice returns the same index, and index 0 is always the general/default style. `SetColumnStyle`/`SetColumnWidth` must be called before the sheet's first `StartRow`/`StartRowAsync` (calling them later throws `InvalidOperationException`) — the column layout (XLSX `<cols>`, XLSB `BrtColInfo`, XLS `COLINFO`) has to be written ahead of the row data. A row's style (from `StartRowAsync(int, CancellationToken)`) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.
 
-Cell-level styling (one specific cell rather than a whole column or row) is out of scope. Bold/italic render only in XLSX today; XLSB and XLS apply the number format but keep the default font, since their font records are opaque binary blobs this library isn't confident hand-editing without a verified field map.
+### Style one cell, and set row heights
+
+`row.Style(styleId)` styles the next cell written on that row, and only that cell; it replaces the row and column style for it, and `Style(0)` forces the general style. A `null` write under a pending style writes a styled blank cell. `Skip` or ending the row while a style is pending throws `InvalidOperationException`. `StartRow(styleId, height)`/`StartRowAsync(styleId, height)` set the row height in points (greater than 0, at most 409):
+
+<!-- snippet: writing-cell-styles -->
+```csharp
+await using var workbook = XlsxWorkbookWriter.Create(stream);
+
+int title = workbook.AddStyle(new CellStyle
+{
+    Bold = true,
+    FontSize = 14,
+    FontColor = ExcelColor.FromRgb(0xFFFFFF),
+    FillColor = ExcelColor.FromRgb(0x1F4E78),
+    HorizontalAlignment = ExcelHorizontalAlignment.Center,
+    VerticalAlignment = ExcelVerticalAlignment.Center,
+});
+var thin = new CellBorder(ExcelBorderStyle.Thin, ExcelColor.FromRgb(0x808080));
+int boxed = workbook.AddStyle(new CellStyle { Left = thin, Right = thin, Top = thin, Bottom = thin });
+int warning = workbook.AddStyle(new CellStyle { FontColor = ExcelColor.FromRgb(0xC00000), Italic = true });
+
+await using var sheet = workbook.AddSheet("Report");
+await using (var row = await sheet.StartRowAsync(title, height: 30)) // row style and height in points
+{
+    row.Write("Quarterly report");
+}
+await using (var row = await sheet.StartRowAsync())
+{
+    row.Style(boxed).Write("Revenue"); // Style applies to the next cell only
+    row.Style(boxed).Write(1234.5);
+    row.Style(warning).Write("estimate");
+}
+
+await workbook.EndAsync();
+```
+
+### Styled record layouts
+
+`[ExcelStyle]` on a property styles that column's data cells (never its header) when a layout from `ExcelRecordLayout.FromAttributes<T>()` or the `[ExcelSerializable]` generator writes it; it wins over `SetColumnStyle`, except that a column number format set with `SetColumnStyle` is kept when the attribute names none. Colors are `0xRRGGBB` ints, `-1` for unset, and `Border` sets all four edges. `WithHeaderStyle` styles every header cell, including a table's header row. For a style that depends on the value, write the column yourself in an `IExcelRecordMap<T>` and call `row.Style` before the write:
+
+<!-- snippet: writing-styled-records -->
+```csharp
+public sealed class Payment
+{
+    public string Customer { get; init; } = "";
+
+    [ExcelStyle(NumberFormat = "#,##0.00", Bold = true)]
+    public decimal Amount { get; init; }
+}
+
+public sealed class Balance : IExcelRecordMap<Balance>
+{
+    public static int Negative; // a style id registered on the workbook before writing
+
+    public string Account { get; init; } = "";
+
+    public double Value { get; init; }
+
+    public static void ConfigureExcelRecordMap<TRow>(ExcelRecordMapBuilder<Balance, TRow> builder)
+        where TRow : IRowWriter
+    {
+        builder
+            .Column("Account", static (row, b) => row.Write(b.Account))
+            .Column("Value", static (row, b) =>
+            {
+                if (b.Value < 0)
+                {
+                    row.Style(Negative);
+                }
+                row.Write(b.Value);
+            });
+    }
+}
+
+await using var workbook = XlsxWorkbookWriter.Create(stream);
+Balance.Negative = workbook.AddStyle(new CellStyle { FontColor = ExcelColor.FromRgb(0xFF0000) });
+
+ExcelRecordLayout<Payment> layout = ExcelRecordLayout.FromAttributes<Payment>()
+    .WithHeaderStyle(new CellStyle { Bold = true, FillColor = ExcelColor.FromRgb(0xD9E1F2) });
+
+await using (var sheet = workbook.AddSheet("Payments"))
+{
+    await sheet.WriteRecordsAsync(payments, layout);
+}
+await using (var sheet = workbook.AddSheet("Balances"))
+{
+    await sheet.WriteRecordsAsync(balances, ExcelRecordLayout.Generated<Balance>());
+}
+
+await workbook.EndAsync();
+```
+
+Styled layouts work in serial, table and parallel writes. An invalid `[ExcelStyle]` value throws `ArgumentException` from `FromAttributes`; with the generator it is compile error `EXR011`. CSV accepts styled layouts and writes the same text as without them. A custom `ISheetWriter<TRow>` given a styled layout throws `NotSupportedException`.
+
+Limits are checked when a style is added: at most 512 fonts in every format, 65,490 cell styles in XLSX/XLSB and 4,000 in XLS. XLS also has a 56-color palette: the 57th distinct color (font, fill or border) throws `ExcelLimitExceededException`.
+
+### Styles from the native library and the bindings
+
+The native writer handle (ABI 7) takes the same styles: `xl_add_style` registers one, and `xl_set_column_style`, `xl_start_row_styled` and `xl_style_next_cell` apply it; `xl_sheet_options` carries column styles, widths and a header style for a typed `xl_write_sheet`. Column styles reach a typed sheet's data cells, never its header. A column or overlay style without a number format keeps the date/time format of a date, time or timestamp column; an explicit number format wins. Each README has a "Cell styles" section:
+
+- [C++](../../cpp/README.md#cell-styles)
+- [Python](../../python/README.md#cell-styles)
+- [Rust](../../rust/excelreader/README.md#cell-styles)
+- [.NET Framework](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.NetFramework/README.md#cell-styles)
+- [C ABI](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Native/README.md#cell-styles)
 
 ## Read and write XLSB workbooks (BIFF12)
 
@@ -342,22 +446,28 @@ once has no idle cores to give it.
 
 ### From the native library and the bindings
 
-`xl_write_typed` and `xl_write_typed_to_memory` take the same two knobs in `xl_write_options`:
+`xl_open_write_handle` and `xl_open_write_handle_to_memory` take the same two knobs in `xl_write_options`
+(as do the deprecated `xl_write_typed` and `xl_write_typed_to_memory`):
 `degree_of_parallelism` and `batch_rows`, with the same meaning (`0` is every processor and the
 8,192-row default). A zero-initialized struct therefore writes XLSX and XLSB in parallel; a struct
 with the 7.0 size (32 bytes) or a NULL options pointer writes serially, as before. The C++, Rust and
 Python wrappers default to a serial write and turn it on only when asked:
 
 ```cpp
-xl::write_columns("big.xlsx", columns, {.degree_of_parallelism = 0});
+auto writer = xl::WriterHandle::open("big.xlsx", {.degree_of_parallelism = 0}).value();
+writer.write_columns("Sheet1", columns);
+writer.finish();
 ```
 
 ```rust
-write_columns("big.xlsx", &columns, &WriteOptions::new().degree_of_parallelism(0))?;
+let mut handle = WriterHandle::create("big.xlsx", &WriteOptions::new().degree_of_parallelism(0))?;
+handle.write_columns("Sheet1", &columns, None)?;
+handle.finish()?;
 ```
 
 ```python
-write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallelism=0))
+with open_writer("big.xlsx", options=WriteOptions(degree_of_parallelism=0)) as writer:
+    writer.write_sheet("Sheet1", table, types)
 ```
 
 The table's buffers are read from several threads, so they must not change while the call runs.

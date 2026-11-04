@@ -130,6 +130,36 @@ namespace ExcelReader.Core.Writer
         ValueTask<TRow> StartRowAsync(int styleId, CancellationToken ct = default);
 
         /// <summary>
+        /// Synchronous counterpart to <see cref="StartRowAsync(int, double, CancellationToken)"/>: begins the
+        /// next row with <paramref name="styleId"/> applied to its cells and a custom height.
+        /// </summary>
+        /// <param name="styleId">The style to apply to every cell of this row; 0 for none.</param>
+        /// <param name="height">The row height in points, greater than 0 and at most 409. Stored to the nearest twip (1/20 point).</param>
+        /// <returns>The writer for the new row.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        /// <exception cref="NotSupportedException">The implementation does not support row heights.</exception>
+        TRow StartRow(int styleId, double height)
+        {
+            throw new NotSupportedException("This sheet writer does not support row heights.");
+        }
+
+        /// <summary>
+        /// Begins the next row with <paramref name="styleId"/> applied to its cells and a custom height.
+        /// The height is chosen here because XLSX writes it into the row's start tag and XLSB/XLS into the
+        /// row header. CSV accepts the call and ignores the height.
+        /// </summary>
+        /// <param name="styleId">The style to apply to every cell of this row; 0 for none.</param>
+        /// <param name="height">The row height in points, greater than 0 and at most 409. Stored to the nearest twip (1/20 point).</param>
+        /// <param name="ct">A token to cancel the operation.</param>
+        /// <returns>The writer for the new row.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        /// <exception cref="NotSupportedException">The implementation does not support row heights.</exception>
+        ValueTask<TRow> StartRowAsync(int styleId, double height, CancellationToken ct = default)
+        {
+            throw new NotSupportedException("This sheet writer does not support row heights.");
+        }
+
+        /// <summary>
         /// Applies <paramref name="styleId"/> to every cell of column <paramref name="columnIndex"/>
         /// that does not carry its own row style. Must be called before the first row is started.
         /// </summary>
@@ -247,5 +277,23 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="count">The number of columns to skip; must not be negative.</param>
         void Skip(int count = 1);
+
+        /// <summary>
+        /// Styles the next cell written, and only that cell. The style replaces any row and column style;
+        /// style 0 forces the general style. A <see langword="null"/> write with a style pending writes a
+        /// styled blank cell. CSV accepts the call and ignores the style.
+        /// </summary>
+        /// <param name="styleId">The style to apply, from <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</param>
+        /// <returns>This row writer, so the call chains into the <c>Write</c> that consumes it.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
+        /// <exception cref="NotSupportedException">The implementation does not support per-cell styles.</exception>
+        /// <remarks>
+        /// <see cref="Skip"/> with a style pending, and disposing the row with a style pending, throw
+        /// <see cref="InvalidOperationException"/>.
+        /// </remarks>
+        IRowWriter Style(int styleId)
+        {
+            throw new NotSupportedException("This row writer does not support per-cell styles.");
+        }
     }
 }

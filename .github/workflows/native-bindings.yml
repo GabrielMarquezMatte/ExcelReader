@@ -27,6 +27,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       python: ${{ steps.filter.outputs.python }}
       cpp: ${{ steps.filter.outputs.cpp }}
+      netframework: ${{ steps.filter.outputs.netframework }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -49,6 +50,10 @@ jobs:
               - 'tests/ExcelReader.NativeSmoke/**'
             cpp:
               - 'cpp/**'
+            netframework:
+              - 'src/ExcelReader.NetFramework/**'
+              - 'tests/ExcelReader.NetFramework.Tests/**'
+              - 'tests/ExcelReader.NetFramework.PackageSmoke/**'
 
   build-native:
     name: Build native library (${{ matrix.os }})
@@ -57,7 +62,8 @@ jobs:
       needs.changes.outputs.native == 'true' ||
       needs.changes.outputs.rust == 'true' ||
       needs.changes.outputs.python == 'true' ||
-      needs.changes.outputs.cpp == 'true'
+      needs.changes.outputs.cpp == 'true' ||
+      needs.changes.outputs.netframework == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -185,6 +191,36 @@ jobs:
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo bench --benches -- --test
+
+  test-netframework:
+    name: .NET Framework binding (windows-latest)
+    needs: [changes, build-native]
+    if: needs.changes.outputs.native == 'true' || needs.changes.outputs.netframework == 'true'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: Download native library
+        uses: actions/download-artifact@v8
+        with:
+          name: native-lib-windows-latest
+          path: python/src/excelreader/_lib
+
+      - name: Test
+        run: dotnet test --project tests/ExcelReader.NetFramework.Tests/ExcelReader.NetFramework.Tests.csproj -c Release
+
+      - name: Package smoke test
+        shell: pwsh
+        run: pwsh tests/ExcelReader.NetFramework.PackageSmoke/run.ps1
 
   test-python:
     name: Native + Python + C smoke (${{ matrix.os }})

@@ -20,7 +20,7 @@ namespace ExcelReader.Core.Writer.Xls
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
-        private readonly StyleTable _styles = new();
+        private readonly StyleTable _styles = new(StyleLimits.Biff8);
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
             Justification = "Released with the sheet buffers once End or EndAsync has written the workbook.")]
         private readonly XlsSharedStrings _sharedStrings = new();
@@ -88,6 +88,11 @@ namespace ExcelReader.Core.Writer.Xls
         internal int DateStyle(int styleId)
         {
             return _styles.DateVariant(styleId);
+        }
+
+        internal int InheritNumberFormat(int overlayStyleId, int columnStyleId)
+        {
+            return _styles.InheritNumberFormat(overlayStyleId, columnStyleId);
         }
 
         internal int AddSharedString(ReadOnlySpan<char> value)
