@@ -1,4 +1,5 @@
 using ExcelReader.Native;
+using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Tests.Native
 {
@@ -103,6 +104,55 @@ namespace ExcelReader.Tests.Native
 
             Assert.False(NativeOpenOptions.TryDecode(raw with { SourceCacheBytes = -1 }, out _, out _));
             Assert.False(NativeOpenOptions.TryDecode(raw with { MaxBufferedBytes = -1 }, out _, out _));
+        }
+
+        [Fact]
+        public void CellStyleLayoutMatchesTheHeader()
+        {
+            NativeCellStyleRaw style = default;
+            byte* start = (byte*)&style;
+
+            Assert.Equal(8, sizeof(NativeBorderRaw));
+            Assert.Equal(104, sizeof(NativeCellStyleRaw));
+            Assert.Equal(
+                [0, 4, 8, 16, 24, 28, 32, 40, 44, 48, 52, 56, 60, 64, 68, 76, 84, 92],
+                [
+                    (int)((byte*)&style.StructSize - start), (int)((byte*)&style.NumberFormatLen - start),
+                    (int)((byte*)&style.NumberFormat - start), (int)((byte*)&style.FontName - start),
+                    (int)((byte*)&style.FontNameLen - start), (int)((byte*)&style.FontFlags - start),
+                    (int)((byte*)&style.FontSize - start), (int)((byte*)&style.FontColor - start),
+                    (int)((byte*)&style.FillColor - start), (int)((byte*)&style.HorizontalAlignment - start),
+                    (int)((byte*)&style.VerticalAlignment - start), (int)((byte*)&style.WrapText - start),
+                    (int)((byte*)&style.Indent - start), (int)((byte*)&style.Rotation - start),
+                    (int)((byte*)&style.Left - start), (int)((byte*)&style.Right - start),
+                    (int)((byte*)&style.Top - start), (int)((byte*)&style.Bottom - start),
+                ]);
+        }
+
+        [Fact]
+        public void SheetOptionsLayoutMatchesTheHeader()
+        {
+            NativeSheetOptionsRaw options = default;
+            byte* start = (byte*)&options;
+
+            Assert.Equal(64, sizeof(NativeSheetOptionsRaw));
+            Assert.Equal(40, NativeSheetOptionsRaw.V6Size);
+            Assert.Equal(
+                [0, 4, 8, 16, 24, 32, 40, 48, 56],
+                [
+                    (int)((byte*)&options.StructSize - start), (int)((byte*)&options.TableNameLen - start),
+                    (int)((byte*)&options.TableName - start), (int)((byte*)&options.TableStyleLen - start),
+                    (int)((byte*)&options.TableStyle - start), (int)((byte*)&options.TableFlags - start),
+                    (int)((byte*)&options.ColumnStyles - start), (int)((byte*)&options.ColumnWidths - start),
+                    (int)((byte*)&options.HeaderStyle - start),
+                ]);
+            Assert.Equal(40, sizeof(NativeWriteOptionsRaw));
+        }
+
+        [Fact]
+        public void AbiVersionIsSeven()
+        {
+            Assert.Equal(7, ((delegate* unmanaged<int>)&Exports.AbiVersion)());
         }
 
         [Fact]

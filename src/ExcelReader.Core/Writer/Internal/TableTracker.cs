@@ -58,7 +58,7 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        internal static void WriteHeader<TRow>(TRow row, int firstColumn, string[] columns)
+        internal static void WriteHeader<TRow>(TRow row, int firstColumn, string[] columns, int headerStyleId)
             where TRow : IRowWriter
         {
             if (firstColumn > 0)
@@ -67,6 +67,10 @@ namespace ExcelReader.Core.Writer.Internal
             }
             foreach (string column in columns)
             {
+                if (headerStyleId >= 0)
+                {
+                    row.Style(headerStyleId);
+                }
                 row.Write(column);
             }
         }

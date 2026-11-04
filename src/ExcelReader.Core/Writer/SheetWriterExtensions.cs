@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Core.Writer
@@ -32,14 +33,27 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(sheet);
             ArgumentNullException.ThrowIfNull(records);
             ArgumentNullException.ThrowIfNull(layout);
-            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
-            await WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
+            BoundLayout<TRow, T> bound = LayoutBinding.Bind(sheet, layout);
+            await WriteHeaderAsync(sheet, bound.Headers, bound.HeaderStyleId, ct).ConfigureAwait(false);
+            IStyleBinder? overlay = LayoutBinding.PushOverlay(sheet, bound.ColumnStyleIds, firstColumn: 0);
+            try
+            {
+                await WriteRowsAsync(sheet, records, bound.WriteRow, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                overlay?.PopColumnStyleOverlay();
+            }
+        }
+
+        private static ValueTask WriteRowsAsync<T, TRow>(ISheetWriter<TRow> sheet, IEnumerable<T> records, Action<TRow, T> writeRow, CancellationToken ct)
+            where TRow : IRowWriter
+        {
             if (sheet is XlsxSheetWriter xlsx && writeRow is Action<XlsxRowWriter, T> writeXlsxRow)
             {
-                await xlsx.WriteRecordsAsync(records, writeXlsxRow, ct).ConfigureAwait(false);
-                return;
+                return xlsx.WriteRecordsAsync(records, writeXlsxRow, ct);
             }
-            await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
+            return sheet.WriteRecordsAsync(records, writeRow, ct);
         }
 
         /// <summary>
@@ -60,9 +74,17 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(sheet);
             ArgumentNullException.ThrowIfNull(records);
             ArgumentNullException.ThrowIfNull(layout);
-            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
-            await WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
-            await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
+            BoundLayout<TRow, T> bound = LayoutBinding.Bind(sheet, layout);
+            await WriteHeaderAsync(sheet, bound.Headers, bound.HeaderStyleId, ct).ConfigureAwait(false);
+            IStyleBinder? overlay = LayoutBinding.PushOverlay(sheet, bound.ColumnStyleIds, firstColumn: 0);
+            try
+            {
+                await sheet.WriteRecordsAsync(records, bound.WriteRow, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                overlay?.PopColumnStyleOverlay();
+            }
         }
 
         /// <summary>
@@ -85,9 +107,17 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(sheet);
             ArgumentNullException.ThrowIfNull(records);
             ArgumentNullException.ThrowIfNull(layout);
-            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
-            await sheet.BeginTableAsync(name, headers, options, ct).ConfigureAwait(false);
-            await sheet.WriteRecordsAsync(records, ShiftToTable(writeRow, options), ct).ConfigureAwait(false);
+            BoundLayout<TRow, T> bound = LayoutBinding.Bind(sheet, layout);
+            await BeginTableAsync(sheet, name, bound, options, ct).ConfigureAwait(false);
+            IStyleBinder? overlay = LayoutBinding.PushOverlay(sheet, bound.ColumnStyleIds, (options ?? ExcelTableOptions.Default).FirstColumn);
+            try
+            {
+                await sheet.WriteRecordsAsync(records, ShiftToTable(bound.WriteRow, options), ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                overlay?.PopColumnStyleOverlay();
+            }
             sheet.EndTable();
         }
 
@@ -111,9 +141,17 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(sheet);
             ArgumentNullException.ThrowIfNull(records);
             ArgumentNullException.ThrowIfNull(layout);
-            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
-            await sheet.BeginTableAsync(name, headers, options, ct).ConfigureAwait(false);
-            await sheet.WriteRecordsAsync(records, ShiftToTable(writeRow, options), ct).ConfigureAwait(false);
+            BoundLayout<TRow, T> bound = LayoutBinding.Bind(sheet, layout);
+            await BeginTableAsync(sheet, name, bound, options, ct).ConfigureAwait(false);
+            IStyleBinder? overlay = LayoutBinding.PushOverlay(sheet, bound.ColumnStyleIds, (options ?? ExcelTableOptions.Default).FirstColumn);
+            try
+            {
+                await sheet.WriteRecordsAsync(records, ShiftToTable(bound.WriteRow, options), ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                overlay?.PopColumnStyleOverlay();
+            }
             sheet.EndTable();
         }
 
@@ -132,7 +170,18 @@ namespace ExcelReader.Core.Writer
             };
         }
 
-        internal static async ValueTask WriteHeaderAsync<TRow>(ISheetWriter<TRow> sheet, string[] headers, CancellationToken ct)
+        internal static ValueTask BeginTableAsync<TRow, T>(ITableSheetWriter<TRow> sheet, string name, BoundLayout<TRow, T> bound,
+                                                           ExcelTableOptions? options, CancellationToken ct)
+            where TRow : IRowWriter
+        {
+            if (bound.HeaderStyleId < 0)
+            {
+                return sheet.BeginTableAsync(name, bound.Headers, options, ct);
+            }
+            return ((IStyleBinder)sheet).BeginStyledTableAsync(name, bound.Headers, options, bound.HeaderStyleId, ct);
+        }
+
+        internal static async ValueTask WriteHeaderAsync<TRow>(ISheetWriter<TRow> sheet, string[] headers, int headerStyleId, CancellationToken ct)
             where TRow : IRowWriter
         {
             TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);
@@ -140,6 +189,10 @@ namespace ExcelReader.Core.Writer
             {
                 foreach (string header in headers)
                 {
+                    if (headerStyleId >= 0)
+                    {
+                        row.Style(headerStyleId);
+                    }
                     row.Write(header);
                 }
             }

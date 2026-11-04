@@ -12,7 +12,7 @@ using ExcelReader.Core.Writer.Zip;
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
-    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>, IBatchSheet<XlsbSheetWriter, XlsbRowWriter>, IZipSheet
+    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>, IBatchSheet<XlsbSheetWriter, XlsbRowWriter>, IZipSheet, IStyleBinder
     {
         private const int SpillThreshold = 64 * 1024;
 
@@ -38,8 +38,11 @@ namespace ExcelReader.Core.Writer.Xlsb
         private XlsbRowWriter? _rowWriter;
         private Dictionary<int, int>? _columnStyles;
         private int[]? _columnStyleLookup;
+        private int[]? _baseColumnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
+        private int _activeRowHeight;
+        private int _pendingStyle = -1;
         private int _dimPayloadPos = -1;
         private int _usedRowFirst = -1;
         private int _usedRowLast = -1;
@@ -127,13 +130,58 @@ namespace ExcelReader.Core.Writer.Xlsb
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, ExcelLimits.MaxColumns, _state, this);
         }
 
+        internal bool HasPendingStyle
+        {
+            get
+            {
+                return _pendingStyle >= 0;
+            }
+        }
+
+        internal void SetPendingStyle(int styleId)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
+            _pendingStyle = styleId;
+        }
+
+        internal bool ClearPendingStyle()
+        {
+            bool wasPending = _pendingStyle >= 0;
+            _pendingStyle = -1;
+            return wasPending;
+        }
+
         private int EffectiveStyle(int columnIndex)
         {
+            if (_pendingStyle >= 0)
+            {
+                int pending = _pendingStyle;
+                _pendingStyle = -1;
+                return pending;
+            }
             if (_activeRowStyle != 0)
             {
                 return _activeRowStyle;
             }
             return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
+        }
+
+        int IStyleBinder.RegisterStyle(CellStyle style)
+        {
+            return _owner.AddStyle(style);
+        }
+
+        void IStyleBinder.PushColumnStyleOverlay(ReadOnlySpan<int> styleIds, int firstColumn)
+        {
+            _baseColumnStyleLookup = _columnStyleLookup;
+            _columnStyleLookup = SheetColumnValidation.Overlay(_columnStyleLookup, styleIds, firstColumn, _owner.InheritNumberFormat);
+        }
+
+        void IStyleBinder.PopColumnStyleOverlay()
+        {
+            _columnStyleLookup = _baseColumnStyleLookup;
+            _baseColumnStyleLookup = null;
         }
 
         private void EnsureStarted()
@@ -200,6 +248,13 @@ namespace ExcelReader.Core.Writer.Xlsb
             return ValueTask.FromResult(StartRow(styleId));
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        public ValueTask<XlsbRowWriter> StartRowAsync(int styleId, double height, CancellationToken ct = default)
+        {
+            return ValueTask.FromResult(StartRow(styleId, height));
+        }
+
         /// <summary>
         /// Synchronous counterpart to <see cref="ISheetWriter{TRow}.StartRow()"/>, for native/unmanaged
         /// callers whose ABI is synchronous.
@@ -216,9 +271,24 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
         public XlsbRowWriter StartRow(int styleId)
         {
+            return StartRowCore(styleId, heightTwips: 0);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="ISheetWriter{TRow}.StartRowAsync(int, double, CancellationToken)"/>, for native/unmanaged
+        /// callers whose ABI is synchronous.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>, or <paramref name="height"/> is out of range or NaN.</exception>
+        public XlsbRowWriter StartRow(int styleId, double height)
+        {
+            return StartRowCore(styleId, SheetColumnValidation.RowHeightTwips(height));
+        }
+
+        private XlsbRowWriter StartRowCore(int styleId, int heightTwips)
+        {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
-            BeginRow(styleId);
+            BeginRow(styleId, heightTwips);
             _rowWriter ??= new XlsbRowWriter(this);
             _rowWriter.Reset();
             return _rowWriter;
@@ -227,7 +297,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <summary>Writes an entire row in one call, mapping each element of <paramref name="values"/> to a column starting at 0.</summary>
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
         {
-            BeginRow(styleId: 0);
+            BeginRow(styleId: 0, heightTwips: 0);
             for (int i = 0; i < values.Length; i++)
             {
                 WriteCell(i, values[i]);
@@ -328,6 +398,23 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <inheritdoc/>
         public void BeginTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null)
         {
+            BeginStyledTable(name, columns, options, headerStyleId: -1);
+        }
+
+        void IStyleBinder.BeginStyledTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId)
+        {
+            BeginStyledTable(name, columns, options, headerStyleId);
+        }
+
+        ValueTask IStyleBinder.BeginStyledTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            BeginStyledTable(name, columns, options, headerStyleId);
+            return ValueTask.CompletedTask;
+        }
+
+        private void BeginStyledTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId)
+        {
             WriterStateGuard.ThrowIfEnded(_state, this);
             ExcelTableOptions effective = options ?? ExcelTableOptions.Default;
             string[] names = TableValidation.Validate(name, columns, effective);
@@ -336,7 +423,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             TableTracker.RequireRoom(_rowNumber + 1);
             using (XlsbRowWriter row = StartRow())
             {
-                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+                TableTracker.WriteHeader(row, effective.FirstColumn, names, headerStyleId);
             }
             _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber);
         }
@@ -355,7 +442,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriterStateGuard.ThrowIfEnded(_state, this);
             if (_tables.End(_rowNumber))
             {
-                BeginRow(styleId: 0);
+                BeginRow(styleId: 0, heightTwips: 0);
                 _rowActive = false;
             }
         }
@@ -507,7 +594,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             Payload.Dispose();
         }
 
-        private void BeginRow(int styleId)
+        private void BeginRow(int styleId, int heightTwips)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsbRowWriter));
@@ -518,6 +605,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             }
             _rowNumber++;
             _activeRowStyle = styleId;
+            _activeRowHeight = heightTwips;
             _rowColFirst = int.MaxValue;
             _rowColLast = -1;
             _rowHeaderPos = _records.Length;
@@ -526,6 +614,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         }
 
         private const int RowHeaderFixedLength = 17;
+        private const byte RowHeaderUnsynced = 0x20;
         private const int ColumnBlockShift = 10;
 
         private void WriteRowHeader(int rowNumber, int spanCount)
@@ -533,6 +622,11 @@ namespace ExcelReader.Core.Writer.Xlsb
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.RowHdr, RowHeaderFixedLength + (spanCount * 8), out Span<byte> p);
             p.Clear();
             BinaryPrimitives.WriteUInt32LittleEndian(p, (uint)rowNumber);
+            if (_activeRowHeight != 0)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(p.Slice(8, 2), (ushort)_activeRowHeight);
+                p[11] = RowHeaderUnsynced;
+            }
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(13, 4), (uint)spanCount);
         }
 
@@ -665,7 +759,21 @@ namespace ExcelReader.Core.Writer.Xlsb
             if (value is not null)
             {
                 WriteTextCell(columnIndex, value, value);
+                return;
             }
+            if (_pendingStyle >= 0)
+            {
+                WriteBlankCell(columnIndex);
+            }
+        }
+
+        internal void WriteBlankCell(int columnIndex)
+        {
+            ValidateColumn(columnIndex);
+            TrackColumn(columnIndex);
+            Span<byte> p = Biff12RecordWriter.WriteCellRecord(_records, Brt.CellBlank, CellHeaderLength);
+            Biff12RecordWriter.WriteCellHeader(p, columnIndex, EffectiveStyle(columnIndex));
+            MaybeFlush();
         }
 
         internal void WriteStringCell(int columnIndex, ReadOnlySpan<char> value)

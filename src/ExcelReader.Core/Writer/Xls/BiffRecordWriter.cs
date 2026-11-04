@@ -142,23 +142,24 @@ namespace ExcelReader.Core.Writer.Xls
             WriteU16Record(buffer, BiffRecord.BookBool, 0);
         }
 
-        internal static void WriteFont(BiffBuffer buffer)
+        internal static void WriteFont(BiffBuffer buffer, in FontKey font, IReadOnlyList<ExcelColor> palette)
         {
             int len = buffer.BeginRecord(BiffRecord.Font);
-            buffer.WriteU16(220);
+            buffer.WriteU16(font.Twips);
+            buffer.WriteU16(font.Flags);
+            buffer.WriteU16(ColorIndex(palette, font.Color, AutomaticFontColor));
+            buffer.WriteU16(font.Bold ? 700 : 400);
             buffer.WriteU16(0);
-            buffer.WriteU16(0x7FFF);
-            buffer.WriteU16(400);
-            buffer.WriteU16(0);
+            buffer.WriteByte(font.Underline ? (byte)1 : (byte)0);
             buffer.WriteByte(0);
             buffer.WriteByte(0);
             buffer.WriteByte(0);
-            buffer.WriteByte(0);
-            BiffStringEncoder.WriteShort(buffer, "Arial");
+            BiffStringEncoder.WriteShort(buffer, font.Name ?? "Arial");
             buffer.EndRecord(len);
         }
+
         private static ReadOnlySpan<byte> FirstPayload => [0xF5, 0xFF, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x20];
-        private static ReadOnlySpan<byte> SecondPayload => [0x01, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xC0, 0x20];
+
         internal static void WriteStyleXf(BiffBuffer buffer, int formatIndex)
         {
             int len = buffer.BeginRecord(BiffRecord.Xf);
@@ -168,14 +169,116 @@ namespace ExcelReader.Core.Writer.Xls
             buffer.EndRecord(len);
         }
 
-        internal static void WriteCellXf(BiffBuffer buffer, int formatIndex)
+        internal static void WriteCellXf(BiffBuffer buffer, int fontIndex, int formatIndex, in CellStyle style, IReadOnlyList<ExcelColor> palette)
         {
+            int lineStyles = LineStyle(style.Left) | (LineStyle(style.Right) << 4) | (LineStyle(style.Top) << 8) | (LineStyle(style.Bottom) << 12);
+            int used = 0;
+            used |= fontIndex != 0 ? XfUsedFont : 0;
+            used |= StyleAlignment.HasAlignment(style) ? XfUsedAlignment : 0;
+            used |= lineStyles != 0 ? XfUsedBorder : 0;
+            used |= style.FillColor is not null ? XfUsedPattern : 0;
             int len = buffer.BeginRecord(BiffRecord.Xf);
-            buffer.WriteU16(0);
+            buffer.WriteU16(fontIndex);
             buffer.WriteU16(formatIndex);
-            buffer.Write(SecondPayload);
+            buffer.WriteU16(XfLocked);
+            buffer.WriteByte((byte)Alignment(style));
+            buffer.WriteByte((byte)StyleAlignment.TextRotation(style.Rotation));
+            buffer.WriteByte((byte)style.Indent);
+            buffer.WriteByte((byte)used);
+            buffer.WriteI32(lineStyles | (BorderColor(palette, style.Left) << 16) | (BorderColor(palette, style.Right) << 23));
+            buffer.WriteI32(BorderColor(palette, style.Top) | (BorderColor(palette, style.Bottom) << 7) | XfHasXfExt | FillPattern(style.FillColor));
+            buffer.WriteU16(FillColors(palette, style.FillColor));
             buffer.EndRecord(len);
         }
+
+        internal static void WritePalette(BiffBuffer buffer, IReadOnlyList<ExcelColor> palette)
+        {
+            int len = buffer.BeginRecord(BiffRecord.Palette);
+            buffer.WriteU16(DefaultPalette.Length);
+            for (int i = 0; i < DefaultPalette.Length; i++)
+            {
+                ExcelColor color = i < palette.Count ? palette[i] : ExcelColor.FromRgb(DefaultPalette[i]);
+                buffer.WriteByte(color.R);
+                buffer.WriteByte(color.G);
+                buffer.WriteByte(color.B);
+                buffer.WriteByte(0);
+            }
+            buffer.EndRecord(len);
+        }
+
+        private static int LineStyle(CellBorder? side)
+        {
+            return (int)(side?.Style ?? ExcelBorderStyle.None);
+        }
+
+        private static int BorderColor(IReadOnlyList<ExcelColor> palette, CellBorder? side)
+        {
+            if (side is not CellBorder border || border.Style == ExcelBorderStyle.None)
+            {
+                return 0;
+            }
+            return ColorIndex(palette, border.Color, AutomaticColor);
+        }
+
+        private static int FillPattern(ExcelColor? fill)
+        {
+            return fill is null ? 0 : XfSolidFill;
+        }
+
+        private static int FillColors(IReadOnlyList<ExcelColor> palette, ExcelColor? fill)
+        {
+            if (fill is null)
+            {
+                return AutomaticColor | ((AutomaticColor + 1) << 7);
+            }
+            return ColorIndex(palette, fill, AutomaticColor) | (AutomaticColor << 7);
+        }
+
+        private static int Alignment(in CellStyle style)
+        {
+            int alignment = (int)style.HorizontalAlignment | (StyleAlignment.BiffVerticalAlignment(style.VerticalAlignment) << 4);
+            alignment |= style.WrapText ? XfWrap : 0;
+            return alignment;
+        }
+
+        // Palette color i is icv 8 + i; StyleTable puts every style color in the palette.
+        private static int ColorIndex(IReadOnlyList<ExcelColor> palette, ExcelColor? color, int automatic)
+        {
+            if (color is not ExcelColor rgb)
+            {
+                return automatic;
+            }
+            int i = 0;
+            while (palette[i] != rgb)
+            {
+                i++;
+            }
+            return 8 + i;
+        }
+
+        private const int AutomaticFontColor = 0x7FFF;
+        private const int AutomaticColor = 64;
+        private const int XfLocked = 0x0001;
+        private const int XfWrap = 0x08;
+        private const int XfUsedFont = 0x08;
+        private const int XfUsedAlignment = 0x10;
+        private const int XfUsedBorder = 0x20;
+        private const int XfUsedPattern = 0x40;
+        private const int XfSolidFill = 1 << 26;
+        // Every cell XF Excel writes sets fHasXFExt; the default cell XF here always has.
+        private const int XfHasXfExt = 1 << 25;
+
+        // Excel's default BIFF8 palette, icv 8 to 63.
+        private static ReadOnlySpan<int> DefaultPalette =>
+        [
+            0x000000, 0xFFFFFF, 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF,
+            0x800000, 0x008000, 0x000080, 0x808000, 0x800080, 0x008080, 0xC0C0C0, 0x808080,
+            0x9999FF, 0x993366, 0xFFFFCC, 0xCCFFFF, 0x660066, 0xFF8080, 0x0066CC, 0xCCCCFF,
+            0x000080, 0xFF00FF, 0xFFFF00, 0x00FFFF, 0x800080, 0x800000, 0x008080, 0x0000FF,
+            0x00CCFF, 0xCCFFFF, 0xCCFFCC, 0xFFFF99, 0x99CCFF, 0xFF99CC, 0xCC99FF, 0xFFCC99,
+            0x3366FF, 0x33CCCC, 0x99CC00, 0xFFCC00, 0xFF9900, 0xFF6600, 0x666699, 0x969696,
+            0x003366, 0x339966, 0x003300, 0x333300, 0x993300, 0x993366, 0x333399, 0x333333,
+        ];
 
         internal static void WriteFormat(BiffBuffer buffer, int formatIndex, ReadOnlySpan<char> formatCode)
         {
@@ -272,20 +375,22 @@ namespace ExcelReader.Core.Writer.Xls
             WriteU16Record(buffer, BiffRecord.DefColWidth, 8);
         }
 
-        internal static void WriteRow(BiffBuffer buffer, int row, int colMic, int colMac)
+        internal static void WriteRow(BiffBuffer buffer, int row, int colMic, int colMac, int heightTwips)
         {
             int len = buffer.BeginRecord(BiffRecord.Row);
             buffer.WriteU16(row);
             buffer.WriteU16(colMic);
             buffer.WriteU16(colMac);
-            buffer.WriteU16(DefaultRowHeightTwips);
+            buffer.WriteU16(heightTwips == 0 ? DefaultRowHeightTwips : heightTwips);
             buffer.WriteI32(0);
-            buffer.WriteU16(0x0100);
+            buffer.WriteU16(heightTwips == 0 ? RowFlags : RowFlags | RowFlagUnsynced);
             buffer.WriteU16(GeneralStyleXf);
             buffer.EndRecord(len);
         }
 
         private const int GeneralStyleXf = 15;
+        private const int RowFlags = 0x0100;
+        private const int RowFlagUnsynced = 0x0040;
 
         // Cell records are written whole into one span: they are most of a sheet's bytes, and going
         // through BeginRecord/WriteU16/EndRecord field by field measured as most of their cost.

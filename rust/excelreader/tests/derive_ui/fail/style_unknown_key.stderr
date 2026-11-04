@@ -1,0 +1,5 @@
+error: unsupported style(...) key, expected one of `bold`, `italic`, `underline`, `strikethrough`, `number_format`, `font_name`, `font_size`, `font_color`, `fill_color`, `horizontal_alignment`, `vertical_alignment`, `wrap_text`, `indent`, `rotation`, `border`, `border_color`
+ --> tests/derive_ui/fail/style_unknown_key.rs:5:41
+  |
+5 |     #[excel(name = "Valor", style(bold, colour = 0xFF0000))]
+  |                                         ^^^^^^

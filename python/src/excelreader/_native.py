@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from excelreader.types import OpenOptions, TableOptions, WriteOptions
+    from excelreader.types import Border, CellStyle, OpenOptions, TableOptions, WriteOptions
 
 XL_OK = 0
 XL_EOF = -1
@@ -26,7 +26,12 @@ XL_ERROR = -5
 XL_STATUS_PASSWORD_REQUIRED = -6
 XL_STATUS_PASSWORD_INCORRECT = -7
 
-XL_ABI_VERSION = 6
+XL_ABI_VERSION = 7
+
+XL_FONT_BOLD = 1
+XL_FONT_ITALIC = 2
+XL_FONT_UNDERLINE = 4
+XL_FONT_STRIKETHROUGH = 8
 
 XL_TABLE_NO_STYLE = 1
 XL_TABLE_NO_ROW_STRIPES = 2
@@ -383,8 +388,78 @@ class NativeTableInfo(ctypes.Structure):
     ]
 
 
+class NativeBorder(ctypes.Structure):
+    """Mirrors xl_border."""
+
+    _fields_ = [("style", ctypes.c_int32), ("color", ctypes.c_int32)]
+
+
+class NativeCellStyle(ctypes.Structure):
+    """Mirrors xl_cell_style. Build one with `to_native_cell_style()`: a zeroed struct means black colors."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_int32),
+        ("number_format_len", ctypes.c_int32),
+        ("number_format", ctypes.c_char_p),
+        ("font_name", ctypes.c_char_p),
+        ("font_name_len", ctypes.c_int32),
+        ("font_flags", ctypes.c_int32),
+        ("font_size", ctypes.c_double),
+        ("font_color", ctypes.c_int32),
+        ("fill_color", ctypes.c_int32),
+        ("horizontal_alignment", ctypes.c_int32),
+        ("vertical_alignment", ctypes.c_int32),
+        ("wrap_text", ctypes.c_int32),
+        ("indent", ctypes.c_int32),
+        ("rotation", ctypes.c_int32),
+        ("left", NativeBorder),
+        ("right", NativeBorder),
+        ("top", NativeBorder),
+        ("bottom", NativeBorder),
+    ]
+
+
+def _color(value: int | None) -> int:
+    return -1 if value is None else value
+
+
+def _native_border(border: Border | None) -> NativeBorder:
+    return NativeBorder(0, -1) if border is None else NativeBorder(int(border.style), _color(border.color))
+
+
+def to_native_cell_style(style: CellStyle) -> NativeCellStyle:
+    """Lowers a `CellStyle`. Values are passed through unvalidated: the native side owns the bounds."""
+    raw = NativeCellStyle(struct_size=ctypes.sizeof(NativeCellStyle))
+    if style.number_format is not None:
+        encoded = style.number_format.encode("utf-8")
+        raw.number_format, raw.number_format_len = encoded, int32_len(encoded)
+    if style.font_name is not None:
+        encoded = style.font_name.encode("utf-8")
+        raw.font_name, raw.font_name_len = encoded, int32_len(encoded)
+    raw.font_flags = (
+        (XL_FONT_BOLD if style.bold else 0)
+        | (XL_FONT_ITALIC if style.italic else 0)
+        | (XL_FONT_UNDERLINE if style.underline else 0)
+        | (XL_FONT_STRIKETHROUGH if style.strikethrough else 0)
+    )
+    raw.font_size = 0.0 if style.font_size is None else style.font_size
+    raw.font_color = _color(style.font_color)
+    raw.fill_color = _color(style.fill_color)
+    raw.horizontal_alignment = int(style.horizontal_alignment)
+    raw.vertical_alignment = int(style.vertical_alignment)
+    raw.wrap_text = 1 if style.wrap_text else 0
+    raw.indent = style.indent
+    raw.rotation = style.rotation
+    raw.left = _native_border(style.left)
+    raw.right = _native_border(style.right)
+    raw.top = _native_border(style.top)
+    raw.bottom = _native_border(style.bottom)
+    return raw
+
+
 class NativeSheetOptions(ctypes.Structure):
-    """Mirrors xl_sheet_options."""
+    """Mirrors xl_sheet_options. Build one with `to_native_sheet_options()`, which keeps the arrays its
+    pointers aim at alive on the instance."""
 
     _fields_ = [
         ("struct_size", ctypes.c_int32),
@@ -393,24 +468,51 @@ class NativeSheetOptions(ctypes.Structure):
         ("table_style_len", ctypes.c_int32),
         ("table_style", ctypes.c_char_p),
         ("table_flags", ctypes.c_int32),
+        ("column_styles", ctypes.POINTER(ctypes.POINTER(NativeCellStyle))),
+        ("column_widths", ctypes.POINTER(ctypes.c_double)),
+        ("header_style", ctypes.POINTER(NativeCellStyle)),
     ]
 
 
-def to_native_sheet_options(table: TableOptions | None) -> NativeSheetOptions | None:
-    if table is None:
+def to_native_sheet_options(
+    table: TableOptions | None,
+    column_styles: Sequence[CellStyle | None] | None = None,
+    header_style: CellStyle | None = None,
+    column_widths: Sequence[float] | None = None,
+) -> NativeSheetOptions | None:
+    """`column_styles` and `column_widths` hold one entry per column; None or 0 keeps a column's default."""
+    if table is None and column_styles is None and header_style is None and column_widths is None:
         return None
     raw = NativeSheetOptions(struct_size=ctypes.sizeof(NativeSheetOptions))
-    name = table.name.encode("utf-8")
-    raw.table_name, raw.table_name_len = name, int32_len(name)
-    flags = 0 if table.row_stripes else XL_TABLE_NO_ROW_STRIPES
-    flags |= XL_TABLE_COLUMN_STRIPES if table.column_stripes else 0
-    flags |= XL_TABLE_FIRST_COLUMN if table.first_column else 0
-    flags |= XL_TABLE_LAST_COLUMN if table.last_column else 0
-    flags |= XL_TABLE_NO_STYLE if table.style is None else 0
-    raw.table_flags = flags
-    if table.style is not None:
-        style = table.style.encode("utf-8")
-        raw.table_style, raw.table_style_len = style, len(style)
+    keepalive: list[object] = []
+    raw.keepalive = keepalive
+    if table is not None:
+        name = table.name.encode("utf-8")
+        raw.table_name, raw.table_name_len = name, int32_len(name)
+        flags = 0 if table.row_stripes else XL_TABLE_NO_ROW_STRIPES
+        flags |= XL_TABLE_COLUMN_STRIPES if table.column_stripes else 0
+        flags |= XL_TABLE_FIRST_COLUMN if table.first_column else 0
+        flags |= XL_TABLE_LAST_COLUMN if table.last_column else 0
+        flags |= XL_TABLE_NO_STYLE if table.style is None else 0
+        raw.table_flags = flags
+        if table.style is not None:
+            style = table.style.encode("utf-8")
+            raw.table_style, raw.table_style_len = style, len(style)
+    if column_styles is not None:
+        native_styles = [None if style is None else to_native_cell_style(style) for style in column_styles]
+        pointers = (ctypes.POINTER(NativeCellStyle) * len(native_styles))(
+            *[None if style is None else ctypes.pointer(style) for style in native_styles]
+        )
+        keepalive += [native_styles, pointers]
+        raw.column_styles = ctypes.cast(pointers, ctypes.POINTER(ctypes.POINTER(NativeCellStyle)))
+    if column_widths is not None:
+        widths = (ctypes.c_double * len(column_widths))(*column_widths)
+        keepalive.append(widths)
+        raw.column_widths = ctypes.cast(widths, ctypes.POINTER(ctypes.c_double))
+    if header_style is not None:
+        header = to_native_cell_style(header_style)
+        keepalive.append(header)
+        raw.header_style = ctypes.pointer(header)
     return raw
 
 
@@ -580,16 +682,6 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_typed_reader_next.restype = c_int
     lib.xl_typed_reader_close.argtypes = [p_void]
     lib.xl_typed_reader_close.restype = None
-    lib.xl_write_typed.argtypes = [
-        p_bytes, c_int, c_int,
-        ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable), ctypes.POINTER(NativeWriteOptions),
-    ]
-    lib.xl_write_typed.restype = c_int
-    lib.xl_write_typed_to_memory.argtypes = [
-        ctypes.c_int32, ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable),
-        ctypes.POINTER(NativeWriteOptions), ctypes.POINTER(NativeBuffer),
-    ]
-    lib.xl_write_typed_to_memory.restype = ctypes.c_int32
     lib.xl_encrypt_package.argtypes = [p_bytes, c_int, p_bytes, c_int, p_bytes, c_int]
     lib.xl_encrypt_package.restype = c_int
     lib.xl_encrypt_package_to_memory.argtypes = [p_bytes, c_int, p_bytes, c_int, ctypes.POINTER(NativeBuffer)]
@@ -643,6 +735,21 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
 
     lib.xl_end_sheet.argtypes = [ctypes.c_void_p]
     lib.xl_end_sheet.restype = ctypes.c_int32
+
+    lib.xl_add_style.argtypes = [ctypes.c_void_p, ctypes.POINTER(NativeCellStyle), ctypes.POINTER(ctypes.c_int32)]
+    lib.xl_add_style.restype = ctypes.c_int32
+
+    lib.xl_set_column_style.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32]
+    lib.xl_set_column_style.restype = ctypes.c_int32
+
+    lib.xl_set_column_width.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_double]
+    lib.xl_set_column_width.restype = ctypes.c_int32
+
+    lib.xl_start_row_styled.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_double]
+    lib.xl_start_row_styled.restype = ctypes.c_int32
+
+    lib.xl_style_next_cell.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+    lib.xl_style_next_cell.restype = ctypes.c_int32
 
     lib.xl_write_sheet.argtypes = [
         ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_int32,

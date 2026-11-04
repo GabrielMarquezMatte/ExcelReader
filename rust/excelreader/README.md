@@ -4,8 +4,8 @@
 
 Read and write Excel/CSV workbooks via ExcelReader's native ABI: opening a workbook (from a path,
 memory, your own random-access source or any `Read`), sheet navigation, schema inference,
-schema-driven typed parse, schema-driven writing, row-by-row reads, parallel CSV aggregation, and
-Arrow export. Every public item lives at the crate root.
+schema-driven typed parse, schema-driven writing with cell styles, row-by-row reads, parallel CSV
+aggregation, and Arrow export. Every public item lives at the crate root.
 
 ## Usage
 
@@ -104,10 +104,11 @@ for column in sheet.infer_schema(1, 100, false)? {
 stored as text): integers, decimals, `true`/`false` and ISO dates.
 
 With no row type, `parse_with_schema` reads the sheet through that schema into a `Table`. Its
-columns are the `Column`s `write_columns` takes, so the table writes back as it was read:
+columns are the `Column`s `WriterHandle::write_columns` takes, so the table writes back as it was
+read:
 
 ```rust,no_run
-use excelreader::{write_columns, ColumnData, ReadOptions, Workbook, WriteOptions};
+use excelreader::{ColumnData, ReadOptions, Workbook, WriteOptions, WriterHandle};
 
 let workbook = Workbook::open("book.xlsx")?;
 let sheet = workbook.sheet(0)?;
@@ -118,7 +119,9 @@ for column in table.columns() {
         println!("{:?}: {} integers", column.name, values.len());
     }
 }
-write_columns("copy.xlsx", &table.columns(), &WriteOptions::new())?;
+let mut copy = WriterHandle::create("copy.xlsx", &WriteOptions::new())?;
+copy.write_columns("Sheet1", &table.columns(), None)?;
+copy.finish()?;
 
 // Or a batch at a time: TableBatches yields one Table per batch.
 for batch in sheet.parse_batches_with_schema(&schema, &ReadOptions::new())? {
@@ -193,17 +196,19 @@ sniffing does not see through the CFB wrapper an encrypted file is stored in, so
 `Format::Auto` rather than setting `Format::Xlsx`, or the file is read as a plain ZIP and fails
 before the password is ever checked.
 
-Writing an encrypted workbook is a second step: write the plaintext package with `write_columns`/
-`write_sheet`, then wrap it with `encrypt_package`, which produces an agile-encrypted (ECMA-376 4.4)
-CFB container - AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
+Writing an encrypted workbook is a second step: write the plaintext package with a `WriterHandle`,
+then wrap it with `encrypt_package`, which produces an agile-encrypted (ECMA-376 4.4) CFB container -
+AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
 
 ```rust,no_run
-use excelreader::{encrypt_package, write_columns, WriteOptions};
+use excelreader::{encrypt_package, WriteOptions, WriterHandle};
 # use excelreader::{Column, ColumnData};
 # let ids = [1i64, 2, 3];
 # let columns = [Column::new(Some("id"), ColumnData::I64(&ids))];
 
-write_columns("plain.xlsx", &columns, &WriteOptions::new())?;
+let mut handle = WriterHandle::create("plain.xlsx", &WriteOptions::new())?;
+handle.write_columns("Sheet1", &columns, None)?;
+handle.finish()?;
 encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")?;
 # Ok::<(), excelreader::Error>(())
 ```
@@ -326,16 +331,20 @@ fails the read, unless the column is `nullable`.
 
 ## Writing
 
-`#[derive(ExcelMapper)]` generates both halves, so the same struct reads and writes - the field
-types in the table above apply unchanged:
+`WriterHandle` writes a workbook: `create` for a path, `new` for any `io::Write`. A whole sheet goes
+in one call, from a slice of structs or from columns, or row by row. `#[derive(ExcelMapper)]`
+generates both halves, so the same struct reads and writes - the field types in the table above
+apply unchanged:
 
 ```rust,no_run
-use excelreader::{write_sheet, WriteOptions};
+use excelreader::{WriteOptions, WriterHandle};
 # #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 # let rows = vec![Row::default()];
 
-write_sheet("out.xlsx", &rows, &WriteOptions::new())?;
+let mut handle = WriterHandle::create("out.xlsx", &WriteOptions::new())?;
+handle.write_sheet("Sheet1", &rows, None)?;
+handle.finish()?;
 # Ok::<(), excelreader::Error>(())
 ```
 
@@ -348,59 +357,70 @@ lifetimes on `Column<'a>` are what turn the ABI's borrow contract into something
 checks:
 
 ```rust,no_run
-use excelreader::{write_columns, Column, ColumnData, WriteOptions};
+use excelreader::{Column, ColumnData, WriteOptions, WriterHandle};
 
 let ids = [1i64, 2, 3];
 let columns = [Column::new(Some("id"), ColumnData::I64(&ids))];
-write_columns("out.xlsx", &columns, &WriteOptions::new())?;
+let mut handle = WriterHandle::create("out.xlsx", &WriteOptions::new())?;
+handle.write_columns("Sheet1", &columns, None)?;
+handle.finish()?;
 # Ok::<(), excelreader::Error>(())
 ```
 
 `validity` is checked against the row count before the call: the ABI takes the bitmap without a
 length and reads `(rows + 7) / 8` bytes on trust, so a short slice would be a buffer overrun rather
-than a wrong answer.
+than a wrong answer. `write_sheet` walks the slice once and appends each field to its own buffer,
+monomorphized per field; that transpose is the only copy it makes, and `write_columns` pays nothing.
 
-`WriteOptions` sets the format, the sheet name, the CSV dialect, and the XLS/XLSB and XLSX/XLSB
-toggles. Its format defaults to `Format::Auto`, inferred from the path's extension; an extension it
-does not recognize is an error - a file being created has no signature bytes to sniff.
-
-For XLSX and XLSB, `degree_of_parallelism` formats and compresses batches of `batch_rows` rows on
-several threads: `0` uses every processor, `1` writes serially, and leaving it unset is serial.
-Unset `batch_rows` keeps the library default of 8,192. With shared strings on, two parallel runs
-give the same content in files that differ byte for byte. XLS, CSV and `WriterHandle`'s per-cell
-writes ignore both.
+`WriteOptions` sets the format, the CSV dialect, and the XLS/XLSB and XLSX/XLSB toggles. Its format
+defaults to `Format::Auto`, inferred from the path's extension; an extension it does not recognize
+is an error - a file being created has no signature bytes to sniff. A handle from `new` has no
+extension, so it needs an explicit format, and writes the whole workbook to its writer once, in
+`finish`:
 
 ```rust,no_run
-use excelreader::{write_columns, Column, ColumnData, WriteOptions};
-# let ids = [1i64, 2, 3];
-# let columns = [Column::new(Some("id"), ColumnData::I64(&ids))];
-
-write_columns("big.xlsx", &columns, &WriteOptions::new().degree_of_parallelism(0))?;
-# Ok::<(), excelreader::Error>(())
-```
-
-Each write has a path form and an `io::Write` form: `write_columns_to`/`write_sheet_to` build the
-workbook in memory and write it to the writer in one `write_all`. A writer has no extension, so
-these need an explicit format:
-
-```rust,no_run
-use excelreader::{write_sheet_to, Format, WriteOptions};
+use excelreader::{Format, WriteOptions, WriterHandle};
 # #[derive(Default, excelreader::ExcelMapper)]
 # struct Row { #[excel(name = "Name")] name: String }
 # let rows = vec![Row::default()];
 
 let mut bytes = Vec::new();
-write_sheet_to(&mut bytes, &rows, &WriteOptions::new().format(Format::Xlsx))?;
+let mut handle = WriterHandle::new(&mut bytes, &WriteOptions::new().format(Format::Xlsx))?;
+handle.write_sheet("Sheet1", &rows, None)?;
+handle.finish()?;
 # Ok::<(), excelreader::Error>(())
 ```
 
-`write_sheet` walks the slice once and appends each field to its own buffer, monomorphized per
-field. That transpose is the only copy it makes; `write_columns` pays nothing.
+For XLSX and XLSB, `degree_of_parallelism` formats and compresses a whole-sheet write in batches of
+`batch_rows` rows on several threads: `0` uses every processor, `1` writes serially, and leaving it
+unset is serial. Unset `batch_rows` keeps the library default of 8,192. With shared strings on, two
+parallel runs give the same content in files that differ byte for byte. XLS, CSV and per-cell
+writes ignore both.
 
-### Streaming writes
+Call `write_sheet` or `write_columns` once per sheet to write several. Passing
+`Some(&TableOptions::new("Sales"))` writes the sheet as an Excel table, with filter buttons and a
+table style (XLSX and XLSB only, every column named). The name must be unique in the workbook; the
+style defaults to `TableStyleMedium2`, and `.style(None)` leaves the table unstyled.
 
-`write_sheet`/`write_columns` build the whole table in memory first. `WriterHandle` is the
-row-by-row alternative, writing directly as each call arrives instead:
+```rust,no_run
+use excelreader::{TableOptions, WriteOptions, WriterHandle};
+# #[derive(Default, excelreader::ExcelMapper)]
+# struct Row { #[excel(name = "Name")] name: String }
+# let sales = vec![Row::default()];
+# let stock = vec![Row::default()];
+
+let mut handle = WriterHandle::create("report.xlsx", &WriteOptions::new().degree_of_parallelism(0))?;
+handle.write_sheet("Sales", &sales, Some(&TableOptions::new("Sales")))?;
+handle.write_sheet("Stock", &stock, None)?;
+handle.finish()?;
+# Ok::<(), excelreader::Error>(())
+```
+
+The free functions `write_columns`, `write_columns_to`, `write_sheet` and `write_sheet_to` are
+deprecated since 7.4 and go away in 8.0. They still work, as a one-sheet `WriterHandle` whose sheet
+is named by `WriteOptions::sheet_name`, and take no styles of their own.
+
+### Row by row
 
 ```rust,no_run
 use excelreader::{WriteOptions, WriterHandle};
@@ -416,36 +436,98 @@ handle.finish()?;
 # Ok::<(), excelreader::Error>(())
 ```
 
-Call order mirrors the C ABI's `xl_writer_handle`: `create` (a path) or `new` (any `io::Write`),
-then per sheet `start_sheet..end_sheet`, each containing `start_row..end_row` with one `write_*`
-call per cell (`None` writes a blank cell), left to right, then `finish`. A call out of order
-returns `Err` rather than corrupting output. A handle from `new` writes the whole workbook to its
-writer once, in `finish`. Only `finish` commits: dropping a handle without finishing it (an early
-`?` return, a panic) discards what was written, leaves an existing file at the path as it was, and
-writes nothing to a writer.
+Call order mirrors the C ABI's `xl_writer_handle`: per sheet `start_sheet..end_sheet`, each
+containing `start_row..end_row` with one `write_*` call per cell (`None` writes a blank cell), left
+to right, then `finish`. A call out of order returns `Err` rather than corrupting output. Between
+sheets, `start_sheet..end_sheet` mixes with whole-sheet writes; while a sheet is open those return
+`Err`. Only `finish` commits: dropping a handle without finishing it (an early `?` return, a panic)
+discards what was written, leaves an existing file at the path as it was, and writes nothing to a
+writer.
 
-To write several sheets from whole tables, call the handle's `write_sheet` or `write_columns` once
-per sheet. They take what the free functions take, plus the sheet's name, and write it in one call
-instead of one per cell, using the handle's `degree_of_parallelism` and `batch_rows`. Between sheets
-they mix with `start_sheet..end_sheet`; while a sheet is open they return `Err`.
+### Cell styles
+
+A `CellStyle` sets the number format, the font (name, size, color, bold, italic, underline,
+strikethrough), a solid fill, alignment, wrap, indent, rotation and borders, with the same values
+and limits as the .NET library. Colors are `0xRRGGBB`, `-1` for unset; the default style is
+General.
 
 ```rust,no_run
-use excelreader::{WriteOptions, WriterHandle};
-# #[derive(Default, excelreader::ExcelMapper)]
-# struct Row { #[excel(name = "Name")] name: String }
-# let sales = vec![Row::default()];
-# let stock = vec![Row::default()];
+use excelreader::{Border, BorderStyle, CellStyle, WriteOptions, WriterHandle};
 
-let mut handle = WriterHandle::create("report.xlsx", &WriteOptions::new().degree_of_parallelism(0))?;
-handle.write_sheet("Sales", &sales, None)?;
-handle.write_sheet("Stock", &stock, None)?;
+let mut handle = WriterHandle::create("styled.xlsx", &WriteOptions::new())?;
+let header = handle.add_style(&CellStyle::new().bold(true).fill_color(0xDDEBF7))?;
+let money = handle.add_style(
+    &CellStyle::new().number_format("#,##0.00").border(Border::new(BorderStyle::Thin, -1)),
+)?;
+handle.start_sheet("Summary")?;
+handle.set_column_style(1, money)?;
+handle.set_column_width(0, 24.0)?;
+handle.start_row_styled(header, 0.0)?;
+handle.write_str(Some("Item"))?;
+handle.write_str(Some("Total"))?;
+handle.end_row()?;
+handle.start_row()?;
+handle.write_str(Some("Widgets"))?;
+handle.write_f64(Some(1234.5))?;
+handle.end_row()?;
+handle.end_sheet()?;
 handle.finish()?;
 # Ok::<(), excelreader::Error>(())
 ```
 
-Passing `Some(&TableOptions::new("Sales"))` writes the sheet as an Excel table, with filter buttons
-and a table style (XLSX and XLSB only, every column named). The name must be unique in the
-workbook; the style defaults to `TableStyleMedium2`, and `.style(None)` leaves the table unstyled.
+`add_style` returns an id, the same one for an equal style; id `0` is General and needs no
+registering. Column styles and widths go after `start_sheet` and before the sheet's first row. A
+row style (`start_row_styled`, with a height in points, `0` for the default) beats the column
+style, and `style_next_cell` styles only the next cell written, beating both; `end_row` with one
+pending fails. An invalid value, such as a color past `0xFFFFFF` or an indent past 15, is an `Err`
+with `ErrorKind::InvalidArgument` that leaves the handle usable. CSV accepts every style call and
+ignores it.
+
+Whole-sheet writes take a style per column (`Column::style`), for the data cells only - never the
+header. A style without a number format keeps a date, time or timestamp column's own. The handle's
+`write_columns_with` and `write_sheet_with` take a `SheetOptions` with the header row's style, the
+column widths (one per column, `0` for the default) and the table, if any:
+
+```rust,no_run
+use excelreader::{CellStyle, Column, ColumnData, SheetOptions, WriteOptions, WriterHandle};
+
+let totals = [1234.5f64, 99.0];
+let columns = [Column::new(Some("Total"), ColumnData::F64(&totals))
+    .style(CellStyle::new().number_format("#,##0.00"))];
+let sheet = SheetOptions::new()
+    .header_style(CellStyle::new().bold(true))
+    .column_widths(vec![14.0]);
+let mut handle = WriterHandle::create("styled.xlsx", &WriteOptions::new())?;
+handle.write_columns_with("Summary", &columns, &sheet)?;
+handle.finish()?;
+# Ok::<(), excelreader::Error>(())
+```
+
+With the derive, `style(...)` in a field's `#[excel(...)]` is that column's style. Its keys are the
+.NET `[ExcelStyle]`'s: the flags `bold`, `italic`, `underline`, `strikethrough` and `wrap_text`, and
+`number_format`, `font_name`, `font_size`, `font_color`, `fill_color`, `horizontal_alignment` and
+`vertical_alignment` (snake_case names such as `"center"` or `"center_continuous"`), `indent`, `rotation`, `border`
+(such as `"thin"` or `"medium_dash_dot"`, on all four edges) and `border_color`. A value out of
+range is a compile error:
+
+```rust,no_run
+use excelreader::{CellStyle, SheetOptions, WriteOptions, WriterHandle};
+
+#[derive(Default, excelreader::ExcelMapper)]
+struct Sale {
+    #[excel(name = "Item", style(bold, font_color = 0x1F4E78))]
+    item: String,
+    #[excel(name = "Total", style(number_format = "#,##0.00", horizontal_alignment = "right", border = "thin"))]
+    total: f64,
+}
+
+# let sales = vec![Sale::default()];
+let header = SheetOptions::new().header_style(CellStyle::new().bold(true));
+let mut handle = WriterHandle::create("sales.xlsx", &WriteOptions::new())?;
+handle.write_sheet_with("Sales", &sales, &header)?;
+handle.finish()?;
+# Ok::<(), excelreader::Error>(())
+```
 
 ## Reading rows one at a time
 

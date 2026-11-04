@@ -83,13 +83,29 @@ namespace
     };
 }
 
+template <typename Write>
+static std::expected<void, xl::Error> write_workbook(const std::string &path, Write &&write)
+{
+    auto writer = xl::WriterHandle::open(path);
+    if (!writer.has_value())
+    {
+        return std::unexpected(std::move(writer.error()));
+    }
+    auto written = write(*writer);
+    if (!written.has_value())
+    {
+        return written;
+    }
+    return writer->finish();
+}
+
 static void BM_WriteSheet(benchmark::State &state)
 {
     const std::vector<Row> &rows = fixture_rows();
     const std::filesystem::path path = bench_path("sheet.xlsx");
     for (auto _ : state)
     {
-        auto result = xl::write_sheet(path.string(), rows);
+        auto result = write_workbook(path.string(), [&](xl::WriterHandle &writer) { return writer.write_sheet("Sheet1", rows); });
         benchmark::DoNotOptimize(result);
         if (!result.has_value())
         {
@@ -158,7 +174,7 @@ static void BM_WriteColumns(benchmark::State &state)
     const std::filesystem::path path = bench_path("columns.xlsx");
     for (auto _ : state)
     {
-        auto result = xl::write_columns(path.string(), columns);
+        auto result = write_workbook(path.string(), [&](xl::WriterHandle &writer) { return writer.write_columns("Sheet1", columns); });
         benchmark::DoNotOptimize(result);
         if (!result.has_value())
         {

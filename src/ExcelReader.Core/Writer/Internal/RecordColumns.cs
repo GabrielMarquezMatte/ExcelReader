@@ -37,6 +37,22 @@ namespace ExcelReader.Core.Writer.Internal
             return headers;
         }
 
+        internal static CellStyle?[]? BuildStyles()
+        {
+            CellStyle?[]? styles = null;
+            for (int i = 0; i < _props.Length; i++)
+            {
+                ExcelStyleAttribute? attr = _props[i].GetCustomAttribute<ExcelStyleAttribute>();
+                if (attr is null)
+                {
+                    continue;
+                }
+                styles ??= new CellStyle?[_props.Length];
+                styles[i] = attr.ToCellStyle();
+            }
+            return styles;
+        }
+
         [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         private static class Plan<TRow> where TRow : IRowWriter

@@ -55,6 +55,11 @@ EXPORTS
     xl_close_write_handle
     xl_write_handle_bytes
     xl_abort_write_handle
+    xl_add_style
+    xl_set_column_style
+    xl_set_column_width
+    xl_start_row_styled
+    xl_style_next_cell
     xl_csv_aggregate_file
     xl_csv_aggregate_memory
     xl_aggregate

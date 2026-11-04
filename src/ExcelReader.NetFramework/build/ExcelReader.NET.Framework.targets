@@ -1,0 +1,12 @@
+<Project>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\ExcelReader.Native.dll"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\ExcelReader.Native.dll')"
+          Link="x64\ExcelReader.Native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x86\native\ExcelReader.Native.dll"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\runtimes\win-x86\native\ExcelReader.Native.dll')"
+          Link="x86\ExcelReader.Native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+</Project>
