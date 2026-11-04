@@ -50,6 +50,7 @@ namespace ExcelReader.NetFramework.Writer.Internal
             Header = header;
             NativeType = nativeType;
             Nullable = nullable;
+            Style = property.GetCustomAttribute<ExcelStyleAttribute>()?.ToCellStyle();
         }
 
         internal string PropertyName { get; }
@@ -59,6 +60,8 @@ namespace ExcelReader.NetFramework.Writer.Internal
         internal int NativeType { get; }
 
         internal bool Nullable { get; }
+
+        internal CellStyle? Style { get; }
 
         internal abstract void Fill(T[] rows, XlColumn* column, NativeWriteTable owner);
 

@@ -154,7 +154,6 @@ ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteEmpty() -> void
 ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteTime(System.TimeSpan value) -> void
 static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Create(string! path, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
 static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CreateInMemory(ExcelReader.NetFramework.Reader.ExcelFormat format, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
-ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteSheet<T>(string! name, System.Collections.Generic.IEnumerable<T>! rows, ExcelReader.NetFramework.Writer.ExcelTableOptions? table = null) -> void
 ExcelReader.NetFramework.Writer.ExcelTableOptions
 ExcelReader.NetFramework.Writer.ExcelTableOptions.ExcelTableOptions() -> void
 ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeFirstColumn.get -> bool
@@ -189,3 +188,115 @@ ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>
 ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>.Accumulate(ExcelReader.NetFramework.Reader.ExcelRowView row) -> void
 ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>.Combine(TSelf other) -> void
 virtual ExcelReader.NetFramework.Reader.ExcelRowAction.Invoke(ExcelReader.NetFramework.Reader.ExcelRowView row) -> void
+ExcelReader.NetFramework.Writer.CellBorder
+ExcelReader.NetFramework.Writer.CellBorder.CellBorder(ExcelReader.NetFramework.Writer.ExcelBorderStyle style, int color = -1) -> void
+ExcelReader.NetFramework.Writer.CellBorder.Color.get -> int
+ExcelReader.NetFramework.Writer.CellBorder.Style.get -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.CellStyle
+ExcelReader.NetFramework.Writer.CellStyle.Bold.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Bold.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Bottom.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Bottom.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.CellStyle() -> void
+ExcelReader.NetFramework.Writer.CellStyle.FillColor.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.FillColor.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.FontColor.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.FontColor.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.FontName.get -> string?
+ExcelReader.NetFramework.Writer.CellStyle.FontName.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.FontSize.get -> double?
+ExcelReader.NetFramework.Writer.CellStyle.FontSize.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.HorizontalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.CellStyle.HorizontalAlignment.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Indent.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.Indent.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Italic.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Italic.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Left.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Left.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.NumberFormat.get -> string?
+ExcelReader.NetFramework.Writer.CellStyle.NumberFormat.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Right.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Right.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Rotation.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.Rotation.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Strikethrough.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Strikethrough.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Top.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Top.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Underline.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Underline.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.VerticalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.CellStyle.VerticalAlignment.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.WrapText.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.WrapText.set -> void
+ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.DashDot = 9 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.DashDotDot = 11 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Dashed = 3 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Dotted = 4 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Double = 6 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Hair = 7 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Medium = 2 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.MediumDashDot = 10 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.MediumDashDotDot = 12 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.MediumDashed = 8 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.None = 0 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.SlantDashDot = 13 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Thick = 5 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Thin = 1 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Center = 2 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.CenterContinuous = 6 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Distributed = 7 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Fill = 4 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.General = 0 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Justify = 5 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Left = 1 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Right = 3 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Bold.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Bold.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Border.get -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Border.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.BorderColor.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.BorderColor.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.ExcelStyleAttribute() -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FillColor.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FillColor.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontColor.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontColor.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontName.get -> string?
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontName.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontSize.get -> double
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontSize.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.HorizontalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.HorizontalAlignment.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Indent.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Indent.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Italic.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Italic.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.NumberFormat.get -> string?
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.NumberFormat.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Rotation.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Rotation.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Strikethrough.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Strikethrough.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Underline.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Underline.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.VerticalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.VerticalAlignment.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.WrapText.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.WrapText.set -> void
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Bottom = 0 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Center = 2 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Distributed = 4 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Justify = 3 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Top = 1 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.AddStyle(ExcelReader.NetFramework.Writer.CellStyle! style) -> int
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.SetColumnStyle(int column, int styleId) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.SetColumnWidth(int column, double width) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StartRow(int styleId, double height = 0) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StyleNextCell(int styleId) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteSheet<T>(string! name, System.Collections.Generic.IEnumerable<T>! rows, ExcelReader.NetFramework.Writer.ExcelTableOptions? table = null, ExcelReader.NetFramework.Writer.CellStyle? headerStyle = null) -> void

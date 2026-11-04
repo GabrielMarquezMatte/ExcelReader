@@ -107,6 +107,64 @@ namespace ExcelReader.NetFramework.Writer
             NativeError.ThrowIfFailed(NativeMethods.xl_start_row(lease.Raw));
         }
 
+        /// <summary>Starts a row whose cells all use a style, beating column styles.</summary>
+        /// <param name="styleId">A style id from <see cref="AddStyle"/>; 0 is the general style.</param>
+        /// <param name="height">The row height in points (at most 409); 0 for the default.</param>
+        /// <exception cref="ExcelReaderException">The style id or height is invalid.</exception>
+        public void StartRow(int styleId, double height = 0)
+        {
+            using Lease lease = Acquire();
+            NativeError.ThrowIfFailed(NativeMethods.xl_start_row_styled(lease.Raw, styleId, height));
+        }
+
+        /// <summary>Registers a style; an equal style returns the same id. Id 0 is the general style and needs no registering.</summary>
+        /// <param name="style">The style.</param>
+        /// <returns>The style id.</returns>
+        /// <exception cref="ExcelReaderException">A value is out of range (<see cref="ExcelStatus.InvalidArgument"/>) or a format limit is reached.</exception>
+        public int AddStyle(CellStyle style)
+        {
+            if (style is null)
+            {
+                throw new ArgumentNullException(nameof(style));
+            }
+
+            using NativeWriteTable block = new NativeWriteTable();
+            XlCellStyle* native = block.Style(style);
+            int id = 0;
+            using Lease lease = Acquire();
+            NativeError.ThrowIfFailed(NativeMethods.xl_add_style(lease.Raw, native, &id));
+            return id;
+        }
+
+        /// <summary>Styles a column of the open sheet; call after <see cref="StartSheet"/> and before its first row.</summary>
+        /// <param name="column">The zero-based column.</param>
+        /// <param name="styleId">A style id from <see cref="AddStyle"/>.</param>
+        /// <exception cref="ExcelReaderException">The column or style id is invalid, or a row was already started.</exception>
+        public void SetColumnStyle(int column, int styleId)
+        {
+            using Lease lease = Acquire();
+            NativeError.ThrowIfFailed(NativeMethods.xl_set_column_style(lease.Raw, column, styleId));
+        }
+
+        /// <summary>Sets a column width of the open sheet; call after <see cref="StartSheet"/> and before its first row.</summary>
+        /// <param name="column">The zero-based column.</param>
+        /// <param name="width">The width in characters, 0 to 255.</param>
+        /// <exception cref="ExcelReaderException">The column or width is invalid, or a row was already started.</exception>
+        public void SetColumnWidth(int column, double width)
+        {
+            using Lease lease = Acquire();
+            NativeError.ThrowIfFailed(NativeMethods.xl_set_column_width(lease.Raw, column, width));
+        }
+
+        /// <summary>Styles the next cell written, and only that one, over the row and column styles.</summary>
+        /// <param name="styleId">A style id from <see cref="AddStyle"/>.</param>
+        /// <exception cref="ExcelReaderException">The style id is invalid.</exception>
+        public void StyleNextCell(int styleId)
+        {
+            using Lease lease = Acquire();
+            NativeError.ThrowIfFailed(NativeMethods.xl_style_next_cell(lease.Raw, styleId));
+        }
+
         /// <summary>Ends the open row.</summary>
         public void EndRow()
         {
@@ -132,13 +190,14 @@ namespace ExcelReader.NetFramework.Writer
         /// <param name="name">The sheet name: at most 31 characters, unique, without the characters Excel forbids.</param>
         /// <param name="rows">The rows, enumerated once.</param>
         /// <param name="table">Writes the sheet as an Excel table (XLSX and XLSB only), or null for a plain sheet.</param>
+        /// <param name="headerStyle">Styles the header row, or null to leave it general. A property's <see cref="ExcelStyleAttribute"/> styles its data cells only.</param>
         /// <exception cref="ArgumentException"><paramref name="table"/> has no <see cref="ExcelTableOptions.Name"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException">A <see cref="TimeSpan"/> value is negative or at least one day.</exception>
         /// <exception cref="InvalidOperationException">A sheet started with <see cref="StartSheet"/> is still open.</exception>
         /// <exception cref="NotSupportedException">A property of <typeparamref name="T"/> has an unsupported type.</exception>
         /// <exception cref="ExcelReaderException">The name or table is invalid, or the format cannot hold a table.</exception>
         /// <exception cref="ObjectDisposedException">The writer is already closed, aborted or disposed.</exception>
-        public void WriteSheet<T>(string name, IEnumerable<T> rows, ExcelTableOptions? table = null)
+        public void WriteSheet<T>(string name, IEnumerable<T> rows, ExcelTableOptions? table = null, CellStyle? headerStyle = null)
         {
             if (name is null)
             {
@@ -164,17 +223,17 @@ namespace ExcelReader.NetFramework.Writer
             WriteMap<T> map = WriteMap<T>.Instance;
             T[] items = rows.ToArray();
             byte[] nameBytes = Utf8.NonNullBytes(name, out int nameLength);
-            using NativeWriteTable native = NativeWriteTable.Create(map, items);
+            using NativeWriteTable native = NativeWriteTable.Create(map, items, headerStyle);
             using Lease lease = Acquire();
             fixed (byte* namePointer = nameBytes)
             {
-                if (table is null)
+                if (table is null && native.ColumnStyles is null && native.HeaderStyle is null)
                 {
                     NativeError.ThrowIfFailed(NativeMethods.xl_write_sheet(lease.Raw, namePointer, nameLength, native.Specs, native.Table, null));
                     return;
                 }
 
-                WriteTableSheet(lease.Raw, namePointer, nameLength, native, table);
+                WriteStyledSheet(lease.Raw, namePointer, nameLength, native, table);
             }
         }
 
@@ -340,12 +399,18 @@ namespace ExcelReader.NetFramework.Writer
             Abort();
         }
 
-        private static void WriteTableSheet(IntPtr raw, byte* name, int nameLength, NativeWriteTable native, ExcelTableOptions table)
+        private static void WriteStyledSheet(IntPtr raw, byte* name, int nameLength, NativeWriteTable native, ExcelTableOptions? table)
         {
-            byte[] tableName = Utf8.NonNullBytes(table.Name, out int tableNameLength);
+            byte[]? tableName = null;
+            int tableNameLength = 0;
             byte[]? style = null;
             int styleLength = 0;
-            if (table.Style is not null)
+            if (table is not null)
+            {
+                tableName = Utf8.NonNullBytes(table.Name, out tableNameLength);
+            }
+
+            if (table?.Style is not null)
             {
                 style = Utf8.NonNullBytes(table.Style, out styleLength);
             }
@@ -360,7 +425,9 @@ namespace ExcelReader.NetFramework.Writer
                     TableName = tableNamePointer,
                     TableStyleLen = styleLength,
                     TableStyle = stylePointer,
-                    TableFlags = table.Flags(),
+                    TableFlags = table?.Flags() ?? 0,
+                    ColumnStyles = native.ColumnStyles,
+                    HeaderStyle = native.HeaderStyle,
                 };
                 NativeError.ThrowIfFailed(NativeMethods.xl_write_sheet(raw, name, nameLength, native.Specs, native.Table, &options));
             }

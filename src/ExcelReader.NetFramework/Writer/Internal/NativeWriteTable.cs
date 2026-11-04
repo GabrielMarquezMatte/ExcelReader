@@ -7,7 +7,7 @@ namespace ExcelReader.NetFramework.Writer.Internal
     {
         private readonly List<IntPtr> _blocks = new List<IntPtr>();
 
-        private NativeWriteTable()
+        internal NativeWriteTable()
         {
         }
 
@@ -15,12 +15,16 @@ namespace ExcelReader.NetFramework.Writer.Internal
 
         internal XlColumnSpec* Specs { get; private set; }
 
-        internal static NativeWriteTable Create<T>(WriteMap<T> map, T[] rows)
+        internal XlCellStyle** ColumnStyles { get; private set; }
+
+        internal XlCellStyle* HeaderStyle { get; private set; }
+
+        internal static NativeWriteTable Create<T>(WriteMap<T> map, T[] rows, CellStyle? headerStyle = null)
         {
             NativeWriteTable table = new NativeWriteTable();
             try
             {
-                table.Build(map, rows);
+                table.Build(map, rows, headerStyle);
                 return table;
             }
             catch
@@ -36,6 +40,31 @@ namespace ExcelReader.NetFramework.Writer.Internal
             IntPtr block = Marshal.AllocHGlobal(new IntPtr(Math.Max(bytes, 1)));
             _blocks[_blocks.Count - 1] = block;
             return (byte*)block;
+        }
+
+        internal XlCellStyle* Style(CellStyle style)
+        {
+            XlCellStyle* native = (XlCellStyle*)Allocate(sizeof(XlCellStyle));
+            *native = new XlCellStyle
+            {
+                StructSize = sizeof(XlCellStyle),
+                FontFlags = (style.Bold ? Xl.XL_FONT_BOLD : 0) | (style.Italic ? Xl.XL_FONT_ITALIC : 0) | (style.Underline ? Xl.XL_FONT_UNDERLINE : 0) | (style.Strikethrough ? Xl.XL_FONT_STRIKETHROUGH : 0),
+                FontSize = style.FontSize ?? 0,
+                FontColor = style.FontColor,
+                FillColor = style.FillColor,
+                HorizontalAlignment = (int)style.HorizontalAlignment,
+                VerticalAlignment = (int)style.VerticalAlignment,
+                WrapText = style.WrapText ? 1 : 0,
+                Indent = style.Indent,
+                Rotation = style.Rotation,
+                Left = Border(style.Left),
+                Right = Border(style.Right),
+                Top = Border(style.Top),
+                Bottom = Border(style.Bottom),
+            };
+            native->NumberFormat = Text(style.NumberFormat, out native->NumberFormatLen);
+            native->FontName = Text(style.FontName, out native->FontNameLen);
+            return native;
         }
 
         internal byte* AllocateValidity(int rows)
@@ -63,9 +92,35 @@ namespace ExcelReader.NetFramework.Writer.Internal
             _blocks.Clear();
             Table = null;
             Specs = null;
+            ColumnStyles = null;
+            HeaderStyle = null;
         }
 
-        private void Build<T>(WriteMap<T> map, T[] rows)
+        private static XlBorder Border(CellBorder? border)
+        {
+            if (border is null)
+            {
+                return new XlBorder { Style = 0, Color = -1 };
+            }
+
+            return new XlBorder { Style = (int)border.Style, Color = border.Color };
+        }
+
+        private byte* Text(string? value, out int length)
+        {
+            length = 0;
+            if (value is null)
+            {
+                return null;
+            }
+
+            byte[] bytes = Utf8.NonNullBytes(value, out length);
+            byte* text = Allocate(bytes.Length);
+            Marshal.Copy(bytes, 0, (IntPtr)text, bytes.Length);
+            return text;
+        }
+
+        private void Build<T>(WriteMap<T> map, T[] rows, CellStyle? headerStyle)
         {
             ColumnWriter<T>[] writers = map.Columns;
             int count = writers.Length;
@@ -75,6 +130,23 @@ namespace ExcelReader.NetFramework.Writer.Internal
             {
                 specs[i] = Spec(writers[i], i);
                 writers[i].Fill(rows, columns + i, this);
+            }
+
+            if (writers.Any(w => w.Style is not null))
+            {
+                XlCellStyle** styles = (XlCellStyle**)Allocate((long)count * sizeof(XlCellStyle*));
+                for (int i = 0; i < count; i++)
+                {
+                    CellStyle? style = writers[i].Style;
+                    styles[i] = style is null ? null : Style(style);
+                }
+
+                ColumnStyles = styles;
+            }
+
+            if (headerStyle is not null)
+            {
+                HeaderStyle = Style(headerStyle);
             }
 
             XlTable* table = (XlTable*)Allocate(sizeof(XlTable));

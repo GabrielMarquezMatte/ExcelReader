@@ -96,10 +96,31 @@ namespace ExcelReader.NetFramework.Tests.Interop
         public void XlSheetOptions_Layout()
         {
             RequireX64();
-            Layout<XlSheetOptions>(40,
+            Layout<XlSheetOptions>(64,
                 (nameof(XlSheetOptions.TableNameLen), 4), (nameof(XlSheetOptions.TableName), 8),
                 (nameof(XlSheetOptions.TableStyleLen), 16), (nameof(XlSheetOptions.TableStyle), 24),
-                (nameof(XlSheetOptions.TableFlags), 32));
+                (nameof(XlSheetOptions.TableFlags), 32), (nameof(XlSheetOptions.ColumnStyles), 40),
+                (nameof(XlSheetOptions.ColumnWidths), 48), (nameof(XlSheetOptions.HeaderStyle), 56));
+        }
+
+        [Fact]
+        public void XlCellStyle_Layout()
+        {
+            RequireX64();
+            Layout<XlCellStyle>(104,
+                (nameof(XlCellStyle.NumberFormatLen), 4), (nameof(XlCellStyle.NumberFormat), 8),
+                (nameof(XlCellStyle.FontName), 16), (nameof(XlCellStyle.FontNameLen), 24),
+                (nameof(XlCellStyle.FontFlags), 28), (nameof(XlCellStyle.FontSize), 32),
+                (nameof(XlCellStyle.FontColor), 40), (nameof(XlCellStyle.FillColor), 44),
+                (nameof(XlCellStyle.HorizontalAlignment), 48), (nameof(XlCellStyle.VerticalAlignment), 52),
+                (nameof(XlCellStyle.WrapText), 56), (nameof(XlCellStyle.Indent), 60), (nameof(XlCellStyle.Rotation), 64),
+                (nameof(XlCellStyle.Left), 68), (nameof(XlCellStyle.Right), 76), (nameof(XlCellStyle.Top), 84), (nameof(XlCellStyle.Bottom), 92));
+        }
+
+        [Fact]
+        public void XlBorder_Layout()
+        {
+            Layout<XlBorder>(8, (nameof(XlBorder.Color), 4));
         }
 
         [Fact]

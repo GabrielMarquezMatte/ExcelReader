@@ -35,6 +35,11 @@ namespace ExcelReader.NetFramework.Interop
         internal const int XL_OPT_FALSE = 1;
         internal const int XL_OPT_TRUE = 2;
 
+        internal const int XL_FONT_BOLD = 1;
+        internal const int XL_FONT_ITALIC = 2;
+        internal const int XL_FONT_UNDERLINE = 4;
+        internal const int XL_FONT_STRIKETHROUGH = 8;
+
         internal const int XL_TABLE_NO_STYLE = 1;
         internal const int XL_TABLE_NO_ROW_STRIPES = 2;
         internal const int XL_TABLE_COLUMN_STRIPES = 4;
@@ -195,6 +200,39 @@ namespace ExcelReader.NetFramework.Interop
         internal int TableStyleLen;
         internal byte* TableStyle;
         internal int TableFlags;
+        internal XlCellStyle** ColumnStyles;
+        internal double* ColumnWidths;
+        internal XlCellStyle* HeaderStyle;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct XlBorder
+    {
+        internal int Style;
+        internal int Color;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct XlCellStyle
+    {
+        internal int StructSize;
+        internal int NumberFormatLen;
+        internal byte* NumberFormat;
+        internal byte* FontName;
+        internal int FontNameLen;
+        internal int FontFlags;
+        internal double FontSize;
+        internal int FontColor;
+        internal int FillColor;
+        internal int HorizontalAlignment;
+        internal int VerticalAlignment;
+        internal int WrapText;
+        internal int Indent;
+        internal int Rotation;
+        internal XlBorder Left;
+        internal XlBorder Right;
+        internal XlBorder Top;
+        internal XlBorder Bottom;
     }
 
     [StructLayout(LayoutKind.Sequential)]
