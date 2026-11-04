@@ -14,7 +14,7 @@ namespace ExcelReader.Core.Writer.Xlsx
     /// <summary>
     /// Writes a single worksheet's XML into an XLSX ZIP archive, buffering rows and flushing them to the entry stream once they cross a size threshold.
     /// </summary>
-    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>, ITableSheetWriter<XlsxRowWriter>, IBatchSheet<XlsxSheetWriter, XlsxRowWriter>, IZipSheet
+    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>, ITableSheetWriter<XlsxRowWriter>, IBatchSheet<XlsxSheetWriter, XlsxRowWriter>, IZipSheet, IStyleBinder
     {
         private readonly TableTracker _tables = new();
         private readonly XlsxWorkbookWriter _owner;
@@ -35,6 +35,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private bool _rowActive;
         private Dictionary<int, int>? _columnStyles;
         private int[]? _columnStyleLookup;
+        private int[]? _baseColumnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
 
         internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipPackageWriter zip, string name, int sheetId,
@@ -117,6 +118,33 @@ namespace ExcelReader.Core.Writer.Xlsx
         internal int GetColumnStyle(int columnIndex)
         {
             return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
+        }
+
+        int IStyleBinder.RegisterStyle(CellStyle style)
+        {
+            return _owner.AddStyle(style);
+        }
+
+        void IStyleBinder.PushColumnStyleOverlay(ReadOnlySpan<int> styleIds, int firstColumn)
+        {
+            _baseColumnStyleLookup = _columnStyleLookup;
+            _columnStyleLookup = SheetColumnValidation.Overlay(_columnStyleLookup, styleIds, firstColumn);
+        }
+
+        void IStyleBinder.PopColumnStyleOverlay()
+        {
+            _columnStyleLookup = _baseColumnStyleLookup;
+            _baseColumnStyleLookup = null;
+        }
+
+        void IStyleBinder.BeginStyledTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId)
+        {
+            BeginStyledTable(name, columns, options, headerStyleId);
+        }
+
+        ValueTask IStyleBinder.BeginStyledTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId, CancellationToken ct)
+        {
+            return BeginStyledTableAsync(name, columns, options, headerStyleId, ct);
         }
 
         /// <inheritdoc/>
@@ -362,22 +390,32 @@ namespace ExcelReader.Core.Writer.Xlsx
         /// <inheritdoc/>
         public void BeginTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null)
         {
+            BeginStyledTable(name, columns, options, headerStyleId: -1);
+        }
+
+        /// <inheritdoc/>
+        public ValueTask BeginTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null, CancellationToken ct = default)
+        {
+            return BeginStyledTableAsync(name, columns, options, headerStyleId: -1, ct);
+        }
+
+        internal void BeginStyledTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId)
+        {
             (string[] names, ExcelTableOptions effective) = PrepareTable(name, columns, options);
             using (XlsxRowWriter row = StartRow())
             {
-                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+                TableTracker.WriteHeader(row, effective.FirstColumn, names, headerStyleId);
             }
             _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber - 1);
         }
 
-        /// <inheritdoc/>
-        public async ValueTask BeginTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null, CancellationToken ct = default)
+        internal async ValueTask BeginStyledTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId, CancellationToken ct)
         {
             (string[] names, ExcelTableOptions effective) = PrepareTable(name, columns, options);
             XlsxRowWriter row = await StartRowAsync(ct).ConfigureAwait(false);
             await using (row.ConfigureAwait(false))
             {
-                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+                TableTracker.WriteHeader(row, effective.FirstColumn, names, headerStyleId);
             }
             _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber - 1);
         }

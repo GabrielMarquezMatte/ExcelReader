@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
@@ -22,6 +23,7 @@ namespace ExcelReader.Core.Writer
     {
         private readonly List<string> _headers = [];
         private readonly List<Action<TRow, T>> _writers = [];
+        private List<CellStyle?>? _styles;
 
         /// <summary>Adds a column: its header text, and how to write one record's value for it.</summary>
         /// <param name="header">The column's header text.</param>
@@ -33,7 +35,28 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(write);
             _headers.Add(header);
             _writers.Add(write);
+            _styles?.Add(null);
             return this;
+        }
+
+        /// <summary>Adds a column whose data cells are written in <paramref name="style"/>; the header cell is left alone.</summary>
+        /// <param name="header">The column's header text.</param>
+        /// <param name="write">Writes exactly one cell for <paramref name="header"/>'s column, from a record.</param>
+        /// <param name="style">The style of the column's data cells; it replaces any column or row style on them.</param>
+        /// <returns>This builder, for chaining.</returns>
+        /// <exception cref="ArgumentException">A value of <paramref name="style"/> is out of range.</exception>
+        public ExcelRecordMapBuilder<T, TRow> Column(string header, Action<TRow, T> write, CellStyle style)
+        {
+            CellStyleValidation.Validate(in style, nameof(style));
+            _styles ??= [.. new CellStyle?[_headers.Count]];
+            Column(header, write);
+            _styles[^1] = style;
+            return this;
+        }
+
+        internal CellStyle?[]? Styles()
+        {
+            return _styles?.ToArray();
         }
 
         internal string[] Headers()

@@ -106,3 +106,40 @@ ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(int styleId, double height
 ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(int styleId, double height, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!>
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRowAsync(int styleId, double height, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!>
+ExcelReader.Core.Writer.ExcelRecordLayout<T>.WithHeaderStyle(ExcelReader.Core.Writer.CellStyle style) -> ExcelReader.Core.Writer.ExcelRecordLayout<T>!
+ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>.Column(string! header, System.Action<TRow, T>! write, ExcelReader.Core.Writer.CellStyle style) -> ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>!
+ExcelReader.Core.Writer.ExcelStyleAttribute
+ExcelReader.Core.Writer.ExcelStyleAttribute.ExcelStyleAttribute() -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.Bold.get -> bool
+ExcelReader.Core.Writer.ExcelStyleAttribute.Bold.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.Border.get -> ExcelReader.Core.Writer.ExcelBorderStyle
+ExcelReader.Core.Writer.ExcelStyleAttribute.Border.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor.get -> int
+ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor.get -> int
+ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor.get -> int
+ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.FontName.get -> string?
+ExcelReader.Core.Writer.ExcelStyleAttribute.FontName.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize.get -> double
+ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment.get -> ExcelReader.Core.Writer.ExcelHorizontalAlignment
+ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.Indent.get -> int
+ExcelReader.Core.Writer.ExcelStyleAttribute.Indent.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.Italic.get -> bool
+ExcelReader.Core.Writer.ExcelStyleAttribute.Italic.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat.get -> string?
+ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation.get -> int
+ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough.get -> bool
+ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle() -> ExcelReader.Core.Writer.CellStyle
+ExcelReader.Core.Writer.ExcelStyleAttribute.Underline.get -> bool
+ExcelReader.Core.Writer.ExcelStyleAttribute.Underline.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment.get -> ExcelReader.Core.Writer.ExcelVerticalAlignment
+ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment.set -> void
+ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText.get -> bool
+ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText.set -> void
