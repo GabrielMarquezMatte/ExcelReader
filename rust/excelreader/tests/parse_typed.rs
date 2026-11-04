@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use excelreader::{write_columns_to, ColumnData, ReadOptions, Table, WriteOptions};
 use excelreader::{ColumnType, Date, ExcelMapper, Format, OpenOptions, Workbook};
 

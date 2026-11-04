@@ -326,9 +326,8 @@ impl ReadOptions {
     }
 }
 
-/// Options for [`write_columns`](crate::write_columns), [`write_sheet`](crate::write_sheet) and
-/// [`WriterHandle`](crate::WriterHandle). Every setting is unset by default, meaning "use the
-/// library default"; set only the ones you want to override.
+/// Options for [`WriterHandle`](crate::WriterHandle). Every setting is unset by default, meaning
+/// "use the library default"; set only the ones you want to override.
 ///
 /// ```no_run
 /// use excelreader::WriteOptions;
@@ -399,6 +398,10 @@ impl WriteOptions {
             )),
             (format, _) => Ok(format.raw()),
         }
+    }
+
+    pub(crate) fn sheet_name_or_default(&self) -> &str {
+        self.sheet_name.as_deref().unwrap_or("Sheet1")
     }
 
     /// Lowers this into the raw ABI struct, with `struct_size` filled in. The struct holds a raw

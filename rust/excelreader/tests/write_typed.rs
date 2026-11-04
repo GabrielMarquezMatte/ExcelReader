@@ -1,6 +1,7 @@
-//! Round-trips through `xl_write_typed`: everything written here is read back with the same
-//! crate's reader, so a layout mistake on either side shows up as a value mismatch rather than
-//! as a file only Excel could judge.
+//! Round-trips through the deprecated one-shot writers, now thin wrappers over `WriterHandle`:
+//! everything written here is read back with the same crate's reader, so a layout mistake on
+//! either side shows up as a value mismatch rather than as a file only Excel could judge.
+#![allow(deprecated)]
 
 use excelreader::ReadOptions;
 use excelreader::{

@@ -1,0 +1,5 @@
+error: unknown h_align "middle", expected one of "general", "left", "center", "right", "fill", "justify", "center_continuous", "distributed"
+ --> tests/derive_ui/fail/style_unknown_alignment.rs:5:45
+  |
+5 |     #[excel(name = "Valor", style(h_align = "middle"))]
+  |                                             ^^^^^^^^

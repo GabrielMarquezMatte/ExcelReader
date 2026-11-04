@@ -94,6 +94,8 @@ struct ParsedField<'a> {
     ident: &'a syn::Ident,
     /// Primary `#[excel(name = "...")]` first, then any aliases in declared order.
     names: Vec<LitStr>,
+    /// The `CellStyle` expression `#[excel(style(...))]` builds, if present.
+    style: Option<proc_macro2::TokenStream>,
     kind: FieldKind,
     ty: &'a Type,
     is_option: bool,
@@ -101,9 +103,11 @@ struct ParsedField<'a> {
 
 fn parse_field(field: &Field) -> syn::Result<ParsedField<'_>> {
     let (inner_ty, is_option) = unwrap_option(&field.ty);
+    let (names, style) = excel_attributes(field)?;
     Ok(ParsedField {
         ident: field.ident.as_ref().expect("named_fields guarantees Some"),
-        names: excel_names(field)?,
+        names,
+        style,
         kind: FieldKind::from_type(inner_ty)?,
         ty: inner_ty,
         is_option,
@@ -139,9 +143,10 @@ fn field_binding(parsed: &ParsedField<'_>) -> proc_macro2::TokenStream {
     }
 }
 
-fn excel_names(field: &Field) -> syn::Result<Vec<LitStr>> {
+fn excel_attributes(field: &Field) -> syn::Result<(Vec<LitStr>, Option<proc_macro2::TokenStream>)> {
     let mut name = None;
     let mut aliases = Vec::new();
+    let mut style = None;
     for attr in &field.attrs {
         if !attr.path().is_ident("excel") {
             continue;
@@ -155,7 +160,11 @@ fn excel_names(field: &Field) -> syn::Result<Vec<LitStr>> {
                 aliases.push(meta.value()?.parse::<LitStr>()?);
                 return Ok(());
             }
-            Err(meta.error("unsupported #[excel(...)] key, expected `name` or `alias`"))
+            if meta.path.is_ident("style") {
+                style = Some(parse_style(&meta)?);
+                return Ok(());
+            }
+            Err(meta.error("unsupported #[excel(...)] key, expected `name`, `alias` or `style`"))
         })?;
     }
     let Some(name) = name else {
@@ -166,7 +175,208 @@ fn excel_names(field: &Field) -> syn::Result<Vec<LitStr>> {
     };
     let mut names = vec![name];
     names.extend(aliases);
-    Ok(names)
+    Ok((names, style))
+}
+
+/// `style(...)`'s keys and values are Core's `[ExcelStyle]`, checked here against the same limits
+/// the native library enforces, so a bad value fails the build instead of the write.
+fn parse_style(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<proc_macro2::TokenStream> {
+    let mut setters = Vec::new();
+    let mut border = None;
+    let mut border_color = None;
+    meta.parse_nested_meta(|key| {
+        let Some(ident) = key.path.get_ident() else {
+            return Err(key.error(UNKNOWN_STYLE_KEY));
+        };
+        match ident.to_string().as_str() {
+            flag @ ("bold" | "italic" | "underline" | "strikethrough") => {
+                let setter = quote::format_ident!("{flag}");
+                setters.push(quote! { .#setter(true) });
+            }
+            "wrap" => setters.push(quote! { .wrap_text(true) }),
+            "number_format" => {
+                let value: LitStr = key.value()?.parse()?;
+                if value.value().chars().count() > 255 {
+                    return Err(syn::Error::new(
+                        value.span(),
+                        "number_format cannot be longer than 255 characters",
+                    ));
+                }
+                setters.push(quote! { .number_format(#value) });
+            }
+            "font_name" => {
+                let value: LitStr = key.value()?.parse()?;
+                if !(1..=31).contains(&value.value().chars().count()) {
+                    return Err(syn::Error::new(
+                        value.span(),
+                        "font_name must be 1 to 31 characters",
+                    ));
+                }
+                setters.push(quote! { .font_name(#value) });
+            }
+            "font_size" => {
+                let (value, span) = number(&key)?;
+                if value != 0.0 && !(1.0..=409.0).contains(&value) {
+                    return Err(syn::Error::new(
+                        span,
+                        "font_size must be between 1 and 409 points",
+                    ));
+                }
+                setters.push(quote! { .font_size(#value) });
+            }
+            "font_color" => {
+                let value = color(&key)?;
+                setters.push(quote! { .font_color(#value) });
+            }
+            "fill_color" => {
+                let value = color(&key)?;
+                setters.push(quote! { .fill_color(#value) });
+            }
+            "h_align" => {
+                let variant = keyword(&key, "h_align", H_ALIGN)?;
+                setters.push(quote! {
+                    .horizontal_alignment(::excelreader::HorizontalAlignment::#variant)
+                });
+            }
+            "v_align" => {
+                let variant = keyword(&key, "v_align", V_ALIGN)?;
+                setters.push(quote! {
+                    .vertical_alignment(::excelreader::VerticalAlignment::#variant)
+                });
+            }
+            "indent" => {
+                let (value, span) = integer(&key)?;
+                if !(0..=15).contains(&value) {
+                    return Err(syn::Error::new(span, "indent must be between 0 and 15"));
+                }
+                setters.push(quote! { .indent(#value) });
+            }
+            "rotation" => {
+                let (value, span) = integer(&key)?;
+                if !(-90..=90).contains(&value) && value != 255 {
+                    return Err(syn::Error::new(
+                        span,
+                        "rotation must be between -90 and 90, or 255 for stacked text",
+                    ));
+                }
+                setters.push(quote! { .rotation(#value) });
+            }
+            "border" => border = Some(keyword(&key, "border", BORDER)?),
+            "border_color" => border_color = Some((color(&key)?, key.path.span())),
+            _ => return Err(key.error(UNKNOWN_STYLE_KEY)),
+        }
+        Ok(())
+    })?;
+    match (border, border_color) {
+        (Some(style), color) => {
+            let color = color.map_or(-1, |(color, _)| color);
+            setters.push(quote! {
+                .border(::excelreader::Border::new(::excelreader::BorderStyle::#style, #color))
+            });
+        }
+        (None, Some((_, span))) => {
+            return Err(syn::Error::new(span, "border_color needs a `border` style"));
+        }
+        (None, None) => {}
+    }
+    Ok(quote! { ::excelreader::CellStyle::new() #(#setters)* })
+}
+
+const UNKNOWN_STYLE_KEY: &str = "unsupported style(...) key, expected one of `bold`, `italic`, \
+     `underline`, `strikethrough`, `number_format`, `font_name`, `font_size`, `font_color`, \
+     `fill_color`, `h_align`, `v_align`, `wrap`, `indent`, `rotation`, `border`, `border_color`";
+
+const H_ALIGN: &[(&str, &str)] = &[
+    ("general", "General"),
+    ("left", "Left"),
+    ("center", "Center"),
+    ("right", "Right"),
+    ("fill", "Fill"),
+    ("justify", "Justify"),
+    ("center_continuous", "CenterContinuous"),
+    ("distributed", "Distributed"),
+];
+
+const V_ALIGN: &[(&str, &str)] = &[
+    ("bottom", "Bottom"),
+    ("top", "Top"),
+    ("center", "Center"),
+    ("justify", "Justify"),
+    ("distributed", "Distributed"),
+];
+
+const BORDER: &[(&str, &str)] = &[
+    ("none", "None"),
+    ("thin", "Thin"),
+    ("medium", "Medium"),
+    ("dashed", "Dashed"),
+    ("dotted", "Dotted"),
+    ("thick", "Thick"),
+    ("double", "Double"),
+    ("hair", "Hair"),
+    ("medium_dashed", "MediumDashed"),
+    ("dash_dot", "DashDot"),
+    ("medium_dash_dot", "MediumDashDot"),
+    ("dash_dot_dot", "DashDotDot"),
+    ("medium_dash_dot_dot", "MediumDashDotDot"),
+    ("slant_dash_dot", "SlantDashDot"),
+];
+
+/// The enum variant named by a string value, from `(value, Variant)` pairs.
+fn keyword(
+    key: &syn::meta::ParseNestedMeta<'_>,
+    name: &str,
+    choices: &[(&str, &str)],
+) -> syn::Result<syn::Ident> {
+    let value: LitStr = key.value()?.parse()?;
+    let text = value.value();
+    let Some((_, variant)) = choices.iter().find(|(choice, _)| *choice == text) else {
+        let expected: Vec<String> = choices.iter().map(|(c, _)| format!("\"{c}\"")).collect();
+        return Err(syn::Error::new(
+            value.span(),
+            format!(
+                "unknown {name} {text:?}, expected one of {}",
+                expected.join(", ")
+            ),
+        ));
+    };
+    Ok(syn::Ident::new(variant, value.span()))
+}
+
+/// An integer literal, optionally negated.
+fn integer(key: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<(i32, proc_macro2::Span)> {
+    let input = key.value()?;
+    let negative = input.parse::<Option<syn::Token![-]>>()?.is_some();
+    let literal: syn::LitInt = input.parse()?;
+    let value = literal
+        .base10_parse::<i64>()
+        .map(|v| if negative { -v } else { v })?;
+    let value = i32::try_from(value)
+        .map_err(|_| syn::Error::new(literal.span(), "value does not fit an i32"))?;
+    Ok((value, literal.span()))
+}
+
+/// `-1`, or `0xRRGGBB`.
+fn color(key: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<i32> {
+    let (value, span) = integer(key)?;
+    if value != -1 && !(0..=0xFF_FFFF).contains(&value) {
+        return Err(syn::Error::new(
+            span,
+            "a color must be 0xRRGGBB (0 to 0xFFFFFF), or -1 for unset",
+        ));
+    }
+    Ok(value)
+}
+
+/// An integer or float literal, as `f64`.
+fn number(key: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<(f64, proc_macro2::Span)> {
+    let literal: syn::Lit = key.value()?.parse()?;
+    let value = match &literal {
+        syn::Lit::Float(value) => value.base10_parse::<f64>()?,
+        syn::Lit::Int(value) => value.base10_parse::<f64>()?,
+        _ => return Err(syn::Error::new(literal.span(), "expected a number")),
+    };
+    Ok((value, literal.span()))
 }
 
 /// Returns `(T, true)` for a field typed `Option<T>`, `(ty, false)` for anything else.
@@ -208,6 +418,7 @@ struct WriteField {
     /// The PRIMARY #[excel(name = "...")] only. An alias must never reach a write spec: the ABI
     /// rejects a write spec carrying more than one name.
     name: LitStr,
+    style: Option<proc_macro2::TokenStream>,
     kind: FieldKind,
     is_option: bool,
     values: syn::Ident,
@@ -225,6 +436,7 @@ impl WriteField {
                 .first()
                 .expect("excel_names always returns the primary name first")
                 .clone(),
+            style: parsed.style.clone(),
             kind: parsed.kind,
             is_option: parsed.is_option,
             values: quote::format_ident!("values_{index}"),
@@ -354,11 +566,16 @@ impl WriteField {
         } else {
             quote! { ::core::option::Option::None }
         };
+        let style_expr = match &self.style {
+            Some(style) => quote! { ::core::option::Option::Some(#style) },
+            None => quote! { ::core::option::Option::None },
+        };
         quote! {
             ::excelreader::__private::OwnedColumn {
                 name: ::core::option::Option::Some(#name),
                 data: #payload,
                 validity: #validity_expr,
+                style: #style_expr,
             }
         }
     }
@@ -660,5 +877,81 @@ mod tests {
             writer_half.contains("\"Nome\""),
             "the primary name must reach the write column"
         );
+    }
+
+    #[test]
+    fn a_field_without_style_writes_no_column_style() {
+        let output = expand_str(r#"struct Row { #[excel(name = "V")] v: f64, }"#)
+            .expect("expand must succeed");
+        assert!(output.contains("style : :: core :: option :: Option :: None"));
+    }
+
+    #[test]
+    fn style_keys_become_cell_style_setters() {
+        let output = expand_str(
+            r#"
+            struct Row {
+                #[excel(name = "V", style(bold, italic, underline, strikethrough, wrap,
+                    number_format = "0.00", font_name = "Arial", font_size = 12,
+                    font_color = 0xFF0000, fill_color = -1, h_align = "center_continuous",
+                    v_align = "distributed", indent = 15, rotation = 255,
+                    border = "slant_dash_dot", border_color = 0x0000FF))]
+                v: f64,
+            }
+            "#,
+        )
+        .expect("expand must succeed");
+
+        for expected in [
+            ". bold (true)",
+            ". italic (true)",
+            ". underline (true)",
+            ". strikethrough (true)",
+            ". wrap_text (true)",
+            ". number_format (\"0.00\")",
+            ". font_name (\"Arial\")",
+            ". font_size (12f64)",
+            ". font_color (16711680i32)",
+            ". fill_color (- 1i32)",
+            "HorizontalAlignment :: CenterContinuous",
+            "VerticalAlignment :: Distributed",
+            ". indent (15i32)",
+            ". rotation (255i32)",
+            "BorderStyle :: SlantDashDot , 255i32",
+        ] {
+            assert!(
+                output.contains(expected),
+                "missing `{expected}` in {output}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_out_of_range_style_values() {
+        for (style, message) in [
+            ("font_color = 0x1000000", "0xRRGGBB"),
+            ("fill_color = -2", "0xRRGGBB"),
+            ("border = \"thin\", border_color = 16777216", "0xRRGGBB"),
+            ("font_size = 410.0", "font_size"),
+            ("font_size = 0.5", "font_size"),
+            ("indent = 16", "indent"),
+            ("rotation = 91", "rotation"),
+            ("rotation = -91", "rotation"),
+            ("font_name = \"\"", "font_name"),
+            ("h_align = \"middle\"", "h_align"),
+            ("v_align = \"left\"", "v_align"),
+            ("border = \"thicker\"", "border"),
+            ("border_color = 0xFF0000", "border_color"),
+            ("colour = 1", "unsupported style"),
+        ] {
+            let err = expand_str(&format!(
+                r#"struct Row {{ #[excel(name = "V", style({style}))] v: f64, }}"#
+            ))
+            .expect_err(style);
+            assert!(
+                err.to_string().contains(message),
+                "{style}: `{err}` should mention {message}"
+            );
+        }
     }
 }
