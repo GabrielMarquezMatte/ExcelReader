@@ -1209,6 +1209,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.CellBorder.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.CellBorder.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.CellBorder",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.CellBorder.yml\" sourcestartlinenumber=\"1\">One edge of a cell border.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/api/ExcelReader.Core.Writer.CellStyle.yml",
       "output": {
         ".html": {
@@ -1219,7 +1233,7 @@
       "Uid": null,
       "IsMRef": true,
       "Title": "ExcelReader.Core.Writer.CellStyle",
-      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.CellStyle.yml\" sourcestartlinenumber=\"1\">A column- or row-level cell style: number format, bold, and italic. Register one with <xref href=\"ExcelReader.Core.Writer.IWorkbookWriter%601.AddStyle(ExcelReader.Core.Writer.CellStyle)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.CellStyle.yml\" sourcestartlinenumber=\"1\">A column- or row-level cell style: number format, font, fill, borders, and alignment. Register one with <xref href=\"ExcelReader.Core.Writer.IWorkbookWriter%601.AddStyle(ExcelReader.Core.Writer.CellStyle)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
     },
     {
       "type": "ManagedReference",
@@ -1307,6 +1321,48 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelBorderStyle.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelBorderStyle.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelBorderStyle",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelBorderStyle.yml\" sourcestartlinenumber=\"1\">The line style of a cell border edge.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelColor.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelColor.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelColor",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelColor.yml\" sourcestartlinenumber=\"1\">An opaque RGB color.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelHorizontalAlignment",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.yml\" sourcestartlinenumber=\"1\">The horizontal alignment of cell content.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelRecordLayout-1.yml",
       "output": {
         ".html": {
@@ -1349,6 +1405,20 @@
     },
     {
       "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelStyleAttribute.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelStyleAttribute.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelStyleAttribute",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelStyleAttribute.yml\" sourcestartlinenumber=\"1\">Styles a property's data cells when <xref href=\"ExcelReader.Core.Writer.ExcelRecordLayout\" data-throw-if-not-resolved=\"false\"></xref> writes it; the header cell is left alone.\nThe style replaces any column or row style on those cells. Colors are <code>0xRRGGBB</code>, -1 for unset.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
       "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelTableOptions.yml",
       "output": {
         ".html": {
@@ -1360,6 +1430,20 @@
       "IsMRef": true,
       "Title": "ExcelReader.Core.Writer.ExcelTableOptions",
       "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelTableOptions.yml\" sourcestartlinenumber=\"1\">Configures an Excel table written with <xref href=\"ExcelReader.Core.Writer.ITableSheetWriter%601.BeginTable(System.String%2cSystem.Collections.Generic.IReadOnlyList%7bSystem.String%7d%2cExcelReader.Core.Writer.ExcelTableOptions)\" data-throw-if-not-resolved=\"false\"></xref>.</p>\n"
+    },
+    {
+      "type": "ManagedReference",
+      "source_relative_path": "docs/api/ExcelReader.Core.Writer.ExcelVerticalAlignment.yml",
+      "output": {
+        ".html": {
+          "relative_path": "api/ExcelReader.Core.Writer.ExcelVerticalAlignment.html"
+        }
+      },
+      "version": "",
+      "Uid": null,
+      "IsMRef": true,
+      "Title": "ExcelReader.Core.Writer.ExcelVerticalAlignment",
+      "Summary": "<p sourcefile=\"docs/api/ExcelReader.Core.Writer.ExcelVerticalAlignment.yml\" sourcestartlinenumber=\"1\">The vertical alignment of cell content.</p>\n"
     },
     {
       "type": "ManagedReference",
@@ -1784,6 +1868,26 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/Border.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/Border.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/CellStyle.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/CellStyle.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/cpp-api/CellType.md",
       "output": {
         ".html": {
@@ -1918,6 +2022,16 @@
       "output": {
         ".html": {
           "relative_path": "cpp-api/Sheet.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/cpp-api/SheetStyles.md",
+      "output": {
+        ".html": {
+          "relative_path": "cpp-api/SheetStyles.html"
         }
       },
       "version": ""
@@ -2187,10 +2301,40 @@
     },
     {
       "type": "Conceptual",
+      "source_relative_path": "docs/python-api/Border.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/Border.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/BorderStyle.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/BorderStyle.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
       "source_relative_path": "docs/python-api/Cell.md",
       "output": {
         ".html": {
           "relative_path": "python-api/Cell.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/CellStyle.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/CellStyle.html"
         }
       },
       "version": ""
@@ -2231,6 +2375,16 @@
       "output": {
         ".html": {
           "relative_path": "python-api/ExcelReaderError.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/HorizontalAlignment.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/HorizontalAlignment.html"
         }
       },
       "version": ""
@@ -2361,6 +2515,16 @@
       "output": {
         ".html": {
           "relative_path": "python-api/TypedTable.html"
+        }
+      },
+      "version": ""
+    },
+    {
+      "type": "Conceptual",
+      "source_relative_path": "docs/python-api/VerticalAlignment.md",
+      "output": {
+        ".html": {
+          "relative_path": "python-api/VerticalAlignment.html"
         }
       },
       "version": ""

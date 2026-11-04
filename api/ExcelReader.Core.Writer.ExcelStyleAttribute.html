@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ExcelStyleAttribute | ExcelReader </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ExcelStyleAttribute | ExcelReader ">
+      
+      <meta name="description" content="Styles a property&#39;s data cells when  writes it; the header cell is left alone. The style replaces any column or row style on those cells. Colors are 0xRRGGBB, -1 for unset.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/GabrielMarquezMatte/ExcelReader/new/master/apiSpec/new?filename=ExcelReader_Core_Writer_ExcelStyleAttribute.md&amp;value=---%0Auid%3A%20ExcelReader.Core.Writer.ExcelStyleAttribute%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../assets/icon.png" alt="ExcelReader">
+            ExcelReader
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute">
+
+
+
+  <h1 id="ExcelReader_Core_Writer_ExcelStyleAttribute" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute" class="text-break">
+Class ExcelStyleAttribute  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L9"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><span class="xref">ExcelReader</span>.<a class="xref" href="ExcelReader.Core.html">Core</a>.<a class="xref" href="ExcelReader.Core.Writer.html">Writer</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Styles a property's data cells when <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a> writes it; the header cell is left alone.
+The style replaces any column or row style on those cells. Colors are <code>0xRRGGBB</code>, -1 for unset.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">[AttributeUsage(AttributeTargets.Property)]
+public sealed class ExcelStyleAttribute : Attribute</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute">Attribute</a></div>
+      <div><span class="xref">ExcelStyleAttribute</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.equals">Attribute.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-assembly-system-type)">Attribute.GetCustomAttribute(Assembly, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-assembly-system-type-system-boolean)">Attribute.GetCustomAttribute(Assembly, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-memberinfo-system-type)">Attribute.GetCustomAttribute(MemberInfo, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-memberinfo-system-type-system-boolean)">Attribute.GetCustomAttribute(MemberInfo, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-module-system-type)">Attribute.GetCustomAttribute(Module, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-module-system-type-system-boolean)">Attribute.GetCustomAttribute(Module, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-parameterinfo-system-type)">Attribute.GetCustomAttribute(ParameterInfo, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattribute#system-attribute-getcustomattribute(system-reflection-parameterinfo-system-type-system-boolean)">Attribute.GetCustomAttribute(ParameterInfo, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-assembly)">Attribute.GetCustomAttributes(Assembly)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-assembly-system-boolean)">Attribute.GetCustomAttributes(Assembly, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-assembly-system-type)">Attribute.GetCustomAttributes(Assembly, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-assembly-system-type-system-boolean)">Attribute.GetCustomAttributes(Assembly, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-memberinfo)">Attribute.GetCustomAttributes(MemberInfo)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-memberinfo-system-boolean)">Attribute.GetCustomAttributes(MemberInfo, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-memberinfo-system-type)">Attribute.GetCustomAttributes(MemberInfo, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-memberinfo-system-type-system-boolean)">Attribute.GetCustomAttributes(MemberInfo, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-module)">Attribute.GetCustomAttributes(Module)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-module-system-boolean)">Attribute.GetCustomAttributes(Module, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-module-system-type)">Attribute.GetCustomAttributes(Module, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-module-system-type-system-boolean)">Attribute.GetCustomAttributes(Module, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-parameterinfo)">Attribute.GetCustomAttributes(ParameterInfo)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-parameterinfo-system-boolean)">Attribute.GetCustomAttributes(ParameterInfo, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-parameterinfo-system-type)">Attribute.GetCustomAttributes(ParameterInfo, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.getcustomattributes#system-attribute-getcustomattributes(system-reflection-parameterinfo-system-type-system-boolean)">Attribute.GetCustomAttributes(ParameterInfo, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.gethashcode">Attribute.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefaultattribute">Attribute.IsDefaultAttribute()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-assembly-system-type)">Attribute.IsDefined(Assembly, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-assembly-system-type-system-boolean)">Attribute.IsDefined(Assembly, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-memberinfo-system-type)">Attribute.IsDefined(MemberInfo, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-memberinfo-system-type-system-boolean)">Attribute.IsDefined(MemberInfo, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-module-system-type)">Attribute.IsDefined(Module, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-module-system-type-system-boolean)">Attribute.IsDefined(Module, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-parameterinfo-system-type)">Attribute.IsDefined(ParameterInfo, Type)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.isdefined#system-attribute-isdefined(system-reflection-parameterinfo-system-type-system-boolean)">Attribute.IsDefined(ParameterInfo, Type, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.match">Attribute.Match(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.attribute.typeid">Attribute.TypeId</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_Bold_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Bold*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_Bold" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Bold">
+  Bold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the text is bold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Bold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_Border_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Border*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_Border" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Border">
+  Border
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the line style of all four border edges.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelBorderStyle Border { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelBorderStyle.html">ExcelBorderStyle</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_BorderColor_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_BorderColor" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor">
+  BorderColor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the border color as <code>0xRRGGBB</code>; -1 for automatic.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BorderColor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_FillColor_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_FillColor" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor">
+  FillColor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the solid fill color as <code>0xRRGGBB</code>; -1 for no fill.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FillColor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_FontColor_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_FontColor" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor">
+  FontColor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the font color as <code>0xRRGGBB</code>; -1 for the default color.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FontColor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_FontName_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FontName*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_FontName" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FontName">
+  FontName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the font family name, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the default font.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? FontName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_FontSize_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_FontSize" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize">
+  FontSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the font size in points; 0 for the default size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FontSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_HorizontalAlignment_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_HorizontalAlignment" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment">
+  HorizontalAlignment
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the horizontal alignment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelHorizontalAlignment HorizontalAlignment { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelHorizontalAlignment.html">ExcelHorizontalAlignment</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_Indent_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Indent*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_Indent" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Indent">
+  Indent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the indent level (0 to 15).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Indent { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_Italic_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Italic*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_Italic" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Italic">
+  Italic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the text is italic.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Italic { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_NumberFormat_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_NumberFormat" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat">
+  NumberFormat
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number-format code, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the general format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? NumberFormat { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_Rotation_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_Rotation" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation">
+  Rotation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the text rotation; see <a class="xref" href="ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Rotation">Rotation</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Rotation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_Strikethrough_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_Strikethrough" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough">
+  Strikethrough
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the text is struck through.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Strikethrough { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_Underline_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Underline*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_Underline" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.Underline">
+  Underline
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the text is underlined.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Underline { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_VerticalAlignment_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_VerticalAlignment" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment">
+  VerticalAlignment
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the vertical alignment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelVerticalAlignment VerticalAlignment { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelVerticalAlignment.html">ExcelVerticalAlignment</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_WrapText_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_WrapText" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText">
+  WrapText
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether text wraps within the cell.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool WrapText { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Writer_ExcelStyleAttribute_ToCellStyle_" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelStyleAttribute_ToCellStyle" data-uid="ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle">
+  ToCellStyle()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the attribute's values to a <a class="xref" href="ExcelReader.Core.Writer.CellStyle.html">CellStyle</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CellStyle ToCellStyle()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.CellStyle.html">CellStyle</a></dt>
+    <dd><p>The style.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>A value is out of range.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelStyleAttribute.cs/#L9" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          <span>Made with <a href="https://dotnet.github.io/docfx">docfx</a></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

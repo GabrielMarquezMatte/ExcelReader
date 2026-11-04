@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Writer_ExcelRecordLayout" data-uid="ExcelReader.Core.Writer.ExcelRecordLayout" class="text-break">
-Class ExcelRecordLayout  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L24"><i class="bi bi-code-slash"></i></a>
+Class ExcelRecordLayout  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L46"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -157,12 +157,12 @@ Class ExcelRecordLayout  <a class="header-action link-secondary" title="View sou
 
   <h3 id="ExcelReader_Core_Writer_ExcelRecordLayout_FromAttributes__1" data-uid="ExcelReader.Core.Writer.ExcelRecordLayout.FromAttributes``1">
   FromAttributes&lt;T&gt;()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L60"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a layout with one column per public readable, non-indexer property of <code class="typeparamref">T</code>
 (excluding any marked <code>[ExcelIgnore]</code>), headed by its <code>[ExcelColumn]</code> name or, failing
-that, the property name, found by reflection.</p>
+that, the property name, found by reflection. A property's <code>[ExcelStyle]</code> styles its data cells.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -197,6 +197,12 @@ public static ExcelRecordLayout&lt;T&gt; FromAttributes&lt;T&gt;()</code></pre>
 <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html#ExcelReader_Core_Writer_ExcelRecordLayout_Generated__1">Generated&lt;T&gt;()</a> instead where that matters.</p>
 </div>
 
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>An <code>[ExcelStyle]</code> value is out of range.</p>
+</dd>
+  </dl>
 
 
 
@@ -204,7 +210,7 @@ public static ExcelRecordLayout&lt;T&gt; FromAttributes&lt;T&gt;()</code></pre>
 
   <h3 id="ExcelReader_Core_Writer_ExcelRecordLayout_Generated__1" data-uid="ExcelReader.Core.Writer.ExcelRecordLayout.Generated``1">
   Generated&lt;T&gt;()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L70"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Creates a layout from the map the <code>[ExcelSerializable]</code> source generator emitted for <code class="typeparamref">T</code>. Trimming and AOT safe.</p>
@@ -243,7 +249,7 @@ public static ExcelRecordLayout&lt;T&gt; FromAttributes&lt;T&gt;()</code></pre>
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L24" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L46" class="edit-link">Edit this page</a>
         </div>
 
 

@@ -6,7 +6,7 @@
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <meta name="title" content="Struct CellStyle | ExcelReader ">
       
-      <meta name="description" content="A column- or row-level cell style: number format, bold, and italic. Register one with .">
+      <meta name="description" content="A column- or row-level cell style: number format, font, fill, borders, and alignment. Register one with .">
       <link rel="icon" href="../favicon.ico">
       <link rel="stylesheet" href="../public/docfx.min.css">
       <link rel="stylesheet" href="../public/main.css">
@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Writer_CellStyle" data-uid="ExcelReader.Core.Writer.CellStyle" class="text-break">
-Struct CellStyle  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L4"><i class="bi bi-code-slash"></i></a>
+Struct CellStyle  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L6"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -97,7 +97,7 @@ Struct CellStyle  <a class="header-action link-secondary" title="View source" hr
   <dl><dt>Assembly</dt><dd>ExcelReader.Core.dll</dd></dl>
   </div>
 
-  <div class="markdown summary"><p>A column- or row-level cell style: number format, bold, and italic. Register one with <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+  <div class="markdown summary"><p>A column- or row-level cell style: number format, font, fill, borders, and alignment. Register one with <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
 </div>
   <div class="markdown conceptual"></div>
 
@@ -145,6 +145,41 @@ Struct CellStyle  <a class="header-action link-secondary" title="View source" hr
 
 
 
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_StackedTextRotation" data-uid="ExcelReader.Core.Writer.CellStyle.StackedTextRotation">
+  StackedTextRotation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L10"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The <a class="xref" href="ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Rotation">Rotation</a> value that stacks text vertically, one character above the next.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int StackedTextRotation = 255</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
   <h2 class="section" id="properties">Properties
 </h2>
 
@@ -153,7 +188,7 @@ Struct CellStyle  <a class="header-action link-secondary" title="View source" hr
 
   <h3 id="ExcelReader_Core_Writer_CellStyle_Bold" data-uid="ExcelReader.Core.Writer.CellStyle.Bold">
   Bold
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L10"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L16"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets a value indicating whether text in cells using this style is bold.</p>
@@ -181,11 +216,235 @@ Struct CellStyle  <a class="header-action link-secondary" title="View source" hr
 
 
 
+  <a id="ExcelReader_Core_Writer_CellStyle_Bottom_" data-uid="ExcelReader.Core.Writer.CellStyle.Bottom*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Bottom" data-uid="ExcelReader.Core.Writer.CellStyle.Bottom">
+  Bottom
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the bottom border, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for none.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CellBorder? Bottom { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.CellBorder.html">CellBorder</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_FillColor_" data-uid="ExcelReader.Core.Writer.CellStyle.FillColor*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_FillColor" data-uid="ExcelReader.Core.Writer.CellStyle.FillColor">
+  FillColor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the solid background color, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for no fill.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelColor? FillColor { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelColor.html">ExcelColor</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_FontColor_" data-uid="ExcelReader.Core.Writer.CellStyle.FontColor*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_FontColor" data-uid="ExcelReader.Core.Writer.CellStyle.FontColor">
+  FontColor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the font color, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the default color.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelColor? FontColor { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelColor.html">ExcelColor</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_FontName_" data-uid="ExcelReader.Core.Writer.CellStyle.FontName*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_FontName" data-uid="ExcelReader.Core.Writer.CellStyle.FontName">
+  FontName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the font family name (1 to 31 characters), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the default font.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? FontName { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_FontSize_" data-uid="ExcelReader.Core.Writer.CellStyle.FontSize*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_FontSize" data-uid="ExcelReader.Core.Writer.CellStyle.FontSize">
+  FontSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the font size in points (1 to 409), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the default size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? FontSize { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_HorizontalAlignment_" data-uid="ExcelReader.Core.Writer.CellStyle.HorizontalAlignment*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_HorizontalAlignment" data-uid="ExcelReader.Core.Writer.CellStyle.HorizontalAlignment">
+  HorizontalAlignment
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the horizontal alignment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelHorizontalAlignment HorizontalAlignment { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelHorizontalAlignment.html">ExcelHorizontalAlignment</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_Indent_" data-uid="ExcelReader.Core.Writer.CellStyle.Indent*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Indent" data-uid="ExcelReader.Core.Writer.CellStyle.Indent">
+  Indent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indent level (0 to 15).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Indent { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="ExcelReader_Core_Writer_CellStyle_Italic_" data-uid="ExcelReader.Core.Writer.CellStyle.Italic*"></a>
 
   <h3 id="ExcelReader_Core_Writer_CellStyle_Italic" data-uid="ExcelReader.Core.Writer.CellStyle.Italic">
   Italic
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L19"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets a value indicating whether text in cells using this style is italic.</p>
@@ -213,11 +472,43 @@ Struct CellStyle  <a class="header-action link-secondary" title="View source" hr
 
 
 
+  <a id="ExcelReader_Core_Writer_CellStyle_Left_" data-uid="ExcelReader.Core.Writer.CellStyle.Left*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Left" data-uid="ExcelReader.Core.Writer.CellStyle.Left">
+  Left
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the left border, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for none.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CellBorder? Left { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.CellBorder.html">CellBorder</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
   <a id="ExcelReader_Core_Writer_CellStyle_NumberFormat_" data-uid="ExcelReader.Core.Writer.CellStyle.NumberFormat*"></a>
 
   <h3 id="ExcelReader_Core_Writer_CellStyle_NumberFormat" data-uid="ExcelReader.Core.Writer.CellStyle.NumberFormat">
   NumberFormat
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L7"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L13"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets the Excel number-format code (e.g. <code>&quot;#,##0.00&quot;</code>, <code>&quot;yyyy-mm-dd&quot;</code>, <code>&quot;0.0%&quot;</code>), or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for the general format.</p>
@@ -245,11 +536,235 @@ Struct CellStyle  <a class="header-action link-secondary" title="View source" hr
 
 
 
+  <a id="ExcelReader_Core_Writer_CellStyle_Right_" data-uid="ExcelReader.Core.Writer.CellStyle.Right*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Right" data-uid="ExcelReader.Core.Writer.CellStyle.Right">
+  Right
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the right border, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for none.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CellBorder? Right { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.CellBorder.html">CellBorder</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_Rotation_" data-uid="ExcelReader.Core.Writer.CellStyle.Rotation*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Rotation" data-uid="ExcelReader.Core.Writer.CellStyle.Rotation">
+  Rotation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the text rotation in degrees (-90 to 90), or <a class="xref" href="ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_StackedTextRotation">StackedTextRotation</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Rotation { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_Strikethrough_" data-uid="ExcelReader.Core.Writer.CellStyle.Strikethrough*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Strikethrough" data-uid="ExcelReader.Core.Writer.CellStyle.Strikethrough">
+  Strikethrough
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether text in cells using this style is struck through.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Strikethrough { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_Top_" data-uid="ExcelReader.Core.Writer.CellStyle.Top*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Top" data-uid="ExcelReader.Core.Writer.CellStyle.Top">
+  Top
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the top border, or <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a> for none.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CellBorder? Top { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.CellBorder.html">CellBorder</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_Underline_" data-uid="ExcelReader.Core.Writer.CellStyle.Underline*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_Underline" data-uid="ExcelReader.Core.Writer.CellStyle.Underline">
+  Underline
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether text in cells using this style is underlined.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Underline { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_VerticalAlignment_" data-uid="ExcelReader.Core.Writer.CellStyle.VerticalAlignment*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_VerticalAlignment" data-uid="ExcelReader.Core.Writer.CellStyle.VerticalAlignment">
+  VerticalAlignment
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the vertical alignment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelVerticalAlignment VerticalAlignment { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelVerticalAlignment.html">ExcelVerticalAlignment</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Core_Writer_CellStyle_WrapText_" data-uid="ExcelReader.Core.Writer.CellStyle.WrapText*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_CellStyle_WrapText" data-uid="ExcelReader.Core.Writer.CellStyle.WrapText">
+  WrapText
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether text wraps within the cell.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool WrapText { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
 
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L4" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/CellStyle.cs/#L6" class="edit-link">Edit this page</a>
         </div>
 
 

@@ -5308,6 +5308,57 @@ references:
   commentId: N:ExcelReader.Core.Writer
   fullName: ExcelReader.Core.Writer
   nameWithType: ExcelReader.Core.Writer
+- uid: ExcelReader.Core.Writer.CellBorder
+  name: CellBorder
+  href: api/ExcelReader.Core.Writer.CellBorder.html
+  commentId: T:ExcelReader.Core.Writer.CellBorder
+  fullName: ExcelReader.Core.Writer.CellBorder
+  nameWithType: CellBorder
+- uid: ExcelReader.Core.Writer.CellBorder.#ctor(ExcelReader.Core.Writer.ExcelBorderStyle,System.Nullable{ExcelReader.Core.Writer.ExcelColor})
+  name: CellBorder(ExcelBorderStyle, ExcelColor?)
+  href: api/ExcelReader.Core.Writer.CellBorder.html#ExcelReader_Core_Writer_CellBorder__ctor_ExcelReader_Core_Writer_ExcelBorderStyle_System_Nullable_ExcelReader_Core_Writer_ExcelColor__
+  commentId: M:ExcelReader.Core.Writer.CellBorder.#ctor(ExcelReader.Core.Writer.ExcelBorderStyle,System.Nullable{ExcelReader.Core.Writer.ExcelColor})
+  name.vb: New(ExcelBorderStyle, ExcelColor?)
+  fullName: ExcelReader.Core.Writer.CellBorder.CellBorder(ExcelReader.Core.Writer.ExcelBorderStyle, ExcelReader.Core.Writer.ExcelColor?)
+  fullName.vb: ExcelReader.Core.Writer.CellBorder.New(ExcelReader.Core.Writer.ExcelBorderStyle, ExcelReader.Core.Writer.ExcelColor?)
+  nameWithType: CellBorder.CellBorder(ExcelBorderStyle, ExcelColor?)
+  nameWithType.vb: CellBorder.New(ExcelBorderStyle, ExcelColor?)
+- uid: ExcelReader.Core.Writer.CellBorder.#ctor*
+  name: CellBorder
+  href: api/ExcelReader.Core.Writer.CellBorder.html#ExcelReader_Core_Writer_CellBorder__ctor_
+  commentId: Overload:ExcelReader.Core.Writer.CellBorder.#ctor
+  isSpec: "True"
+  name.vb: New
+  fullName: ExcelReader.Core.Writer.CellBorder.CellBorder
+  fullName.vb: ExcelReader.Core.Writer.CellBorder.New
+  nameWithType: CellBorder.CellBorder
+  nameWithType.vb: CellBorder.New
+- uid: ExcelReader.Core.Writer.CellBorder.Color
+  name: Color
+  href: api/ExcelReader.Core.Writer.CellBorder.html#ExcelReader_Core_Writer_CellBorder_Color
+  commentId: P:ExcelReader.Core.Writer.CellBorder.Color
+  fullName: ExcelReader.Core.Writer.CellBorder.Color
+  nameWithType: CellBorder.Color
+- uid: ExcelReader.Core.Writer.CellBorder.Color*
+  name: Color
+  href: api/ExcelReader.Core.Writer.CellBorder.html#ExcelReader_Core_Writer_CellBorder_Color_
+  commentId: Overload:ExcelReader.Core.Writer.CellBorder.Color
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellBorder.Color
+  nameWithType: CellBorder.Color
+- uid: ExcelReader.Core.Writer.CellBorder.Style
+  name: Style
+  href: api/ExcelReader.Core.Writer.CellBorder.html#ExcelReader_Core_Writer_CellBorder_Style
+  commentId: P:ExcelReader.Core.Writer.CellBorder.Style
+  fullName: ExcelReader.Core.Writer.CellBorder.Style
+  nameWithType: CellBorder.Style
+- uid: ExcelReader.Core.Writer.CellBorder.Style*
+  name: Style
+  href: api/ExcelReader.Core.Writer.CellBorder.html#ExcelReader_Core_Writer_CellBorder_Style_
+  commentId: Overload:ExcelReader.Core.Writer.CellBorder.Style
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellBorder.Style
+  nameWithType: CellBorder.Style
 - uid: ExcelReader.Core.Writer.CellStyle
   name: CellStyle
   href: api/ExcelReader.Core.Writer.CellStyle.html
@@ -5327,6 +5378,97 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.CellStyle.Bold
   nameWithType: CellStyle.Bold
+- uid: ExcelReader.Core.Writer.CellStyle.Bottom
+  name: Bottom
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Bottom
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Bottom
+  fullName: ExcelReader.Core.Writer.CellStyle.Bottom
+  nameWithType: CellStyle.Bottom
+- uid: ExcelReader.Core.Writer.CellStyle.Bottom*
+  name: Bottom
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Bottom_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Bottom
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Bottom
+  nameWithType: CellStyle.Bottom
+- uid: ExcelReader.Core.Writer.CellStyle.FillColor
+  name: FillColor
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FillColor
+  commentId: P:ExcelReader.Core.Writer.CellStyle.FillColor
+  fullName: ExcelReader.Core.Writer.CellStyle.FillColor
+  nameWithType: CellStyle.FillColor
+- uid: ExcelReader.Core.Writer.CellStyle.FillColor*
+  name: FillColor
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FillColor_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.FillColor
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.FillColor
+  nameWithType: CellStyle.FillColor
+- uid: ExcelReader.Core.Writer.CellStyle.FontColor
+  name: FontColor
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FontColor
+  commentId: P:ExcelReader.Core.Writer.CellStyle.FontColor
+  fullName: ExcelReader.Core.Writer.CellStyle.FontColor
+  nameWithType: CellStyle.FontColor
+- uid: ExcelReader.Core.Writer.CellStyle.FontColor*
+  name: FontColor
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FontColor_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.FontColor
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.FontColor
+  nameWithType: CellStyle.FontColor
+- uid: ExcelReader.Core.Writer.CellStyle.FontName
+  name: FontName
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FontName
+  commentId: P:ExcelReader.Core.Writer.CellStyle.FontName
+  fullName: ExcelReader.Core.Writer.CellStyle.FontName
+  nameWithType: CellStyle.FontName
+- uid: ExcelReader.Core.Writer.CellStyle.FontName*
+  name: FontName
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FontName_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.FontName
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.FontName
+  nameWithType: CellStyle.FontName
+- uid: ExcelReader.Core.Writer.CellStyle.FontSize
+  name: FontSize
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FontSize
+  commentId: P:ExcelReader.Core.Writer.CellStyle.FontSize
+  fullName: ExcelReader.Core.Writer.CellStyle.FontSize
+  nameWithType: CellStyle.FontSize
+- uid: ExcelReader.Core.Writer.CellStyle.FontSize*
+  name: FontSize
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_FontSize_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.FontSize
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.FontSize
+  nameWithType: CellStyle.FontSize
+- uid: ExcelReader.Core.Writer.CellStyle.HorizontalAlignment
+  name: HorizontalAlignment
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_HorizontalAlignment
+  commentId: P:ExcelReader.Core.Writer.CellStyle.HorizontalAlignment
+  fullName: ExcelReader.Core.Writer.CellStyle.HorizontalAlignment
+  nameWithType: CellStyle.HorizontalAlignment
+- uid: ExcelReader.Core.Writer.CellStyle.HorizontalAlignment*
+  name: HorizontalAlignment
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_HorizontalAlignment_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.HorizontalAlignment
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.HorizontalAlignment
+  nameWithType: CellStyle.HorizontalAlignment
+- uid: ExcelReader.Core.Writer.CellStyle.Indent
+  name: Indent
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Indent
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Indent
+  fullName: ExcelReader.Core.Writer.CellStyle.Indent
+  nameWithType: CellStyle.Indent
+- uid: ExcelReader.Core.Writer.CellStyle.Indent*
+  name: Indent
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Indent_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Indent
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Indent
+  nameWithType: CellStyle.Indent
 - uid: ExcelReader.Core.Writer.CellStyle.Italic
   name: Italic
   href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Italic
@@ -5340,6 +5482,19 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.CellStyle.Italic
   nameWithType: CellStyle.Italic
+- uid: ExcelReader.Core.Writer.CellStyle.Left
+  name: Left
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Left
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Left
+  fullName: ExcelReader.Core.Writer.CellStyle.Left
+  nameWithType: CellStyle.Left
+- uid: ExcelReader.Core.Writer.CellStyle.Left*
+  name: Left
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Left_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Left
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Left
+  nameWithType: CellStyle.Left
 - uid: ExcelReader.Core.Writer.CellStyle.NumberFormat
   name: NumberFormat
   href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_NumberFormat
@@ -5353,6 +5508,103 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.CellStyle.NumberFormat
   nameWithType: CellStyle.NumberFormat
+- uid: ExcelReader.Core.Writer.CellStyle.Right
+  name: Right
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Right
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Right
+  fullName: ExcelReader.Core.Writer.CellStyle.Right
+  nameWithType: CellStyle.Right
+- uid: ExcelReader.Core.Writer.CellStyle.Right*
+  name: Right
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Right_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Right
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Right
+  nameWithType: CellStyle.Right
+- uid: ExcelReader.Core.Writer.CellStyle.Rotation
+  name: Rotation
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Rotation
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Rotation
+  fullName: ExcelReader.Core.Writer.CellStyle.Rotation
+  nameWithType: CellStyle.Rotation
+- uid: ExcelReader.Core.Writer.CellStyle.Rotation*
+  name: Rotation
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Rotation_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Rotation
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Rotation
+  nameWithType: CellStyle.Rotation
+- uid: ExcelReader.Core.Writer.CellStyle.StackedTextRotation
+  name: StackedTextRotation
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_StackedTextRotation
+  commentId: F:ExcelReader.Core.Writer.CellStyle.StackedTextRotation
+  fullName: ExcelReader.Core.Writer.CellStyle.StackedTextRotation
+  nameWithType: CellStyle.StackedTextRotation
+- uid: ExcelReader.Core.Writer.CellStyle.Strikethrough
+  name: Strikethrough
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Strikethrough
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Strikethrough
+  fullName: ExcelReader.Core.Writer.CellStyle.Strikethrough
+  nameWithType: CellStyle.Strikethrough
+- uid: ExcelReader.Core.Writer.CellStyle.Strikethrough*
+  name: Strikethrough
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Strikethrough_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Strikethrough
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Strikethrough
+  nameWithType: CellStyle.Strikethrough
+- uid: ExcelReader.Core.Writer.CellStyle.Top
+  name: Top
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Top
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Top
+  fullName: ExcelReader.Core.Writer.CellStyle.Top
+  nameWithType: CellStyle.Top
+- uid: ExcelReader.Core.Writer.CellStyle.Top*
+  name: Top
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Top_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Top
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Top
+  nameWithType: CellStyle.Top
+- uid: ExcelReader.Core.Writer.CellStyle.Underline
+  name: Underline
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Underline
+  commentId: P:ExcelReader.Core.Writer.CellStyle.Underline
+  fullName: ExcelReader.Core.Writer.CellStyle.Underline
+  nameWithType: CellStyle.Underline
+- uid: ExcelReader.Core.Writer.CellStyle.Underline*
+  name: Underline
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_Underline_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.Underline
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.Underline
+  nameWithType: CellStyle.Underline
+- uid: ExcelReader.Core.Writer.CellStyle.VerticalAlignment
+  name: VerticalAlignment
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_VerticalAlignment
+  commentId: P:ExcelReader.Core.Writer.CellStyle.VerticalAlignment
+  fullName: ExcelReader.Core.Writer.CellStyle.VerticalAlignment
+  nameWithType: CellStyle.VerticalAlignment
+- uid: ExcelReader.Core.Writer.CellStyle.VerticalAlignment*
+  name: VerticalAlignment
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_VerticalAlignment_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.VerticalAlignment
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.VerticalAlignment
+  nameWithType: CellStyle.VerticalAlignment
+- uid: ExcelReader.Core.Writer.CellStyle.WrapText
+  name: WrapText
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_WrapText
+  commentId: P:ExcelReader.Core.Writer.CellStyle.WrapText
+  fullName: ExcelReader.Core.Writer.CellStyle.WrapText
+  nameWithType: CellStyle.WrapText
+- uid: ExcelReader.Core.Writer.CellStyle.WrapText*
+  name: WrapText
+  href: api/ExcelReader.Core.Writer.CellStyle.html#ExcelReader_Core_Writer_CellStyle_WrapText_
+  commentId: Overload:ExcelReader.Core.Writer.CellStyle.WrapText
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.CellStyle.WrapText
+  nameWithType: CellStyle.WrapText
 - uid: ExcelReader.Core.Writer.Csv
   name: ExcelReader.Core.Writer.Csv
   href: api/ExcelReader.Core.Writer.Csv.html
@@ -5425,6 +5677,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Csv.CsvRowWriter.Skip
   nameWithType: CsvRowWriter.Skip
+- uid: ExcelReader.Core.Writer.Csv.CsvRowWriter.Style(System.Int32)
+  name: Style(int)
+  href: api/ExcelReader.Core.Writer.Csv.CsvRowWriter.html#ExcelReader_Core_Writer_Csv_CsvRowWriter_Style_System_Int32_
+  commentId: M:ExcelReader.Core.Writer.Csv.CsvRowWriter.Style(System.Int32)
+  name.vb: Style(Integer)
+  fullName: ExcelReader.Core.Writer.Csv.CsvRowWriter.Style(int)
+  fullName.vb: ExcelReader.Core.Writer.Csv.CsvRowWriter.Style(Integer)
+  nameWithType: CsvRowWriter.Style(int)
+  nameWithType.vb: CsvRowWriter.Style(Integer)
+- uid: ExcelReader.Core.Writer.Csv.CsvRowWriter.Style*
+  name: Style
+  href: api/ExcelReader.Core.Writer.Csv.CsvRowWriter.html#ExcelReader_Core_Writer_Csv_CsvRowWriter_Style_
+  commentId: Overload:ExcelReader.Core.Writer.Csv.CsvRowWriter.Style
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Csv.CsvRowWriter.Style
+  nameWithType: CsvRowWriter.Style
 - uid: ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.Boolean)
   name: Write(bool)
   href: api/ExcelReader.Core.Writer.Csv.CsvRowWriter.html#ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_Boolean_
@@ -5640,6 +5908,15 @@ references:
   fullName.vb: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(Integer)
   nameWithType: CsvSheetWriter.StartRow(int)
   nameWithType.vb: CsvSheetWriter.StartRow(Integer)
+- uid: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(System.Int32,System.Double)
+  name: StartRow(int, double)
+  href: api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html#ExcelReader_Core_Writer_Csv_CsvSheetWriter_StartRow_System_Int32_System_Double_
+  commentId: M:ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(System.Int32,System.Double)
+  name.vb: StartRow(Integer, Double)
+  fullName: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(int, double)
+  fullName.vb: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(Integer, Double)
+  nameWithType: CsvSheetWriter.StartRow(int, double)
+  nameWithType.vb: CsvSheetWriter.StartRow(Integer, Double)
 - uid: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow*
   name: StartRow
   href: api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html#ExcelReader_Core_Writer_Csv_CsvSheetWriter_StartRow_
@@ -5647,6 +5924,15 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow
   nameWithType: CsvSheetWriter.StartRow
+- uid: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name: StartRowAsync(int, double, CancellationToken)
+  href: api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html#ExcelReader_Core_Writer_Csv_CsvSheetWriter_StartRowAsync_System_Int32_System_Double_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name.vb: StartRowAsync(Integer, Double, CancellationToken)
+  fullName: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRowAsync(int, double, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRowAsync(Integer, Double, System.Threading.CancellationToken)
+  nameWithType: CsvSheetWriter.StartRowAsync(int, double, CancellationToken)
+  nameWithType.vb: CsvSheetWriter.StartRowAsync(Integer, Double, CancellationToken)
 - uid: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRowAsync(System.Int32,System.Threading.CancellationToken)
   name: StartRowAsync(int, CancellationToken)
   href: api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html#ExcelReader_Core_Writer_Csv_CsvSheetWriter_StartRowAsync_System_Int32_System_Threading_CancellationToken_
@@ -5891,6 +6177,230 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Csv.CsvWriterOptions.WriteByteOrderMark
   nameWithType: CsvWriterOptions.WriteByteOrderMark
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle
+  name: ExcelBorderStyle
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html
+  commentId: T:ExcelReader.Core.Writer.ExcelBorderStyle
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle
+  nameWithType: ExcelBorderStyle
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.DashDot
+  name: DashDot
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_DashDot
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.DashDot
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.DashDot
+  nameWithType: ExcelBorderStyle.DashDot
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.DashDotDot
+  name: DashDotDot
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_DashDotDot
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.DashDotDot
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.DashDotDot
+  nameWithType: ExcelBorderStyle.DashDotDot
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.Dashed
+  name: Dashed
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_Dashed
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.Dashed
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.Dashed
+  nameWithType: ExcelBorderStyle.Dashed
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.Dotted
+  name: Dotted
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_Dotted
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.Dotted
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.Dotted
+  nameWithType: ExcelBorderStyle.Dotted
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.Double
+  name: Double
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_Double
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.Double
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.Double
+  nameWithType: ExcelBorderStyle.Double
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.Hair
+  name: Hair
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_Hair
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.Hair
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.Hair
+  nameWithType: ExcelBorderStyle.Hair
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.Medium
+  name: Medium
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_Medium
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.Medium
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.Medium
+  nameWithType: ExcelBorderStyle.Medium
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDot
+  name: MediumDashDot
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_MediumDashDot
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDot
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDot
+  nameWithType: ExcelBorderStyle.MediumDashDot
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDotDot
+  name: MediumDashDotDot
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_MediumDashDotDot
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDotDot
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashDotDot
+  nameWithType: ExcelBorderStyle.MediumDashDotDot
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashed
+  name: MediumDashed
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_MediumDashed
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashed
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.MediumDashed
+  nameWithType: ExcelBorderStyle.MediumDashed
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.None
+  name: None
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_None
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.None
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.None
+  nameWithType: ExcelBorderStyle.None
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.SlantDashDot
+  name: SlantDashDot
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_SlantDashDot
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.SlantDashDot
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.SlantDashDot
+  nameWithType: ExcelBorderStyle.SlantDashDot
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.Thick
+  name: Thick
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_Thick
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.Thick
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.Thick
+  nameWithType: ExcelBorderStyle.Thick
+- uid: ExcelReader.Core.Writer.ExcelBorderStyle.Thin
+  name: Thin
+  href: api/ExcelReader.Core.Writer.ExcelBorderStyle.html#ExcelReader_Core_Writer_ExcelBorderStyle_Thin
+  commentId: F:ExcelReader.Core.Writer.ExcelBorderStyle.Thin
+  fullName: ExcelReader.Core.Writer.ExcelBorderStyle.Thin
+  nameWithType: ExcelBorderStyle.Thin
+- uid: ExcelReader.Core.Writer.ExcelColor
+  name: ExcelColor
+  href: api/ExcelReader.Core.Writer.ExcelColor.html
+  commentId: T:ExcelReader.Core.Writer.ExcelColor
+  fullName: ExcelReader.Core.Writer.ExcelColor
+  nameWithType: ExcelColor
+- uid: ExcelReader.Core.Writer.ExcelColor.#ctor(System.Byte,System.Byte,System.Byte)
+  name: ExcelColor(byte, byte, byte)
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor__ctor_System_Byte_System_Byte_System_Byte_
+  commentId: M:ExcelReader.Core.Writer.ExcelColor.#ctor(System.Byte,System.Byte,System.Byte)
+  name.vb: New(Byte, Byte, Byte)
+  fullName: ExcelReader.Core.Writer.ExcelColor.ExcelColor(byte, byte, byte)
+  fullName.vb: ExcelReader.Core.Writer.ExcelColor.New(Byte, Byte, Byte)
+  nameWithType: ExcelColor.ExcelColor(byte, byte, byte)
+  nameWithType.vb: ExcelColor.New(Byte, Byte, Byte)
+- uid: ExcelReader.Core.Writer.ExcelColor.#ctor*
+  name: ExcelColor
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor__ctor_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelColor.#ctor
+  isSpec: "True"
+  name.vb: New
+  fullName: ExcelReader.Core.Writer.ExcelColor.ExcelColor
+  fullName.vb: ExcelReader.Core.Writer.ExcelColor.New
+  nameWithType: ExcelColor.ExcelColor
+  nameWithType.vb: ExcelColor.New
+- uid: ExcelReader.Core.Writer.ExcelColor.B
+  name: B
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_B
+  commentId: P:ExcelReader.Core.Writer.ExcelColor.B
+  fullName: ExcelReader.Core.Writer.ExcelColor.B
+  nameWithType: ExcelColor.B
+- uid: ExcelReader.Core.Writer.ExcelColor.B*
+  name: B
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_B_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelColor.B
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelColor.B
+  nameWithType: ExcelColor.B
+- uid: ExcelReader.Core.Writer.ExcelColor.FromRgb(System.Int32)
+  name: FromRgb(int)
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_FromRgb_System_Int32_
+  commentId: M:ExcelReader.Core.Writer.ExcelColor.FromRgb(System.Int32)
+  name.vb: FromRgb(Integer)
+  fullName: ExcelReader.Core.Writer.ExcelColor.FromRgb(int)
+  fullName.vb: ExcelReader.Core.Writer.ExcelColor.FromRgb(Integer)
+  nameWithType: ExcelColor.FromRgb(int)
+  nameWithType.vb: ExcelColor.FromRgb(Integer)
+- uid: ExcelReader.Core.Writer.ExcelColor.FromRgb*
+  name: FromRgb
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_FromRgb_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelColor.FromRgb
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelColor.FromRgb
+  nameWithType: ExcelColor.FromRgb
+- uid: ExcelReader.Core.Writer.ExcelColor.G
+  name: G
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_G
+  commentId: P:ExcelReader.Core.Writer.ExcelColor.G
+  fullName: ExcelReader.Core.Writer.ExcelColor.G
+  nameWithType: ExcelColor.G
+- uid: ExcelReader.Core.Writer.ExcelColor.G*
+  name: G
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_G_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelColor.G
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelColor.G
+  nameWithType: ExcelColor.G
+- uid: ExcelReader.Core.Writer.ExcelColor.R
+  name: R
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_R
+  commentId: P:ExcelReader.Core.Writer.ExcelColor.R
+  fullName: ExcelReader.Core.Writer.ExcelColor.R
+  nameWithType: ExcelColor.R
+- uid: ExcelReader.Core.Writer.ExcelColor.R*
+  name: R
+  href: api/ExcelReader.Core.Writer.ExcelColor.html#ExcelReader_Core_Writer_ExcelColor_R_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelColor.R
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelColor.R
+  nameWithType: ExcelColor.R
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment
+  name: ExcelHorizontalAlignment
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html
+  commentId: T:ExcelReader.Core.Writer.ExcelHorizontalAlignment
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment
+  nameWithType: ExcelHorizontalAlignment
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Center
+  name: Center
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_Center
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.Center
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Center
+  nameWithType: ExcelHorizontalAlignment.Center
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.CenterContinuous
+  name: CenterContinuous
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_CenterContinuous
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.CenterContinuous
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.CenterContinuous
+  nameWithType: ExcelHorizontalAlignment.CenterContinuous
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Distributed
+  name: Distributed
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_Distributed
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.Distributed
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Distributed
+  nameWithType: ExcelHorizontalAlignment.Distributed
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Fill
+  name: Fill
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_Fill
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.Fill
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Fill
+  nameWithType: ExcelHorizontalAlignment.Fill
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.General
+  name: General
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_General
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.General
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.General
+  nameWithType: ExcelHorizontalAlignment.General
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Justify
+  name: Justify
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_Justify
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.Justify
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Justify
+  nameWithType: ExcelHorizontalAlignment.Justify
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Left
+  name: Left
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_Left
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.Left
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Left
+  nameWithType: ExcelHorizontalAlignment.Left
+- uid: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Right
+  name: Right
+  href: api/ExcelReader.Core.Writer.ExcelHorizontalAlignment.html#ExcelReader_Core_Writer_ExcelHorizontalAlignment_Right
+  commentId: F:ExcelReader.Core.Writer.ExcelHorizontalAlignment.Right
+  fullName: ExcelReader.Core.Writer.ExcelHorizontalAlignment.Right
+  nameWithType: ExcelHorizontalAlignment.Right
 - uid: ExcelReader.Core.Writer.ExcelRecordLayout
   name: ExcelRecordLayout
   href: api/ExcelReader.Core.Writer.ExcelRecordLayout.html
@@ -5938,6 +6448,23 @@ references:
   fullName.vb: ExcelReader.Core.Writer.ExcelRecordLayout(Of T)
   nameWithType: ExcelRecordLayout<T>
   nameWithType.vb: ExcelRecordLayout(Of T)
+- uid: ExcelReader.Core.Writer.ExcelRecordLayout`1.WithHeaderStyle(ExcelReader.Core.Writer.CellStyle)
+  name: WithHeaderStyle(CellStyle)
+  href: api/ExcelReader.Core.Writer.ExcelRecordLayout-1.html#ExcelReader_Core_Writer_ExcelRecordLayout_1_WithHeaderStyle_ExcelReader_Core_Writer_CellStyle_
+  commentId: M:ExcelReader.Core.Writer.ExcelRecordLayout`1.WithHeaderStyle(ExcelReader.Core.Writer.CellStyle)
+  fullName: ExcelReader.Core.Writer.ExcelRecordLayout<T>.WithHeaderStyle(ExcelReader.Core.Writer.CellStyle)
+  fullName.vb: ExcelReader.Core.Writer.ExcelRecordLayout(Of T).WithHeaderStyle(ExcelReader.Core.Writer.CellStyle)
+  nameWithType: ExcelRecordLayout<T>.WithHeaderStyle(CellStyle)
+  nameWithType.vb: ExcelRecordLayout(Of T).WithHeaderStyle(CellStyle)
+- uid: ExcelReader.Core.Writer.ExcelRecordLayout`1.WithHeaderStyle*
+  name: WithHeaderStyle
+  href: api/ExcelReader.Core.Writer.ExcelRecordLayout-1.html#ExcelReader_Core_Writer_ExcelRecordLayout_1_WithHeaderStyle_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelRecordLayout`1.WithHeaderStyle
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelRecordLayout<T>.WithHeaderStyle
+  fullName.vb: ExcelReader.Core.Writer.ExcelRecordLayout(Of T).WithHeaderStyle
+  nameWithType: ExcelRecordLayout<T>.WithHeaderStyle
+  nameWithType.vb: ExcelRecordLayout(Of T).WithHeaderStyle
 - uid: ExcelReader.Core.Writer.ExcelRecordMapBuilder`2
   name: ExcelRecordMapBuilder<T, TRow>
   href: api/ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.html
@@ -5956,6 +6483,15 @@ references:
   fullName.vb: ExcelReader.Core.Writer.ExcelRecordMapBuilder(Of T, TRow).Column(String, System.Action(Of TRow, T))
   nameWithType: ExcelRecordMapBuilder<T, TRow>.Column(string, Action<TRow, T>)
   nameWithType.vb: ExcelRecordMapBuilder(Of T, TRow).Column(String, Action(Of TRow, T))
+- uid: ExcelReader.Core.Writer.ExcelRecordMapBuilder`2.Column(System.String,System.Action{`1,`0},ExcelReader.Core.Writer.CellStyle)
+  name: Column(string, Action<TRow, T>, CellStyle)
+  href: api/ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.html#ExcelReader_Core_Writer_ExcelRecordMapBuilder_2_Column_System_String_System_Action__1__0__ExcelReader_Core_Writer_CellStyle_
+  commentId: M:ExcelReader.Core.Writer.ExcelRecordMapBuilder`2.Column(System.String,System.Action{`1,`0},ExcelReader.Core.Writer.CellStyle)
+  name.vb: Column(String, Action(Of TRow, T), CellStyle)
+  fullName: ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>.Column(string, System.Action<TRow, T>, ExcelReader.Core.Writer.CellStyle)
+  fullName.vb: ExcelReader.Core.Writer.ExcelRecordMapBuilder(Of T, TRow).Column(String, System.Action(Of TRow, T), ExcelReader.Core.Writer.CellStyle)
+  nameWithType: ExcelRecordMapBuilder<T, TRow>.Column(string, Action<TRow, T>, CellStyle)
+  nameWithType.vb: ExcelRecordMapBuilder(Of T, TRow).Column(String, Action(Of TRow, T), CellStyle)
 - uid: ExcelReader.Core.Writer.ExcelRecordMapBuilder`2.Column*
   name: Column
   href: api/ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.html#ExcelReader_Core_Writer_ExcelRecordMapBuilder_2_Column_
@@ -5965,6 +6501,233 @@ references:
   fullName.vb: ExcelReader.Core.Writer.ExcelRecordMapBuilder(Of T, TRow).Column
   nameWithType: ExcelRecordMapBuilder<T, TRow>.Column
   nameWithType.vb: ExcelRecordMapBuilder(Of T, TRow).Column
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute
+  name: ExcelStyleAttribute
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html
+  commentId: T:ExcelReader.Core.Writer.ExcelStyleAttribute
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute
+  nameWithType: ExcelStyleAttribute
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Bold
+  name: Bold
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Bold
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.Bold
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Bold
+  nameWithType: ExcelStyleAttribute.Bold
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Bold*
+  name: Bold
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Bold_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.Bold
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Bold
+  nameWithType: ExcelStyleAttribute.Bold
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Border
+  name: Border
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Border
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.Border
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Border
+  nameWithType: ExcelStyleAttribute.Border
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Border*
+  name: Border
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Border_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.Border
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Border
+  nameWithType: ExcelStyleAttribute.Border
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor
+  name: BorderColor
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_BorderColor
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor
+  nameWithType: ExcelStyleAttribute.BorderColor
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor*
+  name: BorderColor
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_BorderColor_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.BorderColor
+  nameWithType: ExcelStyleAttribute.BorderColor
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor
+  name: FillColor
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FillColor
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor
+  nameWithType: ExcelStyleAttribute.FillColor
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor*
+  name: FillColor
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FillColor_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FillColor
+  nameWithType: ExcelStyleAttribute.FillColor
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor
+  name: FontColor
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FontColor
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor
+  nameWithType: ExcelStyleAttribute.FontColor
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor*
+  name: FontColor
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FontColor_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FontColor
+  nameWithType: ExcelStyleAttribute.FontColor
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FontName
+  name: FontName
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FontName
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.FontName
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FontName
+  nameWithType: ExcelStyleAttribute.FontName
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FontName*
+  name: FontName
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FontName_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.FontName
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FontName
+  nameWithType: ExcelStyleAttribute.FontName
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize
+  name: FontSize
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FontSize
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize
+  nameWithType: ExcelStyleAttribute.FontSize
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize*
+  name: FontSize
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_FontSize_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.FontSize
+  nameWithType: ExcelStyleAttribute.FontSize
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment
+  name: HorizontalAlignment
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_HorizontalAlignment
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment
+  nameWithType: ExcelStyleAttribute.HorizontalAlignment
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment*
+  name: HorizontalAlignment
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_HorizontalAlignment_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.HorizontalAlignment
+  nameWithType: ExcelStyleAttribute.HorizontalAlignment
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Indent
+  name: Indent
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Indent
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.Indent
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Indent
+  nameWithType: ExcelStyleAttribute.Indent
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Indent*
+  name: Indent
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Indent_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.Indent
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Indent
+  nameWithType: ExcelStyleAttribute.Indent
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Italic
+  name: Italic
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Italic
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.Italic
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Italic
+  nameWithType: ExcelStyleAttribute.Italic
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Italic*
+  name: Italic
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Italic_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.Italic
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Italic
+  nameWithType: ExcelStyleAttribute.Italic
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat
+  name: NumberFormat
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_NumberFormat
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat
+  nameWithType: ExcelStyleAttribute.NumberFormat
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat*
+  name: NumberFormat
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_NumberFormat_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.NumberFormat
+  nameWithType: ExcelStyleAttribute.NumberFormat
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation
+  name: Rotation
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Rotation
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation
+  nameWithType: ExcelStyleAttribute.Rotation
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation*
+  name: Rotation
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Rotation_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Rotation
+  nameWithType: ExcelStyleAttribute.Rotation
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough
+  name: Strikethrough
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Strikethrough
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough
+  nameWithType: ExcelStyleAttribute.Strikethrough
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough*
+  name: Strikethrough
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Strikethrough_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Strikethrough
+  nameWithType: ExcelStyleAttribute.Strikethrough
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle
+  name: ToCellStyle()
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_ToCellStyle
+  commentId: M:ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle()
+  nameWithType: ExcelStyleAttribute.ToCellStyle()
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle*
+  name: ToCellStyle
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_ToCellStyle_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.ToCellStyle
+  nameWithType: ExcelStyleAttribute.ToCellStyle
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Underline
+  name: Underline
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Underline
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.Underline
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Underline
+  nameWithType: ExcelStyleAttribute.Underline
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.Underline*
+  name: Underline
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_Underline_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.Underline
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.Underline
+  nameWithType: ExcelStyleAttribute.Underline
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment
+  name: VerticalAlignment
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_VerticalAlignment
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment
+  nameWithType: ExcelStyleAttribute.VerticalAlignment
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment*
+  name: VerticalAlignment
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_VerticalAlignment_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.VerticalAlignment
+  nameWithType: ExcelStyleAttribute.VerticalAlignment
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText
+  name: WrapText
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_WrapText
+  commentId: P:ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText
+  nameWithType: ExcelStyleAttribute.WrapText
+- uid: ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText*
+  name: WrapText
+  href: api/ExcelReader.Core.Writer.ExcelStyleAttribute.html#ExcelReader_Core_Writer_ExcelStyleAttribute_WrapText_
+  commentId: Overload:ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ExcelStyleAttribute.WrapText
+  nameWithType: ExcelStyleAttribute.WrapText
 - uid: ExcelReader.Core.Writer.ExcelTableOptions
   name: ExcelTableOptions
   href: api/ExcelReader.Core.Writer.ExcelTableOptions.html
@@ -6062,6 +6825,42 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.ExcelTableOptions.StyleName
   nameWithType: ExcelTableOptions.StyleName
+- uid: ExcelReader.Core.Writer.ExcelVerticalAlignment
+  name: ExcelVerticalAlignment
+  href: api/ExcelReader.Core.Writer.ExcelVerticalAlignment.html
+  commentId: T:ExcelReader.Core.Writer.ExcelVerticalAlignment
+  fullName: ExcelReader.Core.Writer.ExcelVerticalAlignment
+  nameWithType: ExcelVerticalAlignment
+- uid: ExcelReader.Core.Writer.ExcelVerticalAlignment.Bottom
+  name: Bottom
+  href: api/ExcelReader.Core.Writer.ExcelVerticalAlignment.html#ExcelReader_Core_Writer_ExcelVerticalAlignment_Bottom
+  commentId: F:ExcelReader.Core.Writer.ExcelVerticalAlignment.Bottom
+  fullName: ExcelReader.Core.Writer.ExcelVerticalAlignment.Bottom
+  nameWithType: ExcelVerticalAlignment.Bottom
+- uid: ExcelReader.Core.Writer.ExcelVerticalAlignment.Center
+  name: Center
+  href: api/ExcelReader.Core.Writer.ExcelVerticalAlignment.html#ExcelReader_Core_Writer_ExcelVerticalAlignment_Center
+  commentId: F:ExcelReader.Core.Writer.ExcelVerticalAlignment.Center
+  fullName: ExcelReader.Core.Writer.ExcelVerticalAlignment.Center
+  nameWithType: ExcelVerticalAlignment.Center
+- uid: ExcelReader.Core.Writer.ExcelVerticalAlignment.Distributed
+  name: Distributed
+  href: api/ExcelReader.Core.Writer.ExcelVerticalAlignment.html#ExcelReader_Core_Writer_ExcelVerticalAlignment_Distributed
+  commentId: F:ExcelReader.Core.Writer.ExcelVerticalAlignment.Distributed
+  fullName: ExcelReader.Core.Writer.ExcelVerticalAlignment.Distributed
+  nameWithType: ExcelVerticalAlignment.Distributed
+- uid: ExcelReader.Core.Writer.ExcelVerticalAlignment.Justify
+  name: Justify
+  href: api/ExcelReader.Core.Writer.ExcelVerticalAlignment.html#ExcelReader_Core_Writer_ExcelVerticalAlignment_Justify
+  commentId: F:ExcelReader.Core.Writer.ExcelVerticalAlignment.Justify
+  fullName: ExcelReader.Core.Writer.ExcelVerticalAlignment.Justify
+  nameWithType: ExcelVerticalAlignment.Justify
+- uid: ExcelReader.Core.Writer.ExcelVerticalAlignment.Top
+  name: Top
+  href: api/ExcelReader.Core.Writer.ExcelVerticalAlignment.html#ExcelReader_Core_Writer_ExcelVerticalAlignment_Top
+  commentId: F:ExcelReader.Core.Writer.ExcelVerticalAlignment.Top
+  fullName: ExcelReader.Core.Writer.ExcelVerticalAlignment.Top
+  nameWithType: ExcelVerticalAlignment.Top
 - uid: ExcelReader.Core.Writer.IExcelCellWriter`1
   name: IExcelCellWriter<T>
   href: api/ExcelReader.Core.Writer.IExcelCellWriter-1.html
@@ -6137,6 +6936,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.IRowWriter.Skip
   nameWithType: IRowWriter.Skip
+- uid: ExcelReader.Core.Writer.IRowWriter.Style(System.Int32)
+  name: Style(int)
+  href: api/ExcelReader.Core.Writer.IRowWriter.html#ExcelReader_Core_Writer_IRowWriter_Style_System_Int32_
+  commentId: M:ExcelReader.Core.Writer.IRowWriter.Style(System.Int32)
+  name.vb: Style(Integer)
+  fullName: ExcelReader.Core.Writer.IRowWriter.Style(int)
+  fullName.vb: ExcelReader.Core.Writer.IRowWriter.Style(Integer)
+  nameWithType: IRowWriter.Style(int)
+  nameWithType.vb: IRowWriter.Style(Integer)
+- uid: ExcelReader.Core.Writer.IRowWriter.Style*
+  name: Style
+  href: api/ExcelReader.Core.Writer.IRowWriter.html#ExcelReader_Core_Writer_IRowWriter_Style_
+  commentId: Overload:ExcelReader.Core.Writer.IRowWriter.Style
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.IRowWriter.Style
+  nameWithType: IRowWriter.Style
 - uid: ExcelReader.Core.Writer.IRowWriter.Write(System.Boolean)
   name: Write(bool)
   href: api/ExcelReader.Core.Writer.IRowWriter.html#ExcelReader_Core_Writer_IRowWriter_Write_System_Boolean_
@@ -6343,6 +7158,15 @@ references:
   fullName.vb: ExcelReader.Core.Writer.ISheetWriter(Of TRow).StartRow(Integer)
   nameWithType: ISheetWriter<TRow>.StartRow(int)
   nameWithType.vb: ISheetWriter(Of TRow).StartRow(Integer)
+- uid: ExcelReader.Core.Writer.ISheetWriter`1.StartRow(System.Int32,System.Double)
+  name: StartRow(int, double)
+  href: api/ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRow_System_Int32_System_Double_
+  commentId: M:ExcelReader.Core.Writer.ISheetWriter`1.StartRow(System.Int32,System.Double)
+  name.vb: StartRow(Integer, Double)
+  fullName: ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRow(int, double)
+  fullName.vb: ExcelReader.Core.Writer.ISheetWriter(Of TRow).StartRow(Integer, Double)
+  nameWithType: ISheetWriter<TRow>.StartRow(int, double)
+  nameWithType.vb: ISheetWriter(Of TRow).StartRow(Integer, Double)
 - uid: ExcelReader.Core.Writer.ISheetWriter`1.StartRow*
   name: StartRow
   href: api/ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRow_
@@ -6352,6 +7176,15 @@ references:
   fullName.vb: ExcelReader.Core.Writer.ISheetWriter(Of TRow).StartRow
   nameWithType: ISheetWriter<TRow>.StartRow
   nameWithType.vb: ISheetWriter(Of TRow).StartRow
+- uid: ExcelReader.Core.Writer.ISheetWriter`1.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name: StartRowAsync(int, double, CancellationToken)
+  href: api/ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Int32_System_Double_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.ISheetWriter`1.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name.vb: StartRowAsync(Integer, Double, CancellationToken)
+  fullName: ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRowAsync(int, double, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.ISheetWriter(Of TRow).StartRowAsync(Integer, Double, System.Threading.CancellationToken)
+  nameWithType: ISheetWriter<TRow>.StartRowAsync(int, double, CancellationToken)
+  nameWithType.vb: ISheetWriter(Of TRow).StartRowAsync(Integer, Double, CancellationToken)
 - uid: ExcelReader.Core.Writer.ISheetWriter`1.StartRowAsync(System.Int32,System.Threading.CancellationToken)
   name: StartRowAsync(int, CancellationToken)
   href: api/ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRowAsync_System_Int32_System_Threading_CancellationToken_
@@ -6871,6 +7704,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xls.XlsRowWriter.Skip
   nameWithType: XlsRowWriter.Skip
+- uid: ExcelReader.Core.Writer.Xls.XlsRowWriter.Style(System.Int32)
+  name: Style(int)
+  href: api/ExcelReader.Core.Writer.Xls.XlsRowWriter.html#ExcelReader_Core_Writer_Xls_XlsRowWriter_Style_System_Int32_
+  commentId: M:ExcelReader.Core.Writer.Xls.XlsRowWriter.Style(System.Int32)
+  name.vb: Style(Integer)
+  fullName: ExcelReader.Core.Writer.Xls.XlsRowWriter.Style(int)
+  fullName.vb: ExcelReader.Core.Writer.Xls.XlsRowWriter.Style(Integer)
+  nameWithType: XlsRowWriter.Style(int)
+  nameWithType.vb: XlsRowWriter.Style(Integer)
+- uid: ExcelReader.Core.Writer.Xls.XlsRowWriter.Style*
+  name: Style
+  href: api/ExcelReader.Core.Writer.Xls.XlsRowWriter.html#ExcelReader_Core_Writer_Xls_XlsRowWriter_Style_
+  commentId: Overload:ExcelReader.Core.Writer.Xls.XlsRowWriter.Style
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Xls.XlsRowWriter.Style
+  nameWithType: XlsRowWriter.Style
 - uid: ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.Boolean)
   name: Write(bool)
   href: api/ExcelReader.Core.Writer.Xls.XlsRowWriter.html#ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_Boolean_
@@ -7086,6 +7935,15 @@ references:
   fullName.vb: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(Integer)
   nameWithType: XlsSheetWriter.StartRow(int)
   nameWithType.vb: XlsSheetWriter.StartRow(Integer)
+- uid: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(System.Int32,System.Double)
+  name: StartRow(int, double)
+  href: api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html#ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRow_System_Int32_System_Double_
+  commentId: M:ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(System.Int32,System.Double)
+  name.vb: StartRow(Integer, Double)
+  fullName: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(int, double)
+  fullName.vb: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(Integer, Double)
+  nameWithType: XlsSheetWriter.StartRow(int, double)
+  nameWithType.vb: XlsSheetWriter.StartRow(Integer, Double)
 - uid: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow*
   name: StartRow
   href: api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html#ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRow_
@@ -7093,6 +7951,15 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow
   nameWithType: XlsSheetWriter.StartRow
+- uid: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name: StartRowAsync(int, double, CancellationToken)
+  href: api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html#ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRowAsync_System_Int32_System_Double_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name.vb: StartRowAsync(Integer, Double, CancellationToken)
+  fullName: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(int, double, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(Integer, Double, System.Threading.CancellationToken)
+  nameWithType: XlsSheetWriter.StartRowAsync(int, double, CancellationToken)
+  nameWithType.vb: XlsSheetWriter.StartRowAsync(Integer, Double, CancellationToken)
 - uid: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(System.Int32,System.Threading.CancellationToken)
   name: StartRowAsync(int, CancellationToken)
   href: api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html#ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRowAsync_System_Int32_System_Threading_CancellationToken_
@@ -7518,6 +8385,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Skip
   nameWithType: XlsbRowWriter.Skip
+- uid: ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style(System.Int32)
+  name: Style(int)
+  href: api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_Style_System_Int32_
+  commentId: M:ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style(System.Int32)
+  name.vb: Style(Integer)
+  fullName: ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style(int)
+  fullName.vb: ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style(Integer)
+  nameWithType: XlsbRowWriter.Style(int)
+  nameWithType.vb: XlsbRowWriter.Style(Integer)
+- uid: ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style*
+  name: Style
+  href: api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_Style_
+  commentId: Overload:ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style
+  nameWithType: XlsbRowWriter.Style
 - uid: ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Write(System.Boolean)
   name: Write(bool)
   href: api/ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_Write_System_Boolean_
@@ -7778,6 +8661,15 @@ references:
   fullName.vb: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(Integer)
   nameWithType: XlsbSheetWriter.StartRow(int)
   nameWithType.vb: XlsbSheetWriter.StartRow(Integer)
+- uid: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(System.Int32,System.Double)
+  name: StartRow(int, double)
+  href: api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRow_System_Int32_System_Double_
+  commentId: M:ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(System.Int32,System.Double)
+  name.vb: StartRow(Integer, Double)
+  fullName: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(int, double)
+  fullName.vb: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(Integer, Double)
+  nameWithType: XlsbSheetWriter.StartRow(int, double)
+  nameWithType.vb: XlsbSheetWriter.StartRow(Integer, Double)
 - uid: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow*
   name: StartRow
   href: api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRow_
@@ -7785,6 +8677,15 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow
   nameWithType: XlsbSheetWriter.StartRow
+- uid: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name: StartRowAsync(int, double, CancellationToken)
+  href: api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRowAsync_System_Int32_System_Double_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name.vb: StartRowAsync(Integer, Double, CancellationToken)
+  fullName: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(int, double, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(Integer, Double, System.Threading.CancellationToken)
+  nameWithType: XlsbSheetWriter.StartRowAsync(int, double, CancellationToken)
+  nameWithType.vb: XlsbSheetWriter.StartRowAsync(Integer, Double, CancellationToken)
 - uid: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRowAsync(System.Int32,System.Threading.CancellationToken)
   name: StartRowAsync(int, CancellationToken)
   href: api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRowAsync_System_Int32_System_Threading_CancellationToken_
@@ -8086,6 +8987,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Skip
   nameWithType: XlsxRowWriter.Skip
+- uid: ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style(System.Int32)
+  name: Style(int)
+  href: api/ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxRowWriter_Style_System_Int32_
+  commentId: M:ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style(System.Int32)
+  name.vb: Style(Integer)
+  fullName: ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style(int)
+  fullName.vb: ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style(Integer)
+  nameWithType: XlsxRowWriter.Style(int)
+  nameWithType.vb: XlsxRowWriter.Style(Integer)
+- uid: ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style*
+  name: Style
+  href: api/ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxRowWriter_Style_
+  commentId: Overload:ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Style
+  nameWithType: XlsxRowWriter.Style
 - uid: ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.Write(System.Boolean)
   name: Write(bool)
   href: api/ExcelReader.Core.Writer.Xlsx.XlsxRowWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxRowWriter_Write_System_Boolean_
@@ -8346,6 +9263,15 @@ references:
   fullName.vb: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(Integer)
   nameWithType: XlsxSheetWriter.StartRow(int)
   nameWithType.vb: XlsxSheetWriter.StartRow(Integer)
+- uid: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(System.Int32,System.Double)
+  name: StartRow(int, double)
+  href: api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_StartRow_System_Int32_System_Double_
+  commentId: M:ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(System.Int32,System.Double)
+  name.vb: StartRow(Integer, Double)
+  fullName: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(int, double)
+  fullName.vb: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(Integer, Double)
+  nameWithType: XlsxSheetWriter.StartRow(int, double)
+  nameWithType.vb: XlsxSheetWriter.StartRow(Integer, Double)
 - uid: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow*
   name: StartRow
   href: api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_StartRow_
@@ -8353,6 +9279,15 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow
   nameWithType: XlsxSheetWriter.StartRow
+- uid: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name: StartRowAsync(int, double, CancellationToken)
+  href: api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_StartRowAsync_System_Int32_System_Double_System_Threading_CancellationToken_
+  commentId: M:ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)
+  name.vb: StartRowAsync(Integer, Double, CancellationToken)
+  fullName: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRowAsync(int, double, System.Threading.CancellationToken)
+  fullName.vb: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRowAsync(Integer, Double, System.Threading.CancellationToken)
+  nameWithType: XlsxSheetWriter.StartRowAsync(int, double, CancellationToken)
+  nameWithType.vb: XlsxSheetWriter.StartRowAsync(Integer, Double, CancellationToken)
 - uid: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRowAsync(System.Int32,System.Threading.CancellationToken)
   name: StartRowAsync(int, CancellationToken)
   href: api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_StartRowAsync_System_Int32_System_Threading_CancellationToken_

@@ -81,6 +81,7 @@
 <a href="https://www.nuget.org/packages/ExcelReader.NET"><img src="https://img.shields.io/nuget/v/ExcelReader.NET.svg" alt="NuGet"></a>
 <a href="https://www.nuget.org/packages/ExcelReader.NET"><img src="https://img.shields.io/nuget/dt/ExcelReader.NET.svg" alt="Downloads"></a>
 <a href="LICENSE"><img src="https://img.shields.io/github/license/GabrielMarquezMatte/ExcelReader.svg" alt="License"></a>
+<a href="https://doi.org/10.5281/zenodo.23927919"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.23927919.svg" alt="DOI"></a>
 <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/"><img src="https://img.shields.io/badge/benchmarks-GitHub%20Pages-informational" alt="Benchmarks"></a></p>
 <p>High-performance Excel reading and writing for .NET 10. Reads <code>.xlsx</code>, <code>.xlsb</code>, <code>.xls</code>, and <code>.csv</code>; writes <code>.xlsx</code>, <code>.xlsb</code>, <code>.xls</code>, and <code>.csv</code>.</p>
 <p>ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight <code>ref struct</code> values, resolves shared strings, recognizes date styles, and handles sparse cells. Workbooks open from a path, a <code>Stream</code>, or a caller-owned <code>ReadOnlyMemory&lt;byte&gt;</code> — the in-memory path decompresses parts directly, without a <code>ZipArchive</code> or an intermediate stream.</p>
@@ -175,18 +176,22 @@ with open_workbook(&quot;book.xlsx&quot;) as workbook:
     for row in workbook.sheets[0].rows():
         print([cell.value for cell in row])
 </code></pre>
-<p>Writing goes through one export, <code>xl_write_typed</code>: a whole sheet in a single call, from columnar
-buffers the ABI borrows rather than copies. All three bindings expose it — Python as
-<code>write_workbook</code>/<code>write_arrow</code>/<code>write_pandas</code>/<code>write_polars</code>, C++ as <code>xl::write_columns</code> and
-<code>xl::write_sheet&lt;T&gt;</code>, Rust as <code>writer::write_columns</code> and <code>writer::write_sheet</code>. In C++ and Rust the
-same struct mapping drives both directions, so reading a sheet and writing it back needs one
-mapping, not two:</p>
-<pre><code class="lang-rust">use excelreader::writer::write_sheet;
-use excelreader::XL_FORMAT_XLSX;
+<p>Writing goes through the writer handle (<code>xl_open_write_handle*</code> + <code>xl_write_sheet</code>): a whole sheet
+per call, from columnar buffers the ABI borrows rather than copies, or cell by cell, with cell styles.
+All three bindings expose it — Python as <code>open_writer</code> (<code>write_sheet</code>, from a <code>TypedTable</code>, an Arrow
+table or a DataFrame, and <code>write_row</code>), C++ as <code>xl::WriterHandle</code> (<code>write_columns</code> and
+<code>write_sheet&lt;T&gt;</code>), Rust as <code>WriterHandle</code> (<code>write_sheet</code>). The one-shot <code>xl_write_typed</code> and its
+free-function wrappers are deprecated since 7.4 and go away in 8.0. In C++ and Rust the same struct
+mapping drives both directions, so reading a sheet and writing it back needs one mapping, not two:</p>
+<pre><code class="lang-rust">use excelreader::{WriteOptions, WriterHandle};
 
-write_sheet(&quot;out.xlsx&quot;, XL_FORMAT_XLSX, &amp;rows, None)?;
+let mut handle = WriterHandle::create(&quot;out.xlsx&quot;, &amp;WriteOptions::new())?;
+handle.write_sheet(&quot;Sheet1&quot;, &amp;rows, None)?;
+handle.finish()?;
 </code></pre>
-<pre><code class="lang-cpp">auto written = xl::write_sheet(&quot;out.xlsx&quot;, rows);   // format inferred from the extension
+<pre><code class="lang-cpp">auto writer = xl::WriterHandle::open(&quot;out.xlsx&quot;).value();   // format inferred from the extension
+writer.write_sheet(&quot;Sheet1&quot;, rows);
+auto written = writer.finish();
 </code></pre>
 <p>Row-by-row decoded reads are available from all three bindings — Python as <code>Sheet.rows()</code>, C++
 as <code>xl::Sheet::rows()</code>, Rust as <code>Sheet::rows()</code>. Python additionally exposes

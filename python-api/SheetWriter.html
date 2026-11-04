@@ -129,6 +129,9 @@ stays usable: fix the order and continue, or close to discard.</p>
     types: list[ColumnType] | None = None,
     *,
     table: TableOptions | None = None,
+    column_styles: Mapping[str, CellStyle] | None = None,
+    header_style: CellStyle | None = None,
+    column_widths: Mapping[str, float] | None = None,
 ) -&gt; None
 </code></pre>
 <p>Writes <code>data</code> as a whole sheet named <code>name</code>, in one native call instead of one per cell.</p>
@@ -137,6 +140,10 @@ column, or Arrow-compatible data (pyarrow, pandas, polars) with <code>types</cod
 become the header row. With <code>table</code>, the sheet is written as an Excel table (xlsx/xlsb only).
 Parallelism and the other options come from <code>open_writer</code>; <code>WriteOptions.sheet_name</code> does not
 apply. Raises <code>ExcelReaderError</code> while a sheet started with <code>start_sheet</code> is open.</p>
+<p><code>column_styles</code> and <code>column_widths</code> (in characters) are keyed by column name; a column left
+out keeps its default, and a name that is not a column raises <code>ValueError</code>. A column style
+reaches the data cells only, never the header row, and one without a <code>number_format</code> keeps a
+DATE, TIME or TIMESTAMP column's format. <code>header_style</code> styles the header row.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -167,17 +174,118 @@ apply. Raises <code>ExcelReaderError</code> while a sheet started with <code>sta
 <td><a href="TableOptions.html">TableOptions</a> | None</td>
 <td><code>None</code></td>
 </tr>
+<tr>
+<td><code>column_styles</code></td>
+<td>Mapping[str, <a href="CellStyle.html">CellStyle</a>] | None</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td><code>header_style</code></td>
+<td><a href="CellStyle.html">CellStyle</a> | None</td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td><code>column_widths</code></td>
+<td>Mapping[str, float] | None</td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="add_style">add_style</h3>
+<pre><code class="lang-python">def add_style(style: CellStyle) -&gt; int
+</code></pre>
+<p>Registers <code>style</code> and returns its id; an equal style returns the same id, and id 0 is the
+general style, which needs no registering. Raises <code>ExcelReaderError</code> for an invalid value or
+a format limit, leaving the writer usable.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>style</code></td>
+<td><a href="CellStyle.html">CellStyle</a></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> int</p>
+<h3 id="set_column_style">set_column_style</h3>
+<pre><code class="lang-python">def set_column_style(column: int, style_id: int) -&gt; None
+</code></pre>
+<p>Styles every cell of the 0-based <code>column</code> of the open sheet; call it before the sheet's first row.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>column</code></td>
+<td>int</td>
+<td></td>
+</tr>
+<tr>
+<td><code>style_id</code></td>
+<td>int</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="set_column_width">set_column_width</h3>
+<pre><code class="lang-python">def set_column_width(column: int, width: float) -&gt; None
+</code></pre>
+<p>Sets the 0-based <code>column</code>'s width in characters (0-255); call it before the sheet's first row.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>column</code></td>
+<td>int</td>
+<td></td>
+</tr>
+<tr>
+<td><code>width</code></td>
+<td>float</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <h3 id="write_row">write_row</h3>
-<pre><code class="lang-python">def write_row(values: Sequence[Any]) -&gt; None
+<pre><code class="lang-python">def write_row(
+    values: Sequence[Any],
+    *,
+    style_id: int = 0,
+    height: float = 0,
+    cell_styles: Sequence[int | None] | None = None,
+) -&gt; None
 </code></pre>
 <p>Writes one row, one cell per value, its type inferred from the value.</p>
+<p><code>style_id</code> styles every cell of the row, beating column styles, and <code>height</code> is the row's
+height in points (0 for the default). A non-None <code>cell_styles[i]</code> styles value <code>i</code> alone,
+over the row and column styles; its length must equal <code>len(values)</code>, else <code>ValueError</code>.</p>
 <p><code>str</code> is text, <code>bool</code> a boolean, <code>int</code> a 64-bit integer, <code>float</code> a number, <code>datetime</code> a
 timestamp (an aware one converted to UTC), <code>date</code> a date and <code>time</code> a time of day. <code>None</code> is a
 blank text cell; the tuple <code>(None, ColumnType.X)</code> is a blank cell typed as X.</p>
-<p>Raises, before writing anything, <code>TypeError</code> for a value whose type has no mapping and
-<code>OverflowError</code> for an <code>int</code> outside the signed 64-bit range.</p>
+<p>Raises, before writing anything, <code>ValueError</code> for a <code>cell_styles</code> of the wrong length,
+<code>TypeError</code> for a value whose type has no mapping and <code>OverflowError</code> for an <code>int</code> outside the
+signed 64-bit range.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -192,6 +300,21 @@ blank text cell; the tuple <code>(None, ColumnType.X)</code> is a blank cell typ
 <td><code>values</code></td>
 <td>Sequence[Any]</td>
 <td></td>
+</tr>
+<tr>
+<td><code>style_id</code></td>
+<td>int</td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>height</code></td>
+<td>float</td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>cell_styles</code></td>
+<td>Sequence[int | None] | None</td>
+<td><code>None</code></td>
 </tr>
 </tbody>
 </table>

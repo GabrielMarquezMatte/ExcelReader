@@ -528,56 +528,6 @@ std::expected&lt;TableReader, Error&gt; parse_batches(
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;<a href="TableReader.html">TableReader</a>, <a href="Error.html">Error</a>&gt;, std::expected&lt;<a href="TypedReader.html">TypedReader</a>&lt;T&gt;, <a href="Error.html">Error</a>&gt;</p>
-<h2 id="write_columns">write_columns</h2>
-<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; write_columns(
-    std::string_view path,
-    std::span&lt;const ColumnRef&gt; columns,
-    const WriteOptions &amp; options = {})
-std::expected&lt;void, Error&gt; write_columns(
-    std::vector&lt;uint8_t&gt; &amp; out,
-    std::span&lt;const ColumnRef&gt; columns,
-    const WriteOptions &amp; options = {})
-</code></pre>
-<p>Writes columns as one sheet, copying nothing.</p>
-<p>write_columns into memory.</p>
-<p><strong>Parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Name</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>path</code></td>
-<td>std::string_view</td>
-<td></td>
-<td>File to create.</td>
-</tr>
-<tr>
-<td><code>columns</code></td>
-<td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
-<td></td>
-<td>Columns of equal length, borrowed for the call. Either every column has a name, written as a header row, or none does.</td>
-</tr>
-<tr>
-<td><code>options</code></td>
-<td>const <a href="WriteOptions.html">WriteOptions</a> &amp;</td>
-<td><code>{}</code></td>
-<td>Format, sheet name, CSV dialect and format toggles. <code>XL_FORMAT_AUTO</code> takes the format from the path's extension.</td>
-</tr>
-<tr>
-<td><code>out</code></td>
-<td>std::vector&lt;uint8_t&gt; &amp;</td>
-<td></td>
-<td>Replaced with the file's bytes; untouched on failure.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
 <h2 id="encrypt_package">encrypt_package</h2>
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; encrypt_package(
     std::string_view package_path,
@@ -618,6 +568,58 @@ std::expected&lt;void, Error&gt; write_columns(
 </tbody>
 </table>
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h2 id="write_columns">write_columns</h2>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; write_columns(
+    std::string_view path,
+    std::span&lt;const ColumnRef&gt; columns,
+    const WriteOptions &amp; options = {})
+std::expected&lt;void, Error&gt; write_columns(
+    std::vector&lt;uint8_t&gt; &amp; out,
+    std::span&lt;const ColumnRef&gt; columns,
+    const WriteOptions &amp; options = {})
+</code></pre>
+<p>Writes columns as one sheet, copying nothing.</p>
+<p>DeprecatedUse WriterHandle::write_columns, which also takes cell styles.</p>
+<p>write_columns into memory.</p>
+<p>DeprecatedUse WriterHandle::write_columns on a handle opened over a vector.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>std::string_view</td>
+<td></td>
+<td>File to create.</td>
+</tr>
+<tr>
+<td><code>columns</code></td>
+<td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
+<td></td>
+<td>Columns of equal length, borrowed for the call. Either every column has a name, written as a header row, or none does.</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>const <a href="WriteOptions.html">WriteOptions</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Format, sheet name, CSV dialect and format toggles. <code>XL_FORMAT_AUTO</code> takes the format from the path extension.</td>
+</tr>
+<tr>
+<td><code>out</code></td>
+<td>std::vector&lt;uint8_t&gt; &amp;</td>
+<td></td>
+<td>Replaced with the file bytes; untouched on failure.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
 <h2 id="write_sheet">write_sheet</h2>
 <pre><code class="lang-cpp">template &lt;std::ranges::input_range R&gt;
 std::expected&lt;void, Error&gt; write_sheet(
@@ -631,7 +633,9 @@ std::expected&lt;void, Error&gt; write_sheet(
     const WriteOptions &amp; options = {})
 </code></pre>
 <p>Writes rows as one sheet.</p>
+<p>DeprecatedUse WriterHandle::write_sheet.</p>
 <p>write_sheet into memory.</p>
+<p>DeprecatedUse WriterHandle::write_sheet on a handle opened over a vector.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -665,7 +669,7 @@ std::expected&lt;void, Error&gt; write_sheet(
 <td><code>out</code></td>
 <td>std::vector&lt;uint8_t&gt; &amp;</td>
 <td></td>
-<td>Replaced with the file's bytes; untouched on failure.</td>
+<td>Replaced with the file bytes; untouched on failure.</td>
 </tr>
 </tbody>
 </table>

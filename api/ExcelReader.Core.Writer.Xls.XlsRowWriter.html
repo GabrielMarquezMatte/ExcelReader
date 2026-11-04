@@ -162,7 +162,7 @@ Class XlsRowWriter  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Dispose" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Dispose">
   Dispose()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L203"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
@@ -189,7 +189,7 @@ Class XlsRowWriter  <a class="header-action link-secondary" title="View source" 
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_DisposeAsync" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.DisposeAsync">
   DisposeAsync()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L220"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or
@@ -226,7 +226,7 @@ resetting unmanaged resources asynchronously.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Skip_System_Int32_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Skip(System.Int32)">
   Skip(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L182"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Advances past <code class="paramref">count</code> columns without writing any cell for them, leaving
@@ -262,11 +262,59 @@ them blank when the row is read back.</p>
 
 
 
+  <a id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Style_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Style*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Style_System_Int32_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Style(System.Int32)">
+  Style(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Styles the next cell written, and only that cell, replacing the row and column style. Style 0 forces the general style.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public XlsRowWriter Style(int styleId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>styleId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The style to apply, from <a class="xref" href="ExcelReader.Core.Writer.Xls.XlsWorkbookWriter.html#ExcelReader_Core_Writer_Xls_XlsWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Xls.XlsRowWriter.html">XlsRowWriter</a></dt>
+    <dd><p>This row writer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The row has already been disposed.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.Xls.XlsWorkbookWriter.html#ExcelReader_Core_Writer_Xls_XlsWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+  </dl>
+
+
+
   <a id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write*"></a>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_Boolean_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.Boolean)">
   Write(bool)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L80"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a boolean cell.</p>
@@ -299,7 +347,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_DateOnly_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.DateOnly)">
   Write(DateOnly)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L121"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date-only cell (no time component).</p>
@@ -335,7 +383,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_DateTime_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.DateTime)">
   Write(DateTime)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L99"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date/time cell.</p>
@@ -368,7 +416,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_Nullable_System_Boolean__" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.Nullable{System.Boolean})">
   Write(bool?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L88"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a boolean cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -401,7 +449,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_Nullable_System_DateOnly__" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.Nullable{System.DateOnly})">
   Write(DateOnly?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L129"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date-only cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -434,7 +482,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_Nullable_System_DateTime__" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.Nullable{System.DateTime})">
   Write(DateTime?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L107"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date/time cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -467,7 +515,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_Nullable_System_TimeOnly__" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.Nullable{System.TimeOnly})">
   Write(TimeOnly?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L149"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a time-of-day cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -539,7 +587,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write_System_TimeOnly_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write(System.TimeOnly)">
   Write(TimeOnly)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L141"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a time-of-day cell (no date component).</p>
@@ -575,7 +623,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_WriteUtf8_System_ReadOnlySpan_System_Byte__" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.WriteUtf8(System.ReadOnlySpan{System.Byte})">
   WriteUtf8(ReadOnlySpan&lt;byte&gt;)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L72"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a text cell from UTF-8 bytes, producing exactly the cell <a class="xref" href="ExcelReader.Core.Writer.IRowWriter.html#ExcelReader_Core_Writer_IRowWriter_Write_System_String_">Write(string?)</a>
@@ -616,7 +664,7 @@ materializing a <a class="xref" href="https://learn.microsoft.com/dotnet/api/sys
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write__1_System_Nullable___0__" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write``1(System.Nullable{``0})">
   Write&lt;T&gt;(T?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L169"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a numeric cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -655,7 +703,7 @@ materializing a <a class="xref" href="https://learn.microsoft.com/dotnet/api/sys
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsRowWriter_Write__1___0_" data-uid="ExcelReader.Core.Writer.Xls.XlsRowWriter.Write``1(``0)">
   Write&lt;T&gt;(T)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsRowWriter.cs/#L160"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a numeric cell for any UTF-8-formattable value type (e.g. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>).</p>
