@@ -37,6 +37,54 @@ namespace ExcelReader.NetFramework.Reader
         }
 
         /// <summary>
+        /// Calls <paramref name="action"/> once per row, header included, on the calling thread, without copying the
+        /// row. Other calls on this workbook are allowed from inside it; an exception it throws stops the walk and is
+        /// rethrown here.
+        /// </summary>
+        /// <param name="action">Receives each row, valid only for the duration of the call.</param>
+        public void ForEach(ExcelRowAction action)
+        {
+            if (action is null)
+            {
+                throw new ArgumentNullException(nameof(action));
+            }
+
+            RowWalk.Run(Workbook, Id, action);
+        }
+
+        /// <summary>
+        /// Folds the data rows into one <typeparamref name="TAccumulator"/> across several threads: each chunk of the
+        /// sheet is seeded by <paramref name="seed"/> on a worker thread, accumulated, then combined in sheet order.
+        /// XLS, tables and CSV opened from a stream are read sequentially, with the same result. The first exception a
+        /// callback throws ends the run and is rethrown here.
+        /// </summary>
+        /// <typeparam name="TAccumulator">The accumulator type.</typeparam>
+        /// <param name="seed">Creates an empty accumulator; called concurrently, once per chunk.</param>
+        /// <param name="headerRow">The 1-based header row, skipped with the rows above it; 0 when the sheet has none.</param>
+        /// <param name="degreeOfParallelism">The number of threads; 0 uses the processor count, 1 reads sequentially.</param>
+        /// <returns>The accumulator holding the whole sheet.</returns>
+        public TAccumulator Aggregate<TAccumulator>(Func<TAccumulator> seed, int headerRow = 1, int degreeOfParallelism = 0)
+            where TAccumulator : class, IExcelAccumulator<TAccumulator>
+        {
+            if (seed is null)
+            {
+                throw new ArgumentNullException(nameof(seed));
+            }
+
+            if (headerRow < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(headerRow), headerRow, "Use 0 for no header row or the 1-based header row.");
+            }
+
+            if (degreeOfParallelism < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(degreeOfParallelism), degreeOfParallelism, "Use 0 for the processor count or a positive thread count.");
+            }
+
+            return AggregationRun.Run(Workbook, Id, seed, headerRow, degreeOfParallelism);
+        }
+
+        /// <summary>
         /// Reads every data row into a new <typeparamref name="T"/>, matching public settable properties to header
         /// columns by <see cref="ExcelColumnAttribute"/> names or the property name. Properties whose column is
         /// absent, and cells that are empty or do not convert, keep the default value. Decimal properties are read

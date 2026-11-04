@@ -65,6 +65,12 @@ namespace ExcelReader.NetFramework.Interop
         internal static extern int xl_rows_close(IntPtr rows);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_rows_foreach(IntPtr handle, int sheet, IntPtr callback, IntPtr userData);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_aggregate(IntPtr handle, int sheet, XlAggregation* aggregation, int headerRow, int degreeOfParallelism, IntPtr* outState);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int xl_parse_typed(IntPtr handle, int sheet, XlColumnSpec* specs, int specCount, int headerRow, int degreeOfParallelism, XlTable* outTable);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]

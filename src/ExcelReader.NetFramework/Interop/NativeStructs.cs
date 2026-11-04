@@ -64,6 +64,28 @@ namespace ExcelReader.NetFramework.Interop
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct XlCellView
+    {
+        internal int Column;
+        internal int Type;
+        internal int ValueLen;
+        internal int HasNumber;
+        internal byte* Value;
+        internal double Number;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct XlAggregation
+    {
+        internal int StructSize;
+        internal IntPtr Seed;
+        internal IntPtr Accumulate;
+        internal IntPtr Combine;
+        internal IntPtr FreeState;
+        internal IntPtr UserData;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct XlOpenOptions
     {
         internal int StructSize;

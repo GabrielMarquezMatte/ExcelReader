@@ -96,6 +96,48 @@ throws `InvalidOperationException`.
 Each value type also works as `Nullable<T>` (`int?`, `DateTime?`, ...), which stays `null` for an empty
 cell. Any other type, including enums and structs, throws `NotSupportedException`.
 
+## Walk or fold rows without copying
+
+```csharp
+using ExcelReader.NetFramework.Reader;
+
+public sealed class Total : IExcelAccumulator<Total>
+{
+    public double Sum;
+
+    public void Accumulate(ExcelRowView row)
+    {
+        if (row.Count > 1 && row[1].Number is double value)
+        {
+            Sum += value;
+        }
+    }
+
+    public void Combine(Total other)
+    {
+        Sum += other.Sum;
+    }
+}
+
+using (ExcelWorkbook workbook = ExcelWorkbook.Open(@"C:\data\sales.xlsx"))
+{
+    ExcelSheet sheet = workbook.Sheet(0);
+    double sum = sheet.Aggregate(() => new Total()).Sum;
+    sheet.ForEach(row => Console.WriteLine(row[0].GetText()));
+}
+```
+
+`ForEach(action)` calls `action` once per row, header included, on the calling thread. `Aggregate(seed,
+headerRow = 1, degreeOfParallelism = 0)` skips the header and every row above it, seeds one accumulator
+per chunk of the sheet on worker threads, and combines them in sheet order. XLS, tables and a CSV opened
+from a `Stream` are read sequentially, with the same result. An exception thrown by a callback ends the
+call and is rethrown to the caller.
+
+An `ExcelRowView` and its `ExcelCellView`s are valid only during the callback that received them: they
+cannot be stored, and `ToRow()` copies one into an `ExcelRow`. `Number` is the native double, or the
+text parsed with the invariant culture. `GetText()` allocates the string, and formats the number when the
+cell holds only a number.
+
 ## Write
 
 ```csharp
