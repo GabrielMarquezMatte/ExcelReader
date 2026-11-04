@@ -562,5 +562,5 @@ def test_write_workbook_frees_its_column_copies_without_a_gc_pass():
 
 def test_write_workbook_warns_that_it_is_deprecated(tmp_path):
     table = TypedTable(row_count=1, names=["qty"], columns=[array("q", [3])], validity=[None])
-    with pytest.warns(DeprecationWarning, match="open_writer"):
+    with pytest.warns(DeprecationWarning, match=r"since 7.4 and will be removed in 8.0; use open_writer"):
         write_workbook(tmp_path / "out.csv", table, [ColumnType.I64])
