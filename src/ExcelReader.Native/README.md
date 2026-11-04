@@ -106,6 +106,29 @@ output instead, leaving an existing file at the path as it was. A failed `xl_wri
 handle with no output: closing it or reading its bytes then fails, so abort it. Both write paths release their buffers with
 `xl_free_buffer` (`xl_table`/`xl_inferred_schema` keep their own `xl_free_table`/`xl_free_schema`).
 
+### Cell styles
+
+A writer handle styles cells with ids from `xl_add_style`, which takes an `xl_cell_style` (same
+`struct_size` contract): number format, font name, size, color and `XL_FONT_*` flags, fill color,
+`xl_border` edges (`XL_BORDER_*` with a color), `XL_HALIGN_*`/`XL_VALIGN_*` alignment, wrap, indent
+and rotation. Colors are `0xRRGGBB` with `-1` for unset, so a zeroed struct must set its unused colors
+to `-1`; strings are UTF-8 with a length, and a NULL pointer leaves them unset. An equal style returns
+the same id, and id 0 is the general style without registering anything. Then:
+
+- `xl_set_column_style` and `xl_set_column_width` go after `xl_start_sheet` and before the sheet's
+  first row.
+- `xl_start_row_styled(handle, style_id, height)` opens a row whose style beats the column styles;
+  `height` is in points, 0 for the default.
+- `xl_style_next_cell` styles only the next cell written, over the row and column styles;
+  `xl_write_null` then writes a styled blank, and `xl_end_row` with a style still pending fails.
+
+An invalid value returns `XL_INVALID_ARGUMENT`; a format limit (512 fonts, the XLSX/XLSB or XLS style
+count, XLS's 56 colors) returns `XL_ERROR` with the Core message. Neither affects the handle, so the
+next call can go on writing. A call out of order returns `XL_ERROR`, as the other handle calls do. CSV
+accepts every style call and writes the same bytes as without them. Nothing is inherited on this path:
+a column written with `xl_write_time` or `xl_write_timestamp` whose style has no number format shows
+the number, or the date alone.
+
 ## Callback reads
 
 `xl_rows_foreach` walks a sheet and calls back once per row with an array of `xl_cell_view`;

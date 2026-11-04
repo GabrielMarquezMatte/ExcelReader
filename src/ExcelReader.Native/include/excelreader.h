@@ -16,7 +16,7 @@ extern "C" {
 #define XL_STATUS_PASSWORD_REQUIRED  (-6) /* the workbook is encrypted and no password was supplied */
 #define XL_STATUS_PASSWORD_INCORRECT (-7) /* the supplied password did not match the workbook's verifier */
 
-#define XL_ABI_VERSION 6
+#define XL_ABI_VERSION 7
 
 /* Threads: calls on one workbook handle may run on several threads at once. A row cursor, typed
    reader, Arrow stream or writer handle is used by one thread at a time. A closed or unknown handle
@@ -312,6 +312,89 @@ int32_t xl_write_null(xl_writer_handle* handle, int32_t type);
 
 int32_t xl_end_row(xl_writer_handle* handle);
 int32_t xl_end_sheet(xl_writer_handle* handle);
+
+#define XL_FONT_BOLD          1
+#define XL_FONT_ITALIC        2
+#define XL_FONT_UNDERLINE     4
+#define XL_FONT_STRIKETHROUGH 8
+
+#define XL_BORDER_NONE                 0
+#define XL_BORDER_THIN                 1
+#define XL_BORDER_MEDIUM               2
+#define XL_BORDER_DASHED               3
+#define XL_BORDER_DOTTED               4
+#define XL_BORDER_THICK                5
+#define XL_BORDER_DOUBLE               6
+#define XL_BORDER_HAIR                 7
+#define XL_BORDER_MEDIUM_DASHED        8
+#define XL_BORDER_DASH_DOT             9
+#define XL_BORDER_MEDIUM_DASH_DOT     10
+#define XL_BORDER_DASH_DOT_DOT        11
+#define XL_BORDER_MEDIUM_DASH_DOT_DOT 12
+#define XL_BORDER_SLANT_DASH_DOT      13
+
+#define XL_HALIGN_GENERAL           0
+#define XL_HALIGN_LEFT              1
+#define XL_HALIGN_CENTER            2
+#define XL_HALIGN_RIGHT             3
+#define XL_HALIGN_FILL              4
+#define XL_HALIGN_JUSTIFY           5
+#define XL_HALIGN_CENTER_CONTINUOUS 6
+#define XL_HALIGN_DISTRIBUTED       7
+
+#define XL_VALIGN_BOTTOM      0
+#define XL_VALIGN_TOP         1
+#define XL_VALIGN_CENTER      2
+#define XL_VALIGN_JUSTIFY     3
+#define XL_VALIGN_DISTRIBUTED 4
+
+/* Colors are 0xRRGGBB, or -1 for unset: 0 is black, so a zeroed struct must set every unused color to -1. */
+typedef struct xl_border {
+    int32_t style;   /* XL_BORDER_*; XL_BORDER_NONE draws no edge */
+    int32_t color;   /* -1: automatic */
+} xl_border;
+
+/* Strings are UTF-8 of the given length, not NUL-terminated; a NULL pointer leaves them unset. */
+typedef struct xl_cell_style {
+    int32_t struct_size;
+    int32_t number_format_len;
+    const uint8_t* number_format;   /* NULL: General */
+    const uint8_t* font_name;       /* NULL: the default font; 1-31 characters */
+    int32_t font_name_len;
+    int32_t font_flags;             /* XL_FONT_* */
+    double font_size;               /* points, 1-409; 0: the default size */
+    int32_t font_color;
+    int32_t fill_color;             /* solid background */
+    int32_t horizontal_alignment;   /* XL_HALIGN_* */
+    int32_t vertical_alignment;     /* XL_VALIGN_* */
+    int32_t wrap_text;              /* 0 or 1 */
+    int32_t indent;                 /* 0-15 */
+    int32_t rotation;               /* degrees, -90 to 90, or 255 for stacked text */
+    xl_border left;
+    xl_border right;
+    xl_border top;
+    xl_border bottom;
+} xl_cell_style;
+
+/* Registers a style and returns its id; an equal style returns the same id. Id 0 is the general style
+   and needs no registering. An invalid value returns XL_INVALID_ARGUMENT and a format limit (fonts,
+   styles, XLS's 56 colors) XL_ERROR; neither affects the handle. CSV accepts every style call and
+   ignores it. */
+int32_t xl_add_style(xl_writer_handle* handle, const xl_cell_style* style, int32_t* out_style_id);
+
+/* Column style and width go after xl_start_sheet and before the sheet's first row. Nothing is
+   inherited on this path: a style without a number format on a column written with xl_write_time or
+   xl_write_timestamp shows the number, or the date alone. */
+int32_t xl_set_column_style(xl_writer_handle* handle, int32_t column, int32_t style_id);
+int32_t xl_set_column_width(xl_writer_handle* handle, int32_t column, double width);   /* characters, 0-255 */
+
+/* xl_start_row with a style for every cell of the row, beating column styles; height in points, at most
+   409, 0 for the default. */
+int32_t xl_start_row_styled(xl_writer_handle* handle, int32_t style_id, double height);
+
+/* Styles the next cell written, and only that one, over the row and column styles; xl_write_null then
+   writes a styled blank. xl_end_row with a style pending fails, ending the row. */
+int32_t xl_style_next_cell(xl_writer_handle* handle, int32_t style_id);
 
 #define XL_TABLE_NO_STYLE        1
 #define XL_TABLE_NO_ROW_STRIPES  2

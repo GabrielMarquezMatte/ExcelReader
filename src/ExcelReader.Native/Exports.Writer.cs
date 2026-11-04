@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Writer;
 using ExcelReader.Native.Typed;
 using ExcelReader.Native.Writer;
 
@@ -334,6 +335,88 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidHandle;
             }
             return WriteApi.AbortWriteHandle(target);
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_add_style")]
+        public static int AddStyle(nint handle, NativeCellStyleRaw* style, int* outStyleId)
+        {
+            NativeApi.ClearLastError();
+            if (style is null || outStyleId is null)
+            {
+                NativeApi.SetLastError("xl_add_style needs a style and an out_style_id.");
+                return NativeStatus.InvalidArgument;
+            }
+            *outStyleId = 0;
+            if (!NativeCellStyle.TryDecode(style, out CellStyle? decoded, out string? error))
+            {
+                NativeApi.SetLastError(error);
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                *outStyleId = writerHandle.AddStyle(decoded.GetValueOrDefault());
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                return StyleFailure(exception);
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_set_column_style")]
+        public static int SetColumnStyle(nint handle, int column, int styleId)
+        {
+            return RunStyleOp(handle, (column, styleId), static (writerHandle, state) => writerHandle.SetColumnStyle(state.column, state.styleId));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_set_column_width")]
+        public static int SetColumnWidth(nint handle, int column, double width)
+        {
+            return RunStyleOp(handle, (column, width), static (writerHandle, state) => writerHandle.SetColumnWidth(state.column, state.width));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_start_row_styled")]
+        public static int StartRowStyled(nint handle, int styleId, double height)
+        {
+            return RunStyleOp(handle, (styleId, height), static (writerHandle, state) => writerHandle.StartRow(state.styleId, state.height));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_style_next_cell")]
+        public static int StyleNextCell(nint handle, int styleId)
+        {
+            return RunStyleOp(handle, styleId, static (writerHandle, state) => writerHandle.StyleNextCell(state));
+        }
+
+        private static int RunStyleOp<TState>(nint handle, TState state, Action<NativeWriterHandle, TState> operation)
+        {
+            NativeApi.ClearLastError();
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                operation(writerHandle, state);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                return StyleFailure(exception);
+            }
+        }
+
+        private static int StyleFailure(Exception exception)
+        {
+            NativeApi.SetLastError(exception.Message);
+            if (exception is ArgumentException)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            return NativeStatus.Error;
         }
 
         private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)

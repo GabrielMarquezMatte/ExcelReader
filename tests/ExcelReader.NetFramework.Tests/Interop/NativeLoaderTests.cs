@@ -17,16 +17,16 @@ namespace ExcelReader.NetFramework.Tests.Interop
         public void CheckAbiRejectsMismatch()
         {
             InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => NativeLoader.CheckAbi(5));
-            Assert.Contains("6", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("7", ex.Message, StringComparison.Ordinal);
             Assert.Contains("5", ex.Message, StringComparison.Ordinal);
-            NativeLoader.CheckAbi(6);
+            NativeLoader.CheckAbi(7);
         }
 
         [Fact]
         public void NativeLibraryLoadsAndReportsAbi()
         {
             NativeLoader.EnsureLoaded();
-            Assert.Equal(6, NativeMethods.xl_abi_version());
+            Assert.Equal(7, NativeMethods.xl_abi_version());
         }
 
         [Fact]
