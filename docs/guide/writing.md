@@ -193,8 +193,8 @@ The native writer handle (ABI 7) takes the same styles: `xl_add_style` registers
 - [C++](../../cpp/README.md#cell-styles)
 - [Python](../../python/README.md#cell-styles)
 - [Rust](../../rust/excelreader/README.md#cell-styles)
-- [.NET Framework](../../src/ExcelReader.NetFramework/README.md#cell-styles)
-- [C ABI](../../src/ExcelReader.Native/README.md#cell-styles)
+- [.NET Framework](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.NetFramework/README.md#cell-styles)
+- [C ABI](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Native/README.md#cell-styles)
 
 ## Read and write XLSB workbooks (BIFF12)
 
