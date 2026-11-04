@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer.Parallel
 {
@@ -11,9 +12,17 @@ namespace ExcelReader.Core.Writer.Parallel
             where TRow : IRowWriter
         {
             ParallelWriteOptions effective = Resolve(options);
-            (string[] headers, Action<TRow, T> writeRow, _) = layout.Columns<TRow>();
-            await SheetWriterExtensions.WriteHeaderAsync(sheet, headers, headerStyleId: -1, ct).ConfigureAwait(false);
-            await RunAsync(sheet, records, writeRow, effective, ct).ConfigureAwait(false);
+            BoundLayout<TRow, T> bound = LayoutBinding.Bind(sheet, layout);
+            await SheetWriterExtensions.WriteHeaderAsync(sheet, bound.Headers, bound.HeaderStyleId, ct).ConfigureAwait(false);
+            IStyleBinder? overlay = LayoutBinding.PushOverlay(sheet, bound.ColumnStyleIds, firstColumn: 0);
+            try
+            {
+                await RunAsync(sheet, records, bound.WriteRow, effective, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                overlay?.PopColumnStyleOverlay();
+            }
         }
 
         internal static ValueTask WriteRowsAsync<TSheet, TRow, T>(TSheet sheet, RecordSource<T> records,
@@ -30,9 +39,17 @@ namespace ExcelReader.Core.Writer.Parallel
             where TRow : IRowWriter
         {
             ParallelWriteOptions effective = Resolve(options);
-            (string[] headers, Action<TRow, T> writeRow, _) = layout.Columns<TRow>();
-            await sheet.BeginTableAsync(name, headers, tableOptions, ct).ConfigureAwait(false);
-            await RunAsync(sheet, records, SheetWriterExtensions.ShiftToTable(writeRow, tableOptions), effective, ct).ConfigureAwait(false);
+            BoundLayout<TRow, T> bound = LayoutBinding.Bind(sheet, layout);
+            await SheetWriterExtensions.BeginTableAsync(sheet, name, bound, tableOptions, ct).ConfigureAwait(false);
+            IStyleBinder? overlay = LayoutBinding.PushOverlay(sheet, bound.ColumnStyleIds, (tableOptions ?? ExcelTableOptions.Default).FirstColumn);
+            try
+            {
+                await RunAsync(sheet, records, SheetWriterExtensions.ShiftToTable(bound.WriteRow, tableOptions), effective, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                overlay?.PopColumnStyleOverlay();
+            }
             sheet.EndTable();
         }
 
