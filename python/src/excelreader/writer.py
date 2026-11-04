@@ -192,7 +192,8 @@ def write_workbook(
     and take cell styles. This function is a thin wrapper over them and will be removed in 8.0.
     """
     warnings.warn(
-        "write_workbook() is deprecated; use open_writer() and SheetWriter.write_sheet()",
+        "write_workbook() is deprecated since 7.4 and will be removed in 8.0; "
+        "use open_writer() and SheetWriter.write_sheet()",
         DeprecationWarning,
         stacklevel=2,
     )

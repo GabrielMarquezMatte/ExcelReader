@@ -566,3 +566,16 @@ def test_write_row_rejects_cell_styles_of_the_wrong_length():
         with pytest.raises(ValueError, match="cell_styles"):
             writer.write_row(["a", "b"], cell_styles=[None])
         writer.write_row(["a", "b"])
+
+
+def test_write_row_with_a_bad_cell_style_closes_the_row():
+    buffer = io.BytesIO()
+    with open_writer(buffer, "xlsx") as writer:
+        writer.start_sheet("S")
+        with pytest.raises(ExcelReaderError):
+            writer.write_row(["a", "b"], cell_styles=[None, 999])
+        writer.write_row(["c", "d"])
+        writer.end_sheet()
+
+    _, sheet = _xlsx_parts(buffer.getvalue())
+    assert [len(row) for row in _row_styles(sheet)] == [1, 2]

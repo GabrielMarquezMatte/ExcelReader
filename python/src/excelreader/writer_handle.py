@@ -151,8 +151,9 @@ class SheetWriter:
         timestamp (an aware one converted to UTC), `date` a date and `time` a time of day. `None` is a
         blank text cell; the tuple `(None, ColumnType.X)` is a blank cell typed as X.
 
-        Raises, before writing anything, `ValueError` for a `cell_styles` of the wrong length, `TypeError` for a value whose type has no mapping and
-        `OverflowError` for an `int` outside the signed 64-bit range.
+        Raises, before writing anything, `ValueError` for a `cell_styles` of the wrong length,
+        `TypeError` for a value whose type has no mapping and `OverflowError` for an `int` outside the
+        signed 64-bit range.
         """
         if cell_styles is not None and len(cell_styles) != len(values):
             raise ValueError(f"cell_styles has {len(cell_styles)} entries but values has {len(values)}")
@@ -168,10 +169,14 @@ class SheetWriter:
 
         handle = self._require_handle()
         _check(self._lib.xl_start_row_styled(handle, style_id, height))
-        for position, value in enumerate(values):
-            if cell_styles is not None and cell_styles[position] is not None:
-                _check(self._lib.xl_style_next_cell(handle, cell_styles[position]))
-            _check(self._write_cell(handle, value))
+        try:
+            for position, value in enumerate(values):
+                if cell_styles is not None and cell_styles[position] is not None:
+                    _check(self._lib.xl_style_next_cell(handle, cell_styles[position]))
+                _check(self._write_cell(handle, value))
+        except BaseException:
+            self._lib.xl_end_row(handle)
+            raise
         _check(self._lib.xl_end_row(handle))
 
     def _write_cell(self, handle: ctypes.c_void_p, value: Any) -> int:
