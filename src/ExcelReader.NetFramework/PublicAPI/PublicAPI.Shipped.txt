@@ -1,1 +1,302 @@
 #nullable enable
+ExcelReader.NetFramework.ExcelSheetVisibility
+ExcelReader.NetFramework.ExcelSheetVisibility.Hidden = 1 -> ExcelReader.NetFramework.ExcelSheetVisibility
+ExcelReader.NetFramework.ExcelSheetVisibility.VeryHidden = 2 -> ExcelReader.NetFramework.ExcelSheetVisibility
+ExcelReader.NetFramework.ExcelSheetVisibility.Visible = 0 -> ExcelReader.NetFramework.ExcelSheetVisibility
+ExcelReader.NetFramework.Parser.ExcelColumnAttribute
+ExcelReader.NetFramework.Parser.ExcelColumnAttribute.ExcelColumnAttribute(string! name) -> void
+ExcelReader.NetFramework.Parser.ExcelColumnAttribute.Name.get -> string!
+ExcelReader.NetFramework.Parser.ExcelIgnoreAttribute
+ExcelReader.NetFramework.Parser.ExcelIgnoreAttribute.ExcelIgnoreAttribute() -> void
+ExcelReader.NetFramework.Parser.ExcelRequiredAttribute
+ExcelReader.NetFramework.Parser.ExcelRequiredAttribute.AllowEmpty.get -> bool
+ExcelReader.NetFramework.Parser.ExcelRequiredAttribute.AllowEmpty.set -> void
+ExcelReader.NetFramework.Parser.ExcelRequiredAttribute.ExcelRequiredAttribute() -> void
+ExcelReader.NetFramework.Reader.ExcelCell
+ExcelReader.NetFramework.Reader.ExcelCell.Column.get -> int
+ExcelReader.NetFramework.Reader.ExcelCell.Equals(ExcelReader.NetFramework.Reader.ExcelCell other) -> bool
+ExcelReader.NetFramework.Reader.ExcelCell.ExcelCell() -> void
+ExcelReader.NetFramework.Reader.ExcelCell.Text.get -> string?
+ExcelReader.NetFramework.Reader.ExcelCell.Type.get -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType.Bool = 4 -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType.Date = 3 -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType.Empty = 0 -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType.Error = 6 -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType.Formula = 5 -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType.Number = 2 -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellType.String = 1 -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelCellView
+ExcelReader.NetFramework.Reader.ExcelCellView.Column.get -> int
+ExcelReader.NetFramework.Reader.ExcelCellView.ExcelCellView() -> void
+ExcelReader.NetFramework.Reader.ExcelCellView.GetText() -> string?
+ExcelReader.NetFramework.Reader.ExcelCellView.Number.get -> double?
+ExcelReader.NetFramework.Reader.ExcelCellView.Type.get -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelFormat
+ExcelReader.NetFramework.Reader.ExcelFormat.Auto = 0 -> ExcelReader.NetFramework.Reader.ExcelFormat
+ExcelReader.NetFramework.Reader.ExcelFormat.Csv = 4 -> ExcelReader.NetFramework.Reader.ExcelFormat
+ExcelReader.NetFramework.Reader.ExcelFormat.Xls = 1 -> ExcelReader.NetFramework.Reader.ExcelFormat
+ExcelReader.NetFramework.Reader.ExcelFormat.Xlsb = 3 -> ExcelReader.NetFramework.Reader.ExcelFormat
+ExcelReader.NetFramework.Reader.ExcelFormat.Xlsx = 2 -> ExcelReader.NetFramework.Reader.ExcelFormat
+ExcelReader.NetFramework.Reader.ExcelOpenOptions
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.CsvDelimiter.get -> char?
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.CsvDelimiter.set -> void
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.CsvDetectBom.get -> bool?
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.CsvDetectBom.set -> void
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.CsvQuote.get -> char?
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.CsvQuote.set -> void
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.ExcelOpenOptions() -> void
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.Format.get -> ExcelReader.NetFramework.Reader.ExcelFormat
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.Format.set -> void
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.Password.get -> string?
+ExcelReader.NetFramework.Reader.ExcelOpenOptions.Password.set -> void
+ExcelReader.NetFramework.Reader.ExcelReaderException
+ExcelReader.NetFramework.Reader.ExcelReaderException.ExcelReaderException() -> void
+ExcelReader.NetFramework.Reader.ExcelReaderException.ExcelReaderException(ExcelReader.NetFramework.Reader.ExcelStatus status, string! message) -> void
+ExcelReader.NetFramework.Reader.ExcelReaderException.ExcelReaderException(string! message) -> void
+ExcelReader.NetFramework.Reader.ExcelReaderException.ExcelReaderException(string! message, System.Exception! innerException) -> void
+ExcelReader.NetFramework.Reader.ExcelReaderException.Status.get -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelRow
+ExcelReader.NetFramework.Reader.ExcelRow.Cells.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.NetFramework.Reader.ExcelCell>!
+ExcelReader.NetFramework.Reader.ExcelRowAction
+ExcelReader.NetFramework.Reader.ExcelRowView
+ExcelReader.NetFramework.Reader.ExcelRowView.Count.get -> int
+ExcelReader.NetFramework.Reader.ExcelRowView.ExcelRowView() -> void
+ExcelReader.NetFramework.Reader.ExcelRowView.ToRow() -> ExcelReader.NetFramework.Reader.ExcelRow!
+ExcelReader.NetFramework.Reader.ExcelRowView.this[int index].get -> ExcelReader.NetFramework.Reader.ExcelCellView
+ExcelReader.NetFramework.Reader.ExcelSheet
+ExcelReader.NetFramework.Reader.ExcelSheet.Aggregate<TAccumulator>(System.Func<TAccumulator!>! seed, int headerRow = 1, int degreeOfParallelism = 0) -> TAccumulator!
+ExcelReader.NetFramework.Reader.ExcelSheet.Equals(ExcelReader.NetFramework.Reader.ExcelSheet other) -> bool
+ExcelReader.NetFramework.Reader.ExcelSheet.ExcelSheet() -> void
+ExcelReader.NetFramework.Reader.ExcelSheet.ForEach(ExcelReader.NetFramework.Reader.ExcelRowAction! action) -> void
+ExcelReader.NetFramework.Reader.ExcelSheet.InferSchema(int headerRow = 1, int sampleRows = 1000, bool parseText = false) -> System.Collections.Generic.IReadOnlyList<ExcelReader.NetFramework.Reader.Schema.ExcelColumnSchema!>!
+ExcelReader.NetFramework.Reader.ExcelSheet.Read<T>(int headerRow = 1, int degreeOfParallelism = 0) -> T[]!
+ExcelReader.NetFramework.Reader.ExcelSheet.ReadBatches<T>(int batchRows, int headerRow = 1) -> System.Collections.Generic.IEnumerable<T[]!>!
+ExcelReader.NetFramework.Reader.ExcelSheet.ReadRows() -> System.Collections.Generic.IEnumerable<ExcelReader.NetFramework.Reader.ExcelRow!>!
+ExcelReader.NetFramework.Reader.ExcelSheet.Workbook.get -> ExcelReader.NetFramework.Reader.ExcelWorkbook!
+ExcelReader.NetFramework.Reader.ExcelSheetInfo
+ExcelReader.NetFramework.Reader.ExcelSheetInfo.Index.get -> int
+ExcelReader.NetFramework.Reader.ExcelSheetInfo.Name.get -> string!
+ExcelReader.NetFramework.Reader.ExcelSheetInfo.Visibility.get -> ExcelReader.NetFramework.ExcelSheetVisibility
+ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.BufferTooSmall = -2 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.Eof = -1 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.Error = -5 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.InvalidArgument = -4 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.InvalidHandle = -3 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.Ok = 0 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.PasswordIncorrect = -7 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelStatus.PasswordRequired = -6 -> ExcelReader.NetFramework.Reader.ExcelStatus
+ExcelReader.NetFramework.Reader.ExcelTableInfo
+ExcelReader.NetFramework.Reader.ExcelTableInfo.FirstColumn.get -> int
+ExcelReader.NetFramework.Reader.ExcelTableInfo.FirstRow.get -> int
+ExcelReader.NetFramework.Reader.ExcelTableInfo.HeaderRowCount.get -> int
+ExcelReader.NetFramework.Reader.ExcelTableInfo.Index.get -> int
+ExcelReader.NetFramework.Reader.ExcelTableInfo.LastColumn.get -> int
+ExcelReader.NetFramework.Reader.ExcelTableInfo.LastRow.get -> int
+ExcelReader.NetFramework.Reader.ExcelTableInfo.Name.get -> string!
+ExcelReader.NetFramework.Reader.ExcelTableInfo.SheetIndex.get -> int
+ExcelReader.NetFramework.Reader.ExcelTableInfo.TotalsRowCount.get -> int
+ExcelReader.NetFramework.Reader.ExcelWorkbook
+ExcelReader.NetFramework.Reader.ExcelWorkbook.Dispose() -> void
+ExcelReader.NetFramework.Reader.ExcelWorkbook.IsDate1904.get -> bool
+ExcelReader.NetFramework.Reader.ExcelWorkbook.Sheet(int index) -> ExcelReader.NetFramework.Reader.ExcelSheet
+ExcelReader.NetFramework.Reader.ExcelWorkbook.Sheet(string! name) -> ExcelReader.NetFramework.Reader.ExcelSheet
+ExcelReader.NetFramework.Reader.ExcelWorkbook.Sheets.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.NetFramework.Reader.ExcelSheetInfo!>!
+ExcelReader.NetFramework.Reader.ExcelWorkbook.Table(string! name) -> ExcelReader.NetFramework.Reader.ExcelSheet
+ExcelReader.NetFramework.Reader.ExcelWorkbook.Tables.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.NetFramework.Reader.ExcelTableInfo!>!
+ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>
+ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>.Accumulate(ExcelReader.NetFramework.Reader.ExcelRowView row) -> void
+ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>.Combine(TSelf other) -> void
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnSchema
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnSchema.Name.get -> string?
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnSchema.Nullable.get -> bool
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnSchema.Type.get -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Bool = 3 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Date = 4 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Double = 2 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Int64 = 1 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.String = 0 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Time = 5 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Reader.Schema.ExcelColumnType.Timestamp = 6 -> ExcelReader.NetFramework.Reader.Schema.ExcelColumnType
+ExcelReader.NetFramework.Writer.CellBorder
+ExcelReader.NetFramework.Writer.CellBorder.CellBorder(ExcelReader.NetFramework.Writer.ExcelBorderStyle style, int color = -1) -> void
+ExcelReader.NetFramework.Writer.CellBorder.Color.get -> int
+ExcelReader.NetFramework.Writer.CellBorder.Style.get -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.CellStyle
+ExcelReader.NetFramework.Writer.CellStyle.Bold.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Bold.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Bottom.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Bottom.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.CellStyle() -> void
+ExcelReader.NetFramework.Writer.CellStyle.FillColor.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.FillColor.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.FontColor.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.FontColor.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.FontName.get -> string?
+ExcelReader.NetFramework.Writer.CellStyle.FontName.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.FontSize.get -> double?
+ExcelReader.NetFramework.Writer.CellStyle.FontSize.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.HorizontalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.CellStyle.HorizontalAlignment.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Indent.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.Indent.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Italic.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Italic.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Left.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Left.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.NumberFormat.get -> string?
+ExcelReader.NetFramework.Writer.CellStyle.NumberFormat.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Right.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Right.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Rotation.get -> int
+ExcelReader.NetFramework.Writer.CellStyle.Rotation.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Strikethrough.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Strikethrough.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Top.get -> ExcelReader.NetFramework.Writer.CellBorder?
+ExcelReader.NetFramework.Writer.CellStyle.Top.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.Underline.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.Underline.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.VerticalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.CellStyle.VerticalAlignment.set -> void
+ExcelReader.NetFramework.Writer.CellStyle.WrapText.get -> bool
+ExcelReader.NetFramework.Writer.CellStyle.WrapText.set -> void
+ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.DashDot = 9 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.DashDotDot = 11 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Dashed = 3 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Dotted = 4 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Double = 6 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Hair = 7 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Medium = 2 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.MediumDashDot = 10 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.MediumDashDotDot = 12 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.MediumDashed = 8 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.None = 0 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.SlantDashDot = 13 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Thick = 5 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelBorderStyle.Thin = 1 -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Center = 2 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.CenterContinuous = 6 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Distributed = 7 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Fill = 4 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.General = 0 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Justify = 5 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Left = 1 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment.Right = 3 -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Bold.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Bold.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Border.get -> ExcelReader.NetFramework.Writer.ExcelBorderStyle
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Border.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.BorderColor.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.BorderColor.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.ExcelStyleAttribute() -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FillColor.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FillColor.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontColor.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontColor.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontName.get -> string?
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontName.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontSize.get -> double
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.FontSize.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.HorizontalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelHorizontalAlignment
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.HorizontalAlignment.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Indent.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Indent.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Italic.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Italic.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.NumberFormat.get -> string?
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.NumberFormat.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Rotation.get -> int
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Rotation.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Strikethrough.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Strikethrough.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Underline.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.Underline.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.VerticalAlignment.get -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.VerticalAlignment.set -> void
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.WrapText.get -> bool
+ExcelReader.NetFramework.Writer.ExcelStyleAttribute.WrapText.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeFirstColumn.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeFirstColumn.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeLastColumn.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.EmphasizeLastColumn.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ExcelTableOptions() -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Name.get -> string!
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Name.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.NoStyle.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.NoStyle.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowColumnStripes.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowColumnStripes.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowRowStripes.get -> bool
+ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowRowStripes.set -> void
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Style.get -> string?
+ExcelReader.NetFramework.Writer.ExcelTableOptions.Style.set -> void
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Bottom = 0 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Center = 2 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Distributed = 4 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Justify = 3 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelVerticalAlignment.Top = 1 -> ExcelReader.NetFramework.Writer.ExcelVerticalAlignment
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Abort() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.AddStyle(ExcelReader.NetFramework.Writer.CellStyle! style) -> int
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Close() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CloseTo(System.IO.Stream! destination) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CloseToArray() -> byte[]!
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Dispose() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.EndRow() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.EndSheet() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.SetColumnStyle(int column, int styleId) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.SetColumnWidth(int column, double width) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StartRow() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StartRow(int styleId, double height = 0) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StartSheet(string! name) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.StyleNextCell(int styleId) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(bool value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(decimal value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(double value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(long value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Write(string? value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteDate(System.DateTime value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteDateTime(System.DateTime value) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteEmpty() -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteSheet<T>(string! name, System.Collections.Generic.IEnumerable<T>! rows, ExcelReader.NetFramework.Writer.ExcelTableOptions? table = null, ExcelReader.NetFramework.Writer.CellStyle? headerStyle = null) -> void
+ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.WriteTime(System.TimeSpan value) -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.BatchRows.get -> int
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.BatchRows.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvDelimiter.get -> char?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvDelimiter.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvQuote.get -> char?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.CsvQuote.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Date1904.get -> bool?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Date1904.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.DegreeOfParallelism.get -> int
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.DegreeOfParallelism.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.ExcelWriteOptions() -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Format.get -> ExcelReader.NetFramework.Reader.ExcelFormat?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Format.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Password.get -> string?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.Password.set -> void
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.UseSharedStrings.get -> bool?
+ExcelReader.NetFramework.Writer.ExcelWriteOptions.UseSharedStrings.set -> void
+override ExcelReader.NetFramework.Reader.ExcelCell.Equals(object? obj) -> bool
+override ExcelReader.NetFramework.Reader.ExcelCell.GetHashCode() -> int
+override ExcelReader.NetFramework.Reader.ExcelReaderException.GetObjectData(System.Runtime.Serialization.SerializationInfo! info, System.Runtime.Serialization.StreamingContext context) -> void
+override ExcelReader.NetFramework.Reader.ExcelSheet.Equals(object? obj) -> bool
+override ExcelReader.NetFramework.Reader.ExcelSheet.GetHashCode() -> int
+static ExcelReader.NetFramework.Reader.ExcelCell.operator !=(ExcelReader.NetFramework.Reader.ExcelCell left, ExcelReader.NetFramework.Reader.ExcelCell right) -> bool
+static ExcelReader.NetFramework.Reader.ExcelCell.operator ==(ExcelReader.NetFramework.Reader.ExcelCell left, ExcelReader.NetFramework.Reader.ExcelCell right) -> bool
+static ExcelReader.NetFramework.Reader.ExcelSheet.operator !=(ExcelReader.NetFramework.Reader.ExcelSheet left, ExcelReader.NetFramework.Reader.ExcelSheet right) -> bool
+static ExcelReader.NetFramework.Reader.ExcelSheet.operator ==(ExcelReader.NetFramework.Reader.ExcelSheet left, ExcelReader.NetFramework.Reader.ExcelSheet right) -> bool
+static ExcelReader.NetFramework.Reader.ExcelWorkbook.Open(System.IO.Stream! stream, ExcelReader.NetFramework.Reader.ExcelOpenOptions? options = null) -> ExcelReader.NetFramework.Reader.ExcelWorkbook!
+static ExcelReader.NetFramework.Reader.ExcelWorkbook.Open(byte[]! data, ExcelReader.NetFramework.Reader.ExcelOpenOptions? options = null) -> ExcelReader.NetFramework.Reader.ExcelWorkbook!
+static ExcelReader.NetFramework.Reader.ExcelWorkbook.Open(string! path, ExcelReader.NetFramework.Reader.ExcelOpenOptions? options = null) -> ExcelReader.NetFramework.Reader.ExcelWorkbook!
+static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.Create(string! path, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
+static ExcelReader.NetFramework.Writer.ExcelWorkbookWriter.CreateInMemory(ExcelReader.NetFramework.Reader.ExcelFormat format, ExcelReader.NetFramework.Writer.ExcelWriteOptions? options = null) -> ExcelReader.NetFramework.Writer.ExcelWorkbookWriter!
+virtual ExcelReader.NetFramework.Reader.ExcelRowAction.Invoke(ExcelReader.NetFramework.Reader.ExcelRowView row) -> void
