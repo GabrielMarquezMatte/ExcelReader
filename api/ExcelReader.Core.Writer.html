@@ -115,6 +115,12 @@ The write-side counterpart to <a class="xref" href="ExcelReader.Core.Parser.Exce
 </dd>
     </dl>
     <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelStyleAttribute.html">ExcelStyleAttribute</a></dt>
+      <dd><p>Styles a property's data cells when <a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout.html">ExcelRecordLayout</a> writes it; the header cell is left alone.
+The style replaces any column or row style on those cells. Colors are <code>0xRRGGBB</code>, -1 for unset.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelTableOptions.html">ExcelTableOptions</a></dt>
       <dd><p>Configures an Excel table written with <a class="xref" href="ExcelReader.Core.Writer.ITableSheetWriter-1.html#ExcelReader_Core_Writer_ITableSheetWriter_1_BeginTable_System_String_System_Collections_Generic_IReadOnlyList_System_String__ExcelReader_Core_Writer_ExcelTableOptions_">BeginTable(string, IReadOnlyList&lt;string&gt;, ExcelTableOptions?)</a>.</p>
 </dd>
@@ -141,8 +147,18 @@ records to a sheet in one call, driving the start-row/write/dispose lifecycle pe
 Structs
 </h3>
     <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.CellBorder.html">CellBorder</a></dt>
+      <dd><p>One edge of a cell border.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
       <dt><a class="xref" href="ExcelReader.Core.Writer.CellStyle.html">CellStyle</a></dt>
-      <dd><p>A column- or row-level cell style: number format, bold, and italic. Register one with <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+      <dd><p>A column- or row-level cell style: number format, font, fill, borders, and alignment. Register one with <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelColor.html">ExcelColor</a></dt>
+      <dd><p>An opaque RGB color.</p>
 </dd>
     </dl>
     <h3 id="interfaces">
@@ -195,6 +211,24 @@ XLSX and XLSB sheet writers.</p>
 Implementations open the underlying stream/archive on construction, so a caller only needs to
 add sheets with <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddSheet_System_String_">AddSheet(string)</a> and dispose the workbook (or call
 <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_EndAsync_System_Threading_CancellationToken_">EndAsync(CancellationToken)</a> then dispose) when finished.</p>
+</dd>
+    </dl>
+    <h3 id="enums">
+Enums
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelBorderStyle.html">ExcelBorderStyle</a></dt>
+      <dd><p>The line style of a cell border edge.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelHorizontalAlignment.html">ExcelHorizontalAlignment</a></dt>
+      <dd><p>The horizontal alignment of cell content.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelVerticalAlignment.html">ExcelVerticalAlignment</a></dt>
+      <dd><p>The vertical alignment of cell content.</p>
 </dd>
     </dl>
 

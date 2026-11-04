@@ -118,8 +118,35 @@
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
 <h3 id="start_row">start_row</h3>
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; start_row()
+std::expected&lt;void, Error&gt; start_row(int32_t style_id, double height=0)
 </code></pre>
 <p>Starts a row.</p>
+<p>Starts a row whose every cell takes a style, beating the column styles.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>style_id</code></td>
+<td>int32_t</td>
+<td></td>
+<td>An id from add_style.</td>
+</tr>
+<tr>
+<td><code>height</code></td>
+<td>double</td>
+<td><code>0</code></td>
+<td>In points, at most 409; 0 for the default.</td>
+</tr>
+</tbody>
+</table>
 <p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
 <h3 id="end_row">end_row</h3>
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; end_row()
@@ -135,9 +162,10 @@
 <pre><code class="lang-cpp">std::expected&lt;void, Error&gt; write_columns(
     std::string_view name,
     std::span&lt;const ColumnRef&gt; columns,
-    const std::optional&lt;TableOptions&gt; &amp; table = std::nullopt)
+    const std::optional&lt;TableOptions&gt; &amp; table = std::nullopt,
+    const SheetStyles &amp; styles = {})
 </code></pre>
-<p>Writes columns as a whole sheet, as write_columns does, in one call instead of one per cell.</p>
+<p>Writes columns as a whole sheet, in one call instead of one per cell.</p>
 <p>Uses the parallelism of the options the handle was opened with; their sheet name does not apply. Fails while a sheet started with start_sheet is open.</p>
 <p><strong>Parameters</strong></p>
 <table>
@@ -160,13 +188,19 @@
 <td><code>columns</code></td>
 <td>std::span&lt;const <a href="ColumnRef.html">ColumnRef</a>&gt;</td>
 <td></td>
-<td>As for write_columns.</td>
+<td>Columns of equal length, borrowed for the call. Either every column has a name, written as a header row, or none does.</td>
 </tr>
 <tr>
 <td><code>table</code></td>
 <td>const std::optional&lt;<a href="TableOptions.html">TableOptions</a>&gt; &amp;</td>
 <td><code>std::nullopt</code></td>
 <td>Writes the sheet as an Excel table (XLSX/XLSB only, every column named).</td>
+</tr>
+<tr>
+<td><code>styles</code></td>
+<td>const <a href="SheetStyles.html">SheetStyles</a> &amp;</td>
+<td><code>{}</code></td>
+<td>Column styles and widths, and the header row's style.</td>
 </tr>
 </tbody>
 </table>
@@ -176,9 +210,10 @@
 std::expected&lt;void, Error&gt; write_sheet(
     std::string_view name,
     R &amp;&amp; rows,
-    const std::optional&lt;TableOptions&gt; &amp; table = std::nullopt)
+    const std::optional&lt;TableOptions&gt; &amp; table = std::nullopt,
+    const SheetStyles &amp; styles = {})
 </code></pre>
-<p>Writes rows as a whole sheet, as write_sheet does, on top of write_columns.</p>
+<p>Writes rows as a whole sheet, on top of write_columns.</p>
 <p><strong>Parameters</strong></p>
 <table>
 <thead>
@@ -200,13 +235,119 @@ std::expected&lt;void, Error&gt; write_sheet(
 <td><code>rows</code></td>
 <td>R &amp;&amp;</td>
 <td></td>
-<td>As for write_sheet.</td>
+<td>Input range of a row type with an ExcelMapper, the mapping parse reads with. An empty std::optional field writes a blank cell.</td>
 </tr>
 <tr>
 <td><code>table</code></td>
 <td>const std::optional&lt;<a href="TableOptions.html">TableOptions</a>&gt; &amp;</td>
 <td><code>std::nullopt</code></td>
 <td>As for write_columns.</td>
+</tr>
+<tr>
+<td><code>styles</code></td>
+<td>const <a href="SheetStyles.html">SheetStyles</a> &amp;</td>
+<td><code>{}</code></td>
+<td>As for write_columns.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="add_style">add_style</h3>
+<pre><code class="lang-cpp">std::expected&lt;int32_t, Error&gt; add_style(const CellStyle &amp;style)
+</code></pre>
+<p>Registers a style and returns its id; an equal style returns the same id.</p>
+<p>Id 0 is the general style and needs no registering. An invalid value fails with <code>XL_INVALID_ARGUMENT</code> and a format limit (fonts, styles, XLS colors) with <code>XL_ERROR</code>; neither affects the handle. CSV accepts every style call and ignores it.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>style</code></td>
+<td>const <a href="CellStyle.html">CellStyle</a> &amp;</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;int32_t, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="set_column_style">set_column_style</h3>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; set_column_style(int32_t column, int32_t style_id)
+</code></pre>
+<p>Styles a column. After start_sheet and before the sheet's first row.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>column</code></td>
+<td>int32_t</td>
+<td></td>
+</tr>
+<tr>
+<td><code>style_id</code></td>
+<td>int32_t</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="set_column_width">set_column_width</h3>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; set_column_width(int32_t column, double width)
+</code></pre>
+<p>Sets a column width in characters, 0-255. After start_sheet and before the sheet's first row.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>column</code></td>
+<td>int32_t</td>
+<td></td>
+</tr>
+<tr>
+<td><code>width</code></td>
+<td>double</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> std::expected&lt;void, <a href="Error.html">Error</a>&gt;</p>
+<h3 id="style_next_cell">style_next_cell</h3>
+<pre><code class="lang-cpp">std::expected&lt;void, Error&gt; style_next_cell(int32_t style_id)
+</code></pre>
+<p>Styles the next cell written, and only that one, over the row and column styles.</p>
+<p>write_null then writes a styled blank; end_row with a style pending fails.</p>
+<p><strong>Parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>style_id</code></td>
+<td>int32_t</td>
+<td></td>
 </tr>
 </tbody>
 </table>

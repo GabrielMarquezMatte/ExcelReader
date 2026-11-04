@@ -158,6 +158,55 @@ header row and one row per record. Create one with <a class="xref" href="ExcelRe
 
 
 
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="ExcelReader_Core_Writer_ExcelRecordLayout_1_WithHeaderStyle_" data-uid="ExcelReader.Core.Writer.ExcelRecordLayout`1.WithHeaderStyle*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelRecordLayout_1_WithHeaderStyle_ExcelReader_Core_Writer_CellStyle_" data-uid="ExcelReader.Core.Writer.ExcelRecordLayout`1.WithHeaderStyle(ExcelReader.Core.Writer.CellStyle)">
+  WithHeaderStyle(CellStyle)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordLayout.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a layout with the same columns whose header row is written in <code class="paramref">style</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelRecordLayout&lt;T&gt; WithHeaderStyle(CellStyle style)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>style</code> <a class="xref" href="ExcelReader.Core.Writer.CellStyle.html">CellStyle</a></dt>
+    <dd><p>The style of every header cell; it replaces any column style on them.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelRecordLayout-1.html">ExcelRecordLayout</a>&lt;T&gt;</dt>
+    <dd><p>The new layout.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>A value of <code class="paramref">style</code> is out of range.</p>
+</dd>
+  </dl>
+
+
+
 
 </article>
 

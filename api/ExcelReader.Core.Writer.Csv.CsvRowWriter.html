@@ -163,7 +163,7 @@ quote character, carriage return, or line feed.</p>
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Dispose" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Dispose">
   Dispose()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L325"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
@@ -190,7 +190,7 @@ quote character, carriage return, or line feed.</p>
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_DisposeAsync" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.DisposeAsync">
   DisposeAsync()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L347"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or
@@ -224,7 +224,7 @@ resetting unmanaged resources asynchronously.</p>
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Skip_System_Int32_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Skip(System.Int32)">
   Skip(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L211"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Advances past <code class="paramref">count</code> columns without writing any cell for them, leaving
@@ -254,11 +254,59 @@ them blank when the row is read back.</p>
 
 
 
+  <a id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Style_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Style*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Style_System_Int32_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Style(System.Int32)">
+  Style(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates <code class="paramref">styleId</code> is not negative, then ignores it: CSV has no cell styles. Skipping or disposing the row with a style pending still throws, as in the other formats.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CsvRowWriter Style(int styleId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>styleId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The style id; ignored.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Csv.CsvRowWriter.html">CsvRowWriter</a></dt>
+    <dd><p>This row writer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The row has already been disposed.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">styleId</code> is negative.</p>
+</dd>
+  </dl>
+
+
+
   <a id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write*"></a>
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_Boolean_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.Boolean)">
   Write(bool)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L118"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a boolean cell.</p>
@@ -295,7 +343,7 @@ besides &quot;1&quot;, so a written bool round-trips through ExcelParser&lt;T&gt
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_DateOnly_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.DateOnly)">
   Write(DateOnly)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L156"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date-only cell (no time component).</p>
@@ -332,7 +380,7 @@ parser reads back.</p>
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_DateTime_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.DateTime)">
   Write(DateTime)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L137"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date/time cell.</p>
@@ -369,7 +417,7 @@ the common no-offset shape — exactly what ColumnParserFactory's CSV date fast 
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_Nullable_System_Boolean__" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.Nullable{System.Boolean})">
   Write(bool?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L126"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a boolean cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -402,7 +450,7 @@ the common no-offset shape — exactly what ColumnParserFactory's CSV date fast 
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_Nullable_System_DateOnly__" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.Nullable{System.DateOnly})">
   Write(DateOnly?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L164"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date-only cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -435,7 +483,7 @@ the common no-offset shape — exactly what ColumnParserFactory's CSV date fast 
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_Nullable_System_DateTime__" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.Nullable{System.DateTime})">
   Write(DateTime?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L145"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date/time cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -468,7 +516,7 @@ the common no-offset shape — exactly what ColumnParserFactory's CSV date fast 
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_Nullable_System_TimeOnly__" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.Nullable{System.TimeOnly})">
   Write(TimeOnly?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L183"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a time-of-day cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -501,7 +549,7 @@ the common no-offset shape — exactly what ColumnParserFactory's CSV date fast 
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_String_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.String)">
   Write(string?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L87"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a text cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -540,7 +588,7 @@ the common no-offset shape — exactly what ColumnParserFactory's CSV date fast 
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write_System_TimeOnly_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write(System.TimeOnly)">
   Write(TimeOnly)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L175"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a time-of-day cell (no date component).</p>
@@ -577,7 +625,7 @@ parser reconstructs via TryGetDouble, matching how the XLSX/XLSB row writers sto
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_WriteUtf8_System_ReadOnlySpan_System_Byte__" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.WriteUtf8(System.ReadOnlySpan{System.Byte})">
   WriteUtf8(ReadOnlySpan&lt;byte&gt;)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L98"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a text cell from UTF-8 bytes, producing exactly the cell <a class="xref" href="ExcelReader.Core.Writer.IRowWriter.html#ExcelReader_Core_Writer_IRowWriter_Write_System_String_">Write(string?)</a>
@@ -618,7 +666,7 @@ materializing a <a class="xref" href="https://learn.microsoft.com/dotnet/api/sys
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write__1_System_Nullable___0__" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write``1(System.Nullable{``0})">
   Write&lt;T&gt;(T?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L203"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a numeric cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -657,7 +705,7 @@ materializing a <a class="xref" href="https://learn.microsoft.com/dotnet/api/sys
 
   <h3 id="ExcelReader_Core_Writer_Csv_CsvRowWriter_Write__1___0_" data-uid="ExcelReader.Core.Writer.Csv.CsvRowWriter.Write``1(``0)">
   Write&lt;T&gt;(T)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Csv/CsvRowWriter.cs/#L194"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a numeric cell for any UTF-8-formattable value type (e.g. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>).</p>

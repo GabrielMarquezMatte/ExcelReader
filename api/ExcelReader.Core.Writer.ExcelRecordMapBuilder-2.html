@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Writer_ExcelRecordMapBuilder_2" data-uid="ExcelReader.Core.Writer.ExcelRecordMapBuilder`2" class="text-break">
-Class ExcelRecordMapBuilder&lt;T, TRow&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordMapBuilder.cs/#L19"><i class="bi bi-code-slash"></i></a>
+Class ExcelRecordMapBuilder&lt;T, TRow&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordMapBuilder.cs/#L20"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -170,7 +170,7 @@ plan per (<code class="typeparamref">T</code>, <code class="typeparamref">TRow</
 
   <h3 id="ExcelReader_Core_Writer_ExcelRecordMapBuilder_2_Column_System_String_System_Action__1__0__" data-uid="ExcelReader.Core.Writer.ExcelRecordMapBuilder`2.Column(System.String,System.Action{`1,`0})">
   Column(string, Action&lt;TRow, T&gt;)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordMapBuilder.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordMapBuilder.cs/#L32"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Adds a column: its header text, and how to write one record's value for it.</p>
@@ -208,11 +208,62 @@ plan per (<code class="typeparamref">T</code>, <code class="typeparamref">TRow</
 
 
 
+  <a id="ExcelReader_Core_Writer_ExcelRecordMapBuilder_2_Column_" data-uid="ExcelReader.Core.Writer.ExcelRecordMapBuilder`2.Column*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_ExcelRecordMapBuilder_2_Column_System_String_System_Action__1__0__ExcelReader_Core_Writer_CellStyle_" data-uid="ExcelReader.Core.Writer.ExcelRecordMapBuilder`2.Column(System.String,System.Action{`1,`0},ExcelReader.Core.Writer.CellStyle)">
+  Column(string, Action&lt;TRow, T&gt;, CellStyle)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordMapBuilder.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a column whose data cells are written in <code class="paramref">style</code>; the header cell is left alone.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExcelRecordMapBuilder&lt;T, TRow&gt; Column(string header, Action&lt;TRow, T&gt; write, CellStyle style)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>header</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The column's header text.</p>
+</dd>
+    <dt><code>write</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;TRow, T&gt;</dt>
+    <dd><p>Writes exactly one cell for <code class="paramref">header</code>'s column, from a record.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="ExcelReader.Core.Writer.CellStyle.html">CellStyle</a></dt>
+    <dd><p>The style of the column's data cells; it replaces any column or row style on them.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.ExcelRecordMapBuilder-2.html">ExcelRecordMapBuilder</a>&lt;T, TRow&gt;</dt>
+    <dd><p>This builder, for chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>A value of <code class="paramref">style</code> is out of range.</p>
+</dd>
+  </dl>
+
+
+
 
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordMapBuilder.cs/#L19" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/ExcelRecordMapBuilder.cs/#L20" class="edit-link">Edit this page</a>
         </div>
 
 

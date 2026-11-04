@@ -162,7 +162,7 @@ Class XlsbRowWriter  <a class="header-action link-secondary" title="View source"
 
   <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_Dispose" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Dispose">
   Dispose()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbRowWriter.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbRowWriter.cs/#L285"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Synchronous counterpart to <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_DisposeAsync">DisposeAsync()</a>, for native/unmanaged callers whose ABI
@@ -190,7 +190,7 @@ is synchronous.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_DisposeAsync" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.DisposeAsync">
   DisposeAsync()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbRowWriter.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbRowWriter.cs/#L296"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or
@@ -224,7 +224,7 @@ resetting unmanaged resources asynchronously.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_Skip_System_Int32_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Skip(System.Int32)">
   Skip(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbRowWriter.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbRowWriter.cs/#L177"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Advances past <code class="paramref">count</code> columns without writing any cell for them, leaving
@@ -255,6 +255,54 @@ them blank when the row is read back.</p>
   <dl class="parameters">
     <dt><a class="xref" href="ExcelReader.Core.Reader.ExcelLimitExceededException.html">ExcelLimitExceededException</a></dt>
     <dd><p>Skipping would advance past Excel's 16,384-column limit.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_Style_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xlsb_XlsbRowWriter_Style_System_Int32_" data-uid="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.Style(System.Int32)">
+  Style(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xlsb/XlsbRowWriter.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Styles the next cell written, and only that cell, replacing the row and column style. Style 0 forces the general style.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public XlsbRowWriter Style(int styleId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>styleId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The style to apply, from <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbRowWriter.html">XlsbRowWriter</a></dt>
+    <dd><p>This row writer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>The row has already been disposed.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><code class="paramref">styleId</code> is negative or was never returned by <a class="xref" href="ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbWorkbookWriter_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>.</p>
 </dd>
   </dl>
 
