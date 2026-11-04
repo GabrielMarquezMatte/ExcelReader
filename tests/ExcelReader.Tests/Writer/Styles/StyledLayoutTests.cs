@@ -35,6 +35,14 @@ namespace ExcelReader.Tests.Writer.Styles
             public DateTime When { get; init; }
         }
 
+        public sealed class DefaultStamped
+        {
+            public string Name { get; init; } = "";
+
+            [ExcelStyle]
+            public DateTime When { get; init; }
+        }
+
         public sealed class Formatted
         {
             public string Name { get; init; } = "";
@@ -78,6 +86,7 @@ namespace ExcelReader.Tests.Writer.Styles
 
         private static readonly Payment[] Payments = [new() { Name = "a", Amount = 1.5 }, new() { Name = "b", Amount = 2 }];
         private static readonly Stamped[] Stamps = [new() { Name = "a", When = new DateTime(2026, 1, 2, 3, 4, 5) }];
+        private static readonly DefaultStamped[] DefaultStamps = [new() { Name = "a", When = new DateTime(2026, 1, 2, 3, 4, 5) }];
         private static readonly Formatted[] FormattedRows = [new() { Name = "a", Amount = 1.5 }];
         private static readonly Plain[] Plains = [new() { Name = "a", Amount = 1.5 }, new() { Name = "b", Amount = 2 }];
 
@@ -125,6 +134,14 @@ namespace ExcelReader.Tests.Writer.Styles
             ProbedStyle data = Probe(format, file, 1, 1);
             Assert.True(data.Bold);
             Assert.Equal("yyyy-mm-dd hh:mm:ss", data.NumberFormat);
+        }
+
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public async Task DefaultOverlayKeepsColumnNumberFormat(string format)
+        {
+            byte[] file = await WriteAsync(format, t => t.WriteAsync(DefaultStamps, ExcelRecordLayout.FromAttributes<DefaultStamped>(), styledColumn: 1, columnStyle: t.AddStyle(new CellStyle { NumberFormat = "hh:mm:ss" })));
+            Assert.Equal("hh:mm:ss", Probe(format, file, 1, 1).NumberFormat);
         }
 
         [Theory]

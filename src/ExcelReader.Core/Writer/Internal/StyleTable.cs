@@ -94,7 +94,7 @@ namespace ExcelReader.Core.Writer.Internal
         // Runs once per overlay push, before any worker starts; the gate keeps it safe next to DateVariant's registrations.
         internal int InheritNumberFormat(int overlayStyleId, int columnStyleId)
         {
-            if (overlayStyleId == 0 || columnStyleId == 0)
+            if (columnStyleId == 0)
             {
                 return overlayStyleId;
             }
@@ -102,7 +102,11 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 CellStyle overlay = _styles[overlayStyleId];
                 string? columnFormat = _styles[columnStyleId].NumberFormat;
-                return overlay.NumberFormat is null && columnFormat is not null ? Add(overlay with { NumberFormat = columnFormat }) : overlayStyleId;
+                if (overlay.NumberFormat is not null || columnFormat is null)
+                {
+                    return overlayStyleId;
+                }
+                return Add(overlay with { NumberFormat = columnFormat });
             }
         }
 
