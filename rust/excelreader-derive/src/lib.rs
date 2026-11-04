@@ -193,10 +193,10 @@ fn parse_style(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<proc_macro2
                 let setter = quote::format_ident!("{flag}");
                 setters.push(quote! { .#setter(true) });
             }
-            "wrap" => setters.push(quote! { .wrap_text(true) }),
+            "wrap_text" => setters.push(quote! { .wrap_text(true) }),
             "number_format" => {
                 let value: LitStr = key.value()?.parse()?;
-                if value.value().chars().count() > 255 {
+                if value.value().encode_utf16().count() > 255 {
                     return Err(syn::Error::new(
                         value.span(),
                         "number_format cannot be longer than 255 characters",
@@ -206,7 +206,7 @@ fn parse_style(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<proc_macro2
             }
             "font_name" => {
                 let value: LitStr = key.value()?.parse()?;
-                if !(1..=31).contains(&value.value().chars().count()) {
+                if !(1..=31).contains(&value.value().encode_utf16().count()) {
                     return Err(syn::Error::new(
                         value.span(),
                         "font_name must be 1 to 31 characters",
@@ -232,14 +232,14 @@ fn parse_style(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<proc_macro2
                 let value = color(&key)?;
                 setters.push(quote! { .fill_color(#value) });
             }
-            "h_align" => {
-                let variant = keyword(&key, "h_align", H_ALIGN)?;
+            "horizontal_alignment" => {
+                let variant = keyword(&key, "horizontal_alignment", H_ALIGN)?;
                 setters.push(quote! {
                     .horizontal_alignment(::excelreader::HorizontalAlignment::#variant)
                 });
             }
-            "v_align" => {
-                let variant = keyword(&key, "v_align", V_ALIGN)?;
+            "vertical_alignment" => {
+                let variant = keyword(&key, "vertical_alignment", V_ALIGN)?;
                 setters.push(quote! {
                     .vertical_alignment(::excelreader::VerticalAlignment::#variant)
                 });
@@ -284,7 +284,8 @@ fn parse_style(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<proc_macro2
 
 const UNKNOWN_STYLE_KEY: &str = "unsupported style(...) key, expected one of `bold`, `italic`, \
      `underline`, `strikethrough`, `number_format`, `font_name`, `font_size`, `font_color`, \
-     `fill_color`, `h_align`, `v_align`, `wrap`, `indent`, `rotation`, `border`, `border_color`";
+     `fill_color`, `horizontal_alignment`, `vertical_alignment`, `wrap_text`, `indent`, `rotation`, \
+     `border`, `border_color`";
 
 const H_ALIGN: &[(&str, &str)] = &[
     ("general", "General"),
@@ -891,10 +892,10 @@ mod tests {
         let output = expand_str(
             r#"
             struct Row {
-                #[excel(name = "V", style(bold, italic, underline, strikethrough, wrap,
+                #[excel(name = "V", style(bold, italic, underline, strikethrough, wrap_text,
                     number_format = "0.00", font_name = "Arial", font_size = 12,
-                    font_color = 0xFF0000, fill_color = -1, h_align = "center_continuous",
-                    v_align = "distributed", indent = 15, rotation = 255,
+                    font_color = 0xFF0000, fill_color = -1,
+                    horizontal_alignment = "center_continuous", vertical_alignment = "distributed", indent = 15, rotation = 255,
                     border = "slant_dash_dot", border_color = 0x0000FF))]
                 v: f64,
             }
@@ -938,8 +939,8 @@ mod tests {
             ("rotation = 91", "rotation"),
             ("rotation = -91", "rotation"),
             ("font_name = \"\"", "font_name"),
-            ("h_align = \"middle\"", "h_align"),
-            ("v_align = \"left\"", "v_align"),
+            ("horizontal_alignment = \"middle\"", "horizontal_alignment"),
+            ("vertical_alignment = \"left\"", "vertical_alignment"),
             ("border = \"thicker\"", "border"),
             ("border_color = 0xFF0000", "border_color"),
             ("colour = 1", "unsupported style"),
