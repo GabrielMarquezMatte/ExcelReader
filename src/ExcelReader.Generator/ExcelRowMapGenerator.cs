@@ -27,6 +27,16 @@ namespace ExcelReader.Generator
         private const string ConverterAttribute = "ExcelReader.Core.Parser.ExcelConverterAttribute";
         private const string CellConverterInterface = "ExcelReader.Core.Parser.IExcelCellConverter<T>";
         private const string CellWriterInterface = "ExcelReader.Core.Writer.IExcelCellWriter<T>";
+        private const string StyleAttribute = "ExcelReader.Core.Writer.ExcelStyleAttribute";
+
+        // Mirrors CellStyleValidation and ExcelColor.FromRgb in ExcelReader.Core, which the generator cannot reference.
+        private const double MinFontSize = 1;
+        private const double MaxFontSize = 409;
+        private const int MaxIndent = 15;
+        private const int MaxRotation = 90;
+        private const int StackedTextRotation = 255;
+        private const int MaxFontNameLength = 31;
+        private const int MaxRgb = 0xFFFFFF;
 
         private static readonly DiagnosticDescriptor NotPartialDescriptor = new(
             "EXR001",
@@ -104,6 +114,14 @@ namespace ExcelReader.Generator
             "EXR010",
             "[ExcelSerializable] type is file-local",
             "Type '{0}' is file-local (or nested in a file-local type), so the generated partial in another file would declare a different type; make it non-file-local",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor InvalidStyleDescriptor = new(
+            "EXR011",
+            "[ExcelStyle] has an invalid value",
+            "[ExcelStyle] on '{0}' has an invalid {1}: {2}",
             "ExcelReader.Generator",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -316,6 +334,7 @@ namespace ExcelReader.Generator
             AttributeData? converterAttr = property.GetAttributes()
                 .FirstOrDefault(a => string.Equals(a.AttributeClass?.ToDisplayString(), ConverterAttribute, StringComparison.Ordinal));
 
+            string? style = StyleExpression(diagnostics, property, ref hadPropertyError);
             ReadPlan read = default;
             string? writeEmit = null;
             string? converterFieldDecl = null;
@@ -342,7 +361,7 @@ namespace ExcelReader.Generator
                 }
                 if (implementsWriter && canGet)
                 {
-                    writeEmit = $"            .Column({Literal(names[0])}, static (row, m) => {fieldName}.Write(row, m.{member}))";
+                    writeEmit = ColumnEmit(names[0], $"static (row, m) => {fieldName}.Write(row, m.{member})", style);
                 }
             }
             else
@@ -366,7 +385,7 @@ namespace ExcelReader.Generator
                     bool needsNullConditional = isNullable || !underlying.IsValueType;
                     string valueExpr = WriteValueExpression(writeKind, needsNullConditional, member, underlying);
                     string writeMethod = writeKind == WriteKind.Utf8Text ? "WriteUtf8" : "Write";
-                    writeEmit = $"            .Column({Literal(names[0])}, static (row, m) => row.{writeMethod}({valueExpr}))";
+                    writeEmit = ColumnEmit(names[0], $"static (row, m) => row.{writeMethod}({valueExpr})", style);
                 }
             }
 
@@ -387,6 +406,67 @@ namespace ExcelReader.Generator
             string target = init.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             string decl = $"    [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = {Literal(init.MetadataName)})] private static extern void {accessor}({byRef}{target} target, {qualifiedProperty} value);";
             return ($"{accessor}({byRef}m, v)", decl);
+        }
+
+        private static string ColumnEmit(string header, string write, string? style)
+        {
+            if (style is null)
+            {
+                return $"            .Column({Literal(header)}, {write})";
+            }
+            return $"            .Column({Literal(header)}, {write}, {style})";
+        }
+
+        // The attribute's own ToCellStyle maps it to a CellStyle, so the generated map and reflection agree.
+        private static string? StyleExpression(List<DiagnosticInfo> diagnostics, IPropertySymbol property, ref bool hadPropertyError)
+        {
+            AttributeData? attribute = property.GetAttributes()
+                .FirstOrDefault(a => string.Equals(a.AttributeClass?.ToDisplayString(), StyleAttribute, StringComparison.Ordinal));
+            if (attribute is null)
+            {
+                return null;
+            }
+            var assignments = new List<string>(attribute.NamedArguments.Length);
+            bool valid = true;
+            foreach (KeyValuePair<string, TypedConstant> argument in attribute.NamedArguments)
+            {
+                if (IsInvalidStyleValue(argument.Key, argument.Value.Value))
+                {
+                    diagnostics.Add(DiagnosticInfo.Create(
+                        InvalidStyleDescriptor, property.Locations.FirstOrDefault(), property.Name, argument.Key, argument.Value.ToCSharpString()));
+                    hadPropertyError = true;
+                    valid = false;
+                    continue;
+                }
+                assignments.Add($"{argument.Key} = {StyleConstant(argument.Value)}");
+            }
+            if (!valid)
+            {
+                return null;
+            }
+            return $"new global::ExcelReader.Core.Writer.ExcelStyleAttribute {{ {string.Join(", ", assignments)} }}.ToCellStyle()";
+        }
+
+        private static bool IsInvalidStyleValue(string name, object? value)
+        {
+            return (name, value) switch
+            {
+                ("FontSize", double size) => size != 0 && !(size >= MinFontSize && size <= MaxFontSize),
+                ("Indent", int indent) => indent is < 0 or > MaxIndent,
+                ("Rotation", int rotation) => rotation is < -MaxRotation or > MaxRotation && rotation != StackedTextRotation,
+                ("FontName", string fontName) => fontName.Length is 0 or > MaxFontNameLength,
+                ("FontColor" or "FillColor" or "BorderColor", int rgb) => rgb is < -1 or > MaxRgb,
+                _ => false,
+            };
+        }
+
+        private static string StyleConstant(TypedConstant constant)
+        {
+            if (constant.Type is { TypeKind: TypeKind.Enum } enumType)
+            {
+                return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})({constant.Value})";
+            }
+            return constant.ToCSharpString();
         }
 
         private static string Literal(string value)

@@ -1033,5 +1033,110 @@ namespace ExcelReader.Tests.Generator
             Assert.Contains("global::ExcelReader.Core.Parser.ExcelCellReaders.Utf8(in c, in x, out global::System.ReadOnlySpan<byte> v)", generated, StringComparison.Ordinal);
             Assert.Contains("row.WriteUtf8(m.Station)", generated, StringComparison.Ordinal);
         }
+
+        [Fact]
+        public void StyledPropertyEmitsStyledColumn()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+                using ExcelReader.Core.Writer;
+
+                namespace GeneratorTests.Styled
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        public string Name { get; set; } = "";
+
+                        [ExcelStyle(Bold = true, Border = ExcelBorderStyle.Thin, FillColor = 0xFFFF00, NumberFormat = "0.00")]
+                        public double Amount { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(source);
+            Assert.Empty(diagnostics);
+            Assert.Empty(result.Emit().Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Contains(".Column(\"Amount\"", generated, StringComparison.Ordinal);
+            Assert.Contains("ToCellStyle()", generated, StringComparison.Ordinal);
+            Assert.DoesNotContain(".Column(\"Name\", static (row, m) => row.Write(m.Name), new", generated, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData("FontSize = 500")]
+        [InlineData("Indent = 16")]
+        [InlineData("Rotation = 91")]
+        [InlineData("FontName = \"\"")]
+        [InlineData("FillColor = 0x1000000")]
+        [InlineData("BorderColor = -2")]
+        public void InvalidStyleConstantReportsEXR011(string argument)
+        {
+            string source = $$"""
+                using ExcelReader.Core.Parser;
+                using ExcelReader.Core.Writer;
+
+                namespace GeneratorTests.InvalidStyle
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        [ExcelStyle({{argument}})]
+                        public double Amount { get; set; }
+                    }
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Diagnostic diagnostic = Assert.Single(diagnostics);
+            Assert.Equal("EXR011", diagnostic.Id);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        }
+
+        [Fact]
+        public void StackedRotationIsAValidStyleConstant()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+                using ExcelReader.Core.Writer;
+
+                namespace GeneratorTests.Stacked
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        [ExcelStyle(Rotation = 255, FontColor = -1)]
+                        public double Amount { get; set; }
+                    }
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+        }
+
+        [Fact]
+        public async Task GeneratedLayoutWritesAttributeStyle()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var ms = new MemoryStream();
+            await using (var workbook = ExcelReader.Core.Writer.Xlsx.XlsxWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                var sheet = workbook.AddSheet("S1");
+                await ExcelReader.Core.Writer.SheetWriterExtensions.WriteRecordsAsync(sheet, [new StyledGeneratedRecord { Name = "a", Amount = 1.5 }],
+                    ExcelReader.Core.Writer.ExcelRecordLayout.Generated<StyledGeneratedRecord>(), ct);
+                await sheet.EndAsync(ct);
+                await workbook.EndAsync(ct);
+            }
+            byte[] file = ms.ToArray();
+            Assert.False(ExcelReader.Tests.Writer.Styles.StyleProbe.Xlsx(file, 0, 1).Bold);
+            Assert.True(ExcelReader.Tests.Writer.Styles.StyleProbe.Xlsx(file, 1, 1).Bold);
+            Assert.False(ExcelReader.Tests.Writer.Styles.StyleProbe.Xlsx(file, 1, 0).Bold);
+        }
+    }
+
+    [ExcelReader.Core.Parser.ExcelSerializable]
+    public partial class StyledGeneratedRecord
+    {
+        public string Name { get; set; } = "";
+
+        [ExcelReader.Core.Writer.ExcelStyle(Bold = true)]
+        public double Amount { get; set; }
     }
 }
