@@ -250,6 +250,7 @@ typedef struct xl_write_options {
     int32_t batch_rows;
 } xl_write_options;
 
+/* Deprecated since 7.4, removed in 8.0: use xl_open_write_handle + xl_write_sheet, which also takes styles. */
 int32_t xl_write_typed(const uint8_t* path, int32_t path_len,
                        int32_t format,
                        const xl_column_spec* specs,
@@ -261,6 +262,7 @@ typedef struct xl_buffer {
     int64_t len;
 } xl_buffer;
 
+/* Deprecated since 7.4, removed in 8.0: use xl_open_write_handle_to_memory + xl_write_sheet. */
 int32_t xl_write_typed_to_memory(int32_t format,
                                  const xl_column_spec* specs,
                                  const xl_table* table,
@@ -402,6 +404,12 @@ int32_t xl_style_next_cell(xl_writer_handle* handle, int32_t style_id);
 #define XL_TABLE_FIRST_COLUMN    8
 #define XL_TABLE_LAST_COLUMN    16
 
+/* struct_size is sizeof(xl_sheet_options), or 40 for the ABI 6 layout that ends at table_flags. The
+   style arrays have table->column_count entries; a NULL array sets none, a NULL entry or a width of 0
+   keeps that column's default. Column styles reach the data cells only, never the header row, and a
+   style without a number format keeps a DATE/TIME/TIMESTAMP column's format. An invalid style or width
+   returns XL_INVALID_ARGUMENT and a format limit XL_ERROR, both before the sheet is added, so neither
+   affects the handle. */
 typedef struct xl_sheet_options {
     int32_t struct_size;
     int32_t table_name_len;
@@ -409,6 +417,9 @@ typedef struct xl_sheet_options {
     int32_t table_style_len;
     const uint8_t* table_style;   /* NULL: TableStyleMedium2 */
     int32_t table_flags;          /* XL_TABLE_* */
+    const xl_cell_style* const* column_styles;
+    const double* column_widths;  /* characters, 0-255 */
+    const xl_cell_style* header_style;
 } xl_sheet_options;
 
 /* One whole sheet, as xl_write_typed writes it; fails while a sheet is open. A NULL options writes a

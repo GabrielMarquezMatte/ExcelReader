@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
 using ExcelReader.Core.Reader;
@@ -537,6 +539,449 @@ namespace ExcelReader.Tests.Native
             Assert.False(styledRow.Bold);
             Assert.True((xlsb ? StyleProbe.Xlsb(bytes, 1, 1) : StyleProbe.Xls(bytes, 1, 1)).Italic);
             Assert.Equal(25, xlsb ? StyleProbe.RowHeightXlsb(bytes, 0) : StyleProbe.RowHeightXls(bytes, 0));
+        }
+
+        private static nint OpenParallelMemoryWriter(int format, int degreeOfParallelism, int batchRows)
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.DegreeOfParallelism = degreeOfParallelism;
+            raw.BatchRows = batchRows;
+            nint handle;
+            Assert.Equal(NativeStatus.Ok, ((delegate* unmanaged<int, NativeWriteOptionsRaw*, nint*, int>)&Exports.OpenWriteHandleToMemory)(format, &raw, &handle));
+            return handle;
+        }
+
+        private static IntPtr Unmanaged(List<IntPtr> blocks, int size)
+        {
+            IntPtr block = Marshal.AllocHGlobal(Math.Max(size, 1));
+            blocks.Add(block);
+            return block;
+        }
+
+        private static NativeColumnSpecRaw* RawSpecs(NativeColumnSpec[] specs, List<IntPtr> blocks)
+        {
+            var raw = (NativeColumnSpecRaw*)Unmanaged(blocks, specs.Length * sizeof(NativeColumnSpecRaw));
+            for (int index = 0; index < specs.Length; index++)
+            {
+                string[] names = specs[index].Names;
+                var pointers = (byte**)Unmanaged(blocks, names.Length * sizeof(nint));
+                var lengths = (int*)Unmanaged(blocks, names.Length * sizeof(int));
+                for (int n = 0; n < names.Length; n++)
+                {
+                    byte[] utf8 = Encoding.UTF8.GetBytes(names[n]);
+                    pointers[n] = (byte*)Unmanaged(blocks, utf8.Length);
+                    utf8.CopyTo(new Span<byte>(pointers[n], utf8.Length));
+                    lengths[n] = utf8.Length;
+                }
+                raw[index] = new NativeColumnSpecRaw { Names = pointers, NameLens = lengths, NameCount = names.Length, Index = index, Type = specs[index].Type };
+            }
+            return raw;
+        }
+
+        private static NativeCellStyleRaw* RawStyle(NativeCellStyleRaw? style, List<IntPtr> blocks)
+        {
+            if (style is not { } value)
+            {
+                return null;
+            }
+            var copy = (NativeCellStyleRaw*)Unmanaged(blocks, sizeof(NativeCellStyleRaw));
+            *copy = value;
+            return copy;
+        }
+
+        // Builds xl_sheet_options in a 64-byte block pre-filled with 0xFF, so a smaller struct_size proves the
+        // bytes past it are never read.
+        private static NativeSheetOptionsRaw* RawSheetOptions(SheetStyleArgs args, List<IntPtr> blocks)
+        {
+            NativeSheetOptionsRaw options = new() { StructSize = args.StructSize };
+            if (args.TableName is not null)
+            {
+                byte[] utf8 = Encoding.UTF8.GetBytes(args.TableName);
+                options.TableName = (byte*)Unmanaged(blocks, utf8.Length);
+                utf8.CopyTo(new Span<byte>(options.TableName, utf8.Length));
+                options.TableNameLen = utf8.Length;
+            }
+            if (args.ColumnStyles is not null)
+            {
+                options.ColumnStyles = (NativeCellStyleRaw**)Unmanaged(blocks, args.ColumnStyles.Length * sizeof(nint));
+                for (int index = 0; index < args.ColumnStyles.Length; index++)
+                {
+                    options.ColumnStyles[index] = RawStyle(args.ColumnStyles[index], blocks);
+                }
+            }
+            if (args.Widths is not null)
+            {
+                options.ColumnWidths = (double*)Unmanaged(blocks, args.Widths.Length * sizeof(double));
+                args.Widths.CopyTo(new Span<double>(options.ColumnWidths, args.Widths.Length));
+            }
+            options.HeaderStyle = RawStyle(args.HeaderStyle, blocks);
+            var block = (byte*)Unmanaged(blocks, sizeof(NativeSheetOptionsRaw));
+            new Span<byte>(block, sizeof(NativeSheetOptionsRaw)).Fill(0xFF);
+            new ReadOnlySpan<byte>(&options, args.StructSize).CopyTo(new Span<byte>(block, args.StructSize));
+            return (NativeSheetOptionsRaw*)block;
+        }
+
+        private sealed record SheetStyleArgs(
+            NativeCellStyleRaw?[]? ColumnStyles = null, double[]? Widths = null, NativeCellStyleRaw? HeaderStyle = null,
+            string? TableName = null, int StructSize = 64);
+
+        private static int WriteTypedSheet(nint handle, string name, NativeColumnSpec[] specs, NativeTable table, SheetStyleArgs args)
+        {
+            List<IntPtr> blocks = [];
+            try
+            {
+                NativeColumnSpecRaw* rawSpecs = RawSpecs(specs, blocks);
+                NativeSheetOptionsRaw* options = RawSheetOptions(args, blocks);
+                byte[] utf8 = Encoding.UTF8.GetBytes(name);
+                fixed (byte* nameBytes = utf8)
+                {
+                    return ((delegate* unmanaged<nint, byte*, int, NativeColumnSpecRaw*, NativeTable*, NativeSheetOptionsRaw*, int>)&Exports.WriteSheet)(
+                        handle, nameBytes, utf8.Length, rawSpecs, &table, options);
+                }
+            }
+            finally
+            {
+                foreach (IntPtr block in blocks)
+                {
+                    Marshal.FreeHGlobal(block);
+                }
+            }
+        }
+
+        private static byte[] WriteOneTypedSheet(int format, NativeColumnSpec[] specs, NativeTable table, SheetStyleArgs args)
+        {
+            nint handle = OpenMemoryWriter(format);
+            Assert.Equal(NativeStatus.Ok, WriteTypedSheet(handle, "S", specs, table, args));
+            return CloseAndReadBytes(handle);
+        }
+
+        private static ProbedStyle Probe(int format, byte[] bytes, int row, int column)
+        {
+            switch (format)
+            {
+                case NativeFormat.Xlsb:
+                    return StyleProbe.Xlsb(bytes, row, column);
+                case NativeFormat.Xls:
+                    return StyleProbe.Xls(bytes, row, column);
+                default:
+                    return StyleProbe.Xlsx(bytes, row, column);
+            }
+        }
+
+        private static string ContentDigest(byte[] file)
+        {
+            if (file is not [(byte)'P', (byte)'K', ..])
+            {
+                return Convert.ToHexString(SHA256.HashData(file));
+            }
+            using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            using var zip = new ZipArchive(new MemoryStream(file), ZipArchiveMode.Read);
+            foreach (ZipArchiveEntry entry in zip.Entries)
+            {
+                hash.AppendData(Encoding.UTF8.GetBytes(entry.FullName));
+                using var content = new MemoryStream();
+                entry.Open().CopyTo(content);
+                hash.AppendData(content.ToArray());
+            }
+            return Convert.ToHexString(hash.GetHashAndReset());
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, false)]
+        [InlineData(NativeFormat.Xlsx, true)]
+        [InlineData(NativeFormat.Xlsb, false)]
+        [InlineData(NativeFormat.Xlsb, true)]
+        [InlineData(NativeFormat.Xls, false)]
+        public void TypedColumnStylesDataOnly(int format, bool asTable)
+        {
+            NativeTable sales = BuildQtyNameTable([3L, 7L], ["widget", "gadget"]);
+            try
+            {
+                NativeCellStyleRaw bold = UnsetStyle() with { FontFlags = NativeCellStyle.Bold };
+                byte[] bytes = WriteOneTypedSheet(format, QtyNameSpecs(), sales,
+                    new SheetStyleArgs(ColumnStyles: [bold, bold], TableName: asTable ? "Sales" : null));
+
+                for (int column = 0; column < 2; column++)
+                {
+                    ProbedStyle header = Probe(format, bytes, 0, column);
+                    Assert.False(header.Bold);
+                    Assert.Null(header.FillRgb);
+                    Assert.True(Probe(format, bytes, 1, column).Bold);
+                    Assert.True(Probe(format, bytes, 2, column).Bold);
+                }
+                using IExcelWorkbook workbook = Excel.Open(bytes.AsMemory());
+                Assert.Equal(["qty|name", "3|widget", "7|gadget"], ReadCells(workbook.SheetAt(0)), StringComparer.Ordinal);
+                Assert.Equal(asTable ? 1 : 0, workbook.Tables.Count);
+            }
+            finally
+            {
+                FreeBuiltTable(ref sales);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TypedHeaderStyleAndWidths(bool asTable)
+        {
+            NativeTable sales = BuildQtyNameTable([3L, 7L], ["widget", "gadget"]);
+            try
+            {
+                NativeCellStyleRaw header = UnsetStyle() with { FontFlags = NativeCellStyle.Italic, FillColor = 0xDDEEFF };
+                byte[] bytes = WriteOneTypedSheet(NativeFormat.Xlsx, QtyNameSpecs(), sales,
+                    new SheetStyleArgs(Widths: [0, 24.5], HeaderStyle: header, TableName: asTable ? "Sales" : null));
+
+                for (int column = 0; column < 2; column++)
+                {
+                    ProbedStyle headerCell = StyleProbe.Xlsx(bytes, 0, column);
+                    Assert.True(headerCell.Italic);
+                    Assert.Equal(0xDDEEFF, headerCell.FillRgb);
+                    ProbedStyle data = StyleProbe.Xlsx(bytes, 1, column);
+                    Assert.False(data.Italic);
+                    Assert.Null(data.FillRgb);
+                }
+                XElement col = Assert.Single(XlsxSheetXml(bytes).Descendants(SpreadsheetMain + "col"));
+                Assert.Equal("2", col.Attribute("min")!.Value);
+                Assert.Equal(24.5, double.Parse(col.Attribute("width")!.Value, CultureInfo.InvariantCulture));
+            }
+            finally
+            {
+                FreeBuiltTable(ref sales);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, true)]
+        [InlineData(NativeFormat.Xlsx, false)]
+        [InlineData(NativeFormat.Xlsb, true)]
+        [InlineData(NativeFormat.Xlsb, false)]
+        public void TypedStyleKeepsTemporalFormat(int format, bool hasHeader)
+        {
+            NativeTable temporal = BuildTemporalTable(19000, 3_600_000_000L, 1_700_000_000_000_000L);
+            try
+            {
+                NativeColumnSpec[] specs =
+                [
+                    new() { Names = hasHeader ? ["date"] : [], Type = NativeColumnType.Date },
+                    new() { Names = hasHeader ? ["time"] : [], Type = NativeColumnType.Time },
+                    new() { Names = hasHeader ? ["stamp"] : [], Type = NativeColumnType.Timestamp },
+                ];
+                NativeCellStyleRaw bold = UnsetStyle() with { FontFlags = NativeCellStyle.Bold };
+                byte[] bytes = WriteOneTypedSheet(format, specs, temporal, new SheetStyleArgs(ColumnStyles: [bold, bold, bold]));
+
+                int row = hasHeader ? 1 : 0;
+                ProbedStyle time = Probe(format, bytes, row, 1);
+                Assert.True(time.Bold);
+                Assert.Equal("hh:mm:ss", time.NumberFormat);
+                ProbedStyle stamp = Probe(format, bytes, row, 2);
+                Assert.True(stamp.Bold);
+                Assert.Equal("yyyy-mm-dd hh:mm:ss", stamp.NumberFormat);
+                Assert.True(Probe(format, bytes, row, 0).Bold);
+                using IExcelWorkbook workbook = Excel.Open(bytes.AsMemory());
+                using IExcelRowEnumerator rows = workbook.SheetAt(0).GetEnumerator();
+                for (int skipped = 0; skipped <= row; skipped++)
+                {
+                    Assert.True(rows.MoveNext());
+                }
+                Assert.Equal([CellType.Date, CellType.Date, CellType.Date], [rows.Current[0].Type, rows.Current[1].Type, rows.Current[2].Type]);
+            }
+            finally
+            {
+                FreeBuiltTable(ref temporal);
+            }
+        }
+
+        [Fact]
+        public void TypedStyleExplicitNumberFormatWins()
+        {
+            NativeTable temporal = BuildTemporalTable(19000, 3_600_000_000L, 1_700_000_000_000_000L);
+            List<IntPtr> blocks = [];
+            try
+            {
+                byte[] format = Encoding.UTF8.GetBytes("[h]:mm");
+                var formatBytes = (byte*)Unmanaged(blocks, format.Length);
+                format.CopyTo(new Span<byte>(formatBytes, format.Length));
+                NativeCellStyleRaw duration = UnsetStyle() with { NumberFormat = formatBytes, NumberFormatLen = format.Length };
+                NativeColumnSpec[] specs =
+                [
+                    new() { Names = ["date"], Type = NativeColumnType.Date },
+                    new() { Names = ["time"], Type = NativeColumnType.Time },
+                    new() { Names = ["stamp"], Type = NativeColumnType.Timestamp },
+                ];
+                byte[] bytes = WriteOneTypedSheet(NativeFormat.Xlsx, specs, temporal, new SheetStyleArgs(ColumnStyles: [null, duration, null]));
+
+                Assert.Equal("[h]:mm", StyleProbe.Xlsx(bytes, 1, 1).NumberFormat);
+                Assert.Equal("yyyy-mm-dd hh:mm:ss", StyleProbe.Xlsx(bytes, 1, 2).NumberFormat);
+            }
+            finally
+            {
+                foreach (IntPtr block in blocks)
+                {
+                    Marshal.FreeHGlobal(block);
+                }
+                FreeBuiltTable(ref temporal);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, false)]
+        [InlineData(NativeFormat.Xlsx, true)]
+        [InlineData(NativeFormat.Xlsb, false)]
+        [InlineData(NativeFormat.Xlsb, true)]
+        public void TypedStylesInParallelWrite(int format, bool asTable)
+        {
+            const int RowCount = 9;
+            NativeTable table = BuildEveryTypeTable(RowCount);
+            try
+            {
+                NativeCellStyleRaw bold = UnsetStyle() with { FontFlags = NativeCellStyle.Bold };
+                NativeCellStyleRaw header = UnsetStyle() with { FontFlags = NativeCellStyle.Italic };
+                nint handle = OpenParallelMemoryWriter(format, degreeOfParallelism: 4, batchRows: 2);
+                Assert.Equal(NativeStatus.Ok, WriteTypedSheet(handle, "S", EveryTypeSpecs(), table,
+                    new SheetStyleArgs(ColumnStyles: [null, bold, null, null, null, bold, null], HeaderStyle: header, TableName: asTable ? "Data" : null)));
+                byte[] bytes = CloseAndReadBytes(handle);
+
+                ProbedStyle headerCell = Probe(format, bytes, 0, 1);
+                Assert.True(headerCell.Italic);
+                Assert.False(headerCell.Bold);
+                foreach (int row in new[] { 2, 4, 5, 6, 7, 8 })
+                {
+                    Assert.True(Probe(format, bytes, row, 1).Bold, $"row {row}");
+                    Assert.False(Probe(format, bytes, row, 2).Bold);
+                    ProbedStyle time = Probe(format, bytes, row, 5);
+                    Assert.True(time.Bold);
+                    Assert.Equal("hh:mm:ss", time.NumberFormat);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, "D397F2A61315BC0EACAAE77AED1D92C9DBEF4F3D8F0EEACD69B2E1271C486EC6")]
+        [InlineData(NativeFormat.Xlsb, "45249BA1281F1805EAECD53F29D817310ECFED9314BD39CB24D612F6DDDE44FD")]
+        [InlineData(NativeFormat.Xls, "C343CC4143F315F5C9FD32CF0F0AAFF51CA1C990F828952EF65734EE9DEA393E")]
+        [InlineData(NativeFormat.Csv, "FE3FE9C07148018D946635635108234CE122A47A88AEBEC5FDC6D73F980AD7E0")]
+        public void WriteTypedStillWorks(int format, string expectedDigest)
+        {
+            NativeTable table = BuildEveryTypeTable(7);
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, WriteApi.WriteTypedToMemory(format, EveryTypeSpecs(), table, DefaultWriteOptions(), out byte[]? bytes));
+                Assert.Equal(expectedDigest, ContentDigest(bytes!));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, "299C298F0C874FC9FB81060C72D6F335CD4F8EB72E5593C7031B11BE2703E353")]
+        [InlineData(NativeFormat.Xlsb, "3CA9DA1D60A9A5C2C6AE5DA25E302535C072BDF18C829E3432FDB9113730B410")]
+        public void Abi6SizesStillWork(int format, string expectedDigest)
+        {
+            NativeTable table = BuildEveryTypeTable(7);
+            try
+            {
+                byte[] bytes = WriteOneTypedSheet(format, EveryTypeSpecs(), table, new SheetStyleArgs(TableName: "Data", StructSize: NativeSheetOptionsRaw.V6Size));
+                Assert.Equal(expectedDigest, ContentDigest(bytes));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ColumnStylesInvalidEntry()
+        {
+            NativeTable sales = BuildQtyNameTable([3L], ["widget"]);
+            try
+            {
+                NativeCellStyleRaw bold = UnsetStyle() with { FontFlags = NativeCellStyle.Bold };
+                NativeCellStyleRaw badColor = UnsetStyle() with { FontColor = 0x1000000 };
+                nint handle = OpenMemoryWriter(NativeFormat.Xlsx);
+                SheetStyleArgs[] invalid =
+                [
+                    new(ColumnStyles: [bold, badColor]),
+                    new(HeaderStyle: badColor),
+                    new(Widths: [10, -1]),
+                    new(Widths: [256, 0]),
+                    new(Widths: [double.NaN, 0]),
+                    new(StructSize: 48),
+                ];
+                foreach (SheetStyleArgs args in invalid)
+                {
+                    Assert.Equal(NativeStatus.InvalidArgument, WriteTypedSheet(handle, "S", QtyNameSpecs(), sales, args));
+                    Assert.NotEmpty(NativeApi.LastErrorText());
+                }
+                Assert.Contains("column_styles[1]", WriteTypedSheetError(handle, sales, invalid[0]), StringComparison.Ordinal);
+
+                Assert.Equal(NativeStatus.Ok, WriteTypedSheet(handle, "S", QtyNameSpecs(), sales, new SheetStyleArgs(ColumnStyles: [bold, null])));
+                byte[] bytes = CloseAndReadBytes(handle);
+                using IExcelWorkbook workbook = Excel.Open(bytes.AsMemory());
+                Assert.Equal(1, workbook.SheetCount);
+                Assert.True(StyleProbe.Xlsx(bytes, 1, 0).Bold);
+                Assert.False(StyleProbe.Xlsx(bytes, 1, 1).Bold);
+            }
+            finally
+            {
+                FreeBuiltTable(ref sales);
+            }
+        }
+
+        private static string WriteTypedSheetError(nint handle, NativeTable table, SheetStyleArgs args)
+        {
+            Assert.Equal(NativeStatus.InvalidArgument, WriteTypedSheet(handle, "S", QtyNameSpecs(), table, args));
+            return NativeApi.LastErrorText();
+        }
+
+        [Fact]
+        public void ColumnStyleLimitIsErrorWithoutPoisoning()
+        {
+            NativeTable sales = BuildQtyNameTable([3L], ["widget"]);
+            try
+            {
+                nint handle = OpenMemoryWriter(NativeFormat.Xls);
+                for (int color = 0; color < 56; color++)
+                {
+                    RegisterStyle(handle, UnsetStyle() with { FillColor = color });
+                }
+
+                Assert.Equal(NativeStatus.Error, WriteTypedSheet(handle, "S", QtyNameSpecs(), sales,
+                    new SheetStyleArgs(ColumnStyles: [UnsetStyle() with { FillColor = 56 }, null])));
+                Assert.NotEmpty(NativeApi.LastErrorText());
+                Assert.Equal(NativeStatus.Ok, WriteTypedSheet(handle, "S", QtyNameSpecs(), sales, new SheetStyleArgs()));
+                byte[] bytes = CloseAndReadBytes(handle);
+                using IExcelWorkbook workbook = Excel.Open(bytes.AsMemory());
+                Assert.Equal(1, workbook.SheetCount);
+            }
+            finally
+            {
+                FreeBuiltTable(ref sales);
+            }
+        }
+
+        [Fact]
+        public void TypedStylesOnCsvAreNoOps()
+        {
+            NativeTable sales = BuildQtyNameTable([3L, 7L], ["widget", "gadget"]);
+            try
+            {
+                NativeCellStyleRaw bold = UnsetStyle() with { FontFlags = NativeCellStyle.Bold };
+                byte[] plain = WriteOneTypedSheet(NativeFormat.Csv, QtyNameSpecs(), sales, new SheetStyleArgs());
+                byte[] styled = WriteOneTypedSheet(NativeFormat.Csv, QtyNameSpecs(), sales,
+                    new SheetStyleArgs(ColumnStyles: [bold, bold], Widths: [10, 20], HeaderStyle: bold));
+
+                Assert.Equal(plain, styled);
+            }
+            finally
+            {
+                FreeBuiltTable(ref sales);
+            }
         }
     }
 }
