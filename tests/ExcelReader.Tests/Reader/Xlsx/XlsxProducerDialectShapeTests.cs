@@ -22,7 +22,34 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
         public static IEnumerable<object[]> ProducerFixtures
         {
-            get { return DotNetAndJsProducerFixtures().Concat(CloudAndJavaProducerFixtures()); }
+            get { return DotNetAndJsProducerFixtures().Concat(CloudAndJavaProducerFixtures()).Concat(PythonProducerFixtures()); }
+        }
+
+        private static IEnumerable<object[]> PythonProducerFixtures()
+        {
+            yield return
+            [
+                new ProducerFixture(
+                    "openpyxl-like styled cells with no value, written open-and-closed instead of self-closing",
+                    """
+                    <sheetData>
+                        <row r="1">
+                            <c r="A1" s="1" t="n"></c>
+                            <c r="B1" t="n"><v>2</v></c>
+                            <c r="C1" s="1" t="b"></c>
+                            <c r="D1" t="s"><v>0</v></c>
+                        </row>
+                    </sheetData>
+                    """,
+                    "<si><t>openpyxl</t></si>",
+                    """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""",
+                    [
+                        new ExpectedCell(0, 0, CellType.Empty, ""),
+                        new ExpectedCell(0, 1, CellType.Number, "2"),
+                        new ExpectedCell(0, 2, CellType.Empty, ""),
+                        new ExpectedCell(0, 3, CellType.ExcelString, "openpyxl"),
+                    ])
+            ];
         }
 
         private static IEnumerable<object[]> DotNetAndJsProducerFixtures()
