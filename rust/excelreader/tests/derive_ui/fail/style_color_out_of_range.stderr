@@ -1,0 +1,5 @@
+error: a color must be 0xRRGGBB (0 to 0xFFFFFF), or -1 for unset
+ --> tests/derive_ui/fail/style_color_out_of_range.rs:5:48
+  |
+5 |     #[excel(name = "Valor", style(font_color = 0x1000000))]
+  |                                                ^^^^^^^^^

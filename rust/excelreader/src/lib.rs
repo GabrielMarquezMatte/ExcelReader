@@ -11,6 +11,7 @@ mod foreach;
 mod options;
 mod rows;
 mod source;
+mod style;
 mod temporal;
 mod workbook;
 mod writer;
@@ -24,15 +25,15 @@ pub use error::{Error, ErrorKind};
 pub use options::{Format, OpenOptions, ReadOptions, WriteOptions};
 pub use rows::{AllRows, CellIter, CellRef, CellType, RowCursor, RowRef};
 pub use source::Source;
+pub use style::{Border, BorderStyle, CellStyle, HorizontalAlignment, VerticalAlignment};
 pub use temporal::{Date, Time, Timestamp};
 pub use workbook::{
     ColumnType, ExcelMapper, InferredColumn, Sheet, SheetVisibility, Table, TableBatches,
     TableInfo, TableView, TableViewIter, TypedBatches, Workbook,
 };
-pub use writer::{
-    encrypt_package, write_columns, write_columns_to, write_sheet, write_sheet_to, Column,
-    ColumnData, ExcelWriter, TableOptions,
-};
+pub use writer::{encrypt_package, Column, ColumnData, ExcelWriter, SheetOptions, TableOptions};
+#[allow(deprecated)]
+pub use writer::{write_columns, write_columns_to, write_sheet, write_sheet_to};
 pub use writer_handle::WriterHandle;
 
 #[cfg(feature = "arrow")]

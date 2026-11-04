@@ -1030,6 +1030,7 @@ impl Table {
             data: unsafe { column_data(raw) },
             validity: (!raw.validity.is_null())
                 .then(|| unsafe { native_slice(raw.validity, (raw.length as usize).div_ceil(8)) }),
+            style: None,
         })
     }
 
