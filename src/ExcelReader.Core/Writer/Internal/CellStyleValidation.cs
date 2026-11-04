@@ -51,6 +51,8 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         private static bool IsDefined(CellBorder? border)
-            => border is null || border.Value.Style is >= ExcelBorderStyle.None and <= ExcelBorderStyle.SlantDashDot;
+        {
+            return border is null || border.Value.Style is >= ExcelBorderStyle.None and <= ExcelBorderStyle.SlantDashDot;
+        }
     }
 }

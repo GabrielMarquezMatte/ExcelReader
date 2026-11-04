@@ -20,6 +20,9 @@ namespace ExcelReader.Core.Writer
             return new ExcelColor((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
         }
 
-        internal int ToRgb() => (R << 16) | (G << 8) | B;
+        internal int ToRgb()
+        {
+            return (R << 16) | (G << 8) | B;
+        }
     }
 }
