@@ -106,6 +106,108 @@ namespace Snippets.Writing.Styles
     }
 }
 
+namespace Snippets.Writing.CellStyles
+{
+    internal static class Snippet
+    {
+        internal static async Task Run(Stream stream)
+        {
+            #region writing-cell-styles
+            await using var workbook = XlsxWorkbookWriter.Create(stream);
+
+            int title = workbook.AddStyle(new CellStyle
+            {
+                Bold = true,
+                FontSize = 14,
+                FontColor = ExcelColor.FromRgb(0xFFFFFF),
+                FillColor = ExcelColor.FromRgb(0x1F4E78),
+                HorizontalAlignment = ExcelHorizontalAlignment.Center,
+                VerticalAlignment = ExcelVerticalAlignment.Center,
+            });
+            var thin = new CellBorder(ExcelBorderStyle.Thin, ExcelColor.FromRgb(0x808080));
+            int boxed = workbook.AddStyle(new CellStyle { Left = thin, Right = thin, Top = thin, Bottom = thin });
+            int warning = workbook.AddStyle(new CellStyle { FontColor = ExcelColor.FromRgb(0xC00000), Italic = true });
+
+            await using var sheet = workbook.AddSheet("Report");
+            await using (var row = await sheet.StartRowAsync(title, height: 30)) // row style and height in points
+            {
+                row.Write("Quarterly report");
+            }
+            await using (var row = await sheet.StartRowAsync())
+            {
+                row.Style(boxed).Write("Revenue"); // Style applies to the next cell only
+                row.Style(boxed).Write(1234.5);
+                row.Style(warning).Write("estimate");
+            }
+
+            await workbook.EndAsync();
+            #endregion
+        }
+    }
+}
+
+namespace Snippets.Writing.StyledRecords
+{
+    #region writing-styled-records
+    public sealed class Payment
+    {
+        public string Customer { get; init; } = "";
+
+        [ExcelStyle(NumberFormat = "#,##0.00", Bold = true)]
+        public decimal Amount { get; init; }
+    }
+
+    public sealed class Balance : IExcelRecordMap<Balance>
+    {
+        public static int Negative; // a style id registered on the workbook before writing
+
+        public string Account { get; init; } = "";
+
+        public double Value { get; init; }
+
+        public static void ConfigureExcelRecordMap<TRow>(ExcelRecordMapBuilder<Balance, TRow> builder)
+            where TRow : IRowWriter
+        {
+            builder
+                .Column("Account", static (row, b) => row.Write(b.Account))
+                .Column("Value", static (row, b) =>
+                {
+                    if (b.Value < 0)
+                    {
+                        row.Style(Negative);
+                    }
+                    row.Write(b.Value);
+                });
+        }
+    }
+    #endregion
+
+    internal static class Snippet
+    {
+        internal static async Task Run(Stream stream, IEnumerable<Payment> payments, IEnumerable<Balance> balances)
+        {
+            #region writing-styled-records
+            await using var workbook = XlsxWorkbookWriter.Create(stream);
+            Balance.Negative = workbook.AddStyle(new CellStyle { FontColor = ExcelColor.FromRgb(0xFF0000) });
+
+            ExcelRecordLayout<Payment> layout = ExcelRecordLayout.FromAttributes<Payment>()
+                .WithHeaderStyle(new CellStyle { Bold = true, FillColor = ExcelColor.FromRgb(0xD9E1F2) });
+
+            await using (var sheet = workbook.AddSheet("Payments"))
+            {
+                await sheet.WriteRecordsAsync(payments, layout);
+            }
+            await using (var sheet = workbook.AddSheet("Balances"))
+            {
+                await sheet.WriteRecordsAsync(balances, ExcelRecordLayout.Generated<Balance>());
+            }
+
+            await workbook.EndAsync();
+            #endregion
+        }
+    }
+}
+
 namespace Snippets.Writing.Xlsb
 {
     #region writing-xlsb
