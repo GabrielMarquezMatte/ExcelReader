@@ -6,7 +6,9 @@ namespace ExcelReader.Core.Writer.Internal
     internal readonly record struct FontKey(string? Name, double? Size, ExcelColor? Color, bool Bold, bool Italic, bool Underline, bool Strikethrough)
     {
         internal static FontKey Of(in CellStyle style)
-            => new(style.FontName, style.FontSize, style.FontColor, style.Bold, style.Italic, style.Underline, style.Strikethrough);
+        {
+            return new(style.FontName, style.FontSize, style.FontColor, style.Bold, style.Italic, style.Underline, style.Strikethrough);
+        }
 
         private const int DefaultTwips = 220;
 
@@ -21,7 +23,10 @@ namespace ExcelReader.Core.Writer.Internal
     [StructLayout(LayoutKind.Auto)]
     internal readonly record struct BorderKey(CellBorder? Left, CellBorder? Right, CellBorder? Top, CellBorder? Bottom)
     {
-        internal static BorderKey Of(in CellStyle style) => new(style.Left, style.Right, style.Top, style.Bottom);
+        internal static BorderKey Of(in CellStyle style)
+        {
+            return new(style.Left, style.Right, style.Top, style.Bottom);
+        }
     }
 
     internal sealed record StyleLimits(int MaxCellXfs, int MaxFonts, int MaxPaletteColors)
@@ -68,10 +73,19 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal IReadOnlyList<BorderKey> Borders { get; } = borders;
 
-        internal int FontId(int styleIndex) => fontIds[styleIndex];
+        internal int FontId(int styleIndex)
+        {
+            return fontIds[styleIndex];
+        }
 
-        internal int FillId(int styleIndex) => fillIds[styleIndex];
+        internal int FillId(int styleIndex)
+        {
+            return fillIds[styleIndex];
+        }
 
-        internal int BorderId(int styleIndex) => borderIds[styleIndex];
+        internal int BorderId(int styleIndex)
+        {
+            return borderIds[styleIndex];
+        }
     }
 }

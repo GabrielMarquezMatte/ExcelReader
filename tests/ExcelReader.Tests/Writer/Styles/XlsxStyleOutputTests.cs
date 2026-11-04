@@ -9,7 +9,10 @@ namespace ExcelReader.Tests.Writer.Styles
     {
         private const string UnstyledStylesPart = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"1\"><numFmt numFmtId=\"14\" formatCode=\"mm-dd-yy\"/></numFmts><fonts count=\"1\"><font/></fonts><fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills><borders count=\"1\"><border/></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"2\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/><xf numFmtId=\"14\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/></cellXfs></styleSheet>";
 
-        private static ExcelColor Color(int rgb) => ExcelColor.FromRgb(rgb);
+        private static ExcelColor Color(int rgb)
+        {
+            return ExcelColor.FromRgb(rgb);
+        }
 
         private static async Task<byte[]> WriteStyledCellAsync(CellStyle? style)
         {
@@ -44,13 +47,23 @@ namespace ExcelReader.Tests.Writer.Styles
         {
             byte[] file = await WriteStyledCellAsync(new CellStyle
             {
-                FontName = "Consolas", FontSize = 14, FontColor = Color(0x1F4E79),
-                Bold = true, Italic = true, Underline = true, Strikethrough = true,
+                FontName = "Consolas",
+                FontSize = 14,
+                FontColor = Color(0x1F4E79),
+                Bold = true,
+                Italic = true,
+                Underline = true,
+                Strikethrough = true,
             });
             Assert.Equal(Defaults with
             {
-                FontName = "Consolas", FontSize = 14, FontRgb = 0x1F4E79,
-                Bold = true, Italic = true, Underline = true, Strikethrough = true,
+                FontName = "Consolas",
+                FontSize = 14,
+                FontRgb = 0x1F4E79,
+                Bold = true,
+                Italic = true,
+                Underline = true,
+                Strikethrough = true,
             }, StyleProbe.Xlsx(file, 0, 0));
         }
 
@@ -85,13 +98,19 @@ namespace ExcelReader.Tests.Writer.Styles
         {
             byte[] file = await WriteStyledCellAsync(new CellStyle
             {
-                HorizontalAlignment = ExcelHorizontalAlignment.Center, VerticalAlignment = ExcelVerticalAlignment.Top,
-                WrapText = true, Indent = 3, Rotation = -45,
+                HorizontalAlignment = ExcelHorizontalAlignment.Center,
+                VerticalAlignment = ExcelVerticalAlignment.Top,
+                WrapText = true,
+                Indent = 3,
+                Rotation = -45,
             });
             Assert.Equal(Defaults with
             {
-                Horizontal = ExcelHorizontalAlignment.Center, Vertical = ExcelVerticalAlignment.Top,
-                Wrap = true, Indent = 3, Rotation = -45,
+                Horizontal = ExcelHorizontalAlignment.Center,
+                Vertical = ExcelVerticalAlignment.Top,
+                Wrap = true,
+                Indent = 3,
+                Rotation = -45,
             }, StyleProbe.Xlsx(file, 0, 0));
             Assert.Contains("textRotation=\"135\"", StylesPart(file), StringComparison.Ordinal);
         }

@@ -43,7 +43,11 @@ namespace ExcelReader.Tests.Writer.Styles
         [Fact]
         public void EqualStylesWithBordersShareOneId()
         {
-            CellStyle Make() => new() { Left = new CellBorder(ExcelBorderStyle.Thin, ExcelColor.FromRgb(0xFF0000)) };
+            CellStyle Make()
+            {
+                return new() { Left = new CellBorder(ExcelBorderStyle.Thin, ExcelColor.FromRgb(0xFF0000)) };
+            }
+
             using var ms = new MemoryStream();
             using var wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
             Assert.Equal(wb.AddStyle(Make()), wb.AddStyle(Make()));
@@ -57,7 +61,9 @@ namespace ExcelReader.Tests.Writer.Styles
         [InlineData("xls", 0.5)]
         [InlineData("xls", 410.0)]
         public void FontSizeOutOfRangeThrows(string format, double size)
-            => AssertRejected(format, new CellStyle { FontSize = size });
+        {
+            AssertRejected(format, new CellStyle { FontSize = size });
+        }
 
         [Theory]
         [InlineData("xlsx", 16)]
@@ -67,7 +73,9 @@ namespace ExcelReader.Tests.Writer.Styles
         [InlineData("xls", 16)]
         [InlineData("xls", -1)]
         public void IndentOutOfRangeThrows(string format, int indent)
-            => AssertRejected(format, new CellStyle { Indent = indent });
+        {
+            AssertRejected(format, new CellStyle { Indent = indent });
+        }
 
         [Theory]
         [InlineData("xlsx", 91)]
@@ -80,17 +88,23 @@ namespace ExcelReader.Tests.Writer.Styles
         [InlineData("xls", -91)]
         [InlineData("xls", 254)]
         public void RotationOutOfRangeThrows(string format, int rotation)
-            => AssertRejected(format, new CellStyle { Rotation = rotation });
+        {
+            AssertRejected(format, new CellStyle { Rotation = rotation });
+        }
 
         [Theory]
         [MemberData(nameof(Formats))]
         public void StackedTextRotationIsAccepted(string format)
-            => Assert.True(AddStyle(format, new CellStyle { Rotation = CellStyle.StackedTextRotation }) > 1);
+        {
+            Assert.True(AddStyle(format, new CellStyle { Rotation = CellStyle.StackedTextRotation }) > 1);
+        }
 
         [Theory]
         [MemberData(nameof(Formats))]
         public void FontNameLongerThan31CharactersThrows(string format)
-            => AssertRejected(format, new CellStyle { FontName = new string('a', 32) });
+        {
+            AssertRejected(format, new CellStyle { FontName = new string('a', 32) });
+        }
 
         [Theory]
         [MemberData(nameof(Formats))]
@@ -103,22 +117,30 @@ namespace ExcelReader.Tests.Writer.Styles
         [Theory]
         [MemberData(nameof(Formats))]
         public void OverlongNumberFormatStillThrows(string format)
-            => AssertRejected(format, new CellStyle { NumberFormat = new string('0', 256) });
+        {
+            AssertRejected(format, new CellStyle { NumberFormat = new string('0', 256) });
+        }
 
         [Theory]
         [MemberData(nameof(Formats))]
         public void UndefinedBorderStyleThrows(string format)
-            => AssertRejected(format, new CellStyle { Left = new CellBorder((ExcelBorderStyle)99) });
+        {
+            AssertRejected(format, new CellStyle { Left = new CellBorder((ExcelBorderStyle)99) });
+        }
 
         [Theory]
         [MemberData(nameof(Formats))]
         public void UndefinedHorizontalAlignmentThrows(string format)
-            => AssertRejected(format, new CellStyle { HorizontalAlignment = (ExcelHorizontalAlignment)99 });
+        {
+            AssertRejected(format, new CellStyle { HorizontalAlignment = (ExcelHorizontalAlignment)99 });
+        }
 
         [Theory]
         [MemberData(nameof(Formats))]
         public void UndefinedVerticalAlignmentThrows(string format)
-            => AssertRejected(format, new CellStyle { VerticalAlignment = (ExcelVerticalAlignment)(-1) });
+        {
+            AssertRejected(format, new CellStyle { VerticalAlignment = (ExcelVerticalAlignment)(-1) });
+        }
 
         [Fact]
         public void FromRgbRejectsValuesOutsideTwentyFourBits()
