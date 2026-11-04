@@ -13,6 +13,16 @@ namespace ExcelReader.Native.Writer
 
         internal abstract void StartRow();
 
+        internal abstract void StartRow(int styleId, double height);
+
+        internal abstract int AddStyle(CellStyle style);
+
+        internal abstract void SetColumnStyle(int column, int styleId);
+
+        internal abstract void SetColumnWidth(int column, double width);
+
+        internal abstract void StyleNextCell(int styleId);
+
         internal abstract void WriteString(string? value);
 
         internal abstract void WriteInt64(long value);
@@ -114,6 +124,22 @@ namespace ExcelReader.Native.Writer
 
         internal override void StartRow()
         {
+            _row = SheetForNextRow().StartRow();
+        }
+
+        internal override void StartRow(int styleId, double height)
+        {
+            TSheet sheet = SheetForNextRow();
+            if (height == 0)
+            {
+                _row = sheet.StartRow(styleId);
+                return;
+            }
+            _row = sheet.StartRow(styleId, height);
+        }
+
+        private TSheet SheetForNextRow()
+        {
             if (_sheet is null)
             {
                 throw new InvalidOperationException("Cannot start a row before starting a sheet.");
@@ -122,7 +148,32 @@ namespace ExcelReader.Native.Writer
             {
                 throw new InvalidOperationException("A row is already open; call xl_end_row before starting another.");
             }
-            _row = _sheet.StartRow();
+            return _sheet;
+        }
+
+        internal override int AddStyle(CellStyle style)
+        {
+            return _workbook.AddStyle(style);
+        }
+
+        internal override void SetColumnStyle(int column, int styleId)
+        {
+            OpenSheet().SetColumnStyle(column, styleId);
+        }
+
+        internal override void SetColumnWidth(int column, double width)
+        {
+            OpenSheet().SetColumnWidth(column, width);
+        }
+
+        private TSheet OpenSheet()
+        {
+            return _sheet ?? throw new InvalidOperationException("Cannot set a column style or width before starting a sheet.");
+        }
+
+        internal override void StyleNextCell(int styleId)
+        {
+            Row().Style(styleId);
         }
 
         internal override void WriteString(string? value)
@@ -176,8 +227,15 @@ namespace ExcelReader.Native.Writer
             {
                 throw new InvalidOperationException("Cannot end a row before starting one.");
             }
-            _row.Dispose();
-            _row = null;
+            // A row that throws for a pending style has still ended.
+            try
+            {
+                _row.Dispose();
+            }
+            finally
+            {
+                _row = null;
+            }
         }
 
         internal override void EndSheet()

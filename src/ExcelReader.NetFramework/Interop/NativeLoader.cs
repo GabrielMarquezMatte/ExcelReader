@@ -6,7 +6,7 @@ namespace ExcelReader.NetFramework.Interop
 {
     internal static class NativeLoader
     {
-        internal const int AbiVersion = 6;
+        internal const int AbiVersion = 7;
 
         private const string DllName = "ExcelReader.Native.dll";
 

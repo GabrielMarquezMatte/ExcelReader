@@ -34,7 +34,7 @@ pub const XL_CELL_ERROR: i32 = 6;
 
 /// ABI revision this crate is compiled against. Every constructor refuses to proceed when the loaded
 /// library's `xl_abi_version()` disagrees - see `workbook::check_abi_version`.
-pub const XL_ABI_VERSION: i32 = 6;
+pub const XL_ABI_VERSION: i32 = 7;
 
 pub const XL_T_STRING: i32 = 0;
 pub const XL_T_I64: i32 = 1;
