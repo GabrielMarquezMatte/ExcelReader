@@ -15,6 +15,8 @@ from excelreader import (
     write_workbook,
 )
 
+pytestmark = pytest.mark.filterwarnings("ignore:write_workbook:DeprecationWarning")
+
 _SCHEMA = [
     ColumnSpec(ColumnType.STRING, name="name"),
     ColumnSpec(ColumnType.I64, name="qty"),
@@ -556,3 +558,9 @@ def test_write_workbook_frees_its_column_copies_without_a_gc_pass():
         gc.enable()
 
     assert leaked == []
+
+
+def test_write_workbook_warns_that_it_is_deprecated(tmp_path):
+    table = TypedTable(row_count=1, names=["qty"], columns=[array("q", [3])], validity=[None])
+    with pytest.warns(DeprecationWarning, match="open_writer"):
+        write_workbook(tmp_path / "out.csv", table, [ColumnType.I64])

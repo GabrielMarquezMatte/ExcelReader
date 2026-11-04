@@ -1,7 +1,7 @@
 """The streaming writer: one sheet and one row open at a time, written as each call arrives.
 
 Mirrors the xl_writer_handle call order documented in
-src/ExcelReader.Native/include/excelreader.h. `write_workbook()` in writer.py is the columnar
+src/ExcelReader.Native/include/excelreader.h. `write_sheet()` is the columnar
 alternative, which builds the whole table first.
 """
 
@@ -11,11 +11,11 @@ import ctypes
 import datetime
 import os
 from pathlib import Path
-from typing import IO, Any, Sequence, Union
+from typing import IO, Any, Mapping, Sequence, Union
 
 from excelreader import _native
 from excelreader.reader import _check
-from excelreader.types import ColumnType, TableOptions, WriteOptions
+from excelreader.types import CellStyle, ColumnType, TableOptions, WriteOptions
 from excelreader.writer import _marshal, _typed_table, _write_all
 
 _EPOCH_DATE = datetime.date(1970, 1, 1)
@@ -72,7 +72,15 @@ class SheetWriter:
         _check(self._lib.xl_end_sheet(self._require_handle()))
 
     def write_sheet(
-        self, name: str, data: Any, types: list[ColumnType] | None = None, *, table: TableOptions | None = None
+        self,
+        name: str,
+        data: Any,
+        types: list[ColumnType] | None = None,
+        *,
+        table: TableOptions | None = None,
+        column_styles: Mapping[str, CellStyle] | None = None,
+        header_style: CellStyle | None = None,
+        column_widths: Mapping[str, float] | None = None,
     ) -> None:
         """Writes `data` as a whole sheet named `name`, in one native call instead of one per cell.
 
@@ -81,11 +89,24 @@ class SheetWriter:
         become the header row. With `table`, the sheet is written as an Excel table (xlsx/xlsb only).
         Parallelism and the other options come from `open_writer`; `WriteOptions.sheet_name` does not
         apply. Raises `ExcelReaderError` while a sheet started with `start_sheet` is open.
+
+        `column_styles` and `column_widths` (in characters) are keyed by column name; a column left
+        out keeps its default, and a name that is not a column raises `ValueError`. A column style
+        reaches the data cells only, never the header row, and one without a `number_format` keeps a
+        DATE, TIME or TIMESTAMP column's format. `header_style` styles the header row.
         """
         typed, types = _typed_table(data, types)
+        unknown = [key for mapping in (column_styles, column_widths) for key in mapping or () if key not in typed.names]
+        if unknown:
+            raise ValueError(f"unknown column name {unknown[0]!r}; the columns are {typed.names}")
         specs, native_table, _, keepalive = _marshal(typed, types, None)
         pointer, length = _encode(name)
-        options = _native.to_native_sheet_options(table)
+        options = _native.to_native_sheet_options(
+            table,
+            None if column_styles is None else [column_styles.get(column) for column in typed.names],
+            header_style,
+            None if column_widths is None else [column_widths.get(column, 0.0) for column in typed.names],
+        )
         _check(
             self._lib.xl_write_sheet(
                 self._require_handle(), pointer, length, specs, ctypes.byref(native_table),
@@ -94,16 +115,47 @@ class SheetWriter:
         )
         del keepalive
 
-    def write_row(self, values: Sequence[Any]) -> None:
+    def add_style(self, style: CellStyle) -> int:
+        """Registers `style` and returns its id; an equal style returns the same id, and id 0 is the
+        general style, which needs no registering. Raises `ExcelReaderError` for an invalid value or
+        a format limit, leaving the writer usable.
+        """
+        raw = _native.to_native_cell_style(style)
+        style_id = ctypes.c_int32()
+        _check(self._lib.xl_add_style(self._require_handle(), ctypes.byref(raw), ctypes.byref(style_id)))
+        return style_id.value
+
+    def set_column_style(self, column: int, style_id: int) -> None:
+        """Styles every cell of the 0-based `column` of the open sheet; call it before the sheet's first row."""
+        _check(self._lib.xl_set_column_style(self._require_handle(), column, style_id))
+
+    def set_column_width(self, column: int, width: float) -> None:
+        """Sets the 0-based `column`'s width in characters (0-255); call it before the sheet's first row."""
+        _check(self._lib.xl_set_column_width(self._require_handle(), column, width))
+
+    def write_row(
+        self,
+        values: Sequence[Any],
+        *,
+        style_id: int = 0,
+        height: float = 0,
+        cell_styles: Sequence[int | None] | None = None,
+    ) -> None:
         """Writes one row, one cell per value, its type inferred from the value.
+
+        `style_id` styles every cell of the row, beating column styles, and `height` is the row's
+        height in points (0 for the default). A non-None `cell_styles[i]` styles value `i` alone,
+        over the row and column styles; its length must equal `len(values)`, else `ValueError`.
 
         `str` is text, `bool` a boolean, `int` a 64-bit integer, `float` a number, `datetime` a
         timestamp (an aware one converted to UTC), `date` a date and `time` a time of day. `None` is a
         blank text cell; the tuple `(None, ColumnType.X)` is a blank cell typed as X.
 
-        Raises, before writing anything, `TypeError` for a value whose type has no mapping and
+        Raises, before writing anything, `ValueError` for a `cell_styles` of the wrong length, `TypeError` for a value whose type has no mapping and
         `OverflowError` for an `int` outside the signed 64-bit range.
         """
+        if cell_styles is not None and len(cell_styles) != len(values):
+            raise ValueError(f"cell_styles has {len(cell_styles)} entries but values has {len(values)}")
         for position, value in enumerate(values):
             if not _is_writable(value) and not _is_typed_blank(value):
                 raise TypeError(
@@ -115,8 +167,10 @@ class SheetWriter:
                 raise OverflowError(f"{value} at position {position} does not fit a 64-bit integer cell")
 
         handle = self._require_handle()
-        _check(self._lib.xl_start_row(handle))
-        for value in values:
+        _check(self._lib.xl_start_row_styled(handle, style_id, height))
+        for position, value in enumerate(values):
+            if cell_styles is not None and cell_styles[position] is not None:
+                _check(self._lib.xl_style_next_cell(handle, cell_styles[position]))
             _check(self._write_cell(handle, value))
         _check(self._lib.xl_end_row(handle))
 
