@@ -200,7 +200,34 @@ time, so a date-only column shows `00:00`. `TimeSpan` must be within `[0, 24h)`.
   `ExcelWriteOptions.Password` also needs XLSX or XLSB and throws `NotSupportedException` otherwise; an
   empty password throws `ArgumentException`. A path writer with a password builds in memory and writes the encrypted
   bytes on `Close`.
-- No cell formatting, formulas or charts.
+- Cell styles need no extra setup on CSV: every style call is accepted and ignored. Formulas and charts are not supported.
+
+### Cell styles
+
+```csharp
+using (ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Xlsx))
+{
+    int money = writer.AddStyle(new CellStyle { NumberFormat = "#,##0.00", Bold = true, FillColor = 0xFFF2CC });
+
+    writer.StartSheet("Summary");
+    writer.SetColumnStyle(1, money);      // after StartSheet, before the first row
+    writer.SetColumnWidth(0, 24);
+    writer.StartRow(money, 20);           // row style beats column style; height in points
+    writer.Write("Total");
+    writer.StyleNextCell(money);          // the next cell only
+    writer.Write(1234.5);
+    writer.EndRow();
+    writer.EndSheet();
+
+    writer.WriteSheet("Sales", sales, new ExcelTableOptions { Name = "Sales" }, new CellStyle { Bold = true });
+}
+```
+
+`AddStyle` returns the same id for an equal style; id 0 is the general style. Colors are `0xRRGGBB` and `-1` (the default)
+means unset. `[ExcelStyle(Bold = true, NumberFormat = "0.0%")]` on a property styles that column's data cells in
+`WriteSheet<T>`, never its header; `headerStyle` styles the header row, with or without a table. A style without a
+number format keeps a `DateTime` or `TimeSpan` column's date/time format. An out-of-range value throws
+`ExcelReaderException` with `Status == InvalidArgument`; the writer stays usable.
 
 ## Threading
 

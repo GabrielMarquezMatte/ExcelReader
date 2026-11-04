@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Reference Include="System.IO.Compression" />
   </ItemGroup>
 
   <ItemGroup>

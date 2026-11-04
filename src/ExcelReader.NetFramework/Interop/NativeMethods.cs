@@ -104,6 +104,21 @@ namespace ExcelReader.NetFramework.Interop
         internal static extern int xl_start_row(IntPtr handle);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_add_style(IntPtr handle, XlCellStyle* style, int* outStyleId);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_set_column_style(IntPtr handle, int column, int styleId);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_set_column_width(IntPtr handle, int column, double width);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_start_row_styled(IntPtr handle, int styleId, double height);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern int xl_style_next_cell(IntPtr handle, int styleId);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern int xl_write_string(IntPtr handle, byte* value, int valueLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
