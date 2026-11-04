@@ -1049,7 +1049,12 @@ namespace ExcelReader.Core.Reader.Xlsx
 
                 if (kind != Kind.Inline)
                 {
-                    EmitScalarValue(kind, ElementText(inner, VOpen, VClose), col, style);
+                    ReadOnlySpan<byte> value = ElementText(inner, VOpen, VClose);
+                    if (value.IsEmpty && kind is Kind.Number or Kind.Bool or Kind.Error or Kind.IsoDate)
+                    {
+                        return;
+                    }
+                    EmitScalarValue(kind, value, col, style);
                     return;
                 }
 
