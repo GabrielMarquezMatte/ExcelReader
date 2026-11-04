@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ExcelReader.NetFramework.Tests</RootNamespace>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- CA2007: ConfigureAwait is not needed in test code (no captured sync context). -->
+    <!-- CA1707: xUnit test names use underscores for readability. -->
+    <NoWarn>$(NoWarn);CA2007;CA1707;MA0004;CA2000;CA1034;CA1812;MA0060</NoWarn>
+    <!-- RS0016/RS0026/RS0037: public test classes are an xUnit convention, not an API commitment. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037</NoWarn>
+    <ExcelReaderNativeDll Condition="'$(ExcelReaderNativeDll)' == ''">$(MSBuildThisFileDirectory)..\..\python\src\excelreader\_lib\ExcelReader.Native.dll</ExcelReaderNativeDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(ExcelReaderNativeDll)" Condition="Exists('$(ExcelReaderNativeDll)')" Link="x64\ExcelReader.Native.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\RealExcel.xlsx" Link="data\RealExcel.xlsx" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\RealExcel.xlsb" Link="data\RealExcel.xlsb" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ExcelReader.Tests\data\tables\*.*" Link="data\tables\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ExcelReader.Tests\data\encrypted\*.*" Link="data\encrypted\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ExcelReader.Tests\data\sheetjs-sample.xlsx" Link="data\sheetjs-sample.xlsx" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\ExcelReader.Tests\data\excel-formula-strings.xlsx" Link="data\excel-formula-strings.xlsx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.5.1" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ExcelReader.NetFramework\ExcelReader.NetFramework.csproj" />
+  </ItemGroup>
+
+</Project>
