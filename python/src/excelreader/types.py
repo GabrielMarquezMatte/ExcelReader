@@ -175,6 +175,87 @@ class WriteOptions:
     batch_rows: int | None = None
 
 
+class BorderStyle(IntEnum):
+    """A border edge's line style. Mirrors XL_BORDER_* in src/ExcelReader.Native/include/excelreader.h."""
+
+    NONE = 0
+    THIN = 1
+    MEDIUM = 2
+    DASHED = 3
+    DOTTED = 4
+    THICK = 5
+    DOUBLE = 6
+    HAIR = 7
+    MEDIUM_DASHED = 8
+    DASH_DOT = 9
+    MEDIUM_DASH_DOT = 10
+    DASH_DOT_DOT = 11
+    MEDIUM_DASH_DOT_DOT = 12
+    SLANT_DASH_DOT = 13
+
+
+class HorizontalAlignment(IntEnum):
+    """Mirrors XL_HALIGN_* in src/ExcelReader.Native/include/excelreader.h."""
+
+    GENERAL = 0
+    LEFT = 1
+    CENTER = 2
+    RIGHT = 3
+    FILL = 4
+    JUSTIFY = 5
+    CENTER_CONTINUOUS = 6
+    DISTRIBUTED = 7
+
+
+class VerticalAlignment(IntEnum):
+    """Mirrors XL_VALIGN_* in src/ExcelReader.Native/include/excelreader.h."""
+
+    BOTTOM = 0
+    TOP = 1
+    CENTER = 2
+    JUSTIFY = 3
+    DISTRIBUTED = 4
+
+
+@dataclass(frozen=True, slots=True)
+class Border:
+    """One cell edge. `color` is 0xRRGGBB, or None for automatic."""
+
+    style: BorderStyle
+    color: int | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CellStyle:
+    """A cell's look, for `SheetWriter.write_sheet` and `SheetWriter.add_style`. Every field defaults
+    to "unset".
+
+    Colors are 0xRRGGBB ints, None for unset; any other value outside 0..0xFFFFFF raises
+    `ExcelReaderError`. `number_format` is an Excel format code, None for General. `font_size` is in
+    points (1-409), None for the default; `font_name` is 1-31 characters. `indent` is 0-15 and
+    `rotation` -90 to 90, or 255 for stacked text. Validation happens on the native side.
+    """
+
+    number_format: str | None = None
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    strikethrough: bool = False
+    font_name: str | None = None
+    font_size: float | None = None
+    font_color: int | None = None
+    fill_color: int | None = None
+    left: Border | None = None
+    right: Border | None = None
+    top: Border | None = None
+    bottom: Border | None = None
+    horizontal_alignment: HorizontalAlignment = HorizontalAlignment.GENERAL
+    vertical_alignment: VerticalAlignment = VerticalAlignment.BOTTOM
+    wrap_text: bool = False
+    indent: int = 0
+    rotation: int = 0
+
+
 @dataclass(frozen=True, slots=True)
 class TableOptions:
     """Writes a sheet as an Excel table ("Format as Table"), for `SheetWriter.write_sheet`. xlsx/xlsb only.
