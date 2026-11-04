@@ -201,6 +201,26 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void EmptyStringsLeaveFormatAndFontUnset()
+        {
+            nint handle = OpenMemoryWriter(NativeFormat.Xlsx);
+            NativeCellStyleRaw bold = UnsetStyle() with { FontFlags = NativeCellStyle.Bold };
+            int plain = RegisterStyle(handle, bold);
+            int empty = RegisterStyle(handle, bold, numberFormat: "", fontName: "");
+            Assert.Equal(plain, empty);
+            HandleStartSheet(handle, "S");
+            Assert.Equal(NativeStatus.Ok, SetColumnStyle(handle, 0, empty));
+            WriteOneRow(handle, 1);
+            Assert.Equal(NativeStatus.Ok, HandleEndSheet(handle));
+            byte[] bytes = CloseAndReadBytes(handle);
+
+            ProbedStyle cell = StyleProbe.Xlsx(bytes, 0, 0);
+            Assert.True(cell.Bold);
+            Assert.Null(cell.NumberFormat);
+            Assert.Null(cell.FontName);
+        }
+
+        [Fact]
         public void ColumnStyleAndWidth()
         {
             nint handle = OpenMemoryWriter(NativeFormat.Xlsx);
@@ -818,6 +838,30 @@ namespace ExcelReader.Tests.Native
                 {
                     Marshal.FreeHGlobal(block);
                 }
+                FreeBuiltTable(ref temporal);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx)]
+        [InlineData(NativeFormat.Xlsb)]
+        public void TypedDefaultStyleKeepsTemporalFormat(int format)
+        {
+            NativeTable temporal = BuildTemporalTable(19000, 3_600_000_000L, 1_700_000_000_000_000L);
+            try
+            {
+                NativeColumnSpec[] specs =
+                [
+                    new() { Names = ["date"], Type = NativeColumnType.Date },
+                    new() { Names = ["time"], Type = NativeColumnType.Time },
+                    new() { Names = ["stamp"], Type = NativeColumnType.Timestamp },
+                ];
+                byte[] bytes = WriteOneTypedSheet(format, specs, temporal, new SheetStyleArgs(ColumnStyles: [null, UnsetStyle(), null]));
+
+                Assert.Equal("hh:mm:ss", Probe(format, bytes, 1, 1).NumberFormat);
+            }
+            finally
+            {
                 FreeBuiltTable(ref temporal);
             }
         }
