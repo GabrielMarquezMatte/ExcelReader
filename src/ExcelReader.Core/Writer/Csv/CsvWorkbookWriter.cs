@@ -11,7 +11,7 @@ namespace ExcelReader.Core.Writer.Csv
     /// sheet and rejects a second <see cref="CsvWorkbookWriter.AddSheet(string)"/> call. The workbook owns the
     /// <see cref="CsvWriter"/>; this sheet only borrows it.
     /// </remarks>
-    public sealed class CsvSheetWriter : ISheetWriter<CsvRowWriter>
+    public sealed class CsvSheetWriter : ISheetWriter<CsvRowWriter>, IStyleBinder
     {
         private readonly CsvWriter _writer;
         private bool _ended;
@@ -85,6 +85,19 @@ namespace ExcelReader.Core.Writer.Csv
         {
             ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+        }
+
+        int IStyleBinder.RegisterStyle(CellStyle style)
+        {
+            return 0;
+        }
+
+        void IStyleBinder.PushColumnStyleOverlay(ReadOnlySpan<int> styleIds, int firstColumn)
+        {
+        }
+
+        void IStyleBinder.PopColumnStyleOverlay()
+        {
         }
 
         /// <summary>Validates its arguments, then no-ops: CSV has no column widths.</summary>

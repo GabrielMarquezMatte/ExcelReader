@@ -11,8 +11,8 @@ namespace ExcelReader.Core.Writer.Parallel
             where TRow : IRowWriter
         {
             ParallelWriteOptions effective = Resolve(options);
-            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
-            await SheetWriterExtensions.WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
+            (string[] headers, Action<TRow, T> writeRow, _) = layout.Columns<TRow>();
+            await SheetWriterExtensions.WriteHeaderAsync(sheet, headers, headerStyleId: -1, ct).ConfigureAwait(false);
             await RunAsync(sheet, records, writeRow, effective, ct).ConfigureAwait(false);
         }
 
@@ -30,7 +30,7 @@ namespace ExcelReader.Core.Writer.Parallel
             where TRow : IRowWriter
         {
             ParallelWriteOptions effective = Resolve(options);
-            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
+            (string[] headers, Action<TRow, T> writeRow, _) = layout.Columns<TRow>();
             await sheet.BeginTableAsync(name, headers, tableOptions, ct).ConfigureAwait(false);
             await RunAsync(sheet, records, SheetWriterExtensions.ShiftToTable(writeRow, tableOptions), effective, ct).ConfigureAwait(false);
             sheet.EndTable();

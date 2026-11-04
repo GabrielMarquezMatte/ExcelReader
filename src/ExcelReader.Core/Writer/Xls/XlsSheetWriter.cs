@@ -11,7 +11,7 @@ namespace ExcelReader.Core.Writer.Xls
     /// workbook is finalized. Rows beyond the BIFF8 65,536-row cap spill into an auto-generated
     /// continuation sheet.
     /// </summary>
-    public sealed class XlsSheetWriter : ISheetWriter<XlsRowWriter>
+    public sealed class XlsSheetWriter : ISheetWriter<XlsRowWriter>, IStyleBinder
     {
         private const int MaxRow = 65535;
         internal const int MaxColumn = 255;
@@ -47,6 +47,7 @@ namespace ExcelReader.Core.Writer.Xls
         private bool _rowHasCells;
         private Dictionary<int, int>? _columnStyles;
         private int[]? _columnStyleLookup;
+        private int[]? _baseColumnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
         private int _activeRowHeight;
@@ -131,6 +132,31 @@ namespace ExcelReader.Core.Writer.Xls
                 return _activeRowStyle;
             }
             return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
+        }
+
+        int IStyleBinder.RegisterStyle(CellStyle style)
+        {
+            return _owner.AddStyle(style);
+        }
+
+        void IStyleBinder.PushColumnStyleOverlay(ReadOnlySpan<int> styleIds, int firstColumn)
+        {
+            _baseColumnStyleLookup = _columnStyleLookup;
+            _columnStyleLookup = SheetColumnValidation.Overlay(_columnStyleLookup, styleIds, firstColumn);
+            _continuation?.SwapColumnStyleLookup(_columnStyleLookup);
+        }
+
+        void IStyleBinder.PopColumnStyleOverlay()
+        {
+            _columnStyleLookup = _baseColumnStyleLookup;
+            _baseColumnStyleLookup = null;
+            _continuation?.SwapColumnStyleLookup(_columnStyleLookup);
+        }
+
+        private void SwapColumnStyleLookup(int[]? lookup)
+        {
+            _columnStyleLookup = lookup;
+            _continuation?.SwapColumnStyleLookup(lookup);
         }
 
         private void EnsureStarted()
@@ -372,6 +398,7 @@ namespace ExcelReader.Core.Writer.Xls
                 _columnWidths = _columnWidths,
             };
             cont.EnsureStarted();
+            cont._columnStyleLookup = _columnStyleLookup;
             return cont;
         }
 

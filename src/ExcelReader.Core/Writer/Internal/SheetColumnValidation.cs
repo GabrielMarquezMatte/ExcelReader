@@ -58,6 +58,22 @@ namespace ExcelReader.Core.Writer.Internal
             return lookup;
         }
 
+        // A styled record layout's per-column styles laid over the sheet's frozen lookup; entries below 0 keep the column's own style.
+        internal static int[] Overlay(int[]? lookup, ReadOnlySpan<int> styleIds, int firstColumn)
+        {
+            int length = Math.Max(lookup?.Length ?? 0, firstColumn + styleIds.Length);
+            int[] overlaid = new int[length];
+            lookup?.CopyTo(overlaid, 0);
+            for (int i = 0; i < styleIds.Length; i++)
+            {
+                if (styleIds[i] >= 0)
+                {
+                    overlaid[firstColumn + i] = styleIds[i];
+                }
+            }
+            return overlaid;
+        }
+
         internal static int StyleAt(int[]? lookup, int columnIndex)
         {
             return lookup is not null && (uint)columnIndex < (uint)lookup.Length ? lookup[columnIndex] : 0;

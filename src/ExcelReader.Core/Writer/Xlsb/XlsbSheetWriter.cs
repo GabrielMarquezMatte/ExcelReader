@@ -12,7 +12,7 @@ using ExcelReader.Core.Writer.Zip;
 namespace ExcelReader.Core.Writer.Xlsb
 {
     /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
-    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>, IBatchSheet<XlsbSheetWriter, XlsbRowWriter>, IZipSheet
+    public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>, ITableSheetWriter<XlsbRowWriter>, IBatchSheet<XlsbSheetWriter, XlsbRowWriter>, IZipSheet, IStyleBinder
     {
         private const int SpillThreshold = 64 * 1024;
 
@@ -38,6 +38,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private XlsbRowWriter? _rowWriter;
         private Dictionary<int, int>? _columnStyles;
         private int[]? _columnStyleLookup;
+        private int[]? _baseColumnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
         private int _activeRowHeight;
@@ -164,6 +165,23 @@ namespace ExcelReader.Core.Writer.Xlsb
                 return _activeRowStyle;
             }
             return SheetColumnValidation.StyleAt(_columnStyleLookup, columnIndex);
+        }
+
+        int IStyleBinder.RegisterStyle(CellStyle style)
+        {
+            return _owner.AddStyle(style);
+        }
+
+        void IStyleBinder.PushColumnStyleOverlay(ReadOnlySpan<int> styleIds, int firstColumn)
+        {
+            _baseColumnStyleLookup = _columnStyleLookup;
+            _columnStyleLookup = SheetColumnValidation.Overlay(_columnStyleLookup, styleIds, firstColumn);
+        }
+
+        void IStyleBinder.PopColumnStyleOverlay()
+        {
+            _columnStyleLookup = _baseColumnStyleLookup;
+            _baseColumnStyleLookup = null;
         }
 
         private void EnsureStarted()
@@ -380,6 +398,23 @@ namespace ExcelReader.Core.Writer.Xlsb
         /// <inheritdoc/>
         public void BeginTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options = null)
         {
+            BeginStyledTable(name, columns, options, headerStyleId: -1);
+        }
+
+        void IStyleBinder.BeginStyledTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId)
+        {
+            BeginStyledTable(name, columns, options, headerStyleId);
+        }
+
+        ValueTask IStyleBinder.BeginStyledTableAsync(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            BeginStyledTable(name, columns, options, headerStyleId);
+            return ValueTask.CompletedTask;
+        }
+
+        private void BeginStyledTable(string name, IReadOnlyList<string> columns, ExcelTableOptions? options, int headerStyleId)
+        {
             WriterStateGuard.ThrowIfEnded(_state, this);
             ExcelTableOptions effective = options ?? ExcelTableOptions.Default;
             string[] names = TableValidation.Validate(name, columns, effective);
@@ -388,7 +423,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             TableTracker.RequireRoom(_rowNumber + 1);
             using (XlsbRowWriter row = StartRow())
             {
-                TableTracker.WriteHeader(row, effective.FirstColumn, names);
+                TableTracker.WriteHeader(row, effective.FirstColumn, names, headerStyleId);
             }
             _tables.Begin(_owner.Tables.Claim(name), name, names, effective, _rowNumber);
         }
