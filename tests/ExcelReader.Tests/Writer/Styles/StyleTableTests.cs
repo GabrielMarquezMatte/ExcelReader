@@ -6,7 +6,10 @@ namespace ExcelReader.Tests.Writer.Styles
 {
     public class StyleTableTests
     {
-        private static ExcelColor Color(int rgb) => ExcelColor.FromRgb(rgb);
+        private static ExcelColor Color(int rgb)
+        {
+            return ExcelColor.FromRgb(rgb);
+        }
 
         [Fact]
         public void StylesDifferingOnlyInFillShareTheirFont()

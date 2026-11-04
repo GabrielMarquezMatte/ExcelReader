@@ -39,13 +39,23 @@ namespace ExcelReader.Tests.Writer.Styles
         {
             byte[] file = await WriteStyledCellAsync(new CellStyle
             {
-                FontName = "Consolas", FontSize = 14, FontColor = Color(0x1F4E79),
-                Bold = true, Italic = true, Underline = true, Strikethrough = true,
+                FontName = "Consolas",
+                FontSize = 14,
+                FontColor = Color(0x1F4E79),
+                Bold = true,
+                Italic = true,
+                Underline = true,
+                Strikethrough = true,
             });
             Assert.Equal(Defaults with
             {
-                FontName = "Consolas", FontSize = 14, FontRgb = 0x1F4E79,
-                Bold = true, Italic = true, Underline = true, Strikethrough = true,
+                FontName = "Consolas",
+                FontSize = 14,
+                FontRgb = 0x1F4E79,
+                Bold = true,
+                Italic = true,
+                Underline = true,
+                Strikethrough = true,
             }, StyleProbe.Xlsb(file, 0, 0));
         }
 
@@ -80,13 +90,19 @@ namespace ExcelReader.Tests.Writer.Styles
         {
             byte[] file = await WriteStyledCellAsync(new CellStyle
             {
-                HorizontalAlignment = ExcelHorizontalAlignment.Center, VerticalAlignment = ExcelVerticalAlignment.Top,
-                WrapText = true, Indent = 3, Rotation = -45,
+                HorizontalAlignment = ExcelHorizontalAlignment.Center,
+                VerticalAlignment = ExcelVerticalAlignment.Top,
+                WrapText = true,
+                Indent = 3,
+                Rotation = -45,
             });
             Assert.Equal(Defaults with
             {
-                Horizontal = ExcelHorizontalAlignment.Center, Vertical = ExcelVerticalAlignment.Top,
-                Wrap = true, Indent = 3, Rotation = -45,
+                Horizontal = ExcelHorizontalAlignment.Center,
+                Vertical = ExcelVerticalAlignment.Top,
+                Wrap = true,
+                Indent = 3,
+                Rotation = -45,
             }, StyleProbe.Xlsb(file, 0, 0));
             byte[] xf = StyleProbe.XlsbRecords(file).Where(r => r.Id == Brt.Xf).Last().Payload;
             Assert.Equal(135, xf[10]);
