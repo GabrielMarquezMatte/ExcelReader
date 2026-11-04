@@ -115,8 +115,8 @@ A writer handle styles cells with ids from `xl_add_style`, which takes an `xl_ce
 `struct_size` contract): number format, font name, size, color and `XL_FONT_*` flags, fill color,
 `xl_border` edges (`XL_BORDER_*` with a color), `XL_HALIGN_*`/`XL_VALIGN_*` alignment, wrap, indent
 and rotation. Colors are `0xRRGGBB` with `-1` for unset, so a zeroed struct must set its unused colors
-to `-1`; strings are UTF-8 with a length, and a NULL pointer leaves them unset. An equal style returns
-the same id, and id 0 is the general style without registering anything. Then:
+to `-1`; strings are UTF-8 with a length, and a NULL pointer or a length of 0 leaves them unset. An
+equal style returns the same id, and id 0 is the general style without registering anything. Then:
 
 - `xl_set_column_style` and `xl_set_column_width` go after `xl_start_sheet` and before the sheet's
   first row.

@@ -356,7 +356,7 @@ typedef struct xl_border {
     int32_t color;   /* -1: automatic */
 } xl_border;
 
-/* Strings are UTF-8 of the given length, not NUL-terminated; a NULL pointer leaves them unset. */
+/* Strings are UTF-8 of the given length, not NUL-terminated; a NULL pointer or a length of 0 leaves them unset. */
 typedef struct xl_cell_style {
     int32_t struct_size;
     int32_t number_format_len;

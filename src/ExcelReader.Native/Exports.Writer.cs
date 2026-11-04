@@ -213,43 +213,43 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_int64")]
         public static int WriteInt64(nint handle, long value)
         {
-            return RunWriterOp(handle, value, static (writerHandle, state) => writerHandle.WriteInt64(state));
+            return RunWriterOp(handle, value, static (writerHandle, state) => writerHandle.WriteInt64(state), WriterFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_float64")]
         public static int WriteFloat64(nint handle, double value)
         {
-            return RunWriterOp(handle, value, static (writerHandle, state) => writerHandle.WriteFloat64(state));
+            return RunWriterOp(handle, value, static (writerHandle, state) => writerHandle.WriteFloat64(state), WriterFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_bool")]
         public static int WriteBool(nint handle, int value)
         {
-            return RunWriterOp(handle, value != 0, static (writerHandle, state) => writerHandle.WriteBool(state));
+            return RunWriterOp(handle, value != 0, static (writerHandle, state) => writerHandle.WriteBool(state), WriterFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_date")]
         public static int WriteDate(nint handle, int daysSinceEpoch)
         {
-            return RunWriterOp(handle, daysSinceEpoch, static (writerHandle, state) => writerHandle.WriteDate(state));
+            return RunWriterOp(handle, daysSinceEpoch, static (writerHandle, state) => writerHandle.WriteDate(state), WriterFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_time")]
         public static int WriteTime(nint handle, long microsecondsSinceMidnight)
         {
-            return RunWriterOp(handle, microsecondsSinceMidnight, static (writerHandle, state) => writerHandle.WriteTime(state));
+            return RunWriterOp(handle, microsecondsSinceMidnight, static (writerHandle, state) => writerHandle.WriteTime(state), WriterFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_timestamp")]
         public static int WriteTimestamp(nint handle, long microsecondsSinceEpoch)
         {
-            return RunWriterOp(handle, microsecondsSinceEpoch, static (writerHandle, state) => writerHandle.WriteTimestamp(state));
+            return RunWriterOp(handle, microsecondsSinceEpoch, static (writerHandle, state) => writerHandle.WriteTimestamp(state), WriterFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_write_null")]
         public static int WriteNull(nint handle, int type)
         {
-            return RunWriterOp(handle, type, static (writerHandle, state) => writerHandle.WriteNull(state));
+            return RunWriterOp(handle, type, static (writerHandle, state) => writerHandle.WriteNull(state), WriterFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_end_row")]
@@ -360,7 +360,7 @@ namespace ExcelReader.Native
             }
             try
             {
-                *outStyleId = writerHandle.AddStyle(decoded.GetValueOrDefault());
+                *outStyleId = writerHandle.AddStyle(decoded!.Value);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -372,43 +372,25 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_set_column_style")]
         public static int SetColumnStyle(nint handle, int column, int styleId)
         {
-            return RunStyleOp(handle, (column, styleId), static (writerHandle, state) => writerHandle.SetColumnStyle(state.column, state.styleId));
+            return RunWriterOp(handle, (column, styleId), static (writerHandle, state) => writerHandle.SetColumnStyle(state.column, state.styleId), StyleFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_set_column_width")]
         public static int SetColumnWidth(nint handle, int column, double width)
         {
-            return RunStyleOp(handle, (column, width), static (writerHandle, state) => writerHandle.SetColumnWidth(state.column, state.width));
+            return RunWriterOp(handle, (column, width), static (writerHandle, state) => writerHandle.SetColumnWidth(state.column, state.width), StyleFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_start_row_styled")]
         public static int StartRowStyled(nint handle, int styleId, double height)
         {
-            return RunStyleOp(handle, (styleId, height), static (writerHandle, state) => writerHandle.StartRow(state.styleId, state.height));
+            return RunWriterOp(handle, (styleId, height), static (writerHandle, state) => writerHandle.StartRow(state.styleId, state.height), StyleFailure);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_style_next_cell")]
         public static int StyleNextCell(nint handle, int styleId)
         {
-            return RunStyleOp(handle, styleId, static (writerHandle, state) => writerHandle.StyleNextCell(state));
-        }
-
-        private static int RunStyleOp<TState>(nint handle, TState state, Action<NativeWriterHandle, TState> operation)
-        {
-            NativeApi.ClearLastError();
-            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
-            {
-                return NativeStatus.InvalidHandle;
-            }
-            try
-            {
-                operation(writerHandle, state);
-                return NativeStatus.Ok;
-            }
-            catch (Exception exception)
-            {
-                return StyleFailure(exception);
-            }
+            return RunWriterOp(handle, styleId, static (writerHandle, state) => writerHandle.StyleNextCell(state), StyleFailure);
         }
 
         private static int StyleFailure(Exception exception)
@@ -435,12 +417,11 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                NativeApi.SetLastError(exception.Message);
-                return NativeStatus.Error;
+                return WriterFailure(exception);
             }
         }
 
-        private static int RunWriterOp<TState>(nint handle, TState state, Action<NativeWriterHandle, TState> operation)
+        private static int RunWriterOp<TState>(nint handle, TState state, Action<NativeWriterHandle, TState> operation, Func<Exception, int> failure)
         {
             NativeApi.ClearLastError();
             if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
@@ -454,9 +435,14 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                NativeApi.SetLastError(exception.Message);
-                return NativeStatus.Error;
+                return failure(exception);
             }
+        }
+
+        private static int WriterFailure(Exception exception)
+        {
+            NativeApi.SetLastError(exception.Message);
+            return NativeStatus.Error;
         }
 
         private static bool TryResolveWriter(nint handle, [NotNullWhen(true)] out NativeWriterHandle? writerHandle)

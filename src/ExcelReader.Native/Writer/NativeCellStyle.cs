@@ -7,7 +7,6 @@ using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native.Writer
 {
-    // See xl_border and xl_cell_style in excelreader.h for the authoritative field lists.
     [StructLayout(LayoutKind.Sequential)]
     internal struct NativeBorderRaw
     {
@@ -129,7 +128,7 @@ namespace ExcelReader.Native.Writer
         {
             value = null;
             error = null;
-            if (text is null)
+            if (text is null || length == 0)
             {
                 return true;
             }
