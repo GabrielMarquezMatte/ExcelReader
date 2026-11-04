@@ -3081,7 +3081,7 @@ namespace xl
     /// written as a header row, or none does.
     /// @param options Format, sheet name, CSV dialect and format toggles. `XL_FORMAT_AUTO` takes the
     /// format from the path extension.
-    [[deprecated("Use WriterHandle::write_columns")]]
+    [[deprecated("Use WriterHandle::write_columns; deprecated since 7.4, removed in 8.0")]]
     inline std::expected<void, Error> write_columns(std::string_view path, std::span<const ColumnRef> columns,
                                                     const WriteOptions &options = {})
     {
@@ -3097,7 +3097,7 @@ namespace xl
     /// @param out Replaced with the file bytes; untouched on failure.
     /// @param columns As for the path overload.
     /// @param options As for the path overload, except that `format` must name a format.
-    [[deprecated("Use WriterHandle::write_columns")]]
+    [[deprecated("Use WriterHandle::write_columns; deprecated since 7.4, removed in 8.0")]]
     inline std::expected<void, Error> write_columns(std::vector<uint8_t> &out, std::span<const ColumnRef> columns,
                                                     const WriteOptions &options = {})
     {
@@ -3115,7 +3115,7 @@ namespace xl
     /// An empty std::optional field writes a blank cell.
     /// @param options As for write_columns.
     template <std::ranges::input_range R>
-    [[deprecated("Use WriterHandle::write_sheet")]]
+    [[deprecated("Use WriterHandle::write_sheet; deprecated since 7.4, removed in 8.0")]]
     std::expected<void, Error> write_sheet(std::string_view path, R &&rows, const WriteOptions &options = {})
     {
         return detail::write_one_sheet(
@@ -3131,7 +3131,7 @@ namespace xl
     /// @param rows As for the path overload.
     /// @param options As for the path overload, except that `format` must name a format.
     template <std::ranges::input_range R>
-    [[deprecated("Use WriterHandle::write_sheet")]]
+    [[deprecated("Use WriterHandle::write_sheet; deprecated since 7.4, removed in 8.0")]]
     std::expected<void, Error> write_sheet(std::vector<uint8_t> &out, R &&rows, const WriteOptions &options = {})
     {
         return detail::write_one_sheet(
