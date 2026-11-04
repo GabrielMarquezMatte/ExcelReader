@@ -100,6 +100,39 @@ namespace ExcelReader.Tests.Writer.Styles
             Assert.True(Probe(format, file, Entries.Length, 2).Bold);
         }
 
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public async Task ParallelOverlayKeepsColumnTimestampFormat(string format)
+        {
+            const string Stamp = "yyyy-mm-dd hh:mm:ss";
+            var ms = new MemoryStream();
+            ExcelRecordLayout<Entry> layout = ExcelRecordLayout.FromAttributes<Entry>();
+            if (string.Equals(format, "xlsx", StringComparison.Ordinal))
+            {
+                await using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
+                XlsxSheetWriter sheet = workbook.AddSheet("Entries");
+                sheet.SetColumnStyle(2, workbook.AddStyle(new CellStyle { NumberFormat = Stamp }));
+                await sheet.WriteRecordsParallelAsync(Entries, layout, Parallel, Ct);
+                await sheet.EndAsync(Ct);
+                await workbook.EndAsync(Ct);
+            }
+            else
+            {
+                await using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
+                XlsbSheetWriter sheet = workbook.AddSheet("Entries");
+                sheet.SetColumnStyle(2, workbook.AddStyle(new CellStyle { NumberFormat = Stamp }));
+                await sheet.WriteRecordsParallelAsync(Entries, layout, Parallel, Ct);
+                await sheet.EndAsync(Ct);
+                await workbook.EndAsync(Ct);
+            }
+            foreach (int row in new[] { 1, Entries.Length / 2, Entries.Length })
+            {
+                ProbedStyle when = Probe(format, ms.ToArray(), row, 2);
+                Assert.True(when.Bold);
+                Assert.Equal(Stamp, when.NumberFormat);
+            }
+        }
+
         private static async Task<byte[]> WriteAsync(string format, bool parallel, ExcelRecordLayout<Entry> layout, bool table)
         {
             var ms = new MemoryStream();

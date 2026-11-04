@@ -27,6 +27,22 @@ namespace ExcelReader.Tests.Writer.Styles
             public double Amount { get; init; }
         }
 
+        public sealed class Stamped
+        {
+            public string Name { get; init; } = "";
+
+            [ExcelStyle(Bold = true)]
+            public DateTime When { get; init; }
+        }
+
+        public sealed class Formatted
+        {
+            public string Name { get; init; } = "";
+
+            [ExcelStyle(NumberFormat = "0.00")]
+            public double Amount { get; init; }
+        }
+
         public sealed class Plain
         {
             public string Name { get; init; } = "";
@@ -61,6 +77,8 @@ namespace ExcelReader.Tests.Writer.Styles
         }
 
         private static readonly Payment[] Payments = [new() { Name = "a", Amount = 1.5 }, new() { Name = "b", Amount = 2 }];
+        private static readonly Stamped[] Stamps = [new() { Name = "a", When = new DateTime(2026, 1, 2, 3, 4, 5) }];
+        private static readonly Formatted[] FormattedRows = [new() { Name = "a", Amount = 1.5 }];
         private static readonly Plain[] Plains = [new() { Name = "a", Amount = 1.5 }, new() { Name = "b", Amount = 2 }];
 
         [Theory]
@@ -87,6 +105,54 @@ namespace ExcelReader.Tests.Writer.Styles
             Assert.True(data.Bold);
             Assert.False(data.Italic);
             Assert.True(Probe(format, file, 0, 1).Italic);
+        }
+
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public async Task OverlayWithoutNumberFormatKeepsColumnNumberFormat(string format)
+        {
+            byte[] file = await WriteAsync(format, t => t.WriteAsync(Payments, ExcelRecordLayout.FromAttributes<Payment>(), styledColumn: 1, columnStyle: t.AddStyle(new CellStyle { NumberFormat = "hh:mm:ss" })));
+            ProbedStyle data = Probe(format, file, 1, 1);
+            Assert.True(data.Bold);
+            Assert.Equal("hh:mm:ss", data.NumberFormat);
+        }
+
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public async Task OverlayTimestampKeepsDateTimeFormat(string format)
+        {
+            byte[] file = await WriteAsync(format, t => t.WriteAsync(Stamps, ExcelRecordLayout.FromAttributes<Stamped>(), styledColumn: 1, columnStyle: t.AddStyle(new CellStyle { NumberFormat = "yyyy-mm-dd hh:mm:ss" })));
+            ProbedStyle data = Probe(format, file, 1, 1);
+            Assert.True(data.Bold);
+            Assert.Equal("yyyy-mm-dd hh:mm:ss", data.NumberFormat);
+        }
+
+        [Theory]
+        [MemberData(nameof(TableFormats))]
+        public async Task TableOverlayKeepsColumnNumberFormat(string format)
+        {
+            byte[] file = await WriteAsync(format, t => t.WriteTableAsync(Stamps, ExcelRecordLayout.FromAttributes<Stamped>(), new ExcelTableOptions(), styledColumn: 1, columnStyle: t.AddStyle(new CellStyle { NumberFormat = "yyyy-mm-dd hh:mm:ss" })));
+            ProbedStyle data = Probe(format, file, 1, 1);
+            Assert.True(data.Bold);
+            Assert.Equal("yyyy-mm-dd hh:mm:ss", data.NumberFormat);
+        }
+
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public async Task ExplicitNumberFormatWins(string format)
+        {
+            byte[] file = await WriteAsync(format, t => t.WriteAsync(FormattedRows, ExcelRecordLayout.FromAttributes<Formatted>(), styledColumn: 1, columnStyle: t.AddStyle(new CellStyle { NumberFormat = "hh:mm:ss" })));
+            Assert.Equal("0.00", Probe(format, file, 1, 1).NumberFormat);
+        }
+
+        [Theory]
+        [MemberData(nameof(Formats))]
+        public async Task NoColumnStyleLeavesNoNumberFormat(string format)
+        {
+            byte[] file = await WriteAsync(format, t => t.WriteAsync(Payments, ExcelRecordLayout.FromAttributes<Payment>()));
+            ProbedStyle data = Probe(format, file, 1, 1);
+            Assert.True(data.Bold);
+            Assert.Null(data.NumberFormat);
         }
 
         [Theory]
@@ -279,7 +345,7 @@ namespace ExcelReader.Tests.Writer.Styles
 
             Task WriteAsync<T>(IEnumerable<T> records, ExcelRecordLayout<T> layout, int styledColumn = -1, int columnStyle = 0);
 
-            Task WriteTableAsync<T>(IEnumerable<T> records, ExcelRecordLayout<T> layout, ExcelTableOptions options);
+            Task WriteTableAsync<T>(IEnumerable<T> records, ExcelRecordLayout<T> layout, ExcelTableOptions options, int styledColumn = -1, int columnStyle = 0);
 
             Task FinishAsync();
         }
@@ -309,9 +375,13 @@ namespace ExcelReader.Tests.Writer.Styles
                 await sheet.EndAsync(Ct);
             }
 
-            public async Task WriteTableAsync<T>(IEnumerable<T> records, ExcelRecordLayout<T> layout, ExcelTableOptions options)
+            public async Task WriteTableAsync<T>(IEnumerable<T> records, ExcelRecordLayout<T> layout, ExcelTableOptions options, int styledColumn = -1, int columnStyle = 0)
             {
                 var sheet = (ITableSheetWriter<TRow>)workbook.AddSheet($"S{++_sheets}");
+                if (styledColumn >= 0)
+                {
+                    sheet.SetColumnStyle(styledColumn, columnStyle);
+                }
                 await sheet.WriteTableAsync(records, "Payments", layout, options, Ct);
                 await sheet.EndAsync(Ct);
             }

@@ -126,6 +126,11 @@ namespace ExcelReader.Core.Writer.Xlsx
             return _styles.DateVariant(styleId);
         }
 
+        internal int InheritNumberFormat(int overlayStyleId, int columnStyleId)
+        {
+            return _styles.InheritNumberFormat(overlayStyleId, columnStyleId);
+        }
+
         /// <summary>
         /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
         /// synchronous.

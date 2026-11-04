@@ -128,7 +128,7 @@ await workbook.EndAsync();
 
 ### Styled record layouts
 
-`[ExcelStyle]` on a property styles that column's data cells (never its header) when a layout from `ExcelRecordLayout.FromAttributes<T>()` or the `[ExcelSerializable]` generator writes it; it wins over `SetColumnStyle`. Colors are `0xRRGGBB` ints, `-1` for unset, and `Border` sets all four edges. `WithHeaderStyle` styles every header cell, including a table's header row. For a style that depends on the value, write the column yourself in an `IExcelRecordMap<T>` and call `row.Style` before the write:
+`[ExcelStyle]` on a property styles that column's data cells (never its header) when a layout from `ExcelRecordLayout.FromAttributes<T>()` or the `[ExcelSerializable]` generator writes it; it wins over `SetColumnStyle`, except that a column number format set with `SetColumnStyle` is kept when the attribute names none. Colors are `0xRRGGBB` ints, `-1` for unset, and `Border` sets all four edges. `WithHeaderStyle` styles every header cell, including a table's header row. For a style that depends on the value, write the column yourself in an `IExcelRecordMap<T>` and call `row.Style` before the write:
 
 <!-- snippet: writing-styled-records -->
 ```csharp

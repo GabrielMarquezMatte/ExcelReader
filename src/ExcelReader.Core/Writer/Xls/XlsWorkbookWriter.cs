@@ -90,6 +90,11 @@ namespace ExcelReader.Core.Writer.Xls
             return _styles.DateVariant(styleId);
         }
 
+        internal int InheritNumberFormat(int overlayStyleId, int columnStyleId)
+        {
+            return _styles.InheritNumberFormat(overlayStyleId, columnStyleId);
+        }
+
         internal int AddSharedString(ReadOnlySpan<char> value)
         {
             return _sharedStrings.Add(value);

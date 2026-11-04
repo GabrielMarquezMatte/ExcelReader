@@ -59,7 +59,8 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         // A styled record layout's per-column styles laid over the sheet's frozen lookup; entries below 0 keep the column's own style.
-        internal static int[] Overlay(int[]? lookup, ReadOnlySpan<int> styleIds, int firstColumn)
+        // merge resolves an overlaid style against the column's own, so a column number format survives a style without one.
+        internal static int[] Overlay(int[]? lookup, ReadOnlySpan<int> styleIds, int firstColumn, Func<int, int, int> merge)
         {
             int length = Math.Max(lookup?.Length ?? 0, firstColumn + styleIds.Length);
             int[] overlaid = new int[length];
@@ -68,7 +69,7 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 if (styleIds[i] >= 0)
                 {
-                    overlaid[firstColumn + i] = styleIds[i];
+                    overlaid[firstColumn + i] = merge(styleIds[i], StyleAt(lookup, firstColumn + i));
                 }
             }
             return overlaid;
