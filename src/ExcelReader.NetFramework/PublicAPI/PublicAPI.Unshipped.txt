@@ -171,3 +171,21 @@ ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowRowStripes.get -> bool
 ExcelReader.NetFramework.Writer.ExcelTableOptions.ShowRowStripes.set -> void
 ExcelReader.NetFramework.Writer.ExcelTableOptions.Style.get -> string?
 ExcelReader.NetFramework.Writer.ExcelTableOptions.Style.set -> void
+ExcelReader.NetFramework.Reader.ExcelCellView
+ExcelReader.NetFramework.Reader.ExcelCellView.Column.get -> int
+ExcelReader.NetFramework.Reader.ExcelCellView.ExcelCellView() -> void
+ExcelReader.NetFramework.Reader.ExcelCellView.GetText() -> string?
+ExcelReader.NetFramework.Reader.ExcelCellView.Number.get -> double?
+ExcelReader.NetFramework.Reader.ExcelCellView.Type.get -> ExcelReader.NetFramework.Reader.ExcelCellType
+ExcelReader.NetFramework.Reader.ExcelRowAction
+ExcelReader.NetFramework.Reader.ExcelRowView
+ExcelReader.NetFramework.Reader.ExcelRowView.Count.get -> int
+ExcelReader.NetFramework.Reader.ExcelRowView.ExcelRowView() -> void
+ExcelReader.NetFramework.Reader.ExcelRowView.this[int index].get -> ExcelReader.NetFramework.Reader.ExcelCellView
+ExcelReader.NetFramework.Reader.ExcelRowView.ToRow() -> ExcelReader.NetFramework.Reader.ExcelRow!
+ExcelReader.NetFramework.Reader.ExcelSheet.Aggregate<TAccumulator>(System.Func<TAccumulator!>! seed, int headerRow = 1, int degreeOfParallelism = 0) -> TAccumulator!
+ExcelReader.NetFramework.Reader.ExcelSheet.ForEach(ExcelReader.NetFramework.Reader.ExcelRowAction! action) -> void
+ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>
+ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>.Accumulate(ExcelReader.NetFramework.Reader.ExcelRowView row) -> void
+ExcelReader.NetFramework.Reader.IExcelAccumulator<TSelf>.Combine(TSelf other) -> void
+virtual ExcelReader.NetFramework.Reader.ExcelRowAction.Invoke(ExcelReader.NetFramework.Reader.ExcelRowView row) -> void
