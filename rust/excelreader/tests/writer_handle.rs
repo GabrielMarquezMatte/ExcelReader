@@ -646,6 +646,15 @@ fn typed_writes_reject_bad_widths_and_styles_without_poisoning_the_handle() {
         .expect_err("two widths for one column must be rejected");
     assert_eq!(error.kind(), ErrorKind::InvalidArgument);
 
+    let error = handle
+        .write_columns_with(
+            "Dados",
+            &columns,
+            &SheetOptions::new().column_widths(vec![300.0]),
+        )
+        .expect_err("a width over 255 must be rejected by the native side");
+    assert_eq!(error.kind(), ErrorKind::InvalidArgument);
+
     let bad = [Column::new(Some("quantos"), ColumnData::I64(&counts))
         .style(CellStyle::new().font_color(0x100_0000))];
     let error = handle
@@ -694,9 +703,9 @@ struct StyledRow {
             font_size = 12.0,
             font_color = 0xFF0000,
             fill_color = 0x00FF00,
-            h_align = "center",
-            v_align = "top",
-            wrap,
+            horizontal_alignment = "center",
+            vertical_alignment = "top",
+            wrap_text,
             indent = 1,
             rotation = -45,
             border = "medium_dash_dot",

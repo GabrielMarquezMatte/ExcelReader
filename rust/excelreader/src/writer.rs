@@ -295,7 +295,7 @@ fn invalid(message: String) -> Error {
 /// Returns the row count every column agreed on, or the first problem found.
 ///
 /// Runs to completion before anything reaches the native side. The bitmap length check is the one
-/// that must live here and cannot be delegated: `xl_write_typed` takes `validity` without a length
+/// that must live here and cannot be delegated: the native writer takes `validity` without a length
 /// and reads `(rows + 7) / 8` bytes on trust, so a short slice is a buffer overrun the ABI has no
 /// way to catch.
 fn validate(columns: &[Column<'_>]) -> Result<i64, Error> {
@@ -317,8 +317,8 @@ fn validate(columns: &[Column<'_>]) -> Result<i64, Error> {
         }
         if column.name.is_some() != has_header {
             return Err(invalid(format!(
-                "every column must have a name, or none may - xl_write_typed cannot write a \
-                 partial header row (column {index})"
+                "every column must have a name, or none may - a partial header row cannot be \
+                 written (column {index})"
             )));
         }
         if let Some(bitmap) = column.validity {
@@ -400,7 +400,7 @@ pub(crate) fn raw_table(columns: &[Column<'_>]) -> Result<RawTable, Error> {
 /// Writes `columns` to `path` as a single sheet named [`WriteOptions::sheet_name`], through a
 /// [`WriterHandle`]: [`create`](WriterHandle::create), [`write_columns`](WriterHandle::write_columns),
 /// [`finish`](WriterHandle::finish). On failure an existing file at `path` is left as it was.
-#[deprecated(note = "use WriterHandle")]
+#[deprecated(since = "7.4.0", note = "use WriterHandle; removed in 8.0")]
 pub fn write_columns(
     path: impl AsRef<Path>,
     columns: &[Column<'_>],
@@ -413,7 +413,7 @@ pub fn write_columns(
 
 /// `write_columns` to any [`Write`], through [`WriterHandle::new`]. [`WriteOptions::format`] must
 /// be set - there is no extension to infer one from.
-#[deprecated(note = "use WriterHandle")]
+#[deprecated(since = "7.4.0", note = "use WriterHandle; removed in 8.0")]
 pub fn write_columns_to(
     writer: impl Write,
     columns: &[Column<'_>],
@@ -551,7 +551,7 @@ pub trait ExcelWriter: Sized {
 
 /// Writes `rows` to `path` as a single sheet, as `write_columns` does, through
 /// [`WriterHandle::write_sheet`].
-#[deprecated(note = "use WriterHandle")]
+#[deprecated(since = "7.4.0", note = "use WriterHandle; removed in 8.0")]
 pub fn write_sheet<T: ExcelWriter>(
     path: impl AsRef<Path>,
     rows: &[T],
@@ -563,7 +563,7 @@ pub fn write_sheet<T: ExcelWriter>(
 }
 
 /// `write_sheet` to any [`Write`], as `write_columns_to` does it.
-#[deprecated(note = "use WriterHandle")]
+#[deprecated(since = "7.4.0", note = "use WriterHandle; removed in 8.0")]
 pub fn write_sheet_to<T: ExcelWriter>(
     writer: impl Write,
     rows: &[T],

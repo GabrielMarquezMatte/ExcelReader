@@ -504,9 +504,9 @@ handle.finish()?;
 ```
 
 With the derive, `style(...)` in a field's `#[excel(...)]` is that column's style. Its keys are the
-.NET `[ExcelStyle]`'s: the flags `bold`, `italic`, `underline`, `strikethrough` and `wrap`, and
-`number_format`, `font_name`, `font_size`, `font_color`, `fill_color`, `h_align` and `v_align`
-(snake_case names such as `"center"` or `"center_continuous"`), `indent`, `rotation`, `border`
+.NET `[ExcelStyle]`'s: the flags `bold`, `italic`, `underline`, `strikethrough` and `wrap_text`, and
+`number_format`, `font_name`, `font_size`, `font_color`, `fill_color`, `horizontal_alignment` and
+`vertical_alignment` (snake_case names such as `"center"` or `"center_continuous"`), `indent`, `rotation`, `border`
 (such as `"thin"` or `"medium_dash_dot"`, on all four edges) and `border_color`. A value out of
 range is a compile error:
 
@@ -517,7 +517,7 @@ use excelreader::{CellStyle, SheetOptions, WriteOptions, WriterHandle};
 struct Sale {
     #[excel(name = "Item", style(bold, font_color = 0x1F4E78))]
     item: String,
-    #[excel(name = "Total", style(number_format = "#,##0.00", h_align = "right", border = "thin"))]
+    #[excel(name = "Total", style(number_format = "#,##0.00", horizontal_alignment = "right", border = "thin"))]
     total: f64,
 }
 
