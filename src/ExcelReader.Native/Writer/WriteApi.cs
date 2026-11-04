@@ -210,11 +210,13 @@ namespace ExcelReader.Native.Writer
             handle.Close();
         }
 
-        internal static SheetStyleIds RegisterSheetStyles<TSheet>(IWorkbookWriter<TSheet> workbook, NativeSheetStyles? styles, NativeTable table)
+        internal static SheetStyleIds RegisterSheetStyles<TSheet>(IWorkbookWriter<TSheet> workbook, Func<int, int, int> inheritNumberFormat,
+            NativeSheetStyles? styles, NativeTable table)
         {
+            int[] temporalStyleIds = RegisterTemporalStyles(workbook, table);
             if (styles is null)
             {
-                return SheetStyleIds.None;
+                return new SheetStyleIds(temporalStyleIds, null, null, -1);
             }
             int headerStyleId = -1;
             if (styles.HeaderStyle is { } header)
@@ -230,21 +232,35 @@ namespace ExcelReader.Native.Writer
                     columnStyleIds[index] = -1;
                     if (columnStyles[index] is { } style)
                     {
-                        columnStyleIds[index] = workbook.AddStyle(KeepTemporalFormat(style, table.ColumnAt(index).Type));
+                        columnStyleIds[index] = OverColumnStyle(workbook.AddStyle(style), temporalStyleIds[index], inheritNumberFormat);
                     }
                 }
             }
-            return new SheetStyleIds(columnStyleIds, styles.ColumnWidths, headerStyleId);
+            return new SheetStyleIds(temporalStyleIds, columnStyleIds, styles.ColumnWidths, headerStyleId);
         }
 
-        private static CellStyle KeepTemporalFormat(CellStyle style, int columnType)
+        private static int OverColumnStyle(int styleId, int columnStyleId, Func<int, int, int> inheritNumberFormat)
         {
-            string? temporalFormat = TemporalNumberFormat(columnType);
-            if (style.NumberFormat is not null || temporalFormat is null)
+            if (columnStyleId < 0)
             {
-                return style;
+                return styleId;
             }
-            return style with { NumberFormat = temporalFormat };
+            return inheritNumberFormat(styleId, columnStyleId);
+        }
+
+        private static int[] RegisterTemporalStyles<TSheet>(IWorkbookWriter<TSheet> workbook, NativeTable table)
+        {
+            int[] styleIds = new int[table.ColumnCount];
+            for (int index = 0; index < styleIds.Length; index++)
+            {
+                styleIds[index] = -1;
+                string? format = TemporalNumberFormat(table.ColumnAt(index).Type);
+                if (format is not null)
+                {
+                    styleIds[index] = workbook.AddStyle(new CellStyle { NumberFormat = format });
+                }
+            }
+            return styleIds;
         }
 
         private static string? TemporalNumberFormat(int columnType)
@@ -262,13 +278,13 @@ namespace ExcelReader.Native.Writer
             }
         }
 
-        internal static void WriteSheetBody<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeColumnSpec[] specs, NativeTable table, bool hasHeader,
+        internal static void WriteSheetBody<TSheet, TRow>(TSheet sheet, NativeColumnSpec[] specs, NativeTable table, bool hasHeader,
             NativeExcelTable? excelTable, SheetStyleIds styles, ParallelWriteOptions? parallel,
             Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
+            ApplyTemporalStyles<TSheet, TRow>(sheet, styles.TemporalStyleIds);
             ApplyColumnWidths<TSheet, TRow>(sheet, styles.ColumnWidths);
 
             if (excelTable is not null)
@@ -280,8 +296,7 @@ namespace ExcelReader.Native.Writer
             }
             if (!hasHeader)
             {
-                ApplyColumnStyles<TSheet, TRow>(sheet, styles.ColumnStyleIds);
-                WriteDataRows(sheet, table, parallel, writeParallel);
+                WriteHeaderlessRows(sheet, table, styles.ColumnStyleIds, parallel, writeParallel);
                 return;
             }
             WriteHeaderRow<TSheet, TRow>(sheet, specs, styles.HeaderStyleId);
@@ -301,8 +316,7 @@ namespace ExcelReader.Native.Writer
             ((IStyleBinder)sheet).BeginStyledTable(excelTable.Name, columns, excelTable.Options, headerStyleId);
         }
 
-        // The overlay must go on after the header row has started the sheet: starting it rebuilds the column
-        // style lookup the overlay sits on, and the overlay keeps the column styles off the header cells.
+        // Push only once the sheet's first row has started: starting it rebuilds the lookup the overlay sits on.
         private static void WriteStyledDataRows<TSheet, TRow>(TSheet sheet, NativeTable table, int[]? columnStyleIds,
             ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
             where TSheet : ISheetWriter<TRow>
@@ -310,13 +324,13 @@ namespace ExcelReader.Native.Writer
         {
             if (columnStyleIds is null || sheet is not IStyleBinder binder)
             {
-                WriteDataRows(sheet, table, parallel, writeParallel);
+                WriteDataRows(sheet, table, 0, parallel, writeParallel);
                 return;
             }
             binder.PushColumnStyleOverlay(columnStyleIds, firstColumn: 0);
             try
             {
-                WriteDataRows(sheet, table, parallel, writeParallel);
+                WriteDataRows(sheet, table, 0, parallel, writeParallel);
             }
             finally
             {
@@ -324,19 +338,32 @@ namespace ExcelReader.Native.Writer
             }
         }
 
-        private static void ApplyColumnStyles<TSheet, TRow>(TSheet sheet, int[]? columnStyleIds)
+        private static void WriteHeaderlessRows<TSheet, TRow>(TSheet sheet, NativeTable table, int[]? columnStyleIds,
+            ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            if (columnStyleIds is null)
+            if (columnStyleIds is null || sheet is not IStyleBinder binder || table.RowCount == 0)
             {
+                WriteDataRows(sheet, table, 0, parallel, writeParallel);
                 return;
             }
-            for (int index = 0; index < columnStyleIds.Length; index++)
+            bool pushed = false;
+            try
             {
-                if (columnStyleIds[index] >= 0)
+                using (TRow row = sheet.StartRow())
                 {
-                    sheet.SetColumnStyle(index, columnStyleIds[index]);
+                    binder.PushColumnStyleOverlay(columnStyleIds, firstColumn: 0);
+                    pushed = true;
+                    WriteDataCells(row, table, 0);
+                }
+                WriteDataRows(sheet, table, 1, parallel, writeParallel);
+            }
+            finally
+            {
+                if (pushed)
+                {
+                    binder.PopColumnStyleOverlay();
                 }
             }
         }
@@ -358,33 +385,32 @@ namespace ExcelReader.Native.Writer
             }
         }
 
-        private static void WriteDataRows<TSheet, TRow>(TSheet sheet, NativeTable table,
+        private static void WriteDataRows<TSheet, TRow>(TSheet sheet, NativeTable table, long firstRow,
             ParallelWriteOptions? parallel, Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
             if (parallel is not null && writeParallel is not null)
             {
-                writeParallel(sheet, RowIndices(table.RowCount), (row, index) => WriteDataCells(row, table, index), parallel)
+                writeParallel(sheet, RowIndices(firstRow, table.RowCount), (row, index) => WriteDataCells(row, table, index), parallel)
                     .AsTask().GetAwaiter().GetResult();
                 return;
             }
-            for (long row = 0; row < table.RowCount; row++)
+            for (long row = firstRow; row < table.RowCount; row++)
             {
                 WriteDataRow<TSheet, TRow>(sheet, table, row);
             }
         }
 
-        private static void ApplyTemporalStyles<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeTable table)
+        private static void ApplyTemporalStyles<TSheet, TRow>(TSheet sheet, int[] temporalStyleIds)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            for (int index = 0; index < table.ColumnCount; index++)
+            for (int index = 0; index < temporalStyleIds.Length; index++)
             {
-                string? format = TemporalNumberFormat(table.ColumnAt(index).Type);
-                if (format is not null)
+                if (temporalStyleIds[index] >= 0)
                 {
-                    sheet.SetColumnStyle(index, workbook.AddStyle(new CellStyle { NumberFormat = format }));
+                    sheet.SetColumnStyle(index, temporalStyleIds[index]);
                 }
             }
         }
@@ -420,9 +446,9 @@ namespace ExcelReader.Native.Writer
             }
         }
 
-        private static IEnumerable<long> RowIndices(long count)
+        private static IEnumerable<long> RowIndices(long first, long end)
         {
-            for (long index = 0; index < count; index++)
+            for (long index = first; index < end; index++)
             {
                 yield return index;
             }

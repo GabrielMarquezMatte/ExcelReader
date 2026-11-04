@@ -589,8 +589,7 @@ namespace ExcelReader.Tests.Native
             return copy;
         }
 
-        // Builds xl_sheet_options in a 64-byte block pre-filled with 0xFF, so a smaller struct_size proves the
-        // bytes past it are never read.
+        // Pre-filled with 0xFF so a smaller struct_size proves the bytes past it are never read.
         private static NativeSheetOptionsRaw* RawSheetOptions(SheetStyleArgs args, List<IntPtr> blocks)
         {
             NativeSheetOptionsRaw options = new() { StructSize = args.StructSize };
@@ -981,6 +980,96 @@ namespace ExcelReader.Tests.Native
             finally
             {
                 FreeBuiltTable(ref sales);
+            }
+        }
+
+        private static NativeColumnSpec[] Unnamed(NativeColumnSpec[] specs)
+        {
+            return [.. specs.Select(spec => new NativeColumnSpec { Names = [], Type = spec.Type })];
+        }
+
+        private static string SheetXmlWithoutRowNumbers(byte[] file, bool dropFirstRow)
+        {
+            XElement sheet = XlsxSheetXml(file);
+            if (dropFirstRow)
+            {
+                sheet.Descendants(SpreadsheetMain + "row").First().Remove();
+            }
+            foreach (XElement element in sheet.Descendants().Where(e => e.Name == SpreadsheetMain + "row" || e.Name == SpreadsheetMain + "c"))
+            {
+                element.Attribute("r")?.Remove();
+            }
+            sheet.Element(SpreadsheetMain + "dimension")?.Remove();
+            return sheet.ToString();
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(4)]
+        public void HeaderlessColumnStylesMatchTheHeaderPath(int degreeOfParallelism)
+        {
+            const int RowCount = 9;
+            NativeTable table = BuildEveryTypeTable(RowCount);
+            try
+            {
+                NativeCellStyleRaw fill = UnsetStyle() with { FillColor = 0xFFCC00 };
+                SheetStyleArgs args = new(ColumnStyles: [null, fill, null, null, null, fill, null]);
+                nint withHeader = OpenParallelMemoryWriter(NativeFormat.Xlsx, degreeOfParallelism, batchRows: 2);
+                Assert.Equal(NativeStatus.Ok, WriteTypedSheet(withHeader, "S", EveryTypeSpecs(), table, args));
+                byte[] headed = CloseAndReadBytes(withHeader);
+                nint withoutHeader = OpenParallelMemoryWriter(NativeFormat.Xlsx, degreeOfParallelism, batchRows: 2);
+                Assert.Equal(NativeStatus.Ok, WriteTypedSheet(withoutHeader, "S", Unnamed(EveryTypeSpecs()), table, args));
+                byte[] headerless = CloseAndReadBytes(withoutHeader);
+
+                Assert.Equal(SheetXmlWithoutRowNumbers(headed, dropFirstRow: true), SheetXmlWithoutRowNumbers(headerless, dropFirstRow: false));
+                Assert.DoesNotContain(XlsxSheetXml(headerless).Descendants(SpreadsheetMain + "col"), col => string.Equals(col.Attribute("min")!.Value, "2", StringComparison.Ordinal));
+                for (int row = 0; row < RowCount; row++)
+                {
+                    if (row is 0 or 2 or RowCount - 1)
+                    {
+                        continue;
+                    }
+                    Assert.Equal(0xFFCC00, StyleProbe.Xlsx(headerless, row, 1).FillRgb);
+                    Assert.Equal(StyleProbe.Xlsx(headed, row + 1, 5), StyleProbe.Xlsx(headerless, row, 5));
+                    Assert.Null(StyleProbe.Xlsx(headerless, row, 2).FillRgb);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void TemporalStyleLimitIsErrorWithoutPoisoning()
+        {
+            NativeTable temporal = BuildTemporalTable(19000, 3_600_000_000L, 1_700_000_000_000_000L);
+            NativeTable sales = BuildQtyNameTable([3L], ["widget"]);
+            try
+            {
+                nint handle = OpenMemoryWriter(NativeFormat.Xlsx);
+                for (int index = 0; index < 200; index++)
+                {
+                    RegisterStyle(handle, UnsetStyle(), numberFormat: $"0\" u{index}\"");
+                }
+                NativeColumnSpec[] specs =
+                [
+                    new() { Names = ["date"], Type = NativeColumnType.Date },
+                    new() { Names = ["time"], Type = NativeColumnType.Time },
+                    new() { Names = ["stamp"], Type = NativeColumnType.Timestamp },
+                ];
+
+                Assert.Equal(NativeStatus.Error, WriteTypedSheet(handle, "T", specs, temporal, new SheetStyleArgs()));
+                Assert.NotEmpty(NativeApi.LastErrorText());
+                Assert.Equal(NativeStatus.Ok, WriteTypedSheet(handle, "S", QtyNameSpecs(), sales, new SheetStyleArgs()));
+                byte[] bytes = CloseAndReadBytes(handle);
+                using IExcelWorkbook workbook = Excel.Open(bytes.AsMemory());
+                Assert.Equal(1, workbook.SheetCount);
+            }
+            finally
+            {
+                FreeBuiltTable(ref sales);
+                FreeBuiltTable(ref temporal);
             }
         }
     }
