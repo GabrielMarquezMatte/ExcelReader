@@ -349,7 +349,9 @@ down fails the read, unless the column is `nullable`.
 
 ## Writing
 
-Two layers, mirroring the two on the reading side.
+Two layers, mirroring the two on the reading side. The free functions `xl::write_sheet` and
+`xl::write_columns` are deprecated: they now run over `xl::WriterHandle` and take no styles. Use the
+handle (see below).
 
 `xl::write_sheet<T>` uses the same `xl::ExcelMapper<T>` specialization `xl::parse<T>` reads
 with, so a round trip needs one mapping, not two:
@@ -453,6 +455,40 @@ style defaults to `TableStyleMedium2`, and `.style = std::nullopt` leaves the ta
 ```cpp
 writer.write_sheet("Sales", sales, xl::TableOptions{.name = "Sales", .style = "TableStyleLight9"});
 ```
+
+### Cell styles
+
+`xl::CellStyle` describes a number format, font, fill, alignment and borders; colors are `0xRRGGBB`,
+and `-1` (the default) leaves one unset. `add_style` registers a style and returns its id, the same
+id for an equal style; id 0 is the general style. Ids then style a column, a row or the next cell:
+
+```cpp
+auto money = writer.add_style({.number_format = "#,##0.00", .font_flags = XL_FONT_BOLD,
+                               .fill_color = 0xFFFF99, .bottom = {.style = XL_BORDER_THIN}}).value();
+writer.start_sheet("Totals");
+writer.set_column_style(1, money);
+writer.set_column_width(0, 24);
+writer.start_row(money, /*height*/ 30);   // every cell of the row
+writer.write(std::string_view("Total"));
+writer.style_next_cell(money);            // only the next cell
+writer.write(1234.5);
+writer.end_row();
+```
+
+A whole-sheet write takes an `xl::SheetStyles` after the table argument: column styles and widths by
+column index, and a header style. Column styles reach the data cells only, never the header row, and a
+style without a number format keeps a date, time or timestamp column's format:
+
+```cpp
+xl::SheetStyles styles;
+styles.column_styles = {std::nullopt, xl::CellStyle{.number_format = "0.00"}};
+styles.column_widths = {12, 30};
+styles.header_style = xl::CellStyle{.font_flags = XL_FONT_BOLD};
+writer.write_columns("Stock", columns, std::nullopt, styles);
+```
+
+An invalid value (a color past `0xFFFFFF`, an out-of-range border style) fails with
+`XL_INVALID_ARGUMENT` and leaves the handle usable; CSV accepts every style call and ignores it.
 
 ## Aggregating a CSV in parallel
 

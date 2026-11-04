@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <string_view>
 #include <array>
 #include <filesystem>
@@ -12,7 +13,13 @@
 #include <chrono>
 #include <utility>
 
-#define CHECK(cond, msg)                                                         \
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(disable : 4996)
+#else
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+#define CHECK(cond, msg)                                                        \
     do                                                                           \
     {                                                                            \
         if (!(cond))                                                             \
@@ -996,6 +1003,122 @@ static int test_a_valid_empty_string_replaces_the_default()
     const NamedRow row = xl::detail::row_at<NamedRow>(table, 0);
     CHECK(row.name.empty(), "an empty std::string must overwrite the default");
     CHECK(row.view.empty(), "an empty std::string_view must overwrite the default");
+    return 0;
+}
+
+static int test_writer_handle_cell_styles()
+{
+    std::vector<uint8_t> plain;
+    {
+        auto handle = xl::WriterHandle::open(plain, {.format = XL_FORMAT_XLSX});
+        CHECK(handle.has_value(), "open must succeed");
+        CHECK(handle->start_sheet("S").has_value(), "start_sheet must succeed");
+        CHECK(handle->start_row().has_value(), "start_row must succeed");
+        CHECK(handle->write(int64_t{1}).has_value(), "write must succeed");
+        CHECK(handle->write(int64_t{2}).has_value(), "write must succeed");
+        CHECK(handle->end_row().has_value(), "end_row must succeed");
+        CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
+        CHECK(handle->finish().has_value(), "finish must succeed");
+    }
+
+    std::vector<uint8_t> styled;
+    auto handle = xl::WriterHandle::open(styled, {.format = XL_FORMAT_XLSX});
+    CHECK(handle.has_value(), "open must succeed");
+    const xl::CellStyle money{.number_format = "#,##0.00", .font_flags = XL_FONT_BOLD, .font_color = 0xFF0000,
+                              .fill_color = 0xFFFF00, .horizontal_alignment = XL_HALIGN_CENTER,
+                              .bottom = {.style = 1, .color = 0x000000}};
+    auto first = handle->add_style(money);
+    auto again = handle->add_style(money);
+    CHECK(first.has_value() && again.has_value(), "add_style must succeed");
+    CHECK(*first > 0 && *first == *again, "an equal style must dedupe to the same id");
+    auto general = handle->add_style(xl::CellStyle{});
+    CHECK(general.has_value() && *general == 0, "the default style is the general style, id 0");
+
+    CHECK(handle->start_sheet("S").has_value(), "start_sheet must succeed");
+    CHECK(handle->set_column_style(0, *first).has_value(), "set_column_style must succeed");
+    CHECK(handle->set_column_width(0, 20.5).has_value(), "set_column_width must succeed");
+    CHECK(handle->start_row(*first, 30).has_value(), "start_row with a style must succeed");
+    CHECK(handle->write(int64_t{1}).has_value(), "write must succeed");
+    CHECK(handle->style_next_cell(*first).has_value(), "style_next_cell must succeed");
+    CHECK(handle->write(int64_t{2}).has_value(), "write must succeed");
+    CHECK(handle->end_row().has_value(), "end_row must succeed");
+    CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
+    CHECK(handle->finish().has_value(), "finish must succeed");
+    CHECK(styled.size() != plain.size(), "styles and widths must reach the package");
+
+    auto workbook = xl::Workbook::open(styled, {.format = XL_FORMAT_XLSX});
+    CHECK(workbook.has_value(), "the styled bytes must open");
+    const std::vector<std::string> cells = read_cells(*workbook, 0);
+    CHECK(cells.size() == 1 && cells[0] == "1|2", "styled cells keep their values");
+    return 0;
+}
+
+static int test_writer_handle_rejects_invalid_styles_without_poisoning()
+{
+    std::vector<uint8_t> bytes;
+    auto handle = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
+    CHECK(handle.has_value(), "open must succeed");
+
+    auto bad_color = handle->add_style(xl::CellStyle{.font_color = 0x1000000});
+    CHECK(!bad_color.has_value() && bad_color.error().code == XL_INVALID_ARGUMENT, "a color past 0xFFFFFF is invalid");
+    auto bad_border = handle->add_style(xl::CellStyle{.left = {.style = 99}});
+    CHECK(!bad_border.has_value() && bad_border.error().code == XL_INVALID_ARGUMENT, "border style 99 is invalid");
+
+    CHECK(handle->start_sheet("S").has_value(), "the handle must stay usable");
+    CHECK(handle->start_row().has_value(), "start_row must succeed");
+    CHECK(handle->write(int64_t{1}).has_value(), "write must succeed");
+    CHECK(handle->end_row().has_value(), "end_row must succeed");
+    CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
+    CHECK(handle->finish().has_value(), "the workbook must still close");
+    return 0;
+}
+
+static int test_writer_handle_typed_write_takes_column_header_styles_and_widths()
+{
+    const std::vector<int32_t> offsets{0, 1, 2};
+    const std::vector<uint8_t> blob{'a', 'b'};
+    const std::vector<int64_t> values{10, 20};
+    const std::array<xl::ColumnRef, 2> columns{xl::string_column("name", offsets, blob), xl::i64_column("qty", values)};
+
+    const auto write = [&](const xl::SheetStyles &styles, const std::optional<xl::TableOptions> &table)
+    {
+        std::vector<uint8_t> bytes;
+        auto handle = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
+        if (!handle.has_value() || !handle->write_columns("S", columns, table, styles).has_value() ||
+            !handle->finish().has_value())
+        {
+            bytes.clear();
+        }
+        return bytes;
+    };
+
+    const std::vector<uint8_t> plain = write({}, std::nullopt);
+    CHECK(!plain.empty(), "the plain typed write must succeed");
+
+    xl::SheetStyles styles;
+    styles.column_styles = {std::nullopt, xl::CellStyle{.number_format = "0.00", .font_flags = XL_FONT_ITALIC}};
+    styles.column_widths = {12, 30};
+    styles.header_style = xl::CellStyle{.font_flags = XL_FONT_BOLD, .fill_color = 0xCCCCCC};
+    for (const std::optional<xl::TableOptions> &table : {std::optional<xl::TableOptions>{}, std::optional<xl::TableOptions>(xl::TableOptions{.name = "T"})})
+    {
+        const std::vector<uint8_t> styled = write(styles, table);
+        CHECK(!styled.empty(), "the styled typed write must succeed");
+        CHECK(styled.size() != plain.size() || table.has_value(), "typed styles must reach the package");
+        auto workbook = xl::Workbook::open(styled, {.format = XL_FORMAT_XLSX});
+        CHECK(workbook.has_value(), "the styled bytes must open");
+        const std::vector<std::string> cells = read_cells(*workbook, 0);
+        CHECK(cells.size() == 3 && cells[0] == "name|qty" && cells[1] == "a|10", "styled typed cells keep their values");
+    }
+
+    std::vector<uint8_t> bytes;
+    auto handle = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
+    CHECK(handle.has_value(), "open must succeed");
+    xl::SheetStyles invalid;
+    invalid.header_style = xl::CellStyle{.fill_color = 0x1000000};
+    auto written = handle->write_columns("S", columns, std::nullopt, invalid);
+    CHECK(!written.has_value() && written.error().code == XL_INVALID_ARGUMENT, "an invalid typed style is an invalid argument");
+    CHECK(handle->write_columns("S", columns).has_value(), "the handle must stay usable after an invalid style");
+    CHECK(handle->finish().has_value(), "the workbook must still close");
     return 0;
 }
 

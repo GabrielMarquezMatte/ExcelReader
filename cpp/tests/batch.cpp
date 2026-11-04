@@ -246,7 +246,9 @@ namespace
         check(same, "the runtime-schema parse matches the typed parse cell for cell");
 
         std::vector<uint8_t> bytes;
-        check(xl::write_columns(bytes, table->columns(), {.format = XL_FORMAT_XLSX}).has_value(),
+        auto writer = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
+        check(writer.has_value() && writer->write_columns("Sheet1", table->columns()).has_value() &&
+                  writer->finish().has_value(),
               "a runtime-schema table writes back as it was read");
         auto reopened = xl::Workbook::open(bytes);
         check(reopened.has_value(), "the written workbook opens");
