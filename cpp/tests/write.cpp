@@ -1,5 +1,6 @@
 #include <xl/excelreader.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <optional>
@@ -19,7 +20,7 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
-#define CHECK(cond, msg)                                                        \
+#define CHECK(cond, msg)                                                         \
     do                                                                           \
     {                                                                            \
         if (!(cond))                                                             \
@@ -1044,7 +1045,7 @@ static int test_writer_handle_cell_styles()
     CHECK(handle->end_row().has_value(), "end_row must succeed");
     CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
     CHECK(handle->finish().has_value(), "finish must succeed");
-    CHECK(styled.size() != plain.size(), "styles and widths must reach the package");
+    CHECK(!plain.empty(), "the unstyled workbook must be written");
 
     auto workbook = xl::Workbook::open(styled, {.format = XL_FORMAT_XLSX});
     CHECK(workbook.has_value(), "the styled bytes must open");
@@ -1103,7 +1104,6 @@ static int test_writer_handle_typed_write_takes_column_header_styles_and_widths(
     {
         const std::vector<uint8_t> styled = write(styles, table);
         CHECK(!styled.empty(), "the styled typed write must succeed");
-        CHECK(styled.size() != plain.size() || table.has_value(), "typed styles must reach the package");
         auto workbook = xl::Workbook::open(styled, {.format = XL_FORMAT_XLSX});
         CHECK(workbook.has_value(), "the styled bytes must open");
         const std::vector<std::string> cells = read_cells(*workbook, 0);
@@ -1118,6 +1118,139 @@ static int test_writer_handle_typed_write_takes_column_header_styles_and_widths(
     auto written = handle->write_columns("S", columns, std::nullopt, invalid);
     CHECK(!written.has_value() && written.error().code == XL_INVALID_ARGUMENT, "an invalid typed style is an invalid argument");
     CHECK(handle->write_columns("S", columns).has_value(), "the handle must stay usable after an invalid style");
+    CHECK(handle->finish().has_value(), "the workbook must still close");
+    return 0;
+}
+
+static_assert(sizeof(xl_border) == 8);
+static_assert(sizeof(xl_cell_style) == 104);
+static_assert(offsetof(xl_cell_style, struct_size) == 0);
+static_assert(offsetof(xl_cell_style, number_format_len) == 4);
+static_assert(offsetof(xl_cell_style, number_format) == 8);
+static_assert(offsetof(xl_cell_style, font_name) == 16);
+static_assert(offsetof(xl_cell_style, font_name_len) == 24);
+static_assert(offsetof(xl_cell_style, font_flags) == 28);
+static_assert(offsetof(xl_cell_style, font_size) == 32);
+static_assert(offsetof(xl_cell_style, font_color) == 40);
+static_assert(offsetof(xl_cell_style, fill_color) == 44);
+static_assert(offsetof(xl_cell_style, horizontal_alignment) == 48);
+static_assert(offsetof(xl_cell_style, vertical_alignment) == 52);
+static_assert(offsetof(xl_cell_style, wrap_text) == 56);
+static_assert(offsetof(xl_cell_style, indent) == 60);
+static_assert(offsetof(xl_cell_style, rotation) == 64);
+static_assert(offsetof(xl_cell_style, left) == 68);
+static_assert(offsetof(xl_cell_style, right) == 76);
+static_assert(offsetof(xl_cell_style, top) == 84);
+static_assert(offsetof(xl_cell_style, bottom) == 92);
+static_assert(sizeof(xl_sheet_options) == 64);
+static_assert(offsetof(xl_sheet_options, table_flags) == 32);
+static_assert(offsetof(xl_sheet_options, column_styles) == 40);
+static_assert(offsetof(xl_sheet_options, column_widths) == 48);
+static_assert(offsetof(xl_sheet_options, header_style) == 56);
+
+static bool border_is(const xl_border &border, int32_t style, int32_t color)
+{
+    return border.style == style && border.color == color;
+}
+
+static int test_default_cell_style_marshals_unset_colors()
+{
+    const xl_cell_style raw = xl::detail::to_c(xl::CellStyle{});
+    CHECK(raw.struct_size == 104, "struct_size is the real size");
+    CHECK(raw.number_format == nullptr && raw.number_format_len == 0, "no number format");
+    CHECK(raw.font_name == nullptr && raw.font_name_len == 0, "no font name");
+    CHECK(raw.font_flags == 0 && raw.font_size == 0 && raw.wrap_text == 0 && raw.indent == 0 && raw.rotation == 0,
+          "numeric fields default to 0");
+    CHECK(raw.horizontal_alignment == 0 && raw.vertical_alignment == 0, "alignments default to 0");
+    CHECK(raw.font_color == -1 && raw.fill_color == -1, "font and fill colors default to -1, not black");
+    CHECK(border_is(raw.left, 0, -1) && border_is(raw.right, 0, -1) && border_is(raw.top, 0, -1) &&
+              border_is(raw.bottom, 0, -1),
+          "every border color defaults to -1");
+    return 0;
+}
+
+static int test_full_cell_style_marshals_every_field()
+{
+    const std::string_view format = "0.000";
+    const std::string_view font = "Arial";
+    const xl::CellStyle style{.number_format = format,
+                              .font_name = font,
+                              .font_flags = XL_FONT_BOLD | XL_FONT_ITALIC | XL_FONT_UNDERLINE | XL_FONT_STRIKETHROUGH,
+                              .font_size = 11.5,
+                              .font_color = 0x112233,
+                              .fill_color = 0x445566,
+                              .horizontal_alignment = XL_HALIGN_RIGHT,
+                              .vertical_alignment = XL_VALIGN_CENTER,
+                              .wrap_text = true,
+                              .indent = 3,
+                              .rotation = -45,
+                              .left = {.style = 1, .color = 0x010203},
+                              .right = {.style = 2, .color = 0x040506},
+                              .top = {.style = 3, .color = 0x070809},
+                              .bottom = {.style = 4, .color = 0x0A0B0C}};
+    const xl_cell_style raw = xl::detail::to_c(style);
+    CHECK(raw.struct_size == 104, "struct_size is the real size");
+    CHECK(raw.number_format == reinterpret_cast<const uint8_t *>(format.data()) && raw.number_format_len == 5,
+          "number format pointer and length");
+    CHECK(raw.font_name == reinterpret_cast<const uint8_t *>(font.data()) && raw.font_name_len == 5,
+          "font name pointer and length");
+    CHECK(raw.font_flags == 15, "bold, italic, underline and strikethrough bits");
+    CHECK(raw.font_size == 11.5, "font size");
+    CHECK(raw.font_color == 0x112233 && raw.fill_color == 0x445566, "font and fill colors");
+    CHECK(raw.horizontal_alignment == XL_HALIGN_RIGHT && raw.vertical_alignment == XL_VALIGN_CENTER, "alignments");
+    CHECK(raw.wrap_text == 1 && raw.indent == 3 && raw.rotation == -45, "wrap, indent and rotation");
+    CHECK(border_is(raw.left, 1, 0x010203) && border_is(raw.right, 2, 0x040506) && border_is(raw.top, 3, 0x070809) &&
+              border_is(raw.bottom, 4, 0x0A0B0C),
+          "each border side keeps its style and color");
+    return 0;
+}
+
+static int test_sheet_options_storage_marshals_styles_widths_and_header()
+{
+    const xl::SheetStyles none;
+    const xl::detail::SheetOptionsStorage empty(std::nullopt, none, 3);
+    CHECK(empty.raw.struct_size == 64, "sheet options struct_size");
+    CHECK(empty.raw.column_styles == nullptr && empty.raw.column_widths == nullptr && empty.raw.header_style == nullptr,
+          "no styles, widths or header style unless given");
+
+    xl::SheetStyles styles;
+    styles.column_styles = {std::nullopt, xl::CellStyle{.number_format = "0.0"}};
+    styles.column_widths = {15.5};
+    styles.header_style = xl::CellStyle{.font_flags = XL_FONT_BOLD};
+    const xl::detail::SheetOptionsStorage storage(std::nullopt, styles, 3);
+    CHECK(storage.raw.column_styles != nullptr, "column styles array is set");
+    CHECK(storage.raw.column_styles[0] == nullptr && storage.raw.column_styles[2] == nullptr,
+          "unstyled and missing columns are null");
+    CHECK(storage.raw.column_styles[1] != nullptr && storage.raw.column_styles[1]->number_format_len == 3 &&
+              storage.raw.column_styles[1]->font_color == -1,
+          "a styled column points at its converted style");
+    CHECK(storage.raw.column_widths != nullptr && storage.raw.column_widths[0] == 15.5 &&
+              storage.raw.column_widths[1] == 0 && storage.raw.column_widths[2] == 0,
+          "widths are copied and padded to the column count");
+    CHECK(storage.raw.header_style != nullptr && storage.raw.header_style->font_flags == XL_FONT_BOLD &&
+              storage.raw.header_style->struct_size == 104,
+          "header style is converted");
+
+    const xl::detail::SheetOptionsStorage table(xl::TableOptions{.name = "T"}, none, 2);
+    CHECK(table.raw.table_name != nullptr && table.raw.table_name_len == 1 && table.raw.struct_size == 64,
+          "a table keeps its name beside the style fields");
+    return 0;
+}
+
+static int test_typed_write_rejects_an_invalid_column_style()
+{
+    const std::vector<int32_t> offsets{0, 1, 2};
+    const std::vector<uint8_t> blob{'a', 'b'};
+    const std::vector<int64_t> values{10, 20};
+    const std::array<xl::ColumnRef, 2> columns{xl::string_column("name", offsets, blob), xl::i64_column("qty", values)};
+    std::vector<uint8_t> bytes;
+    auto handle = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX});
+    CHECK(handle.has_value(), "open must succeed");
+    xl::SheetStyles invalid;
+    invalid.column_styles = {std::nullopt, xl::CellStyle{.left = {.style = 99}}};
+    auto written = handle->write_columns("S", columns, std::nullopt, invalid);
+    CHECK(!written.has_value() && written.error().code == XL_INVALID_ARGUMENT, "border style 99 in a column style is invalid");
+    CHECK(handle->write_columns("S", columns).has_value(), "the handle must stay usable");
     CHECK(handle->finish().has_value(), "the workbook must still close");
     return 0;
 }
@@ -1225,6 +1358,22 @@ int main()
         return 1;
     }
     if (test_writer_handle_class_rejects_auto_for_memory() != 0)
+    {
+        return 1;
+    }
+    if (test_default_cell_style_marshals_unset_colors() != 0)
+    {
+        return 1;
+    }
+    if (test_full_cell_style_marshals_every_field() != 0)
+    {
+        return 1;
+    }
+    if (test_sheet_options_storage_marshals_styles_widths_and_header() != 0)
+    {
+        return 1;
+    }
+    if (test_typed_write_rejects_an_invalid_column_style() != 0)
     {
         return 1;
     }

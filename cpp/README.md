@@ -108,11 +108,13 @@ for (const auto& column : *workbook->sheet(1).infer_schema(1, 100)) {
 }
 
 // With no row type, parse the sheet through that schema. The columns are the xl::ColumnRef
-// write_columns takes, so the table writes back as it was read.
+// WriterHandle::write_columns takes, so the table writes back as it was read.
 auto schema = workbook->sheet(1).infer_schema();
 auto table = xl::parse(workbook->sheet(1), *schema);
 for (const xl::ColumnRef& column : table->columns()) { /* column.type, column.values, ... */ }
-auto written = xl::write_columns("copy.xlsx", table->columns());
+auto writer = xl::WriterHandle::open("copy.xlsx").value();
+writer.write_columns("Sheet1", table->columns());
+auto written = writer.finish();
 
 // Or a batch at a time: an xl::TableReader, whose batches are xl::Tables.
 auto reader = xl::parse_batches(workbook->sheet(1), *schema, {.batch_size = 10'000});
@@ -263,12 +265,14 @@ Unlike the Rust/Python bindings, this header never throws — `XL_STATUS_PASSWOR
 values on the `std::unexpected` returned from `open`, distinguishable from any other failure without
 parsing `error().message`.
 
-Writing an encrypted workbook is a second step: write the plaintext package with `write_columns`/
+Writing an encrypted workbook is a second step: write the plaintext package with the writer handle's `write_columns`/
 `write_sheet`, then wrap it with `xl::encrypt_package`, which produces an agile-encrypted (ECMA-376
 4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
 
 ```cpp
-auto written = xl::write_columns("plain.xlsx", columns);
+auto writer = xl::WriterHandle::open("plain.xlsx").value();
+writer.write_columns("Sheet1", columns);
+writer.finish();
 auto encrypted = xl::encrypt_package("plain.xlsx", "secret.xlsx", "hunter2");
 if (!encrypted) { /* encrypted.error().message */ }
 ```
@@ -349,22 +353,24 @@ down fails the read, unless the column is `nullable`.
 
 ## Writing
 
-Two layers, mirroring the two on the reading side. The free functions `xl::write_sheet` and
-`xl::write_columns` are deprecated: they now run over `xl::WriterHandle` and take no styles. Use the
-handle (see below).
+Two layers, mirroring the two on the reading side, both on `xl::WriterHandle`. The free functions
+`xl::write_sheet` and `xl::write_columns` still exist but are deprecated: they run over the handle and
+take no styles.
 
-`xl::write_sheet<T>` uses the same `xl::ExcelMapper<T>` specialization `xl::parse<T>` reads
+`WriterHandle::write_sheet<T>` uses the same `xl::ExcelMapper<T>` specialization `xl::parse<T>` reads
 with, so a round trip needs one mapping, not two:
 
 ```cpp
 std::vector<Row> rows = /* ... */;
-auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
+auto writer = xl::WriterHandle::open("out.xlsx").value();   // format inferred from the extension
+writer.write_sheet("Sheet1", rows);
+auto written = writer.finish();
 if (!written) {
     std::fprintf(stderr, "%s\n", written.error().message.c_str());
 }
 ```
 
-If you already hold columnar buffers, `xl::write_columns` hands them to the ABI with **no copy** —
+If you already hold columnar buffers, `WriterHandle::write_columns` hands them to the ABI with **no copy** —
 they are borrowed for the duration of the call and must outlive it:
 
 ```cpp
@@ -374,15 +380,19 @@ std::array<xl::ColumnRef, 2> columns{
     xl::i64_column("id", ids),
     xl::f64_column("value", values)};
 
-auto written = xl::write_columns("out.xlsx", columns);
+auto writer = xl::WriterHandle::open("out.xlsx").value();
+writer.write_columns("Sheet1", columns);
+auto written = writer.finish();
 ```
 
-Both functions also write into memory: pass a `std::vector<std::uint8_t>&` instead of a path and it
-is replaced with the file's bytes. There is no extension to infer the format from, so name it:
+Both also write into memory: open the handle over a `std::vector<std::uint8_t>&` instead of a path and
+it is replaced with the file's bytes when the handle finishes. There is no extension to infer the format from, so name it:
 
 ```cpp
 std::vector<std::uint8_t> bytes;
-auto written = xl::write_sheet(bytes, rows, {.format = XL_FORMAT_XLSX});
+auto writer = xl::WriterHandle::open(bytes, {.format = XL_FORMAT_XLSX}).value();
+writer.write_sheet("Sheet1", rows);
+auto written = writer.finish();
 ```
 
 One constructor per column type: `i64_column`, `f64_column`, `bool_column`, `date_column`,
@@ -407,7 +417,9 @@ keeps the library default of 8,192. The columns must not change while the write 
 XLS, CSV and `xl::WriterHandle`'s per-cell writes ignore both fields.
 
 ```cpp
-xl::write_columns("big.xlsx", columns, {.degree_of_parallelism = 0});
+auto writer = xl::WriterHandle::open("big.xlsx", {.degree_of_parallelism = 0}).value();
+writer.write_columns("Sheet1", columns);
+writer.finish();
 ```
 
 `write_sheet` walks the range once and appends each field to its own column buffer, with the
