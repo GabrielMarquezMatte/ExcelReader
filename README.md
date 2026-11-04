@@ -126,22 +126,26 @@ with open_workbook("book.xlsx") as workbook:
         print([cell.value for cell in row])
 ```
 
-Writing goes through one export, `xl_write_typed`: a whole sheet in a single call, from columnar
-buffers the ABI borrows rather than copies. All three bindings expose it — Python as
-`write_workbook`/`write_arrow`/`write_pandas`/`write_polars`, C++ as `xl::write_columns` and
-`xl::write_sheet<T>`, Rust as `writer::write_columns` and `writer::write_sheet`. In C++ and Rust the
-same struct mapping drives both directions, so reading a sheet and writing it back needs one
-mapping, not two:
+Writing goes through the writer handle (`xl_open_write_handle*` + `xl_write_sheet`): a whole sheet
+per call, from columnar buffers the ABI borrows rather than copies, or cell by cell, with cell styles.
+All three bindings expose it — Python as `open_writer` (`write_sheet`/`write_arrow`/`write_pandas`/
+`write_polars`), C++ as `xl::WriterHandle` (`write_columns` and `write_sheet<T>`), Rust as
+`WriterHandle` (`write_sheet`). The one-shot `xl_write_typed` and its free-function wrappers are
+deprecated since 7.4 and go away in 8.0. In C++ and Rust the same struct mapping drives both
+directions, so reading a sheet and writing it back needs one mapping, not two:
 
 ```rust
-use excelreader::writer::write_sheet;
-use excelreader::XL_FORMAT_XLSX;
+use excelreader::{WriteOptions, WriterHandle};
 
-write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
+let mut handle = WriterHandle::create("out.xlsx", &WriteOptions::new())?;
+handle.write_sheet("Sheet1", &rows, None)?;
+handle.finish()?;
 ```
 
 ```cpp
-auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
+auto writer = xl::WriterHandle::open("out.xlsx").value();   // format inferred from the extension
+writer.write_sheet("Sheet1", rows);
+auto written = writer.finish();
 ```
 
 Row-by-row decoded reads are available from all three bindings — Python as `Sheet.rows()`, C++

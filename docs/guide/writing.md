@@ -186,6 +186,16 @@ Styled layouts work in serial, table and parallel writes. An invalid `[ExcelStyl
 
 Limits are checked when a style is added: at most 512 fonts in every format, 65,490 cell styles in XLSX/XLSB and 4,000 in XLS. XLS also has a 56-color palette: the 57th distinct color (font, fill or border) throws `ExcelLimitExceededException`.
 
+### Styles from the native library and the bindings
+
+The native writer handle (ABI 7) takes the same styles: `xl_add_style` registers one, and `xl_set_column_style`, `xl_start_row_styled` and `xl_style_next_cell` apply it; `xl_sheet_options` carries column styles, widths and a header style for a typed `xl_write_sheet`. Column styles reach a typed sheet's data cells, never its header. A column or overlay style without a number format keeps the date/time format of a date, time or timestamp column; an explicit number format wins. Each README has a "Cell styles" section:
+
+- [C++](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/cpp/README.md#cell-styles)
+- [Python](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/python/README.md#cell-styles)
+- [Rust](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/rust/excelreader/README.md#cell-styles)
+- [.NET Framework](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.NetFramework/README.md#cell-styles)
+- [C ABI](https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Native/README.md#cell-styles)
+
 ## Read and write XLSB workbooks (BIFF12)
 
 Use [`Excel.FromXlsbFile`](xref:ExcelReader.Core.Reader.Excel.FromXlsbFile*), [`Excel.FromXlsb`](xref:ExcelReader.Core.Reader.Excel.FromXlsb*), [`Excel.FromXlsbFileAsync`](xref:ExcelReader.Core.Reader.Excel.FromXlsbFileAsync*), or [`Excel.FromXlsbAsync`](xref:ExcelReader.Core.Reader.Excel.FromXlsbAsync*) to open XLSB directly. For writing, use [`XlsbWorkbookWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbWorkbookWriter), [`XlsbSheetWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter), and [`XlsbRowWriter`](xref:ExcelReader.Core.Writer.Xlsb.XlsbRowWriter).
@@ -436,22 +446,28 @@ once has no idle cores to give it.
 
 ### From the native library and the bindings
 
-`xl_write_typed` and `xl_write_typed_to_memory` take the same two knobs in `xl_write_options`:
+`xl_open_write_handle` and `xl_open_write_handle_to_memory` take the same two knobs in `xl_write_options`
+(as do the deprecated `xl_write_typed` and `xl_write_typed_to_memory`):
 `degree_of_parallelism` and `batch_rows`, with the same meaning (`0` is every processor and the
 8,192-row default). A zero-initialized struct therefore writes XLSX and XLSB in parallel; a struct
 with the 7.0 size (32 bytes) or a NULL options pointer writes serially, as before. The C++, Rust and
 Python wrappers default to a serial write and turn it on only when asked:
 
 ```cpp
-xl::write_columns("big.xlsx", columns, {.degree_of_parallelism = 0});
+auto writer = xl::WriterHandle::open("big.xlsx", {.degree_of_parallelism = 0}).value();
+writer.write_columns("Sheet1", columns);
+writer.finish();
 ```
 
 ```rust
-write_columns("big.xlsx", &columns, &WriteOptions::new().degree_of_parallelism(0))?;
+let mut handle = WriterHandle::create("big.xlsx", &WriteOptions::new().degree_of_parallelism(0))?;
+handle.write_columns("Sheet1", &columns, None)?;
+handle.finish()?;
 ```
 
 ```python
-write_workbook("big.xlsx", table, types, options=WriteOptions(degree_of_parallelism=0))
+with open_writer("big.xlsx", options=WriteOptions(degree_of_parallelism=0)) as writer:
+    writer.write_sheet("Sheet1", table, types)
 ```
 
 The table's buffers are read from several threads, so they must not change while the call runs.
