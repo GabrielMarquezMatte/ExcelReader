@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
@@ -137,6 +138,12 @@ namespace ExcelReader.Tests.Native
             }
         }
 
+        private static unsafe bool TryReadTable(NativeSheetOptionsRaw* options, out NativeExcelTable? table, [NotNullWhen(false)] out string? error)
+        {
+            table = null;
+            return NativeSheetOptionsRaw.TryRead(options, out NativeSheetOptionsRaw raw, out error) && NativeExcelTable.TryRead(raw, out table, out error);
+        }
+
         [Fact]
         public unsafe void SheetOptions_Should_Decode_A_Table_And_Its_Flags()
         {
@@ -151,7 +158,7 @@ namespace ExcelReader.Tests.Native
                     TableStyleLen = 15,
                     TableFlags = NativeExcelTable.NoRowStripes | NativeExcelTable.FirstColumn,
                 };
-                Assert.True(NativeExcelTable.TryRead(&raw, out NativeExcelTable? table, out _));
+                Assert.True(TryReadTable(&raw, out NativeExcelTable? table, out _));
                 Assert.Equal(new NativeExcelTable("Sales", new ExcelTableOptions
                 {
                     StyleName = "TableStyleDark1",
@@ -161,10 +168,10 @@ namespace ExcelReader.Tests.Native
 
                 raw.TableStyle = null;
                 raw.TableFlags = NativeExcelTable.NoStyle;
-                Assert.True(NativeExcelTable.TryRead(&raw, out table, out _));
+                Assert.True(TryReadTable(&raw, out table, out _));
                 Assert.Null(table!.Options.StyleName);
 
-                Assert.True(NativeExcelTable.TryRead(null, out table, out _));
+                Assert.True(TryReadTable(null, out table, out _));
                 Assert.Null(table);
             }
         }
@@ -186,7 +193,7 @@ namespace ExcelReader.Tests.Native
                 foreach (NativeSheetOptionsRaw raw in invalid)
                 {
                     NativeSheetOptionsRaw copy = raw;
-                    Assert.False(NativeExcelTable.TryRead(&copy, out _, out string? error));
+                    Assert.False(TryReadTable(&copy, out _, out string? error));
                     Assert.NotEmpty(error);
                 }
             }

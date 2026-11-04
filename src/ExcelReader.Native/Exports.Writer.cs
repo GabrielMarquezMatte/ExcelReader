@@ -280,8 +280,9 @@ namespace ExcelReader.Native
             }
             try
             {
-                if (!NativeExcelTable.TryRead(options, out NativeExcelTable? excelTable, out string? optionsError)
-                    || !NativeSheetStyles.TryRead(options, table->ColumnCount, out NativeSheetStyles? styles, out optionsError))
+                if (!NativeSheetOptionsRaw.TryRead(options, out NativeSheetOptionsRaw rawOptions, out string? optionsError)
+                    || !NativeExcelTable.TryRead(rawOptions, out NativeExcelTable? excelTable, out optionsError)
+                    || !NativeSheetStyles.TryRead(rawOptions, table->ColumnCount, out NativeSheetStyles? styles, out optionsError))
                 {
                     NativeApi.SetLastError(optionsError);
                     return NativeStatus.InvalidArgument;

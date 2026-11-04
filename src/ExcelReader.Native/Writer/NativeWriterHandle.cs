@@ -74,19 +74,25 @@ namespace ExcelReader.Native.Writer
             switch (format)
             {
                 case NativeFormat.Xlsx:
-                    return new NativeWriterHandle<XlsxSheetWriter, XlsxRowWriter>(
-                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }),
-                        parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
+                    {
+                        XlsxWorkbookWriter xlsx = XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings });
+                        return new NativeWriterHandle<XlsxSheetWriter, XlsxRowWriter>(xlsx, xlsx.InheritNumberFormat,
+                            parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
+                    }
                 case NativeFormat.Xlsb:
-                    return new NativeWriterHandle<XlsbSheetWriter, XlsbRowWriter>(
-                        XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }),
-                        parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
+                    {
+                        XlsbWorkbookWriter xlsb = XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings });
+                        return new NativeWriterHandle<XlsbSheetWriter, XlsbRowWriter>(xlsb, xlsb.InheritNumberFormat,
+                            parallel, static (sheet, rows, writeRow, opts) => sheet.WriteRecordsParallelAsync(rows, writeRow, opts));
+                    }
                 case NativeFormat.Xls:
-                    return new NativeWriterHandle<XlsSheetWriter, XlsRowWriter>(
-                        XlsWorkbookWriter.Create(stream, options: new XlsWriterOptions { Date1904 = date1904 }), null, null);
+                    {
+                        XlsWorkbookWriter xls = XlsWorkbookWriter.Create(stream, options: new XlsWriterOptions { Date1904 = date1904 });
+                        return new NativeWriterHandle<XlsSheetWriter, XlsRowWriter>(xls, xls.InheritNumberFormat, null, null);
+                    }
                 case NativeFormat.Csv:
                     return new NativeWriterHandle<CsvSheetWriter, CsvRowWriter>(
-                        CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()), null, null);
+                        CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()), static (overlayStyleId, _) => overlayStyleId, null, null);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(format), format, "Unsupported write format.");
             }
@@ -98,6 +104,7 @@ namespace ExcelReader.Native.Writer
         where TRow : class, IRowWriter
     {
         private readonly IWorkbookWriter<TSheet> _workbook;
+        private readonly Func<int, int, int> _inheritNumberFormat;
         private readonly ParallelWriteOptions? _parallel;
         private readonly Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? _writeParallel;
         private TSheet? _sheet;
@@ -105,10 +112,11 @@ namespace ExcelReader.Native.Writer
         private bool _closed;
         private Exception? _failure;
 
-        internal NativeWriterHandle(IWorkbookWriter<TSheet> workbook, ParallelWriteOptions? parallel,
+        internal NativeWriterHandle(IWorkbookWriter<TSheet> workbook, Func<int, int, int> inheritNumberFormat, ParallelWriteOptions? parallel,
             Func<TSheet, IEnumerable<long>, Action<TRow, long>, ParallelWriteOptions, ValueTask>? writeParallel)
         {
             _workbook = workbook;
+            _inheritNumberFormat = inheritNumberFormat;
             _parallel = parallel;
             _writeParallel = writeParallel;
         }
@@ -263,12 +271,12 @@ namespace ExcelReader.Native.Writer
             {
                 throw new NotSupportedException("Excel tables can only be written to XLSX or XLSB.");
             }
-            // Registered before the sheet exists, so a style limit fails without leaving a half-written sheet.
-            SheetStyleIds styleIds = WriteApi.RegisterSheetStyles(_workbook, styles, table);
+            // Registered before the sheet exists, so a style limit fails without poisoning the handle.
+            SheetStyleIds styleIds = WriteApi.RegisterSheetStyles(_workbook, _inheritNumberFormat, styles, table);
             _sheet = _workbook.AddSheet(name);
             try
             {
-                WriteApi.WriteSheetBody(_workbook, _sheet, specs, table, hasHeader, excelTable, styleIds, _parallel, _writeParallel);
+                WriteApi.WriteSheetBody<TSheet, TRow>(_sheet, specs, table, hasHeader, excelTable, styleIds, _parallel, _writeParallel);
                 EndSheet();
             }
             catch (Exception exception)

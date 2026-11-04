@@ -48,13 +48,10 @@ namespace ExcelReader.Native.Writer
     {
         private const double MaxColumnWidth = 255;
 
-        internal static unsafe bool TryRead(NativeSheetOptionsRaw* options, int columnCount, out NativeSheetStyles? styles, [NotNullWhen(false)] out string? error)
+        internal static unsafe bool TryRead(in NativeSheetOptionsRaw raw, int columnCount, out NativeSheetStyles? styles, [NotNullWhen(false)] out string? error)
         {
             styles = null;
-            if (!NativeSheetOptionsRaw.TryRead(options, out NativeSheetOptionsRaw raw, out error))
-            {
-                return false;
-            }
+            error = null;
             if (!NativeCellStyle.TryDecode(raw.HeaderStyle, out CellStyle? header, out string? headerError))
             {
                 error = $"xl_sheet_options.header_style: {headerError}";
@@ -116,10 +113,7 @@ namespace ExcelReader.Native.Writer
     }
 
     /// <summary><see cref="NativeSheetStyles"/> registered with a workbook; style ids below 0 and widths of 0 keep the default.</summary>
-    internal readonly record struct SheetStyleIds(int[]? ColumnStyleIds, double[]? ColumnWidths, int HeaderStyleId)
-    {
-        internal static readonly SheetStyleIds None = new(null, null, -1);
-    }
+    internal readonly record struct SheetStyleIds(int[] TemporalStyleIds, int[]? ColumnStyleIds, double[]? ColumnWidths, int HeaderStyleId);
 
     /// <summary>An Excel table to write a sheet as, decoded from <see cref="NativeSheetOptionsRaw"/>.</summary>
     internal sealed record NativeExcelTable(string Name, ExcelTableOptions Options)
@@ -131,18 +125,14 @@ namespace ExcelReader.Native.Writer
         internal const int LastColumn = 16;
         private const int KnownFlags = NoStyle | NoRowStripes | ColumnStripes | FirstColumn | LastColumn;
 
-        internal static unsafe bool TryRead(NativeSheetOptionsRaw* source, out NativeExcelTable? table, [NotNullWhen(false)] out string? error)
+        internal static unsafe bool TryRead(in NativeSheetOptionsRaw options, out NativeExcelTable? table, [NotNullWhen(false)] out string? error)
         {
             table = null;
-            if (!NativeSheetOptionsRaw.TryRead(source, out NativeSheetOptionsRaw raw, out error))
+            error = null;
+            int flags = options.TableFlags;
+            if (options.TableName is null)
             {
-                return false;
-            }
-            NativeSheetOptionsRaw* options = &raw;
-            int flags = options->TableFlags;
-            if (options->TableName is null)
-            {
-                if (options->TableStyle is not null || flags != 0)
+                if (options.TableStyle is not null || flags != 0)
                 {
                     error = "xl_sheet_options sets a table style or flags without a table_name.";
                     return false;
@@ -154,22 +144,22 @@ namespace ExcelReader.Native.Writer
                 error = $"xl_sheet_options.table_flags has unknown bits; got {flags}.";
                 return false;
             }
-            if (!TypedApi.IsValidNameLength(options->TableNameLen))
+            if (!TypedApi.IsValidNameLength(options.TableNameLen))
             {
-                error = $"xl_sheet_options.table_name_len is out of range; got {options->TableNameLen}.";
+                error = $"xl_sheet_options.table_name_len is out of range; got {options.TableNameLen}.";
                 return false;
             }
             string? style = ExcelTableOptions.Default.StyleName;
-            if (options->TableStyle is not null)
+            if (options.TableStyle is not null)
             {
-                if ((flags & NoStyle) != 0 || !TypedApi.IsValidNameLength(options->TableStyleLen))
+                if ((flags & NoStyle) != 0 || !TypedApi.IsValidNameLength(options.TableStyleLen))
                 {
                     error = "xl_sheet_options.table_style needs a valid table_style_len and cannot be combined with XL_TABLE_NO_STYLE.";
                     return false;
                 }
-                style = Encoding.UTF8.GetString(options->TableStyle, options->TableStyleLen);
+                style = Encoding.UTF8.GetString(options.TableStyle, options.TableStyleLen);
             }
-            table = new NativeExcelTable(Encoding.UTF8.GetString(options->TableName, options->TableNameLen), new ExcelTableOptions
+            table = new NativeExcelTable(Encoding.UTF8.GetString(options.TableName, options.TableNameLen), new ExcelTableOptions
             {
                 StyleName = (flags & NoStyle) != 0 ? null : style,
                 ShowRowStripes = (flags & NoRowStripes) == 0,
