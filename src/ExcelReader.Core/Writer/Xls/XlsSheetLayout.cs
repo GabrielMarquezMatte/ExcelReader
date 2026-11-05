@@ -81,7 +81,7 @@ namespace ExcelReader.Core.Writer.Xls
             }
 
             int tailFrame = _frame.Length;
-            BiffRecordWriter.WriteWindow2(_frame, selected);
+            BiffRecordWriter.WriteWindow2(_frame, selected, sheet.ShowGridLines);
             BiffRecordWriter.WriteEof(_frame);
             AddFrame(tailFrame);
             Length = position + (_frame.Length - tailFrame);

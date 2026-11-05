@@ -330,10 +330,13 @@ namespace ExcelReader.Core.Writer.Xls
             buffer.WriteU16(0);
             buffer.EndRecord(len);
         }
-        internal static void WriteWindow2(BiffBuffer buffer, bool selected)
+        private const int Window2DisplayGridLines = 0x0002;
+
+        internal static void WriteWindow2(BiffBuffer buffer, bool selected, bool showGridLines)
         {
             int len = buffer.BeginRecord(BiffRecord.Window2);
-            buffer.WriteU16(selected ? 0x06B6 : 0x00B6);
+            int flags = selected ? 0x06B6 : 0x00B6;
+            buffer.WriteU16(showGridLines ? flags : flags & ~Window2DisplayGridLines);
             buffer.WriteU16(0);
             buffer.WriteU16(0);
             buffer.WriteU16(0x0040);
