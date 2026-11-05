@@ -109,6 +109,12 @@ namespace ExcelReader.Core.Writer.Csv
             ArgumentOutOfRangeException.ThrowIfNegative(width);
         }
 
+        /// <summary>No-op: CSV has no gridlines.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.SetShowGridLines"/>
+        public void SetShowGridLines(bool show)
+        {
+        }
+
         /// <summary>
         /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
         /// synchronous.

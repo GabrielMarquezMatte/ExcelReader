@@ -95,11 +95,15 @@ namespace ExcelReader.Core.Writer.Internal
 
         private static void RequireNotStarted(WriterState state, object writer)
         {
+            RequireNotStarted(state, writer, $"{nameof(SetColumnStyle)}/{nameof(SetColumnWidth)}");
+        }
+
+        internal static void RequireNotStarted(WriterState state, object writer, string member)
+        {
             WriterStateGuard.ThrowIfEnded(state, writer);
             if (state != WriterState.Created)
             {
-                throw new InvalidOperationException(
-                    $"{nameof(SetColumnStyle)}/{nameof(SetColumnWidth)} must be called before the first row is started.");
+                throw new InvalidOperationException($"{member} must be called before the first row is started.");
             }
         }
     }

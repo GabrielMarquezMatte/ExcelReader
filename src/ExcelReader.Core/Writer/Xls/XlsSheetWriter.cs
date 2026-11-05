@@ -97,6 +97,16 @@ namespace ExcelReader.Core.Writer.Xls
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, MaxColumn + 1, _state, this);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        public void SetShowGridLines(bool show)
+        {
+            SheetColumnValidation.RequireNotStarted(_state, this, nameof(SetShowGridLines));
+            ShowGridLines = show;
+        }
+
+        internal bool ShowGridLines { get; private set; } = true;
+
         internal bool HasPendingStyle
         {
             get
@@ -396,6 +406,7 @@ namespace ExcelReader.Core.Writer.Xls
             {
                 _columnStyles = _columnStyles,
                 _columnWidths = _columnWidths,
+                ShowGridLines = ShowGridLines,
             };
             cont.EnsureStarted();
             cont._columnStyleLookup = _columnStyleLookup;

@@ -37,6 +37,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         private int[]? _columnStyleLookup;
         private int[]? _baseColumnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
+        private bool _hideGridLines;
 
         internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipPackageWriter zip, string name, int sheetId,
             ExcelSheetVisibility visibility, CompressionLevel compression, bool offloadWrite)
@@ -163,6 +164,13 @@ namespace ExcelReader.Core.Writer.Xlsx
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, ExcelLimits.MaxColumns, _state, this);
         }
 
+        /// <inheritdoc/>
+        public void SetShowGridLines(bool show)
+        {
+            SheetColumnValidation.RequireNotStarted(_state, this, nameof(SetShowGridLines));
+            _hideGridLines = !show;
+        }
+
         private void EnsureStarted()
         {
             if (_state != WriterState.Created)
@@ -210,7 +218,7 @@ namespace ExcelReader.Core.Writer.Xlsx
             _rowBuffer.Reset();
             _rowBuffer.WriteUtf8(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">{BuildColsXml()}<sheetData>");
+                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">{BuildSheetViewsXml()}{BuildColsXml()}<sheetData>");
             return _stream;
         }
 
@@ -220,6 +228,11 @@ namespace ExcelReader.Core.Writer.Xlsx
             _columnStyleLookup = SheetColumnValidation.StyleLookup(_columnStyles);
             _state = WriterState.Started;
             _owner.RegisterSheet(Name, SheetId, Visibility);
+        }
+
+        private string BuildSheetViewsXml()
+        {
+            return _hideGridLines ? "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>" : string.Empty;
         }
 
         private string BuildColsXml()
