@@ -64,6 +64,7 @@ dotnet tool install --global ExcelReader.NET.Cli
 ```bash
 excelreader sheets  book.xlsb                        # 0<TAB>Sheet1
 excelreader schema  book.xlsb --sample-size 500      # 0<TAB>Id<TAB>Int64
+excelreader preview book.xlsb --rows 20              # polars-style table: shape, types, head and tail
 excelreader convert book.xlsb --output data.csv      # convert to another format, by extension
 excelreader convert book.xlsb --output data.xlsx     # .xlsx, .xlsb, .xls and .csv all work
 excelreader convert book.xlsb --format xlsx | head -c 4   # to stdout, --format picks it instead
@@ -71,7 +72,9 @@ excelreader convert book.xlsb --format xlsx | head -c 4   # to stdout, --format 
 
 Flags: `--sheet|-s <name|index>`, `--header-row N` (0 = no header), `--sample-size N`,
 `--output|-o <file>`, `--format|-f <xlsx|xlsb|xls|csv>` (defaults to `--output`'s extension, or csv
-for stdout), `--delimiter|-d <char>` (csv output), `--input-delimiter <char>` (csv input). Run
+for stdout), `--delimiter|-d <char>` (csv output), `--input-delimiter <char>` (csv input),
+`--rows N`, `--max-columns N`, `--max-width N`, `--fast`, `--columns <name|index,...>` (preview;
+`--fast` stops after the first rows). Run
 `excelreader <command> --help` for the full list.
 
 `--sheet` matches a sheet name first and falls back to a 0-based index, so a sheet literally named
