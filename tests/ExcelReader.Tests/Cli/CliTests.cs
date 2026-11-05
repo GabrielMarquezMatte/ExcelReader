@@ -615,5 +615,253 @@ namespace ExcelReader.Tests.Cli
                 File.Delete(target);
             }
         }
+
+        private string CsvFile(string content)
+        {
+            string path = TemporaryPath("csv");
+            File.WriteAllText(path, content);
+            return path;
+        }
+
+        private static (int Code, string[] Lines, string Err) Preview(
+            string path, int headerRow = 1, int rows = 10, int maxColumns = 8, int maxWidth = 32, bool fast = false, string? columns = null)
+        {
+            StringWriter stdout = new();
+            StringWriter stderr = new();
+            int code = CliCommands.Preview(path, sheet: null, headerRow, rows, maxColumns, maxWidth, fast, columns, stdout, stderr);
+            string[] lines = stdout.ToString().ReplaceLineEndings("\n").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            return (code, lines, stderr.ToString());
+        }
+
+        [Fact]
+        public void Should_PrintAPolarsStyleTable_When_RunningPreview()
+        {
+            (int code, string[] lines, string error) = Preview(CsvFile("id,name\n1,Ana\n2,\n"));
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal(
+            [
+                "shape: (2, 2)",
+                "┌─────┬──────┐",
+                "│ id  ┆ name │",
+                "│ --- ┆ ---  │",
+                "│ i64 ┆ str  │",
+                "╞═════╪══════╡",
+                "│ 1   ┆ Ana  │",
+                "│ 2   ┆ null │",
+                "└─────┴──────┘",
+            ], lines);
+        }
+
+        [Fact]
+        public void Should_ShowHeadAndTailAroundAnEllipsisRow_When_TheSheetHasMoreRowsThanRequested()
+        {
+            string csv = "n\n" + string.Concat(Enumerable.Range(1, 25).Select(static i => $"{i}\n"));
+
+            (int code, string[] lines, _) = Preview(CsvFile(csv), rows: 4);
+
+            Assert.Equal(0, code);
+            Assert.Equal("shape: (25, 1)", lines[0]);
+            Assert.Equal(["│ 1   │", "│ 2   │", "│ …   │", "│ 24  │", "│ 25  │"], lines[6..^1]);
+        }
+
+        [Fact]
+        public void Should_ShowOnlyTheHeadAndAnUnknownRowCount_When_FastStopsBeforeTheEnd()
+        {
+            string csv = "n\n" + string.Concat(Enumerable.Range(1, 25).Select(static i => $"{i}\n"));
+
+            (int code, string[] lines, _) = Preview(CsvFile(csv), rows: 3, fast: true);
+
+            Assert.Equal(0, code);
+            Assert.Equal("shape: (?, 1)", lines[0]);
+            Assert.Equal(["│ 1   │", "│ 2   │", "│ 3   │", "│ …   │"], lines[6..^1]);
+        }
+
+        [Fact]
+        public void Should_KeepTheExactRowCount_When_FastReachesTheEnd()
+        {
+            (_, string[] lines, _) = Preview(CsvFile("n\n1\n2\n3\n"), rows: 3, fast: true);
+
+            Assert.Equal("shape: (3, 1)", lines[0]);
+            Assert.Equal(["│ 1   │", "│ 2   │", "│ 3   │"], lines[6..^1]);
+        }
+
+        [Fact]
+        public void Should_PrintThousandsWithUnderscores_When_TheRowCountIsLarge()
+        {
+            string csv = "n\n" + string.Concat(Enumerable.Range(1, 1234).Select(static i => $"{i}\n"));
+
+            (_, string[] lines, _) = Preview(CsvFile(csv));
+
+            Assert.Equal("shape: (1_234, 1)", lines[0]);
+        }
+
+        [Fact]
+        public void Should_ElideMiddleColumns_When_TheSheetIsWiderThanMaxColumns()
+        {
+            string header = string.Join(',', Enumerable.Range(1, 10).Select(static i => $"c{i}"));
+            string row = string.Join(',', Enumerable.Range(1, 10));
+
+            (int code, string[] lines, _) = Preview(CsvFile($"{header}\n{row}\n"), maxColumns: 4);
+
+            Assert.Equal(0, code);
+            Assert.Equal("shape: (1, 10)", lines[0]);
+            Assert.Equal("│ c1  ┆ c2  ┆ …   ┆ c9  ┆ c10 │", lines[2]);
+            Assert.Equal("│ 1   ┆ 2   ┆ …   ┆ 9   ┆ 10  │", lines[6]);
+        }
+
+        [Fact]
+        public void Should_ShowOnlyTheRequestedColumnsInOrder_When_ColumnsIsGiven()
+        {
+            (int code, string[] lines, string error) = Preview(CsvFile("id,name,city\n1,Ana,Rio\n"), columns: "city, 0");
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal("shape: (1, 2)", lines[0]);
+            Assert.Equal("│ city ┆ id  │", lines[2]);
+            Assert.Equal("│ Rio  ┆ 1   │", lines[6]);
+        }
+
+        [Fact]
+        public void Should_PreferTheHeaderName_When_AColumnIsNamedLikeAnIndex()
+        {
+            (_, string[] lines, _) = Preview(CsvFile("a,0\nx,y\n"), columns: "0");
+
+            Assert.Equal("│ 0   │", lines[2]);
+            Assert.Equal("│ y   │", lines[6]);
+        }
+
+        [Fact]
+        public void Should_MatchPositionalNames_When_HeaderRowIsZero()
+        {
+            (_, string[] lines, _) = Preview(CsvFile("a,b\n"), headerRow: 0, columns: "column_2");
+
+            Assert.Equal("│ b        │", lines[6]);
+        }
+
+        [Theory]
+        [InlineData("nope")]
+        [InlineData("7")]
+        [InlineData(",")]
+        public void Should_ReturnOne_When_ColumnsNamesAMissingColumn(string columns)
+        {
+            (int code, string[] lines, string error) = Preview(CsvFile("id,name\n1,Ana\n"), columns: columns);
+
+            Assert.Equal(1, code);
+            Assert.Empty(lines);
+            Assert.Contains("--columns", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Should_KeepTheLastColumn_When_ItOnlyAppearsAfterTheSampledRows()
+        {
+            string csv = "a,b\n" + string.Concat(Enumerable.Repeat("1,2\n", 150)) + "x,y,w,z\n";
+
+            (int code, string[] lines, _) = Preview(CsvFile(csv), rows: 2, maxColumns: 2);
+
+            Assert.Equal(0, code);
+            Assert.Equal("shape: (151, 4)", lines[0]);
+            Assert.Equal("│ a   ┆ …   ┆ column_4 │", lines[2]);
+            Assert.Equal("│ x   ┆ …   ┆ z        │", lines[^2]);
+        }
+
+        [Fact]
+        public void Should_PrintFloatsLikePolars_When_ACsvColumnIsFloat()
+        {
+            (_, string[] lines, _) = Preview(CsvFile("v\n10\n0.5\n"));
+
+            Assert.Equal("│ f64  │", lines[4]);
+            Assert.Equal(["│ 10.0 │", "│ 0.5  │"], lines[6..^1]);
+        }
+
+        [Fact]
+        public void Should_ReplaceControlCharacters_When_ACellContainsThem()
+        {
+            (_, string[] lines, _) = Preview(CsvFile("t\n\u001b[2J\n"));
+
+            Assert.Equal("│  [2J │", lines[6]);
+        }
+
+        [Fact]
+        public void Should_PrintOnlyTheFlagMessage_When_ALimitIsInvalid()
+        {
+            (_, _, string error) = Preview(CsvFile("a\n1\n"), rows: 0);
+
+            Assert.Equal("--rows must be positive; got 0.", error.TrimEnd());
+        }
+
+        [Fact]
+        public void Should_TruncateLongText_When_ItExceedsMaxWidth()
+        {
+            (_, string[] lines, _) = Preview(CsvFile("text\nabcdefghij\n"), maxWidth: 5);
+
+            Assert.Equal("│ abcd… │", lines[6]);
+        }
+
+        [Fact]
+        public void Should_NameColumnsByPosition_When_HeaderRowIsZero()
+        {
+            (_, string[] lines, _) = Preview(CsvFile("a,b\n"), headerRow: 0);
+
+            Assert.Equal("│ column_1 ┆ column_2 │", lines[2]);
+        }
+
+        [Fact]
+        public void Should_LabelColumnsWithPolarsTypes_When_PreviewingATypedWorkbook()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"cli-preview-{Guid.NewGuid():N}.xlsx");
+            _temporaryFiles.Add(path);
+            using (FileStream file = File.Create(path))
+            using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(file, leaveOpen: true))
+            {
+                using XlsxSheetWriter sheet = workbook.AddSheet("Data");
+                using (XlsxRowWriter header = sheet.StartRow())
+                {
+                    header.Write("int");
+                    header.Write("float");
+                    header.Write("flag");
+                    header.Write("day");
+                    header.Write("text");
+                }
+                using (XlsxRowWriter row = sheet.StartRow())
+                {
+                    row.Write(42L);
+                    row.Write(2.0);
+                    row.Write(true);
+                    row.Write(new DateOnly(2024, 1, 2));
+                    row.Write("hi");
+                }
+                using (XlsxRowWriter row = sheet.StartRow())
+                {
+                    row.Write(7L);
+                    row.Write(2.5);
+                    row.Write(false);
+                    row.Write(new DateOnly(2024, 1, 3));
+                    row.Write("yo");
+                }
+                sheet.End();
+                workbook.End();
+            }
+
+            (int code, string[] lines, string error) = Preview(path);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal("│ i64 ┆ f64   ┆ bool  ┆ date       ┆ str  │", lines[4]);
+            Assert.Equal("│ 42  ┆ 2.0   ┆ true  ┆ 2024-01-02 ┆ hi   │", lines[6]);
+        }
+
+        [Theory]
+        [InlineData(0, 8, 32)]
+        [InlineData(10, 0, 32)]
+        [InlineData(10, 8, 0)]
+        public void Should_ReturnOne_When_APreviewLimitIsNotPositive(int rows, int maxColumns, int maxWidth)
+        {
+            (int code, _, string error) = Preview(CsvFile("a\n1\n"), rows: rows, maxColumns: maxColumns, maxWidth: maxWidth);
+
+            Assert.Equal(1, code);
+            Assert.NotEmpty(error);
+        }
     }
 }
