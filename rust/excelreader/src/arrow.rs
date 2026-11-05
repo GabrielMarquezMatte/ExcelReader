@@ -10,7 +10,7 @@ use arrow::array::{RecordBatch, StructArray};
 use arrow::datatypes::SchemaRef;
 use arrow::error::ArrowError;
 use arrow::ffi::{from_ffi, FFI_ArrowArray, FFI_ArrowSchema};
-use arrow::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
+use arrow::ffi_stream::{RecordBatchStreamReader, FFI_ArrowArrayStream};
 use arrow::record_batch::RecordBatchReader;
 
 use crate::ffi::{self, XlColumnSpec};
@@ -104,7 +104,7 @@ impl<'w> Sheet<'w> {
             )
         })?;
 
-        let inner = ArrowArrayStreamReader::try_new(stream).map_err(|e| {
+        let inner = RecordBatchStreamReader::try_new(stream).map_err(|e| {
             Error::new(
                 ErrorKind::Other,
                 format!("importing the native Arrow stream failed: {e}"),
@@ -124,7 +124,7 @@ impl<'w> Sheet<'w> {
 /// for at least as long as the stream. Unlike [`TypedBatches`](crate::TypedBatches) it does not fuse
 /// after an error, so break on the first `Err` rather than spinning on the latched one.
 pub struct ArrowBatches<'a> {
-    inner: ArrowArrayStreamReader,
+    inner: RecordBatchStreamReader,
     _workbook: PhantomData<&'a Workbook>,
 }
 
