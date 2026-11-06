@@ -599,6 +599,9 @@ pub enum ColumnType {
     Time,
     /// Microseconds since 1970-01-01T00:00:00Z.
     Timestamp,
+    /// UTF-8 text as an Arrow dictionary column (int32 indices into the distinct strings). Only the
+    /// Arrow reads take it; `parse_typed` and the typed reader reject it.
+    StringDict,
 }
 
 impl ColumnType {
@@ -611,6 +614,7 @@ impl ColumnType {
             ColumnType::Date => ffi::XL_T_DATE,
             ColumnType::Time => ffi::XL_T_TIME,
             ColumnType::Timestamp => ffi::XL_T_TIMESTAMP,
+            ColumnType::StringDict => ffi::XL_T_STRING_DICT,
         }
     }
 
@@ -1057,7 +1061,10 @@ unsafe fn column_data(raw: &XlColumn) -> ColumnData<'_> {
         Some(ColumnType::Date) => ColumnData::Date(native_slice(raw.values.cast(), rows)),
         Some(ColumnType::Time) => ColumnData::Time(native_slice(raw.values.cast(), rows)),
         Some(ColumnType::Timestamp) => ColumnData::Timestamp(native_slice(raw.values.cast(), rows)),
-        None => unreachable!("Table::new rejects unknown column types"),
+        // xl_parse_typed rejects XL_T_STRING_DICT, and Table::new any type from_raw does not know.
+        Some(ColumnType::StringDict) | None => {
+            unreachable!("Table::new rejects unknown column types")
+        }
     }
 }
 
