@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using ExcelReader.Native;
+using ExcelReader.Native.Arrow;
 using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
 using ExcelReader.Native.Writer;
@@ -7,7 +8,7 @@ using ExcelReader.Native.Writer;
 namespace ExcelReader.NativePgoTrainer
 {
     /// <summary>
-    /// Runs the managed implementations of xl_parse_typed, xl_rows_next, xl_rows_next_view, xl_rows_next_cells and
+    /// Runs the managed implementations of xl_parse_typed, xl_parse_arrow (dictionary strings), xl_rows_next, xl_rows_next_view, xl_rows_next_cells and
     /// xl_rows_foreach over the 65K benchmark fixtures, so a dotnet-trace of this process yields the static PGO
     /// profile NativeAOT compiles ExcelReader.Native with. See "Static PGO profile" in src/ExcelReader.Native/README.md.
     /// </summary>
@@ -33,6 +34,9 @@ namespace ExcelReader.NativePgoTrainer
             Column("Total Profit", NativeColumnType.Float64),
         ];
 
+        private static readonly NativeColumnSpec[] DictionarySpecs = Array.ConvertAll(Specs,
+            static spec => spec.Type == NativeColumnType.String ? spec with { Type = NativeColumnType.StringDictionary } : spec);
+
         private static int Main()
         {
             string data = Path.Combine(AppContext.BaseDirectory, "data");
@@ -57,6 +61,10 @@ namespace ExcelReader.NativePgoTrainer
                             status = WriteAll(table);
                         }
                         TypedApi.FreeTable(ref table);
+                        if (status == NativeStatus.Ok)
+                        {
+                            status = ParseDictionaryArrow(handle);
+                        }
                         if (status == NativeStatus.Ok && format != NativeFormat.Csv)
                         {
                             status = TypedApi.ParseTypedTable(handle, 0, Specs, headerRow: 1, degreeOfParallelism: 0, out table);
@@ -94,6 +102,14 @@ namespace ExcelReader.NativePgoTrainer
                 }
             }
             return 0;
+        }
+
+        private static unsafe int ParseDictionaryArrow(NativeHandle? handle)
+        {
+            int status = ArrowApi.ParseArrow(handle, 0, DictionarySpecs, headerRow: 1, out ArrowArray array, out ArrowSchema schema);
+            ArrowApi.ReleaseArrowArray((IntPtr)(&array));
+            ArrowApi.ReleaseArrowSchema((IntPtr)(&schema));
+            return status;
         }
 
         private static unsafe int ReadCellsAndForEach(byte[] bytes, int format)

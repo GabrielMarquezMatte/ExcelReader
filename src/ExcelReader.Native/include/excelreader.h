@@ -201,6 +201,7 @@ void xl_free_rows(xl_rows_decoded* rows);
 #define XL_T_DATE      4   /* days since 1970-01-01, int32 */
 #define XL_T_TIME      5   /* microseconds since midnight, int64 */
 #define XL_T_TIMESTAMP 6   /* microseconds since 1970-01-01T00:00:00Z, int64 */
+#define XL_T_STRING_DICT 7 /* xl_parse_arrow/xl_parse_arrow_stream only: utf8 dictionary, int32 indices */
 
 typedef struct xl_column_spec {
     const uint8_t* const* names; 

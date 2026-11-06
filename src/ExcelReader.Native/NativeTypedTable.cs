@@ -11,6 +11,7 @@ namespace ExcelReader.Native
         internal const int Date = 4;
         internal const int Time = 5;
         internal const int Timestamp = 6;
+        internal const int StringDictionary = 7;
     }
 
     [StructLayout(LayoutKind.Sequential)]

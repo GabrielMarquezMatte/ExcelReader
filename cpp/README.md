@@ -123,7 +123,8 @@ for (auto& batch : *reader) { if (!batch) { break; } /* batch->columns() */ }
 
 A column matched by index has no name, and writing needs every column named or none. The schema is
 a guess over a sample: a column inferred as `XL_T_I64` that holds a fraction further down fails the
-read, unless the column is `nullable`.
+read, unless the column is `nullable`. In a nullable `XL_T_STRING` column a blank cell is null, not an
+empty string.
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 

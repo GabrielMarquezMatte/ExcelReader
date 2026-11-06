@@ -25,7 +25,7 @@ example) silently drops its profile. That happened after the namespace refactor 
 `<IlcArg Include="--codegenopt:JitStdOutFile=disasm.txt" />` (after deleting `obj/.../native`) and
 look for `; No PGO data` in the listing header.
 
-`tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_rows_next`,
+`tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_parse_arrow` (with `XL_T_STRING_DICT` columns), `xl_rows_next`,
 `xl_rows_next_view`, `xl_rows_next_cells` and `xl_rows_foreach` over the 65K benchmark fixtures in XLSX, XLSB and CSV, and writes each parsed
 table back out with `xl_write_typed_to_memory` in XLSX, XLSB and CSV, serially and in parallel.
 Record it and convert the trace (needs `dotnet-trace` and `dotnet-pgo`):
@@ -46,6 +46,7 @@ replacing the profile. Some formats may get worse, not only better.
 | File | Role |
 |---|---|
 | `NativeApi.cs`, `Reading/`, `Typed/`, `Arrow/`, `Csv/`, `Writer/` | Internal span-based implementation (`ReadApi`, `TypedApi`, `ArrowApi`, `CsvAggregateApi`, `WriteApi`). This is what the tests drive. |
+| `ExcelReader.Core/Reader/Columnar/` | The typed column builder behind `xl_parse_typed`, the Arrow exports and ExcelReader.Arrow's `ToArrowRecordBatch`: one pass per sheet or per partition, then the parts joined. `TypedApi` and `ArrowApi` only map its columns onto `xl_table` and the Arrow C structs. |
 | `Exports*.cs` | `[UnmanagedCallersOnly]` pointer wrappers, one partial per feature. Keep logic out of here — it is untestable from managed code. |
 | `NativeHandleTable.cs` | Maps the opaque ids callers see onto `NativeHandle` (a workbook), `NativeRowCursor` and typed-reader instances. An id resolves only as its own kind and is never reissued after it is closed, so a stale or mismatched handle stays invalid permanently. |
 | `Reading/NativeRowCursor.cs` | One row enumerator and its buffers, behind `xl_rows_open`. Each cursor is independent, which is what lets several threads read one workbook. |

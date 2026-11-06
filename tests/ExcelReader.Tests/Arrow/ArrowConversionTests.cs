@@ -159,6 +159,65 @@ namespace ExcelReader.Tests.Arrow
             Assert.Equal("42", text.GetString(4));
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ToArrowRecordBatch_Should_Dictionary_Encode_A_String_Column(bool sharedStrings)
+        {
+            using MemoryStream ms = new();
+            using (Core.Writer.Xlsb.XlsbWorkbookWriter workbook = Core.Writer.Xlsb.XlsbWorkbookWriter.Create(ms, leaveOpen: true, new Core.Writer.Xlsb.XlsbWriterOptions { UseSharedStrings = sharedStrings }))
+            {
+                using Core.Writer.Xlsb.XlsbSheetWriter sheet = workbook.AddSheet("S");
+                foreach (Action<Core.Writer.Xlsb.XlsbRowWriter> write in (Action<Core.Writer.Xlsb.XlsbRowWriter>[])
+                    [row => row.Write("city"), row => row.Write("Porto"), row => row.Write("Lisboa"), row => row.Skip(), row => row.Write("Porto"), row => row.Write(7)])
+                {
+                    using Core.Writer.Xlsb.XlsbRowWriter row = sheet.StartRow();
+                    write(row);
+                }
+                sheet.End();
+                workbook.End();
+            }
+            ms.Position = 0;
+            using var reader = Excel.FromXlsb(ms);
+            ExcelColumnSchema[] schema = [new() { Index = 0, Name = "city", Type = ExcelColumnType.StringDictionaryColumn, IsNullable = true }];
+
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = schema });
+
+            Assert.IsType<Apache.Arrow.Types.DictionaryType>(batch.Schema.GetFieldByIndex(0).DataType);
+            var city = Assert.IsType<DictionaryArray>(batch.Column(0));
+            var values = Assert.IsType<StringArray>(city.Dictionary);
+            var indices = Assert.IsType<Int32Array>(city.Indices);
+            Assert.Equal(["Porto", "Lisboa", "7"], Enumerable.Range(0, values.Length).Select(i => values.GetString(i)), StringComparer.Ordinal);
+            Assert.Equal(1, city.NullCount);
+            Assert.True(city.IsNull(2));
+            Assert.Equal([0, 1, 0, 2], ((int[])[0, 1, 3, 4]).Select(i => indices.GetValue(i)!.Value));
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Read_In_Parallel_Like_On_One_Thread()
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "data", "RealExcel.xlsb");
+            using IExcelWorkbook workbook = Excel.Open(path);
+
+            using RecordBatch sequential = workbook.FirstSheet.ToArrowRecordBatch();
+            using RecordBatch parallel = workbook.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { DegreeOfParallelism = 0 });
+
+            Assert.Equal((sequential.Length, sequential.ColumnCount), (parallel.Length, parallel.ColumnCount));
+            for (int c = 0; c < sequential.ColumnCount; c++)
+            {
+                Assert.Equal(sequential.Column(c).NullCount, parallel.Column(c).NullCount);
+                Assert.Equal(sequential.Column(c).Data.Buffers.Select(b => b.Span.ToArray()), parallel.Column(c).Data.Buffers.Select(b => b.Span.ToArray()));
+            }
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Reject_A_Negative_Degree_Of_Parallelism()
+        {
+            using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("qty\n1\n"));
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { DegreeOfParallelism = -1 }));
+        }
+
         [Fact]
         public void ToArrowRecordBatch_Should_Convert_Bool_Column()
         {

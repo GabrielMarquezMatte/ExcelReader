@@ -26,5 +26,10 @@ namespace ExcelReader.Core.Reader.Schema
         TimeColumn = 5,
         /// <summary>A date and time, counted in microseconds since 1970-01-01T00:00:00Z.</summary>
         TimestampColumn = 6,
+        /// <summary>
+        /// UTF-8 text, dictionary-encoded: int32 indices into the column's distinct strings. Only the
+        /// Arrow outputs take it; schema inference never produces it.
+        /// </summary>
+        StringDictionaryColumn = 7,
     }
 }

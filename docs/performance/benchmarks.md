@@ -357,12 +357,14 @@ The bridge costs ~1.4x over reading rows directly. `GetValue` boxes every value 
 
 | Scenario | Mean | Allocated |
 |---|---:|---:|
-| CSV, typed, explicit schema | 12.26 ms | 8.13 MB |
-| CSV, typed, inferred schema | 12.48 ms | 14.89 MB |
-| XLSB, typed, explicit schema | 16.88 ms | 8.14 MB |
-| CSV, 8 text columns, explicit schema | 22.31 ms | 16.27 MB |
+| CSV, typed, explicit schema | 8.56 ms | 3.13 MB |
+| CSV, typed, inferred schema | 7.42 ms | 5.62 MB |
+| XLSB, typed, explicit schema | 11.89 ms | 3.13 MB |
+| CSV, 8 text columns, explicit schema | 10.61 ms | 6.69 MB |
 
-On the same file, letting `Excel.InferSchema` guess the schema costs ~2% more time (12.48 ms vs. 12.26 ms) and ~1.8x the allocation of passing an explicit `ExcelColumnSchema[]`. The allocation grows with the sheet, because the batch holds every row at once and there is no streaming variant.
+`ToArrowRecordBatch` reads through the same column builder as the native `xl_parse_arrow`, then copies each finished buffer once into the managed array Apache.Arrow takes. Before that (per-cell appenders into Apache.Arrow builders) the same rows took 12.26 ms / 8.13 MB (CSV typed), 16.88 ms / 8.14 MB (XLSB) and 22.31 ms / 16.27 MB (8 text columns). The inferred schema is faster than the explicit one because `Excel.InferSchema` types every CSV column as a string, which skips the int64/timestamp/double conversion; it allocates ~1.8x more. The batch holds every row at once and there is no streaming variant.
+
+On the 65K-row real-data fixtures (14 columns, 5 of them text, one thread), `ExcelColumnType.StringDictionaryColumn` on the text columns cut XLSB from 27.2 to 24.0 ms and XLSX from 45.5 to 43.4 ms; CSV, which has no shared strings to look up by index, stayed the same (22.0 vs 22.4 ms). Those come from a quick console harness, not BenchmarkDotNet.
 
 ### Encrypted workbooks
 
