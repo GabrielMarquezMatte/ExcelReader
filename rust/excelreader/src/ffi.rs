@@ -586,6 +586,13 @@ extern "C" {
         capacity: i32,
         out_written: *mut i32,
     ) -> c_int;
+    /// The next row as cursor-owned `xl_cell_view`s with numbers kept binary, valid until the next
+    /// call on `rows` or `xl_rows_close`. `out_cells` may be NULL when `out_count` is 0.
+    pub fn xl_rows_next_cells(
+        rows: *mut XlRows,
+        out_cells: *mut *const XlCellView,
+        out_count: *mut i32,
+    ) -> c_int;
     pub fn xl_rows_read_all_blob(
         rows: *mut XlRows,
         buffer: *mut u8,

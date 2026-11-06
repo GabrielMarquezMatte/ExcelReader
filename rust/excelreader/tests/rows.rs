@@ -34,6 +34,22 @@ fn cursor_reads_the_header_row() {
 }
 
 #[test]
+fn cursor_passes_xlsb_numbers_as_binary() {
+    let workbook = Workbook::open(fixture("RealExcel.xlsb")).expect("open");
+    let mut cursor = workbook.sheet(0).expect("sheet 0").rows().expect("cursor");
+    let mut numbers = 0usize;
+    while let Some(row) = cursor.next_row() {
+        for cell in row.expect("no error mid-sheet").iter() {
+            if cell.as_bytes().is_empty() && cell.number().is_some() {
+                assert_eq!(cell.text().unwrap(), cell.number().unwrap().to_string());
+                numbers += 1;
+            }
+        }
+    }
+    assert!(numbers > 0, "RealExcel.xlsb has numeric cells");
+}
+
+#[test]
 fn cursor_terminates_cleanly() {
     let workbook = Workbook::open(fixture("RealExcel.xlsx")).expect("open");
     let mut counted = 0usize;
@@ -57,7 +73,7 @@ fn cursor_terminates_cleanly() {
 }
 
 #[test]
-fn grows_its_buffer_for_an_oversized_row() {
+fn reads_an_oversized_row() {
     let big = "x".repeat(200_000);
     let dir = std::env::temp_dir().join("excelreader-rust-rows-test");
     std::fs::create_dir_all(&dir).expect("temp dir");
