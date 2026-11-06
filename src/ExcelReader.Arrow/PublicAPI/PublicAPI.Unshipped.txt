@@ -1,1 +1,3 @@
 #nullable enable
+ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism.get -> int
+ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism.init -> void

@@ -53,6 +53,10 @@
     <!-- Reading/ReadApi.Schema.cs / Typed/TypedApi.cs drive SchemaInference directly, so the C ABI and
          Excel.InferSchema answer identically by construction rather than by two parallel copies. -->
     <InternalsVisibleTo Include="ExcelReader.Native" />
+    <!-- ToArrowRecordBatch reads through Reader/Columnar's TypedTableParser, the same column builder as
+         xl_parse_arrow. ExcelReader.Arrow pins this package's exact version, so the internals it binds
+         always ship with it. -->
+    <InternalsVisibleTo Include="ExcelReader.Arrow" />
     <!-- Cli replaces its output file through the same StagedFile as Excel.EncryptPackage. -->
     <InternalsVisibleTo Include="ExcelReader.Cli" />
     <!-- The CsvParallel fuzz target drives ParallelCsvFactory.CreateWithChunkSize<T> directly (the

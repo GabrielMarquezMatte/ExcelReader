@@ -1,12 +1,13 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
-using ExcelReader.Core.Writer;
+using ExcelReader.Core.Reader.Columnar;
 using ExcelReader.Core.Writer.Csv;
 using ExcelReader.Core.Writer.Xlsb;
-using ExcelReader.Native;
+using ExcelReader.Core.Writer;
 using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
+using ExcelReader.Native;
 
 namespace ExcelReader.Tests.Native
 {
@@ -669,7 +670,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(5, tracker.Allocations);
             Assert.Equal(0, tracker.Frees);
 
-            TypedApi.FreeOverride = tracker.Free;
+            ColumnBlocks.FreeOverride = tracker.Free;
             try
             {
                 TypedApi.FreeTable(ref table);
@@ -677,7 +678,7 @@ namespace ExcelReader.Tests.Native
             }
             finally
             {
-                TypedApi.FreeOverride = null;
+                ColumnBlocks.FreeOverride = null;
             }
 
             Assert.Equal(5, tracker.Frees);
@@ -697,16 +698,16 @@ namespace ExcelReader.Tests.Native
                     new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
                     new() { Names = ["name"], Type = NativeColumnType.String },
                 ];
-                TypedApi.AllocOverride = tracker.Alloc;
-                TypedApi.FreeOverride = tracker.Free;
+                ColumnBlocks.AllocOverride = tracker.Alloc;
+                ColumnBlocks.FreeOverride = tracker.Free;
                 try
                 {
                     return TypedApi.ParseTyped(handle, 0, specs, headerRow: 1, out table);
                 }
                 finally
                 {
-                    TypedApi.AllocOverride = null;
-                    TypedApi.FreeOverride = null;
+                    ColumnBlocks.AllocOverride = null;
+                    ColumnBlocks.FreeOverride = null;
                     ReadApi.Close(handle);
                 }
             }

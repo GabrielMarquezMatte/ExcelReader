@@ -1,4 +1,5 @@
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Columnar;
 using ExcelReader.Native.Reading;
 
 namespace ExcelReader.Native.Typed
@@ -7,7 +8,7 @@ namespace ExcelReader.Native.Typed
     {
         internal sealed class TypedParseSession : IDisposable
         {
-            private readonly NativeColumnSpec[] _specs;
+            private readonly TypedColumnSpec[] _specs;
             private readonly int[] _columnIndices;
             private readonly long _maxRows;
             private readonly bool _isDate1904;
@@ -16,7 +17,7 @@ namespace ExcelReader.Native.Typed
             private string? _faultMessage;
             private bool _disposed;
 
-            private TypedParseSession(NativeColumnSpec[] specs, int[] columnIndices,
+            private TypedParseSession(TypedColumnSpec[] specs, int[] columnIndices,
                 long maxRows, bool isDate1904, IExcelRowEnumerator rows)
             {
                 _specs = specs;
@@ -27,7 +28,7 @@ namespace ExcelReader.Native.Typed
             }
 
             internal static int Open(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, long maxRows,
-                out TypedParseSession? session)
+                out TypedParseSession? session, bool allowDictionary = false)
             {
                 session = null;
                 if (handle is null)
@@ -39,32 +40,36 @@ namespace ExcelReader.Native.Typed
                     NativeApi.SetLastError($"max_rows must be 0 (unbounded) or positive; got {maxRows}.");
                     return NativeStatus.InvalidArgument;
                 }
-                if (!TryValidateArguments(specs, headerRow, out string? argumentError))
-                {
-                    NativeApi.SetLastError(argumentError);
-                    return NativeStatus.InvalidArgument;
-                }
-
-                NativeApi.ClearLastError();
-                int status = ReadApi.ResolveSheet(handle, sheet, out IExcelSheet? resolved);
+                int status = ValidateSpecs(specs, headerRow, allowDictionary, out TypedColumnSpec[] coreSpecs);
                 if (status != NativeStatus.Ok)
                 {
                     return status;
                 }
+                status = ReadApi.ResolveSheet(handle, sheet, out IExcelSheet? resolved);
+                if (status != NativeStatus.Ok)
+                {
+                    return status;
+                }
+                return OpenRows(resolved!, coreSpecs, headerRow, maxRows, handle.Workbook.IsDate1904, out session);
+            }
 
+            private static int OpenRows(IExcelSheet sheet, TypedColumnSpec[] specs, int headerRow, long maxRows, bool isDate1904,
+                out TypedParseSession? session)
+            {
+                session = null;
                 IExcelRowEnumerator? rows = null;
                 try
                 {
-                    rows = resolved!.GetEnumerator();
+                    rows = sheet.GetEnumerator();
                     int[] columnIndices = new int[specs.Length];
-                    if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
+                    if (!TypedTableParser.TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
                     {
                         NativeApi.SetLastError(resolveError);
                         rows.Dispose();
                         return NativeStatus.InvalidArgument;
                     }
 
-                    session = new TypedParseSession(specs, columnIndices, maxRows, handle.Workbook.IsDate1904, rows);
+                    session = new TypedParseSession(specs, columnIndices, maxRows, isDate1904, rows);
                     return NativeStatus.Ok;
                 }
                 catch (Exception exception)
@@ -78,6 +83,26 @@ namespace ExcelReader.Native.Typed
             internal int NextBatch(out NativeTable table)
             {
                 table = default;
+                int status = NextColumns(out ColumnarTable? columns);
+                if (status != NativeStatus.Ok)
+                {
+                    return status;
+                }
+                using ColumnarTable built = columns!;
+                try
+                {
+                    table = ToNativeTable(built);
+                    return NativeStatus.Ok;
+                }
+                catch (Exception exception)
+                {
+                    return Fail(exception.Message);
+                }
+            }
+
+            internal int NextColumns(out ColumnarTable? table)
+            {
+                table = null;
                 if (_disposed)
                 {
                     NativeApi.SetLastError("this typed reader has been closed.");
@@ -94,34 +119,27 @@ namespace ExcelReader.Native.Typed
                 }
 
                 NativeApi.ClearLastError();
-                ColumnBuilder[] builders = NewBuilders(_specs);
+                using TypedTableBuilder builder = new(_specs);
                 try
                 {
-                    long taken = 0;
-                    while ((_maxRows == 0 || taken < _maxRows) && _rows.MoveNext())
+                    while ((_maxRows == 0 || builder.RowCount < _maxRows) && _rows.MoveNext())
                     {
-                        if (!TryAppendRow(builders, _rows.Current, _columnIndices, _isDate1904, out int failedColumn))
+                        if (!builder.TryAppend(_rows.Current, _columnIndices, _isDate1904, out int failedColumn))
                         {
-                            return Fail(DescribeFailedColumn(_specs, failedColumn));
+                            return Fail(TypedTableParser.DescribeFailedColumn(_specs, failedColumn));
                         }
-                        taken++;
                     }
 
-                    if (taken == 0)
+                    if (builder.RowCount == 0)
                     {
                         return NativeStatus.Eof;
                     }
-                    table = BuildTable(builders);
+                    table = builder.Build();
                     return NativeStatus.Ok;
                 }
                 catch (Exception exception)
                 {
-                    table = default;
                     return Fail(exception.Message);
-                }
-                finally
-                {
-                    DisposeAll(builders);
                 }
             }
 
