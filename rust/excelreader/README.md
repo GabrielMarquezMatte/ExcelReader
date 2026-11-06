@@ -48,7 +48,12 @@ up to `n` threads - XLSX, XLSB and CSV are split, and the table is the same what
 | `Time` / `chrono::NaiveTime` | `ColumnType::Time` |
 | `Timestamp` / `chrono::NaiveDateTime` | `ColumnType::Timestamp` |
 
-`Option<T>` of any of the above makes the field `None` when the cell is null; a non-`Option` field is
+`ColumnType::StringDict` has no field type: set it on a column from `infer_schema`, then pass the schema to
+`to_arrow_with_schema`/`to_arrow_stream_with_schema` to read text as an Arrow dictionary
+(`DictionaryArray<Int32Type>`). The typed reads reject it.
+
+`Option<T>` of any of the above makes the field `None` when the cell is null (a blank cell is null for
+`Option<String>` too); a non-`Option` field is
 left at its `Default` instead.
 
 Narrower integers convert through `TryFrom` and panic on a value that does not fit, rather than

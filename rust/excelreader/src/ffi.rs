@@ -46,6 +46,8 @@ pub const XL_T_DATE: i32 = 4;
 pub const XL_T_TIME: i32 = 5;
 /// Microseconds since 1970-01-01T00:00:00Z, stored as `i64`.
 pub const XL_T_TIMESTAMP: i32 = 6;
+/// Dictionary-encoded UTF-8 (int32 indices). Only the Arrow exports take it.
+pub const XL_T_STRING_DICT: i32 = 7;
 
 /// `xl_infer_schema` flag: also type cells that hold text (integers, decimals, booleans, ISO dates).
 pub const XL_INFER_PARSE_TEXT: i32 = 1;
