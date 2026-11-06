@@ -633,7 +633,7 @@ Two workloads:
 - **Typed:** `parse<FullRow>` against zsv plus the same conversions done by hand (`std::string`
   for text, ISO dates, `std::from_chars` for the integers and doubles), one owned `FullRow` per row.
   All three produce the same checksum.
-- **Cells:** every cell's bytes counted. ExcelReader goes through `RowCursor` (`xl_rows_next_view`), zsv
+- **Cells:** every cell's bytes counted. ExcelReader goes through `RowCursor` (`xl_rows_next_cells`), zsv
   through its row handler. zsv's checksum is 3 bytes higher because it keeps the BOM in the first
   header cell.
 
@@ -642,19 +642,20 @@ Measured on the same machine as above, GCC 16.2.0 (MSYS2 UCRT64, `-O3 -mavx2` fo
 
 | Workload | ExcelReader | zsv `compat` | zsv `fast` |
 |---|---:|---:|---:|
-| Typed, 14 columns into `FullRow` | 28.1 ms | 24.0 ms | 21.2 ms |
-| Cells, byte count | 11.8 ms | 5.8 ms | 3.5 ms |
+| Typed, 14 columns into `FullRow` | 28.7 ms | 25.2 ms | 22.1 ms |
+| Cells, byte count | 10.3 ms | 6.0 ms | 3.6 ms |
 
-**zsv is faster on both.** Typed, it is ~1.2x (`compat`) and ~1.3x (`fast`) faster than ExcelReader.
-Counting cells, it is ~2.0x and ~3.4x faster.
+**zsv is faster on both.** Typed, it is ~1.1x (`compat`) and ~1.3x (`fast`) faster than ExcelReader.
+Counting cells, it is ~1.7x and ~2.9x faster.
 
-The cells gap is the C ABI, not the CSV parser. `xl_rows_next_view` copies every cell's value into a
-native row the cursor owns, one call per row, and that alone costs ~10.6 ms here (calling it without
-reading any cell, measured separately). The managed reader reads the same file in ~5 ms under
+The cells gap is the C ABI, not the CSV parser. `xl_rows_next_cells` copies every cell's text into
+memory the cursor owns, one call per row. `Sheet::for_each_row` borrows the reader's buffers instead
+and counts the same bytes in 7.1 ms. The managed reader reads the same file in ~5 ms under
 BenchmarkDotNet (`RealDataReadBenchmark.Csv_ExcelReader`), but that is a different harness and
 runtime, so it is context rather than a like-for-like number.
 
-The ExcelReader rows were 34.2 ms (typed) and 14.3 ms (cells) before the NativeAOT library's static
+The cells row was 11.8 ms while `RowCursor` used `xl_rows_next_view`, which also NUL-terminates each
+value and formats numbers to text. The ExcelReader rows were 34.2 ms (typed) and 14.3 ms (cells) before the NativeAOT library's static
 PGO profile was regenerated (a namespace refactor had left it matching none of the hot methods) and
 its x64 build was pinned to `x86-64-v3`. The cells row was 30.5 ms before that, when `xl::RowView`
 still decoded each cell through `std::optional` helpers. The rows are from separate 10-repetition
