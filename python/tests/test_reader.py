@@ -809,3 +809,50 @@ def test_value_types_take_keywords_so_a_new_field_never_shifts_a_caller():
         tuple(Cell(column=0, type=CellType.EMPTY, value=""))
     with pytest.raises(TypeError):
         open_writer(io.BytesIO(), "xlsx", WriteOptions())
+
+
+_CITIES = ["Lisboa", "Porto", "Braga"]
+_CITY_SCHEMA = [ColumnSpec(ColumnType.STRING_DICT, name="city")]
+
+
+@pytest.fixture
+def city_csv(tmp_path):
+    path = tmp_path / "cities.csv"
+    path.write_text("city\n" + "\n".join(_CITIES[i % 3] for i in range(30)) + "\n", encoding="utf-8")
+    return path
+
+
+def test_to_arrow_dictionary_encodes_a_string_dict_column(city_csv):
+    pa = pytest.importorskip("pyarrow")
+
+    with open_workbook(city_csv) as workbook:
+        column = workbook.sheets[0].to_arrow(_CITY_SCHEMA).column("city")
+
+    assert pa.types.is_dictionary(column.type)
+    assert column.dictionary.to_pylist() == _CITIES
+    assert column.to_pylist() == [_CITIES[i % 3] for i in range(30)]
+
+
+def test_to_pandas_reads_a_string_dict_column_as_a_categorical_across_batches(city_csv):
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+
+    with open_workbook(city_csv) as workbook:
+        df = workbook.sheets[0].to_pandas(_CITY_SCHEMA, batch_size=7)
+
+    assert isinstance(df["city"].dtype, pd.CategoricalDtype)
+    assert df["city"].tolist() == [_CITIES[i % 3] for i in range(30)]
+
+
+def test_to_polars_reads_a_string_dict_column_across_batches(city_csv):
+    pytest.importorskip("polars")
+
+    with open_workbook(city_csv) as workbook:
+        df = workbook.sheets[0].to_polars(_CITY_SCHEMA, batch_size=7)
+
+    assert df["city"].to_list() == [_CITIES[i % 3] for i in range(30)]
+
+
+def test_parse_rejects_a_string_dict_column(city_csv):
+    with open_workbook(city_csv) as workbook, pytest.raises(ExcelReaderError, match="Arrow outputs"):
+        workbook.sheets[0].parse(_CITY_SCHEMA)

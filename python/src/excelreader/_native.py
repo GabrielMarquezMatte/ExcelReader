@@ -74,6 +74,7 @@ XL_T_BOOL = 3
 XL_T_DATE = 4
 XL_T_TIME = 5
 XL_T_TIMESTAMP = 6
+XL_T_STRING_DICT = 7
 
 
 def int32_len(buffer: bytes) -> int:

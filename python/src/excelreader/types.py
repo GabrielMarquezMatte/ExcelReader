@@ -83,6 +83,9 @@ class ColumnType(IntEnum):
     DATE = 4
     TIME = 5
     TIMESTAMP = 6
+    STRING_DICT = 7
+    """Text as an Arrow dictionary column (int32 indices into the distinct strings), a pandas
+    `Categorical`. Only `to_arrow()`, `to_arrow_stream()`, `to_pandas()` and `to_polars()` take it."""
 
 
 @dataclass(frozen=True, slots=True)
