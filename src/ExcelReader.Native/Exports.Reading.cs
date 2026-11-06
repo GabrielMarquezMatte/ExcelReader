@@ -325,6 +325,22 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_rows_next_cells")]
+        public static int RowsNextCells(nint rows, NativeCellView** outCells, int* outCount)
+        {
+            NativeApi.ClearLastError();
+
+            if (outCells is null || outCount is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.NextRowCells(ResolveRows(rows), out NativeCellView* cells, out int count);
+            *outCells = cells;
+            *outCount = count;
+            return status;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_rows_foreach")]
         public static int RowsForEach(nint handle, int sheet, delegate* unmanaged<NativeCellView*, int, void*, int> callback, void* userData)
         {

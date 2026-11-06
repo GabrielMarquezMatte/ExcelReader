@@ -20,6 +20,8 @@ namespace ExcelReader.Native.Reading
 
         internal RowViewBuffer? View { get; set; }
 
+        internal CellViewBuffer? Cells { get; set; }
+
         internal ChunkedBuffer<byte>? AllRowsScratch { get; set; }
 
         internal int AllRowsCount { get; set; }
@@ -37,6 +39,7 @@ namespace ExcelReader.Native.Reading
             finally
             {
                 View?.Dispose();
+                Cells?.Dispose();
             }
         }
     }
