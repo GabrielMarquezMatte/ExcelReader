@@ -25,8 +25,8 @@ example) silently drops its profile. That happened after the namespace refactor 
 `<IlcArg Include="--codegenopt:JitStdOutFile=disasm.txt" />` (after deleting `obj/.../native`) and
 look for `; No PGO data` in the listing header.
 
-`tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_rows_next` and
-`xl_rows_next_view` over the 65K benchmark fixtures in XLSX, XLSB and CSV, and writes each parsed
+`tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_rows_next`,
+`xl_rows_next_view`, `xl_rows_next_cells` and `xl_rows_foreach` over the 65K benchmark fixtures in XLSX, XLSB and CSV, and writes each parsed
 table back out with `xl_write_typed_to_memory` in XLSX, XLSB and CSV, serially and in parallel.
 Record it and convert the trace (needs `dotnet-trace` and `dotnet-pgo`):
 
@@ -51,13 +51,14 @@ replacing the profile. Some formats may get worse, not only better.
 | `Reading/NativeRowCursor.cs` | One row enumerator and its buffers, behind `xl_rows_open`. Each cursor is independent, which is what lets several threads read one workbook. |
 | `Reading/RowBlob.cs` | Row serialization. |
 | `Reading/RowViewBuffer.cs` | Cursor-owned native row behind `xl_rows_next_view`. |
+| `Reading/CellViewBuffer.cs` | `xl_cell_view` arrays: borrowed for `xl_rows_foreach`/`xl_aggregate`, cursor-owned copies for `xl_rows_next_cells`. |
 | `include/excelreader.h` | Hand-written C header; keep in sync with `Exports*.cs`. |
 
 Reading exports: `xl_open_file`, `xl_open_memory`, `xl_open_source`, `xl_open_stream`,
 `xl_set_source_error`, `xl_close`, `xl_sheet_count`, `xl_sheet_name_at`,
 `xl_sheet_visibility_at`, `xl_sheet_index`, `xl_table_count`, `xl_table_info_at`, `xl_table_name_at`,
 `xl_table_index`, `xl_is_date1904`, `xl_rows_open`, `xl_rows_next`,
-`xl_rows_next_view`, `xl_rows_foreach`, `xl_aggregate`, `xl_rows_read_all_blob`, `xl_rows_read_all_decoded`, `xl_rows_close`,
+`xl_rows_next_view`, `xl_rows_next_cells`, `xl_rows_foreach`, `xl_aggregate`, `xl_rows_read_all_blob`, `xl_rows_read_all_decoded`, `xl_rows_close`,
 `xl_free_rows`, `xl_parse_typed`, `xl_free_table`, `xl_typed_reader_open`, `xl_typed_reader_next`,
 `xl_typed_reader_close`, `xl_infer_schema`, `xl_free_schema`, `xl_last_error`, `xl_last_error_ptr`,
 `xl_parse_arrow`, `xl_parse_arrow_stream`.
@@ -139,6 +140,21 @@ in a plain sheet and in a table alike, and a column style without a number forma
 DATE/TIME/TIMESTAMP column's format, so a bold TIME column still shows `hh:mm:ss`. Parallel writes
 keep them. The styles are checked and registered before the sheet is added: an invalid one returns
 `XL_INVALID_ARGUMENT`, a format limit `XL_ERROR`, and the handle stays usable.
+
+## Row reads
+
+A cursor (`xl_rows_open`) hands out one row per call, in three shapes:
+
+- `xl_rows_next` serializes the row into a caller buffer, every cell as text.
+- `xl_rows_next_view` returns a cursor-owned `xl_row`, every cell as NUL-terminated text.
+- `xl_rows_next_cells` returns cursor-owned `xl_cell_view`s, valid until the next call on the cursor or
+  `xl_rows_close`. Numbers stay binary (`has_number`/`number`), so XLSB and XLS numbers are never
+  formatted to text, and values are not NUL-terminated. It is the fastest pull read: on the 65K
+  fixtures it takes ~37% less time than `xl_rows_next_view` on XLSB and ~17% less on CSV. The C++
+  and Rust `RowCursor` use it.
+
+A row left pending by `xl_rows_next`'s `XL_BUFFER_TOO_SMALL` is handed out by whichever call comes
+next; `xl_rows_next_cells` then reports it as text only.
 
 ## Callback reads
 

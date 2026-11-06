@@ -169,9 +169,14 @@ typedef struct xl_cell_view {
     int32_t type;
     int32_t value_len;
     int32_t has_number;     /* number is valid; a cell carries text, a number, or both */
-    const uint8_t* value;   /* valid only until the callback returns, NOT NUL-terminated; NULL when value_len is 0 */
+    const uint8_t* value;   /* valid only until the callback returns or the next call on the cursor, NOT NUL-terminated; NULL when value_len is 0 */
     double number;
 } xl_cell_view;
+
+/* The next row as cell views owned by the cursor, valid until the next call on it or xl_rows_close.
+   Unlike xl_rows_next_view, numbers stay binary (has_number) instead of being formatted to text.
+   *out_cells may be NULL when *out_count is 0. */
+int32_t xl_rows_next_cells(xl_rows* rows, const xl_cell_view** out_cells, int32_t* out_count);
 
 /* cells may be NULL when cell_count is 0; a non-XL_OK return stops the walk and is returned verbatim (use positive codes); other xl_ calls are allowed from inside it */
 typedef int32_t (*xl_row_fn)(const xl_cell_view* cells, int32_t cell_count, void* user_data);
