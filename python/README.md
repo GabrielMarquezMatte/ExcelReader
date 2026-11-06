@@ -159,7 +159,8 @@ Leave `name` out to resolve a column by position instead: `ColumnSpec(ColumnType
 header, where every spec must resolve by index.
 
 A column that fails to convert is an error unless its spec sets `nullable=True`, which records the
-failure in `table.validity` and keeps reading.
+failure in `table.validity` and keeps reading. In a nullable text column a blank cell is null too,
+not an empty string.
 
 `parse()` always reads the whole sheet from its first row, independent of any `rows()`
 generator in progress.
@@ -196,6 +197,15 @@ sheet under 256 KiB, is read on one thread with the same result. The table is id
 either way. Every partition's columns are held until they are merged, so the peak memory is higher
 than a sequential read of the same file. `to_pandas()` and `to_polars()` with `parallelism` other
 than 1 parse the whole file instead of streaming it in batches.
+
+#### Dictionary-encoded text
+
+`ColumnType.STRING_DICT` reads a text column as an Arrow dictionary: int32 indices into the
+column's distinct strings. pandas gets a `Categorical`, polars a `Categorical` column. On a column
+with few distinct values that is much less memory than one string per row, and in XLSX/XLSB a
+shared string is looked up by its index instead of copied. Only `to_arrow()`, `to_arrow_stream()`,
+`to_pandas()` and `to_polars()` take it; `parse()` and `parse_batches()` raise. A streamed read builds
+one dictionary per batch.
 
 `xl_parse_typed` on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:
 

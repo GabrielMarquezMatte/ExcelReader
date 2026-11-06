@@ -272,8 +272,8 @@ class Sheet:
         never yielded as data); 0 means the sheet has no header, in which case every spec must
         resolve by `index`.
 
-        `parallelism` is the thread count for a CSV: 1 (the default) reads on one thread, 0 uses every
-        core, n up to n threads. Any other format, or a CSV too small to split, is read on one thread.
+        `parallelism` is the thread count for an XLSX, XLSB or CSV sheet: 1 (the default) reads on one
+        thread, 0 uses every core, n up to n threads. XLS, or a sheet under 256 KiB, is read on one thread.
         The table is identical either way; a parallel read holds every partition's columns until they
         are merged, so its peak memory is higher.
         """
