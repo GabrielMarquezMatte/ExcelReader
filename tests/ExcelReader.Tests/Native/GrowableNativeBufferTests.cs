@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Reader.Columnar;
 using ExcelReader.Native;
 
 namespace ExcelReader.Tests.Native

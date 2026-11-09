@@ -73,6 +73,7 @@ int header = workbook.AddStyle(new CellStyle { Bold = true });
 await using var sheet = workbook.AddSheet("Summary");
 sheet.SetColumnStyle(columnIndex: 1, currency); // before the first row
 sheet.SetColumnWidth(columnIndex: 0, width: 20);
+sheet.SetShowGridLines(false);
 
 await using (var row = await sheet.StartRowAsync(header))
 {
@@ -88,7 +89,7 @@ await using (var row = await sheet.StartRowAsync())
 await workbook.EndAsync();
 ```
 
-`AddStyle` deduplicates by value: registering the same `CellStyle` twice returns the same index, and index 0 is always the general/default style. `SetColumnStyle`/`SetColumnWidth` must be called before the sheet's first `StartRow`/`StartRowAsync` (calling them later throws `InvalidOperationException`) — the column layout (XLSX `<cols>`, XLSB `BrtColInfo`, XLS `COLINFO`) has to be written ahead of the row data. A row's style (from `StartRowAsync(int, CancellationToken)`) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.
+`AddStyle` deduplicates by value: registering the same `CellStyle` twice returns the same index, and index 0 is always the general/default style. `SetColumnStyle`/`SetColumnWidth` must be called before the sheet's first `StartRow`/`StartRowAsync` (calling them later throws `InvalidOperationException`) — the column layout (XLSX `<cols>`, XLSB `BrtColInfo`, XLS `COLINFO`) has to be written ahead of the row data. `SetShowGridLines` follows the same rule (it sets XLSX `<sheetView showGridLines>`, the XLSB `BrtBeginWsView` flag and the XLS `WINDOW2` flag); sheets show gridlines unless it is called with `false`. A row's style (from `StartRowAsync(int, CancellationToken)`) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.
 
 ### Style one cell, and set row heights
 

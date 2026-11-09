@@ -1,10 +1,11 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
-using ExcelReader.Native;
+using ExcelReader.Core.Reader.Columnar;
 using ExcelReader.Native.Arrow;
 using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
+using ExcelReader.Native;
 
 namespace ExcelReader.Tests.Native
 {
@@ -166,16 +167,16 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(Encoding.UTF8.GetBytes(text.ToString()), NativeFormat.Csv, out NativeHandle? handle));
             int status;
             NativeTable table;
-            TypedApi.AllocOverride = tracker.Alloc;
-            TypedApi.FreeOverride = tracker.Free;
+            ColumnBlocks.AllocOverride = tracker.Alloc;
+            ColumnBlocks.FreeOverride = tracker.Free;
             try
             {
                 status = TypedApi.ParseTypedTable(handle, 0, specs, headerRow: 1, 4, out table, SmallChunk);
             }
             finally
             {
-                TypedApi.AllocOverride = null;
-                TypedApi.FreeOverride = null;
+                ColumnBlocks.AllocOverride = null;
+                ColumnBlocks.FreeOverride = null;
                 ReadApi.Close(handle);
             }
 

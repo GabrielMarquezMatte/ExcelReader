@@ -180,6 +180,17 @@ namespace ExcelReader.Core.Writer
         void SetColumnWidth(int columnIndex, double width);
 
         /// <summary>
+        /// Sets whether the sheet shows its gridlines when opened; sheets show them by default. Must be
+        /// called before the first row is started. The default implementation does nothing, so sheet
+        /// writers implemented outside this library keep compiling.
+        /// </summary>
+        /// <param name="show"><see langword="false"/> to hide the gridlines.</param>
+        /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
+        void SetShowGridLines(bool show)
+        {
+        }
+
+        /// <summary>
         /// Synchronous counterpart to <see cref="EndAsync"/>: finalizes the sheet without the
         /// async/await machinery, for native/unmanaged callers whose ABI is synchronous.
         /// </summary>

@@ -838,7 +838,7 @@ namespace ExcelReader.Tests.Native
                     {
                         Assert.Equal(4, read.RowCount);
                         Assert.Equal(["", "widget", "gadget", ""], DecodeStringColumn(ColumnAt(read, 0)));
-                        Assert.Equal([true, true, true, true], DecodeValidity(ColumnAt(read, 0)));
+                        Assert.Equal([false, true, true, false], DecodeValidity(ColumnAt(read, 0)));
                     }
                     finally
                     {

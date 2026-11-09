@@ -46,6 +46,8 @@ pub const XL_T_DATE: i32 = 4;
 pub const XL_T_TIME: i32 = 5;
 /// Microseconds since 1970-01-01T00:00:00Z, stored as `i64`.
 pub const XL_T_TIMESTAMP: i32 = 6;
+/// Dictionary-encoded UTF-8 (int32 indices). Only the Arrow exports take it.
+pub const XL_T_STRING_DICT: i32 = 7;
 
 /// `xl_infer_schema` flag: also type cells that hold text (integers, decimals, booleans, ISO dates).
 pub const XL_INFER_PARSE_TEXT: i32 = 1;
@@ -580,11 +582,12 @@ extern "C" {
 
     pub fn xl_rows_open(handle: *mut XlWorkbook, sheet: i32, out_rows: *mut *mut XlRows) -> c_int;
     pub fn xl_rows_close(rows: *mut XlRows) -> c_int;
-    pub fn xl_rows_next(
+    /// The next row as cursor-owned `xl_cell_view`s with numbers kept binary, valid until the next
+    /// call on `rows` or `xl_rows_close`. `out_cells` may be NULL when `out_count` is 0.
+    pub fn xl_rows_next_cells(
         rows: *mut XlRows,
-        buffer: *mut u8,
-        capacity: i32,
-        out_written: *mut i32,
+        out_cells: *mut *const XlCellView,
+        out_count: *mut i32,
     ) -> c_int;
     pub fn xl_rows_read_all_blob(
         rows: *mut XlRows,

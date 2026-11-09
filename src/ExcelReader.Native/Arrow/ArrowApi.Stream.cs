@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Reader.Columnar;
 using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native.Arrow
@@ -45,7 +46,8 @@ namespace ExcelReader.Native.Arrow
             long maxRows, out ArrowArrayStream stream)
         {
             stream = default;
-            int status = TypedApi.TypedParseSession.Open(handle, sheet, specs, headerRow, maxRows, out TypedApi.TypedParseSession? session);
+            int status = TypedApi.TypedParseSession.Open(handle, sheet, specs, headerRow, maxRows, out TypedApi.TypedParseSession? session,
+                allowDictionary: true);
             if (status != NativeStatus.Ok)
             {
                 return status;
@@ -115,7 +117,7 @@ namespace ExcelReader.Native.Arrow
             }
             *outArray = default;
 
-            int status = state.Session.NextBatch(out NativeTable table);
+            int status = state.Session.NextColumns(out ColumnarTable? table);
             if (status == NativeStatus.Eof)
             {
                 return 0;
@@ -128,7 +130,7 @@ namespace ExcelReader.Native.Arrow
 
             try
             {
-                *outArray = BuildArrowArray(state.Specs, table);
+                *outArray = BuildArrowArray(table!);
                 return 0;
             }
             catch (Exception exception)
@@ -139,7 +141,7 @@ namespace ExcelReader.Native.Arrow
             }
             finally
             {
-                TypedApi.FreeTable(ref table);
+                table!.Dispose();
             }
         }
 

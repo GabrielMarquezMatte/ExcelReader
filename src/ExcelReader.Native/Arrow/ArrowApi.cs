@@ -1,7 +1,8 @@
 using System.Globalization;
-using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Reader.Columnar;
+using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native.Arrow
@@ -18,16 +19,18 @@ namespace ExcelReader.Native.Arrow
         {
             array = default;
             schema = default;
-            int status = TypedApi.ParseTypedTable(handle, sheet, specs, headerRow, degreeOfParallelism, out NativeTable table);
+            int status = TypedApi.ParseColumns(handle, sheet, specs, headerRow, degreeOfParallelism, allowDictionary: true, chunkSizeOverride: 0,
+                out ColumnarTable? columns);
             if (status != NativeStatus.Ok)
             {
                 return status;
             }
 
+            using ColumnarTable table = columns!;
             try
             {
                 schema = BuildArrowSchema(specs);
-                array = BuildArrowArray(specs, table);
+                array = BuildArrowArray(table);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -40,10 +43,6 @@ namespace ExcelReader.Native.Arrow
                 array = default;
                 schema = default;
                 return NativeStatus.Error;
-            }
-            finally
-            {
-                TypedApi.FreeTable(ref table);
             }
         }
 
@@ -60,6 +59,7 @@ namespace ExcelReader.Native.Arrow
             }
 
             ReleaseChildren(schema.Children, schema.NChildren, &ReleaseArrowSchema);
+            ReleaseDictionary(schema.Dictionary, &ReleaseArrowSchema);
             FreeIfSet(schema.Format);
             FreeIfSet(schema.Name);
 
@@ -80,6 +80,7 @@ namespace ExcelReader.Native.Arrow
             }
 
             ReleaseChildren(array.Children, array.NChildren, &ReleaseArrowArray);
+            ReleaseDictionary(array.Dictionary, &ReleaseArrowArray);
             for (long i = 0; i < array.NBuffers; i++)
             {
                 FreeIfSet(Marshal.ReadIntPtr(array.Buffers, (int)(i * IntPtr.Size)));
@@ -105,6 +106,16 @@ namespace ExcelReader.Native.Arrow
             {
                 Marshal.FreeHGlobal(children);
             }
+        }
+
+        private static void ReleaseDictionary(IntPtr dictionary, delegate*<IntPtr, void> release)
+        {
+            if (dictionary == IntPtr.Zero)
+            {
+                return;
+            }
+            release(dictionary);
+            Marshal.FreeHGlobal(dictionary);
         }
 
         private static void FreeIfSet(IntPtr pointer)
@@ -153,18 +164,30 @@ namespace ExcelReader.Native.Arrow
         private static ArrowSchema BuildChildSchema(NativeColumnSpec spec, int index)
         {
             string name = spec.Names.Length > 0 ? spec.Names[0] : index.ToString(CultureInfo.InvariantCulture);
-            return new ArrowSchema
+            ArrowSchema child = new()
             {
                 Format = AllocUtf8Z(ArrowFormatCode(spec.Type)),
                 Name = AllocUtf8Z(name),
                 Flags = spec.Nullable ? ArrowFlags.Nullable : 0,
                 Release = SchemaReleaseCallback,
             };
+            if (spec.Type == NativeColumnType.StringDictionary)
+            {
+                child.Dictionary = AllocStruct(new ArrowSchema { Format = AllocUtf8Z("u"), Release = SchemaReleaseCallback });
+            }
+            return child;
         }
 
-        private static ArrowArray BuildArrowArray(NativeColumnSpec[] specs, NativeTable table)
+        private static IntPtr AllocStruct<T>(T value) where T : unmanaged
         {
-            int count = table.ColumnCount;
+            IntPtr block = Marshal.AllocHGlobal(sizeof(T));
+            *(T*)block = value;
+            return block;
+        }
+
+        private static ArrowArray BuildArrowArray(ColumnarTable table)
+        {
+            int count = table.Columns.Length;
             IntPtr children = Marshal.AllocHGlobal(checked(count * IntPtr.Size));
             int built = 0;
             try
@@ -172,7 +195,7 @@ namespace ExcelReader.Native.Arrow
                 for (; built < count; built++)
                 {
                     IntPtr child = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
-                    Marshal.StructureToPtr(BuildChildArray(specs[built].Type, &((NativeColumn*)table.Columns)[built]), child, false);
+                    Marshal.StructureToPtr(BuildChildArray(ref table.Columns[built]), child, false);
                     Marshal.WriteIntPtr(children, built * IntPtr.Size, child);
                 }
 
@@ -202,68 +225,80 @@ namespace ExcelReader.Native.Arrow
             }
         }
 
-        private static ArrowArray BuildChildArray(int type, NativeColumn* column)
+        private static ArrowArray BuildChildArray(ref BuiltColumn column)
         {
-            int bufferCount = type == NativeColumnType.String ? 3 : 2;
+            if (column.Type == ExcelColumnType.StringDictionaryColumn)
+            {
+                return BuildDictionaryArray(ref column);
+            }
+            bool isString = column.Type == ExcelColumnType.StringColumn;
+            int bufferCount = isString ? 3 : 2;
             IntPtr* buffers = (IntPtr*)Marshal.AllocHGlobal(bufferCount * IntPtr.Size);
-            if (type == NativeColumnType.Bool)
+            try
             {
-                try
-                {
-                    buffers[1] = BitPackBoolColumn(column->Values, column->Length);
-                }
-                catch
-                {
-                    Marshal.FreeHGlobal((IntPtr)buffers);
-                    throw;
-                }
+                buffers[1] = ValuesBuffer(ref column);
             }
-            else
+            catch
             {
-                buffers[1] = column->Values;
-                column->Values = IntPtr.Zero;
+                Marshal.FreeHGlobal((IntPtr)buffers);
+                throw;
             }
-            if (type == NativeColumnType.String)
+            if (isString)
             {
-                buffers[2] = column->Data;
-                column->Data = IntPtr.Zero;
+                buffers[2] = TakeBlock(ref column.Data);
             }
-            buffers[0] = column->Validity;
-            column->Validity = IntPtr.Zero;
+            buffers[0] = TakeBlock(ref column.Validity);
+            return Primitive(column.Length, buffers, bufferCount);
+        }
 
+        // Arrow packs booleans to bits; every other type hands its block over as it is.
+        private static IntPtr ValuesBuffer(ref BuiltColumn column)
+        {
+            if (column.Type == ExcelColumnType.BoolColumn)
+            {
+                return BitPackBoolColumn(column.Values, column.Length);
+            }
+            return TakeBlock(ref column.Values);
+        }
+
+        // Indices with the column's validity; the distinct strings hang off them as a utf8 array with no nulls.
+        private static ArrowArray BuildDictionaryArray(ref BuiltColumn column)
+        {
+            IntPtr* values = (IntPtr*)Marshal.AllocHGlobal(3 * IntPtr.Size);
+            values[0] = IntPtr.Zero;
+            values[1] = TakeBlock(ref column.DictionaryOffsets);
+            values[2] = TakeBlock(ref column.Data);
+            ArrowArray dictionary = Primitive(column.DictionaryLength, values, 3);
+            IntPtr* indices = (IntPtr*)Marshal.AllocHGlobal(2 * IntPtr.Size);
+            indices[1] = TakeBlock(ref column.Values);
+            indices[0] = TakeBlock(ref column.Validity);
+            ArrowArray array = Primitive(column.Length, indices, 2);
+            array.Dictionary = AllocStruct(dictionary);
+            return array;
+        }
+
+        private static ArrowArray Primitive(long length, IntPtr* buffers, int bufferCount)
+        {
             return new ArrowArray
             {
-                Length = column->Length,
-                NullCount = CountUnset(buffers[0], column->Length),
+                Length = length,
+                NullCount = ColumnBlocks.CountUnset(buffers[0], length),
                 NBuffers = bufferCount,
                 Buffers = (IntPtr)buffers,
                 Release = ArrayReleaseCallback,
             };
         }
 
-        private static long CountUnset(IntPtr validity, long length)
+        private static IntPtr TakeBlock(ref IntPtr block)
         {
-            if (validity == IntPtr.Zero)
-            {
-                return 0;
-            }
-            ReadOnlySpan<byte> bits = new((void*)validity, (int)((length + 7) / 8));
-            var ulongs = MemoryMarshal.Cast<byte, ulong>(bits);
-            long set = 0;
-            foreach (ref readonly ulong packed in ulongs)
-            {
-                set += BitOperations.PopCount(packed);
-            }
-            foreach (ref readonly byte packed in bits.Slice(ulongs.Length * sizeof(ulong)))
-            {
-                set += BitOperations.PopCount(packed);
-            }
-            return length - set;
+            IntPtr taken = block;
+            block = IntPtr.Zero;
+            return taken;
         }
 
         private static IntPtr BitPackBoolColumn(IntPtr byteValues, long length)
         {
-            return TypedApi.PackBitsLsbFirst(new ReadOnlySpan<byte>((void*)byteValues, (int)length));
+            return ColumnBlocks.PackBitsLsbFirst(new ReadOnlySpan<byte>((void*)byteValues, (int)length));
         }
 
         private static string ArrowFormatCode(int type)
@@ -271,6 +306,7 @@ namespace ExcelReader.Native.Arrow
             return type switch
             {
                 NativeColumnType.String => "u",
+                NativeColumnType.StringDictionary => "i",
                 NativeColumnType.Int64 => "l",
                 NativeColumnType.Float64 => "g",
                 NativeColumnType.Bool => "b",

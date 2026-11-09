@@ -63,7 +63,7 @@ namespace ExcelReader.Core.Reader.Csv
             private int _firstCell;
             private int _cellCount;
 
-            private readonly Utf8StringCache? _contentCache;
+            private readonly ColumnStringCaches? _contentCache;
 
             private struct FieldState
             {
@@ -73,37 +73,37 @@ namespace ExcelReader.Core.Reader.Csv
                 public int MatStart;
             }
 
-            internal Enumerator(Stream stream, CsvReaderOptions options, Utf8StringCache? contentCache, CancellationToken ct)
+            internal Enumerator(Stream stream, CsvReaderOptions options, ColumnStringCaches? contentCache, CancellationToken ct)
                 : this(stream, options, ownsSource: false, lease: null, contentCache, ct)
             {
             }
 
             internal Enumerator(Stream stream, CsvReaderOptions options, bool ownsSource, ReaderLifetime? lease,
-                Utf8StringCache? contentCache, CancellationToken ct)
+                ColumnStringCaches? contentCache, CancellationToken ct)
                 : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ownsSource, ct)
             {
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
-                _contentCache = contentCache ?? (options.InternStrings ? new Utf8StringCache() : null);
+                _contentCache = contentCache ?? (options.InternStrings ? new ColumnStringCaches() : null);
                 _scanner = new CsvStructuralScanner(_delimiter, _quote);
                 _scannerSupported = CsvStructuralScanner.Supports(_delimiter, _quote);
                 _lease = lease;
             }
 
-            internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, Utf8StringCache? contentCache, CancellationToken ct)
+            internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, ColumnStringCaches? contentCache, CancellationToken ct)
                 : this(content, options, lease: null, contentCache, ct)
             {
             }
 
             internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, ReaderLifetime? lease,
-                Utf8StringCache? contentCache, CancellationToken ct)
+                ColumnStringCaches? contentCache, CancellationToken ct)
                 : base(content, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), ct)
             {
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
-                _contentCache = contentCache ?? (options.InternStrings ? new Utf8StringCache() : null);
+                _contentCache = contentCache ?? (options.InternStrings ? new ColumnStringCaches() : null);
                 _scanner = new CsvStructuralScanner(_delimiter, _quote);
                 _scannerSupported = CsvStructuralScanner.Supports(_delimiter, _quote);
                 _lease = lease;

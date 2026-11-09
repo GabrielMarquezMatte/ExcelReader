@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace ExcelReader.Core.Reader.Internal
 {
@@ -36,7 +35,7 @@ namespace ExcelReader.Core.Reader.Internal
                 return false;
             }
             ref string? slot = ref (Volatile.Read(ref _values) ?? CreateValues())[index];
-            string created = Encoding.UTF8.GetString(utf8);
+            string created = Utf8Strings.Create(utf8);
             value = Interlocked.CompareExchange(ref slot, created, null) ?? created;
             return true;
         }

@@ -159,6 +159,42 @@ namespace ExcelReader.Native.Reading
             }
         }
 
+        internal static int NextRowCells(NativeRowCursor? cursor, out NativeCellView* cells, out int count)
+        {
+            cells = null;
+            count = 0;
+            if (cursor is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            NativeApi.ClearLastError();
+            try
+            {
+                cursor.Cells ??= new CellViewBuffer();
+                if (cursor.HasPending)
+                {
+                    cursor.HasPending = false;
+                    cells = cursor.Cells.Copy(cursor.Scratch.AsSpan(0, cursor.PendingLength), out count);
+                    return NativeStatus.Ok;
+                }
+
+                if (!cursor.Rows.MoveNext())
+                {
+                    return NativeStatus.Eof;
+                }
+                cells = cursor.Cells.Copy(cursor.Rows.Current, out count);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                cells = null;
+                count = 0;
+                return NativeStatus.Error;
+            }
+        }
+
         private static int DecodePendingRow(NativeRowCursor cursor, out NativeRow row)
         {
             row = default;

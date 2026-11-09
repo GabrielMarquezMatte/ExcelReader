@@ -88,6 +88,7 @@ namespace Snippets.Writing.Styles
             await using var sheet = workbook.AddSheet("Summary");
             sheet.SetColumnStyle(columnIndex: 1, currency); // before the first row
             sheet.SetColumnWidth(columnIndex: 0, width: 20);
+            sheet.SetShowGridLines(false);
 
             await using (var row = await sheet.StartRowAsync(header))
             {

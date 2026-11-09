@@ -179,7 +179,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         {
             int claimed = -1;
             // One per worker: a cache per chunk would be allocated, and start cold, every 64 KB of input.
-            Utf8StringCache? contentCache = _readerOptions.InternStrings ? new Utf8StringCache() : null;
+            ColumnStringCaches? contentCache = _readerOptions.InternStrings ? new ColumnStringCaches() : null;
             try
             {
                 while (true)

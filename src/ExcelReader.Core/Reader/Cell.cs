@@ -451,15 +451,11 @@ namespace ExcelReader.Core.Reader
         /// A repeated value — the common case for categorical columns — returns the same cached instance
         /// instead of decoding UTF-8 and allocating again. See the constructor for how the dedup cache is supplied.
         /// </remarks>
-        [SkipLocalsInit]
         public string GetString()
         {
             if (_hasNumber && Value.IsEmpty)
             {
-                Span<byte> buffer = stackalloc byte[32];
-                return CellFormatter.TryFormatDouble(_number, buffer, out int written)
-                    ? Encoding.UTF8.GetString(buffer[..written])
-                    : string.Empty;
+                return FormatNumber(_number);
             }
             if (_sharedCache is not null && !Value.IsEmpty && _sharedCache.TryGet(_sharedIndex, Value, out string? shared))
             {
@@ -469,7 +465,18 @@ namespace ExcelReader.Core.Reader
             {
                 return _contentCache.GetOrAdd(Value);
             }
-            return Encoding.UTF8.GetString(Value);
+            return Utf8Strings.Create(Value);
+        }
+
+        // Out of line: its stackalloc would otherwise give every GetString call a heavier frame.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        [SkipLocalsInit]
+        private static string FormatNumber(double number)
+        {
+            Span<byte> buffer = stackalloc byte[32];
+            return CellFormatter.TryFormatDouble(number, buffer, out int written)
+                ? Encoding.UTF8.GetString(buffer[..written])
+                : string.Empty;
         }
 
 

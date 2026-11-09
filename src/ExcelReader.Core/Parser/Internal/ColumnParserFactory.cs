@@ -362,6 +362,10 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return true;
             }
+            if (ReferenceEquals(provider, CultureInfo.InvariantCulture) && FastDate.TryParseInvariantGeneral(utf8, out value))
+            {
+                return true;
+            }
             Span<char> stack = stackalloc char[Utf8Text.StackChars];
             ReadOnlySpan<char> chars = Utf8Text.Decode(utf8, stack, out char[]? rented);
             try

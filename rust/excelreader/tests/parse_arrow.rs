@@ -1,9 +1,10 @@
 #![cfg(feature = "arrow")]
 
-use arrow::array::{Array, Int64Array, StringArray};
+use arrow::array::{Array, DictionaryArray, Int64Array, StringArray};
+use arrow::datatypes::Int32Type;
 use arrow::record_batch::RecordBatchReader;
 use excelreader::ReadOptions;
-use excelreader::{ArrowBatches, ExcelMapper, Format, OpenOptions, Workbook};
+use excelreader::{ArrowBatches, ColumnType, ExcelMapper, Format, OpenOptions, Workbook};
 
 #[derive(Default, ExcelMapper)]
 struct Record {
@@ -241,4 +242,43 @@ fn an_inferred_schema_streams_every_row() {
         .map(|batch| batch.expect("a batch must read").num_rows())
         .sum();
     assert_eq!(rows, 100);
+}
+
+#[test]
+fn a_string_dict_column_comes_back_dictionary_encoded() {
+    let workbook = Workbook::open(fixture_path()).expect("open must succeed");
+    let sheet = workbook.sheet(0).expect("sheet 0");
+    let mut schema = sheet
+        .infer_schema(1, 100, false)
+        .expect("infer_schema must succeed");
+    schema.truncate(1);
+    schema[0].column_type = ColumnType::String;
+    let plain = sheet
+        .to_arrow_with_schema(&schema, &ReadOptions::new())
+        .expect("a string column must read");
+    schema[0].column_type = ColumnType::StringDict;
+    let encoded = sheet
+        .to_arrow_with_schema(&schema, &ReadOptions::new())
+        .expect("a dictionary column must read");
+
+    let strings = plain
+        .column(0)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .expect("utf8");
+    let dictionary = encoded
+        .column(0)
+        .as_any()
+        .downcast_ref::<DictionaryArray<Int32Type>>()
+        .expect("dictionary<int32, utf8>");
+    let values = dictionary
+        .values()
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .expect("utf8 values");
+    assert_eq!(dictionary.len(), strings.len());
+    for row in 0..strings.len() {
+        let key = dictionary.keys().value(row) as usize;
+        assert_eq!(values.value(key), strings.value(row));
+    }
 }
