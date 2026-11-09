@@ -767,11 +767,29 @@ namespace ExcelReader.Core.Reader.Xlsx
                     return -1;
                 }
                 int lt = textStart + rel;
-                if (!buf[lt..].StartsWith("</t></is></c>"u8) || (mayEscape && buf.Slice(textStart, rel).IndexOf("_x"u8) >= 0))
+                bool plain = buf[lt] == (byte)'<' && !(mayEscape && buf.Slice(textStart, rel).IndexOf("_x"u8) >= 0);
+                if (!plain)
+                {
+                    int close = buf[lt..].IndexOf((byte)'<');
+                    if (close < 0)
+                    {
+                        return -1;
+                    }
+                    lt += close;
+                }
+                if (!buf[lt..].StartsWith("</t></is></c>"u8))
                 {
                     return -1;
                 }
-                _acc.Add(col, textStart, rel, CellType.ExcelString, style, CellValueSource.RowBuffer);
+                if (plain)
+                {
+                    _acc.Add(col, textStart, rel, CellType.ExcelString, style, CellValueSource.RowBuffer);
+                    return lt + 13;
+                }
+                // Entities, _xHHHH_ escapes and carriage returns: the single run holds no '<', so no CDATA either.
+                int vStart = _acc.ValueLength;
+                AppendDecoded(buf[textStart..lt]);
+                _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, CellValueSource.RowValues);
                 return lt + 13;
             }
 

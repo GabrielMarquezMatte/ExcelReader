@@ -97,6 +97,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
             """<c r="L{r}" t="inlineStr"><is><t></t></is></c>""",
             """<c r="M{r}" t="inlineStr"/>""",
             """<c r="N{r}" t="inlineStr"><is><t>a_x000D_b</t></is></c>""",
+            """<c r="O{r}" t="inlineStr"><is><t>a&amp;b_x0041_&lt;c&gt;</t></is></c>""",
+            "<c r=\"P{r}\" t=\"inlineStr\"><is><t>cr\r\nlf\rend</t></is></c>",
+            """<c r="Q{r}" t="inlineStr"><is><t>&#65;&unknown;x&amp;</t></is></c>""",
+            """<c r="R{r}" t="inlineStr"><is><t>a&amp;</t><t>b</t></is></c>""",
         ];
 
         [Fact]
@@ -128,6 +132,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal("x", row[8].GetString());
             Assert.Equal(1, row[9].StyleIndex);
             Assert.Equal("no ref", row[10].GetString());
+            Assert.Equal("a&bA<c>", row[14].GetString());
+            Assert.Equal("cr\nlf\nend", row[15].GetString());
+            Assert.Equal("A&unknown;x&", row[16].GetString());
+            Assert.Equal("a&b", row[17].GetString());
         }
 
         private static void AssertPathsAgree(string[] cells, bool prefixedAgrees)
