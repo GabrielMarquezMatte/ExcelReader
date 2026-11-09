@@ -90,9 +90,49 @@ namespace ExcelReader.Tests.Reader
 
         private static int BucketOf(ReadOnlySpan<byte> utf8)
         {
-            HashCode hash = default;
-            hash.AddBytes(utf8);
-            return hash.ToHashCode() & 1023;
+            return Utf8StringCache.ComputeHash(utf8) & 255;
+        }
+
+        [Fact]
+        public void ARarelyRepeatingSamplePausesTheCacheThenItResamples()
+        {
+            var cache = new Utf8StringCache();
+            for (int i = 0; i < 1024; i++)
+            {
+                cache.GetOrAdd(Encoding.UTF8.GetBytes("unique-" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            }
+
+            int pausedCells = 0;
+            while (!cache.TryUse())
+            {
+                pausedCells++;
+            }
+
+            Assert.Equal(64 * 1024, pausedCells);
+            Assert.True(cache.TryUse());
+        }
+
+        [Fact]
+        public void ARepeatingSampleKeepsTheCacheInUse()
+        {
+            var cache = new Utf8StringCache();
+            byte[] utf8 = Encoding.UTF8.GetBytes("alpha");
+            for (int i = 0; i < 1024; i++)
+            {
+                cache.GetOrAdd(utf8);
+            }
+
+            Assert.True(cache.TryUse());
+        }
+
+        [Fact]
+        public void EachColumnGetsItsOwnCache()
+        {
+            var caches = new ColumnStringCaches();
+
+            Assert.NotSame(caches.ForColumn(0), caches.ForColumn(1));
+            Assert.Same(caches.ForColumn(40), caches.ForColumn(40));
+            Assert.Null(caches.ForColumn(ExcelLimits.MaxColumns));
         }
 
         [Fact]

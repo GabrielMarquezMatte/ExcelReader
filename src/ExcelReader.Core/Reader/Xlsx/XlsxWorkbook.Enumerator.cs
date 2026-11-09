@@ -20,7 +20,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             private readonly XlsxWorkbook _reader;
             private readonly bool[] _styleIsDate;
             private int[] _sharedOffsets;
-            private readonly Utf8StringCache? _contentCache;
+            private readonly ColumnStringCaches? _contentCache;
             private readonly ZipEntryRef _entry;
             private int _nextCol;
             private bool _trackRowIndex;
@@ -44,7 +44,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
-                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _contentCache = reader._options.InternStrings ? new ColumnStringCaches() : null;
                 _lease = reader.Lifetime;
             }
 
@@ -54,7 +54,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
-                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _contentCache = reader._options.InternStrings ? new ColumnStringCaches() : null;
                 _entry = entry;
                 _lease = reader.Lifetime;
             }
@@ -65,7 +65,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
-                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _contentCache = reader._options.InternStrings ? new ColumnStringCaches() : null;
                 _ns = ns;
                 _nsChecked = true;
             }
