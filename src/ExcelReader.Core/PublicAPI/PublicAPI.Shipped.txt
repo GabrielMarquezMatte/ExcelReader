@@ -313,6 +313,7 @@ ExcelReader.Core.Reader.Schema.ExcelColumnType.DateColumn = 4 -> ExcelReader.Cor
 ExcelReader.Core.Reader.Schema.ExcelColumnType.Float64Column = 2 -> ExcelReader.Core.Reader.Schema.ExcelColumnType
 ExcelReader.Core.Reader.Schema.ExcelColumnType.Int64Column = 1 -> ExcelReader.Core.Reader.Schema.ExcelColumnType
 ExcelReader.Core.Reader.Schema.ExcelColumnType.StringColumn = 0 -> ExcelReader.Core.Reader.Schema.ExcelColumnType
+ExcelReader.Core.Reader.Schema.ExcelColumnType.StringDictionaryColumn = 7 -> ExcelReader.Core.Reader.Schema.ExcelColumnType
 ExcelReader.Core.Reader.Schema.ExcelColumnType.TimeColumn = 5 -> ExcelReader.Core.Reader.Schema.ExcelColumnType
 ExcelReader.Core.Reader.Schema.ExcelColumnType.TimestampColumn = 6 -> ExcelReader.Core.Reader.Schema.ExcelColumnType
 ExcelReader.Core.Reader.Schema.SchemaInferenceOptions
@@ -515,6 +516,7 @@ ExcelReader.Core.Writer.Csv.CsvSheetWriter.End() -> void
 ExcelReader.Core.Writer.Csv.CsvSheetWriter.EndAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
 ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines(bool show) -> void
 ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow() -> ExcelReader.Core.Writer.Csv.CsvRowWriter!
 ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(int styleId) -> ExcelReader.Core.Writer.Csv.CsvRowWriter!
 ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Csv.CsvRowWriter!
@@ -668,6 +670,7 @@ ExcelReader.Core.Writer.ISheetWriter<TRow>.End() -> void
 ExcelReader.Core.Writer.ISheetWriter<TRow>.EndAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 ExcelReader.Core.Writer.ISheetWriter<TRow>.SetColumnStyle(int columnIndex, int styleId) -> void
 ExcelReader.Core.Writer.ISheetWriter<TRow>.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.ISheetWriter<TRow>.SetShowGridLines(bool show) -> void
 ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRow() -> TRow
 ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRow(int styleId) -> TRow
 ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRow(int styleId, double height) -> TRow
@@ -718,6 +721,7 @@ ExcelReader.Core.Writer.Xls.XlsSheetWriter.End() -> void
 ExcelReader.Core.Writer.Xls.XlsSheetWriter.EndAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
 ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines(bool show) -> void
 ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow() -> ExcelReader.Core.Writer.Xls.XlsRowWriter!
 ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(int styleId) -> ExcelReader.Core.Writer.Xls.XlsRowWriter!
 ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Xls.XlsRowWriter!
@@ -770,6 +774,7 @@ ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.EndAsync(System.Threading.Cancellat
 ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.EndTable() -> void
 ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
 ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines(bool show) -> void
 ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow() -> ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!
 ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(int styleId) -> ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!
 ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Xlsb.XlsbRowWriter!
@@ -826,6 +831,7 @@ ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.EndAsync(System.Threading.Cancellat
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.EndTable() -> void
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines(bool show) -> void
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow() -> ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(int styleId) -> ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!
 ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow(int styleId, double height) -> ExcelReader.Core.Writer.Xlsx.XlsxRowWriter!
