@@ -240,10 +240,10 @@ formula-string cells, and every CSV field) are deduplicated through a small cont
 when materialized via <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_GetString">GetString()</a>. Defaults to <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.
 Has no effect on shared-string cells, which already dedup through the shared-string table's
 own index-keyed cache, nor on the zero-copy <a class="xref" href="ExcelReader.Core.Reader.Cell.html#ExcelReader_Core_Reader_Cell_Value">Value</a> span path —
-only <code>GetString()</code> consults this cache. Worth enabling only for genuinely categorical
-(low-cardinality, repeated) text; for high-cardinality data every lookup is a cache miss, so the
-per-call hashing cost is pure overhead — measured roughly doubling wall-clock time on a
-real-world, mixed-cardinality CSV corpus.</p>
+only <code>GetString()</code> consults this cache. Each column has its own cache, and a column whose
+values rarely repeat stops consulting it for a while, so mostly-unique columns cost little. It
+trades time for allocation: on a real-world, mixed-cardinality CSV it allocated about half as
+much and took about 20% longer.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 

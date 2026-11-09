@@ -227,7 +227,8 @@ table.validity[2]          # bit-packed nulls, or None when the column has none
 <code>header_row</code> defaults to 1 (the first row names the columns); pass <code>header_row=0</code> for a sheet with no
 header, where every spec must resolve by index.</p>
 <p>A column that fails to convert is an error unless its spec sets <code>nullable=True</code>, which records the
-failure in <code>table.validity</code> and keeps reading.</p>
+failure in <code>table.validity</code> and keeps reading. In a nullable text column a blank cell is null too,
+not an empty string.</p>
 <p><code>parse()</code> always reads the whole sheet from its first row, independent of any <code>rows()</code>
 generator in progress.</p>
 <h4 id="reading-a-sheet-a-batch-at-a-time">Reading a sheet a batch at a time</h4>
@@ -255,6 +256,13 @@ sheet under 256 KiB, is read on one thread with the same result. The table is id
 either way. Every partition's columns are held until they are merged, so the peak memory is higher
 than a sequential read of the same file. <code>to_pandas()</code> and <code>to_polars()</code> with <code>parallelism</code> other
 than 1 parse the whole file instead of streaming it in batches.</p>
+<h4 id="dictionary-encoded-text">Dictionary-encoded text</h4>
+<p><code>ColumnType.STRING_DICT</code> reads a text column as an Arrow dictionary: int32 indices into the
+column's distinct strings. pandas gets a <code>Categorical</code>, polars a <code>Categorical</code> column. On a column
+with few distinct values that is much less memory than one string per row, and in XLSX/XLSB a
+shared string is looked up by its index instead of copied. Only <code>to_arrow()</code>, <code>to_arrow_stream()</code>,
+<code>to_pandas()</code> and <code>to_polars()</code> take it; <code>parse()</code> and <code>parse_batches()</code> raise. A streamed read builds
+one dictionary per batch.</p>
 <p><code>xl_parse_typed</code> on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:</p>
 <table>
 <thead>

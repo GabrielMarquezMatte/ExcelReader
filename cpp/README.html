@@ -174,7 +174,8 @@ for (auto&amp; batch : *reader) { if (!batch) { break; } /* batch-&gt;columns() 
 </code></pre>
 <p>A column matched by index has no name, and writing needs every column named or none. The schema is
 a guess over a sample: a column inferred as <code>XL_T_I64</code> that holds a fraction further down fails the
-read, unless the column is <code>nullable</code>.</p>
+read, unless the column is <code>nullable</code>. In a nullable <code>XL_T_STRING</code> column a blank cell is null, not an
+empty string.</p>
 <p>Every entry point returns <code>std::expected&lt;T, xl::Error&gt;</code> — this header throws nothing.</p>
 <p>A workbook hands out sheets. An <code>xl::Sheet</code> is the workbook handle and an index: it owns nothing,
 it is cheap to copy, and every read on it opens its own cursor. <code>workbook-&gt;sheet(i)</code> makes no native
@@ -609,7 +610,7 @@ because the DuckDB comparison above only links under MSVC.</p>
 <li><strong>Typed:</strong> <code>parse&lt;FullRow&gt;</code> against zsv plus the same conversions done by hand (<code>std::string</code>
 for text, ISO dates, <code>std::from_chars</code> for the integers and doubles), one owned <code>FullRow</code> per row.
 All three produce the same checksum.</li>
-<li><strong>Cells:</strong> every cell's bytes counted. ExcelReader goes through <code>RowCursor</code> (<code>xl_rows_next_view</code>), zsv
+<li><strong>Cells:</strong> every cell's bytes counted. ExcelReader goes through <code>RowCursor</code> (<code>xl_rows_next_cells</code>), zsv
 through its row handler. zsv's checksum is 3 bytes higher because it keeps the BOM in the first
 header cell.</li>
 </ul>
@@ -627,26 +628,27 @@ header cell.</li>
 <tbody>
 <tr>
 <td>Typed, 14 columns into <code>FullRow</code></td>
-<td style="text-align: right;">28.1 ms</td>
-<td style="text-align: right;">24.0 ms</td>
-<td style="text-align: right;">21.2 ms</td>
+<td style="text-align: right;">28.7 ms</td>
+<td style="text-align: right;">25.2 ms</td>
+<td style="text-align: right;">22.1 ms</td>
 </tr>
 <tr>
 <td>Cells, byte count</td>
-<td style="text-align: right;">11.8 ms</td>
-<td style="text-align: right;">5.8 ms</td>
-<td style="text-align: right;">3.5 ms</td>
+<td style="text-align: right;">10.3 ms</td>
+<td style="text-align: right;">6.0 ms</td>
+<td style="text-align: right;">3.6 ms</td>
 </tr>
 </tbody>
 </table>
-<p><strong>zsv is faster on both.</strong> Typed, it is ~1.2x (<code>compat</code>) and ~1.3x (<code>fast</code>) faster than ExcelReader.
-Counting cells, it is ~2.0x and ~3.4x faster.</p>
-<p>The cells gap is the C ABI, not the CSV parser. <code>xl_rows_next_view</code> copies every cell's value into a
-native row the cursor owns, one call per row, and that alone costs ~10.6 ms here (calling it without
-reading any cell, measured separately). The managed reader reads the same file in ~5 ms under
+<p><strong>zsv is faster on both.</strong> Typed, it is ~1.1x (<code>compat</code>) and ~1.3x (<code>fast</code>) faster than ExcelReader.
+Counting cells, it is ~1.7x and ~2.9x faster.</p>
+<p>The cells gap is the C ABI, not the CSV parser. <code>xl_rows_next_cells</code> copies every cell's text into
+memory the cursor owns, one call per row. <code>Sheet::for_each_row</code> borrows the reader's buffers instead
+and counts the same bytes in 7.1 ms. The managed reader reads the same file in ~5 ms under
 BenchmarkDotNet (<code>RealDataReadBenchmark.Csv_ExcelReader</code>), but that is a different harness and
 runtime, so it is context rather than a like-for-like number.</p>
-<p>The ExcelReader rows were 34.2 ms (typed) and 14.3 ms (cells) before the NativeAOT library's static
+<p>The cells row was 11.8 ms while <code>RowCursor</code> used <code>xl_rows_next_view</code>, which also NUL-terminates each
+value and formats numbers to text. The ExcelReader rows were 34.2 ms (typed) and 14.3 ms (cells) before the NativeAOT library's static
 PGO profile was regenerated (a namespace refactor had left it matching none of the hot methods) and
 its x64 build was pinned to <code>x86-64-v3</code>. The cells row was 30.5 ms before that, when <code>xl::RowView</code>
 still decoded each cell through <code>std::optional</code> helpers. The rows are from separate 10-repetition

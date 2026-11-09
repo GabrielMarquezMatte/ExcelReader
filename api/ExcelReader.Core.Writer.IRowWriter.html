@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Core_Writer_IRowWriter" data-uid="ExcelReader.Core.Writer.IRowWriter" class="text-break">
-Interface IRowWriter  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L213"><i class="bi bi-code-slash"></i></a>
+Interface IRowWriter  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L224"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -146,7 +146,7 @@ way, reading the cell back yields an empty/blank value.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Skip_System_Int32_" data-uid="ExcelReader.Core.Writer.IRowWriter.Skip(System.Int32)">
   Skip(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L279"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L290"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Advances past <code class="paramref">count</code> columns without writing any cell for them, leaving
@@ -180,7 +180,7 @@ them blank when the row is read back.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Style_System_Int32_" data-uid="ExcelReader.Core.Writer.IRowWriter.Style(System.Int32)">
   Style(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L305"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Styles the next cell written, and only that cell. The style replaces any row and column style;
@@ -234,7 +234,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_Boolean_" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.Boolean)">
   Write(bool)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L245"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a boolean cell.</p>
@@ -267,7 +267,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_DateOnly_" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.DateOnly)">
   Write(DateOnly)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L250"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L261"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date-only cell (no time component).</p>
@@ -300,7 +300,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_DateTime_" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.DateTime)">
   Write(DateTime)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L253"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date/time cell.</p>
@@ -333,7 +333,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_Nullable_System_Boolean__" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.Nullable{System.Boolean})">
   Write(bool?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L249"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a boolean cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -366,7 +366,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_Nullable_System_DateOnly__" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.Nullable{System.DateOnly})">
   Write(DateOnly?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L265"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date-only cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -399,7 +399,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_Nullable_System_DateTime__" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.Nullable{System.DateTime})">
   Write(DateTime?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L257"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a date/time cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -432,7 +432,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_Nullable_System_TimeOnly__" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.Nullable{System.TimeOnly})">
   Write(TimeOnly?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L262"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L273"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a time-of-day cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -465,7 +465,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_String_" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.String)">
   Write(string?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L229"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a text cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -504,7 +504,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write_System_TimeOnly_" data-uid="ExcelReader.Core.Writer.IRowWriter.Write(System.TimeOnly)">
   Write(TimeOnly)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L258"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L269"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a time-of-day cell (no date component).</p>
@@ -537,7 +537,7 @@ styled blank cell. CSV accepts the call and ignores the style.</p>
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_WriteUtf8_System_ReadOnlySpan_System_Byte__" data-uid="ExcelReader.Core.Writer.IRowWriter.WriteUtf8(System.ReadOnlySpan{System.Byte})">
   WriteUtf8(ReadOnlySpan&lt;byte&gt;)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L238"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a text cell from UTF-8 bytes, producing exactly the cell <a class="xref" href="ExcelReader.Core.Writer.IRowWriter.html#ExcelReader_Core_Writer_IRowWriter_Write_System_String_">Write(string?)</a>
@@ -578,7 +578,7 @@ materializing a <a class="xref" href="https://learn.microsoft.com/dotnet/api/sys
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write__1_System_Nullable___0__" data-uid="ExcelReader.Core.Writer.IRowWriter.Write``1(System.Nullable{``0})">
   Write&lt;T&gt;(T?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L283"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a numeric cell, or a blank/empty cell if <code class="paramref">value</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
@@ -617,7 +617,7 @@ materializing a <a class="xref" href="https://learn.microsoft.com/dotnet/api/sys
 
   <h3 id="ExcelReader_Core_Writer_IRowWriter_Write__1___0_" data-uid="ExcelReader.Core.Writer.IRowWriter.Write``1(``0)">
   Write&lt;T&gt;(T)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L267"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L278"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Writes a numeric cell for any UTF-8-formattable value type (e.g. <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a>).</p>
@@ -656,7 +656,7 @@ materializing a <a class="xref" href="https://learn.microsoft.com/dotnet/api/sys
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L213" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/IWorkbookWriter.cs/#L224" class="edit-link">Edit this page</a>
         </div>
 
 

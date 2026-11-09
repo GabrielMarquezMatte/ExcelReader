@@ -1183,27 +1183,28 @@
 <tbody>
 <tr>
 <td>CSV, typed, explicit schema</td>
-<td style="text-align: right;">12.26 ms</td>
-<td style="text-align: right;">8.13 MB</td>
+<td style="text-align: right;">8.56 ms</td>
+<td style="text-align: right;">3.13 MB</td>
 </tr>
 <tr>
 <td>CSV, typed, inferred schema</td>
-<td style="text-align: right;">12.48 ms</td>
-<td style="text-align: right;">14.89 MB</td>
+<td style="text-align: right;">7.42 ms</td>
+<td style="text-align: right;">5.62 MB</td>
 </tr>
 <tr>
 <td>XLSB, typed, explicit schema</td>
-<td style="text-align: right;">16.88 ms</td>
-<td style="text-align: right;">8.14 MB</td>
+<td style="text-align: right;">11.89 ms</td>
+<td style="text-align: right;">3.13 MB</td>
 </tr>
 <tr>
 <td>CSV, 8 text columns, explicit schema</td>
-<td style="text-align: right;">22.31 ms</td>
-<td style="text-align: right;">16.27 MB</td>
+<td style="text-align: right;">10.61 ms</td>
+<td style="text-align: right;">6.69 MB</td>
 </tr>
 </tbody>
 </table>
-<p>On the same file, letting <code>Excel.InferSchema</code> guess the schema costs ~2% more time (12.48 ms vs. 12.26 ms) and ~1.8x the allocation of passing an explicit <code>ExcelColumnSchema[]</code>. The allocation grows with the sheet, because the batch holds every row at once and there is no streaming variant.</p>
+<p><code>ToArrowRecordBatch</code> reads through the same column builder as the native <code>xl_parse_arrow</code>, then copies each finished buffer once into the managed array Apache.Arrow takes. Before that (per-cell appenders into Apache.Arrow builders) the same rows took 12.26 ms / 8.13 MB (CSV typed), 16.88 ms / 8.14 MB (XLSB) and 22.31 ms / 16.27 MB (8 text columns). The inferred schema is faster than the explicit one because <code>Excel.InferSchema</code> types every CSV column as a string, which skips the int64/timestamp/double conversion; it allocates ~1.8x more. The batch holds every row at once and there is no streaming variant.</p>
+<p>On the 65K-row real-data fixtures (14 columns, 5 of them text, one thread), <code>ExcelColumnType.StringDictionaryColumn</code> on the text columns cut XLSB from 27.2 to 24.0 ms and XLSX from 45.5 to 43.4 ms; CSV, which has no shared strings to look up by index, stayed the same (22.0 vs 22.4 ms). Those come from a quick console harness, not BenchmarkDotNet.</p>
 <h3 id="encrypted-workbooks">Encrypted workbooks</h3>
 <p><code>EncryptedWorkbookBenchmark</code>: agile encryption (AES-256, SHA-512, 100,000 spin iterations — see <a href="../guide/encryption.html">Encrypted workbooks</a>). The small rows use a 15 KB fixture; the large rows use a generated 300,000-row workbook, encrypted with <code>Excel.EncryptPackage</code>.</p>
 <table>
@@ -1328,37 +1329,43 @@
 <tr>
 <td><code>xl_rows_next</code></td>
 <td>one row per call, serialized into a caller buffer</td>
-<td style="text-align: right;">38.42 ms</td>
+<td style="text-align: right;">32.06 ms</td>
+<td style="text-align: right;">3.71 MB</td>
+</tr>
+<tr>
+<td><code>xl_rows_next_cells</code></td>
+<td>one row per call, cursor-owned cell views, numbers binary</td>
+<td style="text-align: right;">19.98 ms</td>
 <td style="text-align: right;">3.71 MB</td>
 </tr>
 <tr>
 <td><code>xl_rows_read_all_blob</code></td>
 <td>whole sheet in one buffer</td>
-<td style="text-align: right;">41.82 ms</td>
-<td style="text-align: right;">21.06 MB</td>
+<td style="text-align: right;">35.27 ms</td>
+<td style="text-align: right;">21.05 MB</td>
 </tr>
 <tr>
 <td><code>xl_rows_read_all_decoded</code></td>
 <td>whole sheet as native row structs</td>
-<td style="text-align: right;">52.05 ms</td>
+<td style="text-align: right;">47.12 ms</td>
 <td style="text-align: right;">5.71 MB</td>
 </tr>
 <tr>
 <td><code>xl_parse_typed</code></td>
 <td>typed native columns</td>
-<td style="text-align: right;">34.84 ms</td>
+<td style="text-align: right;">27.03 ms</td>
 <td style="text-align: right;">3.71 MB</td>
 </tr>
 <tr>
 <td><code>xl_parse_arrow</code></td>
 <td>Arrow C Data Interface arrays</td>
-<td style="text-align: right;">36.02 ms</td>
+<td style="text-align: right;">27.14 ms</td>
 <td style="text-align: right;">3.72 MB</td>
 </tr>
 </tbody>
 </table>
 <p>The allocation column is <strong>managed memory only</strong>. <code>MemoryDiagnoser</code> cannot see the native blocks that <code>xl_rows_read_all_decoded</code>, <code>xl_parse_typed</code> and <code>xl_parse_arrow</code> return their data in.</p>
-<p>Row by row, <code>xl_rows_next</code> costs ~1.6x the managed in-memory read of the same file (38.42 ms vs. 24.418 ms for <code>Xlsb_ExcelReader_Memory</code> under <a href="#in-memory-real-data-reads">In-memory real-data reads</a>). Every cell crosses the ABI as text, so each binary XLSB number is formatted to UTF-8 on the way out. <code>xl_rows_read_all_blob</code> adds ~9% over it, because the whole sheet is buffered before it is copied out. <code>xl_rows_read_all_decoded</code> adds ~35%, because it allocates a native block per row. <code>xl_parse_typed</code> and <code>xl_parse_arrow</code> are slightly faster than a row-by-row read (~6–9%) and return columnar native buffers with numbers still binary, so they are the path to use for bulk typed loads.</p>
+<p>Every cell that crosses the ABI as text costs time: each binary XLSB number is formatted to UTF-8 on the way out. <code>xl_rows_next_cells</code> passes numbers as doubles and copies only the text, so it reads the sheet ~38% faster than <code>xl_rows_next</code>, and faster than <code>xl_parse_typed</code>, which also converts every cell to its column type. <code>xl_rows_read_all_blob</code> adds ~10% over <code>xl_rows_next</code>, because the whole sheet is buffered before it is copied out. <code>xl_rows_read_all_decoded</code> adds ~47%, because it allocates a native block per row. <code>xl_parse_typed</code> and <code>xl_parse_arrow</code> return columnar native buffers with numbers still binary, so they are the path to use for bulk typed loads; <code>xl_rows_next_cells</code> is the one for reading cells as they are.</p>
 <p><code>ChunkedParseBenchmark</code> compares <code>xl_parse_typed</code> on a whole sheet against draining the same sheet in batches through <code>xl_typed_reader_open</code>/<code>xl_typed_reader_next</code>. It uses the generated 50,000-row XLSX file, read from disk, with three nullable columns (string, int64, float64):</p>
 <table>
 <thead>
@@ -1459,7 +1466,7 @@ well-optimized reader in its own right — the gap there is real but not the ord
 against the C/C++ competitors.</p>
 <p>zsv is the one competitor ahead. The CSV row is the typed workload, where both sides build the same
 14-column rows with owned strings. Just counting cell bytes, zsv is ~3.4x faster, and that gap is
-ExcelReader's C ABI, which serializes every row into a buffer, not its CSV parser. That suite is
+ExcelReader's C ABI, which copies every row's cells out to the caller, not its CSV parser. That suite is
 built with GCC (zsv does not compile under MSVC). Its caveats are in the C++ README.</p>
 
 </article>

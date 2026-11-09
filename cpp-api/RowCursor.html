@@ -96,7 +96,7 @@
 <pre><code class="lang-cpp">std::expected&lt;RowView, Error&gt; next_row()
 </code></pre>
 <p>Reads the next row.</p>
-<p><strong>Returns</strong> std::expected&lt;<a href="RowView.html">RowView</a>, <a href="Error.html">Error</a>&gt;: A view into memory the cursor owns, valid until the next next_row() or the cursor's destruction. The end of the sheet arrives as an error whose code is <code>XL_EOF</code>.</p>
+<p><strong>Returns</strong> std::expected&lt;<a href="RowView.html">RowView</a>, <a href="Error.html">Error</a>&gt;: A view into memory the cursor owns, valid until the next next_row() or the cursor's destruction. A cell that carries only a number has an empty <code>value</code>; read it with CellView::as_number() or CellView::text(). The end of the sheet arrives as an error whose code is <code>XL_EOF</code>.</p>
 
 </article>
 

@@ -89,7 +89,7 @@
 
 
   <h1 id="ExcelReader_Arrow_ArrowConversionExtensions" data-uid="ExcelReader.Arrow.ArrowConversionExtensions" class="text-break">
-Class ArrowConversionExtensions  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowConversionExtensions.cs/#L8"><i class="bi bi-code-slash"></i></a>
+Class ArrowConversionExtensions  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowConversionExtensions.cs/#L10"><i class="bi bi-code-slash"></i></a>
   </h1>
 
   <div class="facts text-secondary">
@@ -157,7 +157,7 @@ Class ArrowConversionExtensions  <a class="header-action link-secondary" title="
 
   <h3 id="ExcelReader_Arrow_ArrowConversionExtensions_ToArrowRecordBatch_ExcelReader_Core_Reader_IExcelSheet_ExcelReader_Arrow_ArrowReadOptions_" data-uid="ExcelReader.Arrow.ArrowConversionExtensions.ToArrowRecordBatch(ExcelReader.Core.Reader.IExcelSheet,ExcelReader.Arrow.ArrowReadOptions)">
   ToArrowRecordBatch(IExcelSheet, ArrowReadOptions?)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowConversionExtensions.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowConversionExtensions.cs/#L23"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Converts one sheet into an Arrow <span class="xref">Apache.Arrow.RecordBatch</span>.</p>
@@ -174,7 +174,7 @@ Class ArrowConversionExtensions  <a class="header-action link-secondary" title="
     <dd><p>The sheet to convert.</p>
 </dd>
     <dt><code>options</code> <a class="xref" href="ExcelReader.Arrow.ArrowReadOptions.html">ArrowReadOptions</a></dt>
-    <dd><p>The schema and header row; <a class="xref" href="ExcelReader.Arrow.ArrowReadOptions.html#ExcelReader_Arrow_ArrowReadOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
+    <dd><p>The schema, header row and parallelism; <a class="xref" href="ExcelReader.Arrow.ArrowReadOptions.html#ExcelReader_Arrow_ArrowReadOptions_Default">Default</a> when <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
 </dd>
   </dl>
 
@@ -197,6 +197,9 @@ Class ArrowConversionExtensions  <a class="header-action link-secondary" title="
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
     <dd><p><code class="paramref">sheet</code> is <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/keywords/null">null</a>.</p>
 </dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p><a class="xref" href="ExcelReader.Arrow.ArrowReadOptions.html#ExcelReader_Arrow_ArrowReadOptions_DegreeOfParallelism">DegreeOfParallelism</a> is negative.</p>
+</dd>
     <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
     <dd><p>A cell failed to convert to its column's declared type on a non-nullable column.</p>
 </dd>
@@ -214,7 +217,7 @@ Class ArrowConversionExtensions  <a class="header-action link-secondary" title="
 </article>
 
         <div class="contribution d-print-none">
-          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowConversionExtensions.cs/#L8" class="edit-link">Edit this page</a>
+          <a href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowConversionExtensions.cs/#L10" class="edit-link">Edit this page</a>
         </div>
 
 

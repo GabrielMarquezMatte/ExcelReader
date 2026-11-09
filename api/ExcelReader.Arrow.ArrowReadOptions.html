@@ -157,7 +157,7 @@ Class ArrowReadOptions  <a class="header-action link-secondary" title="View sour
   <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowReadOptions.cs/#L9"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Gets the default options: header on row 1, schema inferred from the sheet.</p>
+  <div class="markdown level1 summary"><p>Gets the default options: header on row 1, schema inferred from the sheet, one thread.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
 
@@ -172,6 +172,40 @@ Class ArrowReadOptions  <a class="header-action link-secondary" title="View sour
   <h4 class="section">Property Value</h4>
   <dl class="parameters">
     <dt><a class="xref" href="ExcelReader.Arrow.ArrowReadOptions.html">ArrowReadOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="ExcelReader_Arrow_ArrowReadOptions_DegreeOfParallelism_" data-uid="ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism*"></a>
+
+  <h3 id="ExcelReader_Arrow_ArrowReadOptions_DegreeOfParallelism" data-uid="ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism">
+  DegreeOfParallelism
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Arrow/ArrowReadOptions.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of threads to read with: <code>1</code>, the default, reads on the calling thread and
+<code>0</code> uses every processor. A CSV, XLSX or XLSB sheet too small to split, or any other
+sheet, is read on one thread.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DegreeOfParallelism { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
     <dd></dd>
   </dl>
 
