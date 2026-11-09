@@ -140,7 +140,11 @@ up to <code>n</code> threads - XLSX, XLSB and CSV are split, and the table is th
 </tr>
 </tbody>
 </table>
-<p><code>Option&lt;T&gt;</code> of any of the above makes the field <code>None</code> when the cell is null; a non-<code>Option</code> field is
+<p><code>ColumnType::StringDict</code> has no field type: set it on a column from <code>infer_schema</code>, then pass the schema to
+<code>to_arrow_with_schema</code>/<code>to_arrow_stream_with_schema</code> to read text as an Arrow dictionary
+(<code>DictionaryArray&lt;Int32Type&gt;</code>). The typed reads reject it.</p>
+<p><code>Option&lt;T&gt;</code> of any of the above makes the field <code>None</code> when the cell is null (a blank cell is null for
+<code>Option&lt;String&gt;</code> too); a non-<code>Option</code> field is
 left at its <code>Default</code> instead.</p>
 <p>Narrower integers convert through <code>TryFrom</code> and panic on a value that does not fit, rather than
 wrapping silently. <code>Date</code>/<code>Time</code>/<code>Timestamp</code> are dependency-free newtypes over the exact wire

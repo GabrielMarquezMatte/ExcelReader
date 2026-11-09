@@ -48,6 +48,19 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Arrow.ArrowReadOptions.Default
   nameWithType: ArrowReadOptions.Default
+- uid: ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism
+  name: DegreeOfParallelism
+  href: api/ExcelReader.Arrow.ArrowReadOptions.html#ExcelReader_Arrow_ArrowReadOptions_DegreeOfParallelism
+  commentId: P:ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism
+  fullName: ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism
+  nameWithType: ArrowReadOptions.DegreeOfParallelism
+- uid: ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism*
+  name: DegreeOfParallelism
+  href: api/ExcelReader.Arrow.ArrowReadOptions.html#ExcelReader_Arrow_ArrowReadOptions_DegreeOfParallelism_
+  commentId: Overload:ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism
+  isSpec: "True"
+  fullName: ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism
+  nameWithType: ArrowReadOptions.DegreeOfParallelism
 - uid: ExcelReader.Arrow.ArrowReadOptions.HeaderRow
   name: HeaderRow
   href: api/ExcelReader.Arrow.ArrowReadOptions.html#ExcelReader_Arrow_ArrowReadOptions_HeaderRow
@@ -3734,6 +3747,12 @@ references:
   commentId: F:ExcelReader.Core.Reader.Schema.ExcelColumnType.StringColumn
   fullName: ExcelReader.Core.Reader.Schema.ExcelColumnType.StringColumn
   nameWithType: ExcelColumnType.StringColumn
+- uid: ExcelReader.Core.Reader.Schema.ExcelColumnType.StringDictionaryColumn
+  name: StringDictionaryColumn
+  href: api/ExcelReader.Core.Reader.Schema.ExcelColumnType.html#ExcelReader_Core_Reader_Schema_ExcelColumnType_StringDictionaryColumn
+  commentId: F:ExcelReader.Core.Reader.Schema.ExcelColumnType.StringDictionaryColumn
+  fullName: ExcelReader.Core.Reader.Schema.ExcelColumnType.StringDictionaryColumn
+  nameWithType: ExcelColumnType.StringDictionaryColumn
 - uid: ExcelReader.Core.Reader.Schema.ExcelColumnType.TimeColumn
   name: TimeColumn
   href: api/ExcelReader.Core.Reader.Schema.ExcelColumnType.html#ExcelReader_Core_Reader_Schema_ExcelColumnType_TimeColumn
@@ -5893,6 +5912,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetColumnWidth
   nameWithType: CsvSheetWriter.SetColumnWidth
+- uid: ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines(System.Boolean)
+  name: SetShowGridLines(bool)
+  href: api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html#ExcelReader_Core_Writer_Csv_CsvSheetWriter_SetShowGridLines_System_Boolean_
+  commentId: M:ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines(System.Boolean)
+  name.vb: SetShowGridLines(Boolean)
+  fullName: ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines(bool)
+  fullName.vb: ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines(Boolean)
+  nameWithType: CsvSheetWriter.SetShowGridLines(bool)
+  nameWithType.vb: CsvSheetWriter.SetShowGridLines(Boolean)
+- uid: ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines*
+  name: SetShowGridLines
+  href: api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html#ExcelReader_Core_Writer_Csv_CsvSheetWriter_SetShowGridLines_
+  commentId: Overload:ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines
+  nameWithType: CsvSheetWriter.SetShowGridLines
 - uid: ExcelReader.Core.Writer.Csv.CsvSheetWriter.StartRow
   name: StartRow()
   href: api/ExcelReader.Core.Writer.Csv.CsvSheetWriter.html#ExcelReader_Core_Writer_Csv_CsvSheetWriter_StartRow
@@ -7141,6 +7176,24 @@ references:
   fullName.vb: ExcelReader.Core.Writer.ISheetWriter(Of TRow).SetColumnWidth
   nameWithType: ISheetWriter<TRow>.SetColumnWidth
   nameWithType.vb: ISheetWriter(Of TRow).SetColumnWidth
+- uid: ExcelReader.Core.Writer.ISheetWriter`1.SetShowGridLines(System.Boolean)
+  name: SetShowGridLines(bool)
+  href: api/ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_SetShowGridLines_System_Boolean_
+  commentId: M:ExcelReader.Core.Writer.ISheetWriter`1.SetShowGridLines(System.Boolean)
+  name.vb: SetShowGridLines(Boolean)
+  fullName: ExcelReader.Core.Writer.ISheetWriter<TRow>.SetShowGridLines(bool)
+  fullName.vb: ExcelReader.Core.Writer.ISheetWriter(Of TRow).SetShowGridLines(Boolean)
+  nameWithType: ISheetWriter<TRow>.SetShowGridLines(bool)
+  nameWithType.vb: ISheetWriter(Of TRow).SetShowGridLines(Boolean)
+- uid: ExcelReader.Core.Writer.ISheetWriter`1.SetShowGridLines*
+  name: SetShowGridLines
+  href: api/ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_SetShowGridLines_
+  commentId: Overload:ExcelReader.Core.Writer.ISheetWriter`1.SetShowGridLines
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.ISheetWriter<TRow>.SetShowGridLines
+  fullName.vb: ExcelReader.Core.Writer.ISheetWriter(Of TRow).SetShowGridLines
+  nameWithType: ISheetWriter<TRow>.SetShowGridLines
+  nameWithType.vb: ISheetWriter(Of TRow).SetShowGridLines
 - uid: ExcelReader.Core.Writer.ISheetWriter`1.StartRow
   name: StartRow()
   href: api/ExcelReader.Core.Writer.ISheetWriter-1.html#ExcelReader_Core_Writer_ISheetWriter_1_StartRow
@@ -7920,6 +7973,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetColumnWidth
   nameWithType: XlsSheetWriter.SetColumnWidth
+- uid: ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines(System.Boolean)
+  name: SetShowGridLines(bool)
+  href: api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html#ExcelReader_Core_Writer_Xls_XlsSheetWriter_SetShowGridLines_System_Boolean_
+  commentId: M:ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines(System.Boolean)
+  name.vb: SetShowGridLines(Boolean)
+  fullName: ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines(bool)
+  fullName.vb: ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines(Boolean)
+  nameWithType: XlsSheetWriter.SetShowGridLines(bool)
+  nameWithType.vb: XlsSheetWriter.SetShowGridLines(Boolean)
+- uid: ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines*
+  name: SetShowGridLines
+  href: api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html#ExcelReader_Core_Writer_Xls_XlsSheetWriter_SetShowGridLines_
+  commentId: Overload:ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines
+  nameWithType: XlsSheetWriter.SetShowGridLines
 - uid: ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow
   name: StartRow()
   href: api/ExcelReader.Core.Writer.Xls.XlsSheetWriter.html#ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRow
@@ -8646,6 +8715,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetColumnWidth
   nameWithType: XlsbSheetWriter.SetColumnWidth
+- uid: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines(System.Boolean)
+  name: SetShowGridLines(bool)
+  href: api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_SetShowGridLines_System_Boolean_
+  commentId: M:ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines(System.Boolean)
+  name.vb: SetShowGridLines(Boolean)
+  fullName: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines(bool)
+  fullName.vb: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines(Boolean)
+  nameWithType: XlsbSheetWriter.SetShowGridLines(bool)
+  nameWithType.vb: XlsbSheetWriter.SetShowGridLines(Boolean)
+- uid: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines*
+  name: SetShowGridLines
+  href: api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_SetShowGridLines_
+  commentId: Overload:ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines
+  nameWithType: XlsbSheetWriter.SetShowGridLines
 - uid: ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.StartRow
   name: StartRow()
   href: api/ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.html#ExcelReader_Core_Writer_Xlsb_XlsbSheetWriter_StartRow
@@ -9248,6 +9333,22 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetColumnWidth
   nameWithType: XlsxSheetWriter.SetColumnWidth
+- uid: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines(System.Boolean)
+  name: SetShowGridLines(bool)
+  href: api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_SetShowGridLines_System_Boolean_
+  commentId: M:ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines(System.Boolean)
+  name.vb: SetShowGridLines(Boolean)
+  fullName: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines(bool)
+  fullName.vb: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines(Boolean)
+  nameWithType: XlsxSheetWriter.SetShowGridLines(bool)
+  nameWithType.vb: XlsxSheetWriter.SetShowGridLines(Boolean)
+- uid: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines*
+  name: SetShowGridLines
+  href: api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_SetShowGridLines_
+  commentId: Overload:ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines
+  isSpec: "True"
+  fullName: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines
+  nameWithType: XlsxSheetWriter.SetShowGridLines
 - uid: ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.StartRow
   name: StartRow()
   href: api/ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.html#ExcelReader_Core_Writer_Xlsx_XlsxSheetWriter_StartRow

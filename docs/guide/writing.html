@@ -131,6 +131,7 @@ int header = workbook.AddStyle(new CellStyle { Bold = true });
 await using var sheet = workbook.AddSheet(&quot;Summary&quot;);
 sheet.SetColumnStyle(columnIndex: 1, currency); // before the first row
 sheet.SetColumnWidth(columnIndex: 0, width: 20);
+sheet.SetShowGridLines(false);
 
 await using (var row = await sheet.StartRowAsync(header))
 {
@@ -145,7 +146,7 @@ await using (var row = await sheet.StartRowAsync())
 
 await workbook.EndAsync();
 </code></pre>
-<p><code>AddStyle</code> deduplicates by value: registering the same <code>CellStyle</code> twice returns the same index, and index 0 is always the general/default style. <code>SetColumnStyle</code>/<code>SetColumnWidth</code> must be called before the sheet's first <code>StartRow</code>/<code>StartRowAsync</code> (calling them later throws <code>InvalidOperationException</code>) — the column layout (XLSX <code>&lt;cols&gt;</code>, XLSB <code>BrtColInfo</code>, XLS <code>COLINFO</code>) has to be written ahead of the row data. A row's style (from <code>StartRowAsync(int, CancellationToken)</code>) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.</p>
+<p><code>AddStyle</code> deduplicates by value: registering the same <code>CellStyle</code> twice returns the same index, and index 0 is always the general/default style. <code>SetColumnStyle</code>/<code>SetColumnWidth</code> must be called before the sheet's first <code>StartRow</code>/<code>StartRowAsync</code> (calling them later throws <code>InvalidOperationException</code>) — the column layout (XLSX <code>&lt;cols&gt;</code>, XLSB <code>BrtColInfo</code>, XLS <code>COLINFO</code>) has to be written ahead of the row data. <code>SetShowGridLines</code> follows the same rule (it sets XLSX <code>&lt;sheetView showGridLines&gt;</code>, the XLSB <code>BrtBeginWsView</code> flag and the XLS <code>WINDOW2</code> flag); sheets show gridlines unless it is called with <code>false</code>. A row's style (from <code>StartRowAsync(int, CancellationToken)</code>) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.</p>
 <h3 id="style-one-cell-and-set-row-heights">Style one cell, and set row heights</h3>
 <p><code>row.Style(styleId)</code> styles the next cell written on that row, and only that cell; it replaces the row and column style for it, and <code>Style(0)</code> forces the general style. A <code>null</code> write under a pending style writes a styled blank cell. <code>Skip</code> or ending the row while a style is pending throws <code>InvalidOperationException</code>. <code>StartRow(styleId, height)</code>/<code>StartRowAsync(styleId, height)</code> set the row height in points (greater than 0, at most 409):</p>
 <!-- snippet: writing-cell-styles -->

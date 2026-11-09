@@ -138,6 +138,11 @@ Enum ExcelColumnType  <a class="header-action link-secondary" title="View source
   
   <dd><p>UTF-8 text. Also the fallback for any column whose sampled cells disagreed.</p>
 </dd>
+    <dt id="ExcelReader_Core_Reader_Schema_ExcelColumnType_StringDictionaryColumn"><code>StringDictionaryColumn = 7</code></dt>
+  
+  <dd><p>UTF-8 text, dictionary-encoded: int32 indices into the column's distinct strings. Only the
+Arrow outputs take it; schema inference never produces it.</p>
+</dd>
     <dt id="ExcelReader_Core_Reader_Schema_ExcelColumnType_TimeColumn"><code>TimeColumn = 5</code></dt>
   
   <dd><p>A time of day, counted in microseconds since midnight.</p>

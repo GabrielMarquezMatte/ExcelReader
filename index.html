@@ -123,13 +123,16 @@ foreach (Row row in workbook.FirstSheet)
 </code></pre>
 <pre><code class="lang-bash">excelreader sheets  book.xlsb                        # 0&lt;TAB&gt;Sheet1
 excelreader schema  book.xlsb --sample-size 500      # 0&lt;TAB&gt;Id&lt;TAB&gt;Int64
+excelreader preview book.xlsb --rows 20              # polars-style table: shape, types, head and tail
 excelreader convert book.xlsb --output data.csv      # convert to another format, by extension
 excelreader convert book.xlsb --output data.xlsx     # .xlsx, .xlsb, .xls and .csv all work
 excelreader convert book.xlsb --format xlsx | head -c 4   # to stdout, --format picks it instead
 </code></pre>
 <p>Flags: <code>--sheet|-s &lt;name|index&gt;</code>, <code>--header-row N</code> (0 = no header), <code>--sample-size N</code>,
 <code>--output|-o &lt;file&gt;</code>, <code>--format|-f &lt;xlsx|xlsb|xls|csv&gt;</code> (defaults to <code>--output</code>'s extension, or csv
-for stdout), <code>--delimiter|-d &lt;char&gt;</code> (csv output), <code>--input-delimiter &lt;char&gt;</code> (csv input). Run
+for stdout), <code>--delimiter|-d &lt;char&gt;</code> (csv output), <code>--input-delimiter &lt;char&gt;</code> (csv input),
+<code>--rows N</code>, <code>--max-columns N</code>, <code>--max-width N</code>, <code>--fast</code>, <code>--columns &lt;name|index,...&gt;</code> (preview;
+<code>--fast</code> stops after the first rows). Run
 <code>excelreader &lt;command&gt; --help</code> for the full list.</p>
 <p><code>--sheet</code> matches a sheet name first and falls back to a 0-based index, so a sheet literally named
 <code>2</code> is reachable by name. A <code>.csv</code> input has its dialect sniffed unless <code>--input-delimiter</code> names one,

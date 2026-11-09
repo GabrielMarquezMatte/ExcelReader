@@ -180,7 +180,7 @@ continuation sheet.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_Dispose" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.Dispose">
   Dispose()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L422"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L433"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
@@ -207,7 +207,7 @@ continuation sheet.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_DisposeAsync" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.DisposeAsync">
   DisposeAsync()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L464"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L475"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or
@@ -241,7 +241,7 @@ resetting unmanaged resources asynchronously.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_End" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.End">
   End()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L408"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L419"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Marks the sheet (and any continuation sheet it spilled into) as ended.</p>
@@ -268,7 +268,7 @@ resetting unmanaged resources asynchronously.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_EndAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.EndAsync(System.Threading.CancellationToken)">
   EndAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L456"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L467"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Finalizes the sheet, writing any trailing structure so the sheet is complete within the
@@ -408,11 +408,55 @@ called before the first row is started.</p>
 
 
 
+  <a id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_SetShowGridLines_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines*"></a>
+
+  <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_SetShowGridLines_System_Boolean_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines(System.Boolean)">
+  SetShowGridLines(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets whether the sheet shows its gridlines when opened; sheets show them by default. Must be
+called before the first row is started. The default implementation does nothing, so sheet
+writers implemented outside this library keep compiling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetShowGridLines(bool show)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>show</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a> to hide the gridlines.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The first row has already been started.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>The sheet has already been started.</p>
+</dd>
+  </dl>
+
+
+
   <a id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRow_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow*"></a>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRow" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow">
   StartRow()
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L211"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins writing the next row, transparently spilling into a continuation sheet once the
@@ -445,7 +489,7 @@ BIFF8 row cap is reached.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRow_System_Int32_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(System.Int32)">
   StartRow(int)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L221"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins writing the next row with <code class="paramref">styleId</code> applied to its cells,
@@ -489,7 +533,7 @@ transparently spilling into a continuation sheet once the BIFF8 row cap is reach
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRow_System_Int32_System_Double_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRow(System.Int32,System.Double)">
   StartRow(int, double)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L233"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins writing the next row with <code class="paramref">styleId</code> applied to its cells and a custom
@@ -537,7 +581,7 @@ height, transparently spilling into a continuation sheet once the BIFF8 row cap 
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRowAsync_System_Int32_System_Double_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(System.Int32,System.Double,System.Threading.CancellationToken)">
   StartRowAsync(int, double, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L449"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L460"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins the next row with <code class="paramref">styleId</code> applied to its cells and a custom height.
@@ -593,7 +637,7 @@ row header. CSV accepts the call and ignores the height.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRowAsync_System_Int32_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(System.Int32,System.Threading.CancellationToken)">
   StartRowAsync(int, CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L442"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L453"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins the next row, applying <code class="paramref">styleId</code> (from <a class="xref" href="ExcelReader.Core.Writer.IWorkbookWriter-1.html#ExcelReader_Core_Writer_IWorkbookWriter_1_AddStyle_ExcelReader_Core_Writer_CellStyle_">AddStyle(CellStyle)</a>)
@@ -642,7 +686,7 @@ to its cells.</p>
 
   <h3 id="ExcelReader_Core_Writer_Xls_XlsSheetWriter_StartRowAsync_System_Threading_CancellationToken_" data-uid="ExcelReader.Core.Writer.Xls.XlsSheetWriter.StartRowAsync(System.Threading.CancellationToken)">
   StartRowAsync(CancellationToken)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L435"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Writer/Xls/XlsSheetWriter.cs/#L446"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Begins the next row, in order starting from the first, and returns its writer. Only one row

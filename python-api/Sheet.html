@@ -124,8 +124,8 @@ or turned into a Python object.</p>
 <p><code>header_row</code> is a 1-based row number whose values name the columns (that row is skipped and
 never yielded as data); 0 means the sheet has no header, in which case every spec must
 resolve by <code>index</code>.</p>
-<p><code>parallelism</code> is the thread count for a CSV: 1 (the default) reads on one thread, 0 uses every
-core, n up to n threads. Any other format, or a CSV too small to split, is read on one thread.
+<p><code>parallelism</code> is the thread count for an XLSX, XLSB or CSV sheet: 1 (the default) reads on one
+thread, 0 uses every core, n up to n threads. XLS, or a sheet under 256 KiB, is read on one thread.
 The table is identical either way; a parallel read holds every partition's columns until they
 are merged, so its peak memory is higher.</p>
 <p><strong>Parameters</strong></p>
