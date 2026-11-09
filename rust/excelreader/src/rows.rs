@@ -88,8 +88,8 @@ impl<'a> CellRef<'a> {
     }
 }
 
-/// Where a `RowRef`'s cells live. Blob rows come from `xl_rows_next`/`xl_rows_read_all_blob`,
-/// decoded rows from a CSV aggregation callback, views from `xl_rows_foreach`/`xl_aggregate`.
+/// Where a `RowRef`'s cells live. Blob rows come from `xl_rows_read_all_blob`, decoded rows from a
+/// CSV aggregation callback, views from `xl_rows_next_cells`/`xl_rows_foreach`/`xl_aggregate`.
 #[derive(Debug, Clone, Copy)]
 enum RowBacking<'a> {
     /// The bytes AFTER the leading `int32 cell_count`.
@@ -132,7 +132,7 @@ impl<'a> RowRef<'a> {
         }
     }
 
-    /// Wraps the cells handed to an `xl_rows_foreach`/`xl_aggregate` callback.
+    /// Wraps the cells from `xl_rows_next_cells` or an `xl_rows_foreach`/`xl_aggregate` callback.
     ///
     /// # Safety
     /// `cells` must point to `count` initialized `XlCellView` values whose `value` pointers stay
@@ -284,18 +284,12 @@ fn cell_from_view(raw: &XlCellView) -> Option<CellRef<'_>> {
     })
 }
 
-/// Rows are usually well under this; it only sets how often the first oversized row costs a retry.
-const INITIAL_ROW_BUFFER: usize = 64 * 1024;
-
-/// A row-at-a-time reader over one sheet, holding one reusable buffer and one native cursor,
-/// which it closes on drop.
+/// A row-at-a-time reader over one sheet, holding one native cursor, which it closes on drop.
 ///
-/// Not an `Iterator`: each row borrows the buffer that the next call overwrites, which
+/// Not an `Iterator`: each row borrows cells the cursor owns and the next call overwrites, which
 /// `Iterator::next` cannot express. One row is alive at a time, enforced by the borrow checker.
 pub struct RowCursor<'w> {
     rows: *mut ffi::XlRows,
-    buffer: Vec<u8>,
-    written: usize,
     workbook: std::marker::PhantomData<&'w crate::Workbook>,
 }
 
@@ -308,8 +302,6 @@ impl<'w> RowCursor<'w> {
         crate::workbook::check(unsafe { ffi::xl_rows_open(handle, sheet, &mut rows) })?;
         Ok(RowCursor {
             rows,
-            buffer: vec![0; INITIAL_ROW_BUFFER],
-            written: 0,
             workbook: std::marker::PhantomData,
         })
     }
@@ -320,41 +312,15 @@ impl<'w> RowCursor<'w> {
 
     /// Advances to the next row. `None` at end of sheet.
     ///
-    /// On `XL_BUFFER_TOO_SMALL` the native side holds the row until it fits, so growing the buffer
-    /// and retrying loses nothing.
+    /// A cell that carries only a number has empty text; read it with `number()` or `text()`.
     pub fn next_row(&mut self) -> Option<Result<RowRef<'_>, Error>> {
-        loop {
-            let mut written: i32 = 0;
-            let capacity = i32::try_from(self.buffer.len()).unwrap_or(i32::MAX);
-            let status = unsafe {
-                ffi::xl_rows_next(self.rows, self.buffer.as_mut_ptr(), capacity, &mut written)
-            };
-
-            match status {
-                ffi::XL_OK => {
-                    self.written = if written > 0 { written as usize } else { 0 };
-                    let blob = &self.buffer[..self.written];
-                    return Some(RowRef::from_blob(blob).ok_or_else(|| {
-                        Error::new(ErrorKind::Other, "native returned a malformed row blob")
-                    }));
-                }
-                ffi::XL_EOF => return None,
-                ffi::XL_BUFFER_TOO_SMALL => {
-                    let needed = if written > 0 {
-                        written as usize
-                    } else {
-                        self.buffer.len() * 2
-                    };
-                    if needed <= self.buffer.len() {
-                        return Some(Err(Error::new(
-                            ErrorKind::Other,
-                            "native asked for a buffer no larger than the current one",
-                        )));
-                    }
-                    self.buffer.resize(needed, 0);
-                }
-                other => return Some(Err(crate::workbook::last_error(other))),
-            }
+        let mut cells: *const XlCellView = std::ptr::null();
+        let mut count: i32 = 0;
+        match unsafe { ffi::xl_rows_next_cells(self.rows, &mut cells, &mut count) } {
+            // SAFETY: the views stay valid until the next call on this cursor, which needs `&mut self`.
+            ffi::XL_OK => Some(Ok(unsafe { RowRef::from_views(cells, count) })),
+            ffi::XL_EOF => None,
+            other => Some(Err(crate::workbook::last_error(other))),
         }
     }
 }

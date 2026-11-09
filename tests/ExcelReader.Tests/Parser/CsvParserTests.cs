@@ -244,6 +244,11 @@ namespace ExcelReader.Tests.Parser
         [InlineData("2024-01-15T13:30:05Z")]
         [InlineData("2024-01-15T13:30:05+03:00")]
         [InlineData("01/15/2024")]
+        [InlineData("01/15/2024 13:30:05")]
+        [InlineData("02/29/2024 23:59:59")]
+        [InlineData("12/31/9999 23:59:59")]
+        [InlineData("01/01/0001 00:00:00")]
+        [InlineData("1/15/2024")]
         public void TextDatesBindExactlyAsTheCultureParserWould(string text)
         {
             using var ms = Csv($"At,Day\n{text},{text[..Math.Min(10, text.Length)]}\n");

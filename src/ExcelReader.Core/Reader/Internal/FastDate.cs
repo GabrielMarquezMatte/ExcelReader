@@ -81,6 +81,50 @@ namespace ExcelReader.Core.Reader.Internal
             return true;
         }
 
+        /// <summary>The invariant culture's general pattern, <c>MM/dd/yyyy</c> optionally followed by a space and
+        /// <c>HH:mm:ss</c>, which is what invariant <c>DateTime.ToString()</c> writes. Any other spelling returns
+        /// false for the culture parser to handle.</summary>
+        public static bool TryParseInvariantGeneral(ReadOnlySpan<byte> s, out DateTime value)
+        {
+            value = default;
+            if (s.Length is not (10 or 19) || s[2] != (byte)'/' || s[5] != (byte)'/')
+            {
+                return false;
+            }
+            if (!TryTwoDigits(s, 0, out int month)
+                || !TryTwoDigits(s, 3, out int day)
+                || !TryDigits(s, 6, 4, out int year))
+            {
+                return false;
+            }
+            if (year < 1 || month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month))
+            {
+                return false;
+            }
+            var date = new DateTime(year, month, day);
+            if (s.Length == 10)
+            {
+                value = date;
+                return true;
+            }
+            if (s[10] != (byte)' ' || s[13] != (byte)':' || s[16] != (byte)':')
+            {
+                return false;
+            }
+            if (!TryTwoDigits(s, 11, out int hour)
+                || !TryTwoDigits(s, 14, out int minute)
+                || !TryTwoDigits(s, 17, out int second)
+                || hour > 23 || minute > 59 || second > 59)
+            {
+                return false;
+            }
+            value = new DateTime(date.Ticks
+                + (hour * TimeSpan.TicksPerHour)
+                + (minute * TimeSpan.TicksPerMinute)
+                + (second * TimeSpan.TicksPerSecond));
+            return true;
+        }
+
         private static bool TryParseRoundTrip(ReadOnlySpan<byte> s, out DateTime value)
         {
             value = default;

@@ -176,6 +176,22 @@ namespace
                                                           return XL_OK; });
         check(walked.has_value(), "for_each_row over the xlsb fixture succeeds");
         check(seen > 0, "the xlsb fixture has a cell that carries only a number");
+
+        int pulled = 0;
+        auto cursor = workbook->sheet(0).rows();
+        check(cursor.has_value(), "open a cursor over the xlsb fixture");
+        if (!cursor.has_value())
+        {
+            return;
+        }
+        for (auto row = cursor->next_row(); row.has_value(); row = cursor->next_row())
+        {
+            for (auto cell : *row)
+            {
+                pulled += cell.value.empty() && cell.number.has_value();
+            }
+        }
+        check(pulled == seen, "the cursor passes the same number-only cells as for_each_row");
     }
 
     void positive_code_stops_the_walk()

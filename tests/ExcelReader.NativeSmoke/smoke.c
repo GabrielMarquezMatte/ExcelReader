@@ -1439,6 +1439,52 @@ static void smoke_view_free_state(void* state, void* user_data)
     free(state);
 }
 
+typedef int32_t (*xl_rows_next_cells_fn)(xl_rows*, const xl_cell_view**, int32_t*);
+
+static int test_rows_next_cells(xl_lib_handle lib, const api_t* api, const char* fixture)
+{
+    xl_rows_next_cells_fn next_cells = (xl_rows_next_cells_fn)load_symbol(lib, "xl_rows_next_cells");
+    CHECK(next_cells != NULL, "xl_rows_next_cells must be exported");
+
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+    xl_rows* rows = NULL;
+    CHECK(api->rows_open(handle, 0, &rows) == XL_OK, "xl_rows_open must succeed");
+
+    const xl_cell_view* cells = NULL;
+    int32_t count = 0;
+    CHECK(next_cells(rows, NULL, &count) == XL_INVALID_ARGUMENT, "xl_rows_next_cells must reject a NULL out_cells");
+    CHECK(next_cells(rows, &cells, NULL) == XL_INVALID_ARGUMENT, "xl_rows_next_cells must reject a NULL out_count");
+
+    CHECK(next_cells(rows, &cells, &count) == XL_OK, "xl_rows_next_cells must return the header row");
+    CHECK(count == 18 && cells != NULL, "RealExcel.xlsb's header row has 18 columns");
+    CHECK(cells[0].column == 0 && cells[0].type == XL_CELL_STRING, "the first header cell is a string in column 0");
+    CHECK(cells[0].value_len == 7 && memcmp(cells[0].value, "Coluna1", 7) == 0, "first header cell must read Coluna1");
+
+    int row_count = 1;
+    int numbers = 0;
+    for (;;)
+    {
+        int32_t status = next_cells(rows, &cells, &count);
+        if (status == XL_EOF)
+        {
+            break;
+        }
+        CHECK(status == XL_OK, "xl_rows_next_cells must succeed for every remaining row of this fixture");
+        for (int32_t index = 0; index < count; index++)
+        {
+            numbers += cells[index].has_number && cells[index].value_len == 0;
+        }
+        row_count++;
+    }
+    CHECK(row_count == 101, "xl_rows_next_cells must see all 101 rows");
+    CHECK(numbers > 0, "xl_rows_next_cells must pass XLSB numbers as binary");
+
+    CHECK(api->rows_close(rows) == XL_OK, "xl_rows_close must succeed");
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
 static int test_callback_reads(xl_lib_handle lib, const api_t* api, const char* fixture)
 {
     xl_rows_foreach_fn rows_foreach = (xl_rows_foreach_fn)load_symbol(lib, "xl_rows_foreach");
@@ -1517,6 +1563,7 @@ int main(int argc, char** argv)
     failures += test_csv_aggregate_quoted_records(lib);
     failures += test_open_source(lib, &api, fixture_path);
     failures += test_callback_reads(lib, &api, fixture_path);
+    failures += test_rows_next_cells(lib, &api, fixture_path);
 
     if (failures == 0)
     {

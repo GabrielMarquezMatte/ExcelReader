@@ -30,7 +30,7 @@ namespace ExcelReader.Native.Reading
                     fixed (byte* shared = row.Shared)
                     fixed (byte* rowBuffer = row.RowBuffer)
                     {
-                        NativeCellView* cells = views.Fill(row.Descriptors, rowValues, shared, rowBuffer);
+                        NativeCellView* cells = views.Borrow(row.Descriptors, rowValues, shared, rowBuffer);
                         status = callback(cells, row.Descriptors.Length, userData);
                     }
 

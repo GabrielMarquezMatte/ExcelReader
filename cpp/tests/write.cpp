@@ -300,7 +300,7 @@ static int test_write_columns_in_parallel()
             std::vector<std::string> cells;
             for (auto cell : *row)
             {
-                cells.emplace_back(cell.value);
+                cells.emplace_back(cell.text());
             }
             CHECK(cells.size() == 2, "every row must have both cells");
             if (index > 0)
@@ -764,7 +764,7 @@ static std::vector<std::string> read_cells(const xl::Workbook &workbook, int32_t
         std::string line;
         for (auto cell : *row)
         {
-            line += (line.empty() ? "" : "|") + std::string(cell.value);
+            line += (line.empty() ? "" : "|") + cell.text();
         }
         rows.push_back(std::move(line));
     }

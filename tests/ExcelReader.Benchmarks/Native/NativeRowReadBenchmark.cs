@@ -66,6 +66,26 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
+        public unsafe int NextRowCells()
+        {
+            using NativeHandle handle = Open();
+            ReadApi.OpenRows(handle, 0, out NativeRowCursor? opened);
+            using NativeRowCursor cursor = opened!;
+            int rows = 0;
+            while (true)
+            {
+                int status = ReadApi.NextRowCells(cursor, out _, out _);
+                if (status == NativeStatus.Eof)
+                {
+                    break;
+                }
+                Verify(status);
+                rows++;
+            }
+            return VerifyRows(rows);
+        }
+
+        [Benchmark]
         public int ReadAllBlob()
         {
             using NativeHandle handle = Open();

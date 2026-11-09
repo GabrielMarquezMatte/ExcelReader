@@ -38,7 +38,7 @@ namespace ExcelReader.Native.Csv
                 fixed (byte* shared = row.Shared)
                 fixed (byte* rowBuffer = row.RowBuffer)
                 {
-                    NativeCellView* cells = state.Views.Fill(row.Descriptors, rowValues, shared, rowBuffer);
+                    NativeCellView* cells = state.Views.Borrow(row.Descriptors, rowValues, shared, rowBuffer);
                     status = context.AccumulateView((void*)state.Native, cells, row.Descriptors.Length, context.UserData);
                 }
                 if (status != NativeStatus.Ok)

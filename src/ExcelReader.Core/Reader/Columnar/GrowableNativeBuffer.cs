@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace ExcelReader.Native
+namespace ExcelReader.Core.Reader.Columnar
 {
     /// <summary>
     /// One native block that doubles as it fills, so a finished column can be handed over as-is instead
@@ -38,6 +38,11 @@ namespace ExcelReader.Native
             }
             values.CopyTo(new Span<T>(_data + Count, values.Length));
             Count += values.Length;
+        }
+
+        internal ReadOnlySpan<T> AsSpan()
+        {
+            return new ReadOnlySpan<T>(_data, Count);
         }
 
         internal void CopyTo(Span<byte> destination)

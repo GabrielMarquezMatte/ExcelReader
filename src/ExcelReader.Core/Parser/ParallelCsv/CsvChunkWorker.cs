@@ -119,7 +119,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvReaderOptions readerOptions,
             ExcelParserOptions config,
             List<T> models,
-            Utf8StringCache? contentCache,
+            ColumnStringCaches? contentCache,
             CancellationToken ct)
         {
             long start = confirmedStart ?? GuessStart(source, chunk, readerOptions.Quote, readerOptions.Delimiter);
@@ -141,7 +141,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             TypeMapInfo<T> info,
             CsvReaderOptions options,
             ExcelParserOptions config,
-            Utf8StringCache? contentCache,
+            ColumnStringCaches? contentCache,
             CancellationToken ct)
         {
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);

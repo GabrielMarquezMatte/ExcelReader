@@ -108,8 +108,9 @@ namespace xl
             xl_rows *rows = nullptr;
             if (xl_rows_open(workbook, 0, &rows) == XL_OK && rows != nullptr)
             {
-                xl_row row{};
-                while (xl_rows_next_view(rows, &row) == XL_OK)
+                const xl_cell_view *cells = nullptr;
+                int32_t count = 0;
+                while (xl_rows_next_cells(rows, &cells, &count) == XL_OK)
                 {
                 }
                 xl_rows_close(rows);
@@ -618,7 +619,7 @@ namespace xl
         int32_t column{};              ///< 0-based column.
         CellType type{};               ///< What the cell holds.
         std::string_view value{};      ///< The text as stored, so a date is its serial number. Empty for a cell that carries only a number.
-        std::optional<double> number{}; ///< The library's own double, set only by Sheet::for_each_row and Sheet::aggregate, and only when the cell carries one.
+        std::optional<double> number{}; ///< The library's own double, set by RowCursor, Sheet::for_each_row and Sheet::aggregate when the cell carries one.
 
         /// @brief `number` when set, else `value` parsed as a double.
         std::optional<double> as_number() const
@@ -911,20 +912,23 @@ namespace xl
 
         /// @brief Reads the next row.
         /// @return A view into memory the cursor owns, valid until the next next_row() or the cursor's
-        /// destruction. The end of the sheet arrives as an error whose code is `XL_EOF`.
+        /// destruction. A cell that carries only a number has an empty `value`; read it with
+        /// CellView::as_number() or CellView::text(). The end of the sheet arrives as an error whose
+        /// code is `XL_EOF`.
         std::expected<RowView, Error> next_row()
         {
-            xl_row row{};
-            const int32_t status = xl_rows_next_view(rows_, &row);
+            const xl_cell_view *cells = nullptr;
+            int32_t count = 0;
+            const int32_t status = xl_rows_next_cells(rows_, &cells, &count);
             if (status != XL_OK)
             {
                 return std::unexpected(detail::make_error(status));
             }
-            if (row.cell_count < 0)
+            if (count < 0)
             {
                 return std::unexpected(detail::make_error(XL_ERROR));
             }
-            return RowView(row.cells, static_cast<size_t>(row.cell_count));
+            return RowView(cells, static_cast<size_t>(count));
         }
 
     private:

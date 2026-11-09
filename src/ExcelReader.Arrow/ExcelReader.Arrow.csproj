@@ -50,6 +50,14 @@
     <ProjectReference Include="..\ExcelReader.Core\ExcelReader.Core.csproj" />
   </ItemGroup>
 
+  <!-- ToArrowRecordBatch binds Core internals (Reader/Columnar), so the package depends on exactly the
+       Core it was built with: [x.y.z] instead of the default >= x.y.z. -->
+  <Target Name="PinCoreVersion" AfterTargets="_GetProjectReferenceVersions">
+    <ItemGroup>
+      <_ProjectReferencesWithVersions Update="@(_ProjectReferencesWithVersions)" ProjectVersion="[%(ProjectVersion)]" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <AdditionalFiles Include="PublicAPI\PublicAPI.Shipped.txt" />
     <AdditionalFiles Include="PublicAPI\PublicAPI.Unshipped.txt" />

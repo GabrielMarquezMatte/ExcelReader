@@ -1,94 +1,125 @@
-using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.Runtime.CompilerServices;
-using System.Runtime.ExceptionServices;
-using System.Runtime.InteropServices;
-using ExcelReader.Core.Parser;
-using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Columnar;
 using ExcelReader.Core.Reader.Schema;
+using ExcelReader.Native.Reading;
 
 namespace ExcelReader.Native.Typed
 {
     internal static unsafe partial class TypedApi
     {
+        [ThreadStatic]
+        internal static bool LastParseRanInParallel;
+
         internal static int ParseTyped(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
             return ParseTypedTable(handle, sheet, specs, headerRow, 1, out table);
         }
 
-        private static int ParseSequential(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
+        internal static int ParseTypedTable(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, int degreeOfParallelism,
+            out NativeTable table, int chunkSizeOverride = 0)
         {
             table = default;
-            int status = TypedParseSession.Open(handle, sheet, specs, headerRow, maxRows: 0, out TypedParseSession? session);
+            int status = ParseColumns(handle, sheet, specs, headerRow, degreeOfParallelism, allowDictionary: false, chunkSizeOverride, out ColumnarTable? columns);
             if (status != NativeStatus.Ok)
             {
                 return status;
             }
-
-            using TypedParseSession open = session!;
-            status = open.NextBatch(out table);
-            if (status != NativeStatus.Eof)
-            {
-                return status;
-            }
-
+            using ColumnarTable built = columns!;
             try
             {
-                table = BuildEmptyTable(specs);
+                table = ToNativeTable(built);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
             {
                 NativeApi.SetLastError(exception.Message);
-                table = default;
                 return NativeStatus.Error;
             }
         }
 
-        internal static NativeTable BuildEmptyTable(NativeColumnSpec[] specs)
+        internal static int ParseColumns(NativeHandle? handle, int sheet, NativeColumnSpec[] specs, int headerRow, int degreeOfParallelism,
+            bool allowDictionary, int chunkSizeOverride, out ColumnarTable? columns)
         {
-            return BuildTable(NewBuilders(specs));
-        }
-
-        private static string DescribeFailedColumn(NativeColumnSpec[] specs, int failedColumn)
-        {
-            NativeColumnSpec spec = specs[failedColumn];
-            string columnLabel = spec.Names.Length > 0
-                ? string.Join(" / ", spec.Names)
-                : spec.Index.ToString(CultureInfo.InvariantCulture);
-            return $"column {failedColumn} (\"{columnLabel}\") has a value that failed to convert and is not nullable.";
-        }
-
-        private static bool TryAppendRow(ColumnBuilder[] builders, in Row row, int[] columnIndices, bool isDate1904, out int failedColumn)
-        {
-            ReadOnlySpan<CellDesc> cells = row.Descriptors;
-            for (int i = 0; i < builders.Length; i++)
+            columns = null;
+            LastParseRanInParallel = false;
+            if (handle is null)
             {
-                int index = row.IndexOf(columnIndices[i]);
-                if (index >= 0 && builders[i].CanAppendDirect(in cells[index]) && builders[i].TryAppendDirect(in cells[index], in row))
-                {
-                    continue;
-                }
-                if (!builders[i].AppendFrom(CellAt(in row, index), isDate1904))
-                {
-                    failedColumn = i;
-                    return false;
-                }
+                return NativeStatus.InvalidHandle;
             }
-            failedColumn = -1;
-            return true;
+            if (degreeOfParallelism < 0)
+            {
+                NativeApi.SetLastError($"degree_of_parallelism must be 0 (processor count) or positive; got {degreeOfParallelism}.");
+                return NativeStatus.InvalidArgument;
+            }
+            int status = ValidateSpecs(specs, headerRow, allowDictionary, out TypedColumnSpec[] coreSpecs);
+            if (status != NativeStatus.Ok)
+            {
+                return status;
+            }
+            status = ReadApi.ResolveSheet(handle, sheet, out IExcelSheet? resolved);
+            if (status != NativeStatus.Ok)
+            {
+                return status;
+            }
+            try
+            {
+                columns = TypedTableParser.Parse(resolved!, coreSpecs, headerRow, degreeOfParallelism, allowDictionary, chunkSizeOverride,
+                    out LastParseRanInParallel, out string? specError);
+                return columns is null ? InvalidArgument(specError!) : NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
         }
 
-        private static Cell CellAt(in Row row, int index)
+        internal static int ValidateSpecs(NativeColumnSpec[] specs, int headerRow, bool allowDictionary, out TypedColumnSpec[] coreSpecs)
         {
-            if (index < 0)
+            coreSpecs = Array.ConvertAll(specs, ToCore);
+            if (specs.Length == 0)
             {
-                return new Cell(CellType.Empty, default);
+                return InvalidArgument("xl_parse_typed requires at least one column spec.");
             }
-            return row.CellAt(index);
+            if (!TypedTableParser.TryValidate(coreSpecs, headerRow, allowDictionary, out string? error))
+            {
+                return InvalidArgument(error);
+            }
+            NativeApi.ClearLastError();
+            return NativeStatus.Ok;
+        }
+
+        private static int InvalidArgument(string message)
+        {
+            NativeApi.SetLastError(message);
+            return NativeStatus.InvalidArgument;
+        }
+
+        private static TypedColumnSpec ToCore(NativeColumnSpec spec)
+        {
+            return new TypedColumnSpec { Names = spec.Names, Index = spec.Index, Type = (ExcelColumnType)spec.Type, Nullable = spec.Nullable };
+        }
+
+        internal static NativeTable ToNativeTable(ColumnarTable columns)
+        {
+            int count = columns.Columns.Length;
+            IntPtr block = ColumnBlocks.Alloc(checked(Math.Max(count, 1) * sizeof(NativeColumn)));
+            NativeColumn* target = (NativeColumn*)block;
+            for (int c = 0; c < count; c++)
+            {
+                ref BuiltColumn source = ref columns.Columns[c];
+                target[c] = new NativeColumn
+                {
+                    Type = (int)source.Type,
+                    Length = source.Length,
+                    Values = source.Values,
+                    Validity = source.Validity,
+                    Data = source.Data,
+                    DataLen = source.DataLen,
+                };
+                source = default;
+            }
+            return new NativeTable { ColumnCount = count, RowCount = columns.RowCount, Columns = block };
         }
 
         internal static void FreeTable(ref NativeTable table)
@@ -101,63 +132,13 @@ namespace ExcelReader.Native.Typed
 
             for (int index = 0; index < table.ColumnCount; index++)
             {
-                FreeColumn(table.ColumnAt(index));
+                ref readonly NativeColumn column = ref table.ColumnAt(index);
+                ColumnBlocks.Free(column.Values);
+                ColumnBlocks.Free(column.Validity);
+                ColumnBlocks.Free(column.Data);
             }
-            FreeBlock(table.Columns);
+            ColumnBlocks.Free(table.Columns);
             table = default;
-        }
-
-        private static void FreeColumn(in NativeColumn column)
-        {
-            FreeBlock(column.Values);
-            FreeBlock(column.Validity);
-            FreeBlock(column.Data);
-        }
-
-        private static readonly AsyncLocal<Func<int, IntPtr>?> AllocOverrideLocal = new();
-        private static readonly AsyncLocal<Action<IntPtr>?> FreeOverrideLocal = new();
-
-        internal static Func<int, IntPtr>? AllocOverride
-        {
-            get
-            {
-                return AllocOverrideLocal.Value;
-            }
-            set
-            {
-                AllocOverrideLocal.Value = value;
-            }
-        }
-
-        internal static Action<IntPtr>? FreeOverride
-        {
-            get
-            {
-                return FreeOverrideLocal.Value;
-            }
-            set
-            {
-                FreeOverrideLocal.Value = value;
-            }
-        }
-
-        private static IntPtr AllocBlock(int byteLength)
-        {
-            return AllocOverride is { } alloc ? alloc(byteLength) : Marshal.AllocHGlobal(byteLength);
-        }
-
-        private static void FreeBlock(IntPtr block)
-        {
-            if (block == IntPtr.Zero)
-            {
-                return;
-            }
-            if (FreeOverride is { } free)
-            {
-                free(block);
-                return;
-            }
-            Marshal.FreeHGlobal(block);
         }
 
         internal static bool IsValidSpecCount(int specCount)
@@ -173,588 +154,6 @@ namespace ExcelReader.Native.Typed
         internal static bool IsValidNameCount(int nameCount)
         {
             return nameCount is >= 0 and <= NativeLimits.MaxNamesPerSpec;
-        }
-
-        private static bool TryValidateArguments(NativeColumnSpec[] specs, int headerRow, [NotNullWhen(false)] out string? error)
-        {
-            error = null;
-            if (specs.Length == 0)
-            {
-                error = "xl_parse_typed requires at least one column spec.";
-                return false;
-            }
-            if (headerRow < 0)
-            {
-                error = $"header_row must be 0 (no header) or a positive row number; got {headerRow}.";
-                return false;
-            }
-            foreach (NativeColumnSpec spec in specs)
-            {
-                if (spec.Names.Length == 0 && spec.Index < 0)
-                {
-                    error = "a column spec with no name must have a non-negative index.";
-                    return false;
-                }
-                if (spec.Names.Length > 0 && headerRow == 0)
-                {
-                    error = $"column \"{spec.Names[0]}\" is name-based, but header_row is 0 (no header row to match it against).";
-                    return false;
-                }
-                foreach (string name in spec.Names)
-                {
-                    if (name.AsSpan().Trim().IsEmpty)
-                    {
-                        error = "a name-based column spec cannot have a blank name.";
-                        return false;
-                    }
-                }
-                if (spec.Type is < NativeColumnType.String or > NativeColumnType.Timestamp)
-                {
-                    error = $"column spec has unknown type {spec.Type}.";
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        private static bool TryResolveColumns(IExcelRowEnumerator rows, NativeColumnSpec[] specs, int headerRow, int[] columnIndices, [NotNullWhen(false)] out string? error)
-        {
-            error = null;
-            if (headerRow == 0)
-            {
-                for (int i = 0; i < specs.Length; i++)
-                {
-                    columnIndices[i] = specs[i].Index;
-                }
-                return true;
-            }
-
-            if (!SchemaInference.TrySkipToHeaderRow(rows, headerRow, out error))
-            {
-                return false;
-            }
-
-            Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>>? header = null;
-            for (int i = 0; i < specs.Length; i++)
-            {
-                string[] names = specs[i].Names;
-                if (names.Length == 0)
-                {
-                    columnIndices[i] = specs[i].Index;
-                    continue;
-                }
-                header ??= HeaderColumns(rows.Current).GetAlternateLookup<ReadOnlySpan<char>>();
-                int found = -1;
-                foreach (string name in names)
-                {
-                    if (header.Value.TryGetValue(name.AsSpan().Trim(), out found))
-                    {
-                        break;
-                    }
-                    found = -1;
-                }
-                if (found < 0)
-                {
-                    error = $"no column header matches any of {FormatCandidates(names)}.";
-                    return false;
-                }
-                columnIndices[i] = found;
-            }
-            return true;
-        }
-
-        private static string FormatCandidates(string[] names)
-        {
-            return string.Join(", ", Array.ConvertAll(names, n => $"\"{n}\""));
-        }
-
-        // The first column carrying a header wins, as a left-to-right search would find it.
-        private static Dictionary<string, int> HeaderColumns(Row header)
-        {
-            Dictionary<string, int> columns = new(StringComparer.OrdinalIgnoreCase);
-            foreach (RowCell cell in header.Cells)
-            {
-                columns.TryAdd(cell.Value.GetString().Trim(), cell.ColumnIndex);
-            }
-            return columns;
-        }
-
-        private static NativeTable BuildTable(ColumnBuilder[] builders)
-        {
-            return BuildTable([builders], 1);
-        }
-
-        private static NativeTable BuildTable(ColumnBuilder[][] parts, int degreeOfParallelism)
-        {
-            int columnCount = parts[0].Length;
-            long rowCount = 0;
-            if (columnCount > 0)
-            {
-                foreach (ColumnBuilder[] part in parts)
-                {
-                    rowCount += part[0].RowCount;
-                }
-            }
-            IntPtr columnsBlock = AllocBlock(checked(columnCount * sizeof(NativeColumn)));
-            new Span<NativeColumn>((void*)columnsBlock, columnCount).Clear();
-            NativeTable table = new() { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
-            try
-            {
-                if (degreeOfParallelism == 1)
-                {
-                    for (int c = 0; c < columnCount; c++)
-                    {
-                        ((NativeColumn*)columnsBlock)[c] = BuildColumn(parts, c);
-                    }
-                }
-                else
-                {
-                    Parallel.For(0, columnCount, new ParallelOptions { MaxDegreeOfParallelism = degreeOfParallelism },
-                        c => ((NativeColumn*)columnsBlock)[c] = BuildColumn(parts, c));
-                }
-            }
-            catch (AggregateException exception) when (exception.InnerExceptions.Count == 1)
-            {
-                FreeTable(ref table);
-                ExceptionDispatchInfo.Throw(exception.InnerExceptions[0]);
-            }
-            catch
-            {
-                FreeTable(ref table);
-                throw;
-            }
-            return table;
-        }
-
-        private static NativeColumn BuildColumn(ColumnBuilder[][] parts, int index)
-        {
-            ColumnBuilder[] column = new ColumnBuilder[parts.Length];
-            for (int p = 0; p < parts.Length; p++)
-            {
-                column[p] = parts[p][index];
-            }
-            return ColumnBuilder.Build(column);
-        }
-
-        internal static IntPtr PackBitsLsbFirst(ReadOnlySpan<byte> flags)
-        {
-            int byteLength = Math.Max((flags.Length + 7) / 8, 1);
-            IntPtr block = Marshal.AllocHGlobal(byteLength);
-            Span<byte> packed = new((void*)block, byteLength);
-            packed.Clear();
-            for (int i = 0; i < flags.Length; i++)
-            {
-                if (flags[i] != 0)
-                {
-                    packed[i >> 3] |= (byte)(1 << (i & 7));
-                }
-            }
-            return block;
-        }
-
-        private sealed class ColumnBuilder(int type, bool nullable) : IDisposable
-        {
-            private readonly GrowableNativeBuffer<byte> _validity = new();
-            private int _rowCount;
-            private bool _anyNull;
-
-            private readonly GrowableNativeBuffer<long> _longs = new();
-            private readonly GrowableNativeBuffer<int> _ints = new();
-            private readonly GrowableNativeBuffer<double> _doubles = new();
-            private readonly GrowableNativeBuffer<byte> _bools = new();
-            private readonly GrowableNativeBuffer<int> _stringOffsets = NewStringOffsets(type);
-            private readonly GrowableNativeBuffer<byte> _stringData = new();
-
-            public void Dispose()
-            {
-                _validity.Dispose();
-                _longs.Dispose();
-                _ints.Dispose();
-                _doubles.Dispose();
-                _bools.Dispose();
-                _stringOffsets.Dispose();
-                _stringData.Dispose();
-            }
-
-            private static GrowableNativeBuffer<int> NewStringOffsets(int type)
-            {
-                GrowableNativeBuffer<int> offsets = new();
-                if (type == NativeColumnType.String)
-                {
-                    offsets.Add(0);
-                }
-                return offsets;
-            }
-
-            private byte[] _scratch = [];
-
-            internal int RowCount
-            {
-                get
-                {
-                    return _rowCount;
-                }
-            }
-
-            private int Type
-            {
-                get
-                {
-                    return type;
-                }
-            }
-
-            internal bool AppendFrom(in Cell cell, bool isDate1904)
-            {
-                return type switch
-                {
-                    NativeColumnType.String => AppendString(in cell),
-                    NativeColumnType.Int64 => AppendInt64(in cell, isDate1904),
-                    NativeColumnType.Float64 => AppendFloat64(in cell, isDate1904),
-                    NativeColumnType.Bool => AppendBool(in cell, isDate1904),
-                    NativeColumnType.Date => AppendDate(in cell, isDate1904),
-                    NativeColumnType.Time => AppendTime(in cell, isDate1904),
-                    _ => AppendTimestamp(in cell, isDate1904),
-                };
-            }
-
-            // The common cases read straight from the cell's descriptor, with the same result AppendFrom
-            // gives them: text bytes as they are, a binary number as Cell.TryParse<double/long> returns it.
-            // Everything else returns false and goes through AppendFrom.
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal bool CanAppendDirect(in CellDesc cell)
-            {
-                return cell.HasNumber || type == NativeColumnType.String;
-            }
-
-            internal bool TryAppendDirect(in CellDesc cell, in Row row)
-            {
-                if (type == NativeColumnType.String && cell.Length > 0)
-                {
-                    _stringData.AddRange(row.ValueOf(in cell));
-                    _stringOffsets.Add(_stringData.Count);
-                    RecordValidity(valid: true);
-                    return true;
-                }
-                if (!cell.HasNumber)
-                {
-                    return false;
-                }
-                double number = cell.Number;
-                if (type == NativeColumnType.Float64)
-                {
-                    _doubles.Add(number);
-                    RecordValidity(valid: true);
-                    return true;
-                }
-                if (type == NativeColumnType.Int64 && number == Math.Truncate(number) && number is >= -9223372036854775808.0 and < 9223372036854775808.0)
-                {
-                    _longs.Add((long)number);
-                    RecordValidity(valid: true);
-                    return true;
-                }
-                return false;
-            }
-
-            private const int NumberFormatMaxBytes = 32;
-
-            private bool AppendString(in Cell cell)
-            {
-                if (!cell.Value.IsEmpty)
-                {
-                    _stringData.AddRange(cell.Value);
-                    _stringOffsets.Add(_stringData.Count);
-                    RecordValidity(valid: true);
-                    return true;
-                }
-                int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
-                if (_scratch.Length < capacity)
-                {
-                    _scratch = new byte[capacity];
-                }
-                if (!cell.TryFormat(_scratch, out int written))
-                {
-                    written = 0;
-                }
-                _stringData.AddRange(_scratch.AsSpan(0, written));
-                _stringOffsets.Add(_stringData.Count);
-                RecordValidity(valid: true);
-                return true;
-            }
-
-            [MethodImpl(MethodImplOptions.NoInlining)]
-            private bool AppendInt64(in Cell cell, bool isDate1904)
-            {
-                return Append(_longs, ExcelCellReaders.Parsable(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out long value), value);
-            }
-
-            [MethodImpl(MethodImplOptions.NoInlining)]
-            private bool AppendFloat64(in Cell cell, bool isDate1904)
-            {
-                return Append(_doubles, ExcelCellReaders.Parsable(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out double value), value);
-            }
-
-            [MethodImpl(MethodImplOptions.NoInlining)]
-            private bool AppendBool(in Cell cell, bool isDate1904)
-            {
-                return Append(_bools, ColumnParserFactory.ReadBool(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out bool flag), (byte)(flag ? 1 : 0));
-            }
-
-            private static readonly int UnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
-
-            private bool AppendDate(in Cell cell, bool isDate1904)
-            {
-                bool ok = ColumnParserFactory.ReadDateOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out DateOnly value)
-                    || ColumnParserFactory.ReadTextDateOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out value);
-                return Append(_ints, ok, value.DayNumber - UnixEpochDayNumber);
-            }
-
-            private bool AppendTime(in Cell cell, bool isDate1904)
-            {
-                bool ok = ColumnParserFactory.ReadTimeOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out TimeOnly value)
-                    || ColumnParserFactory.ReadTextTimeOnly(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out value);
-                return Append(_longs, ok, value.ToTimeSpan().Ticks / 10);
-            }
-
-            private bool AppendTimestamp(in Cell cell, bool isDate1904)
-            {
-                bool ok = ColumnParserFactory.ReadDateTime(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out DateTime value)
-                    || ColumnParserFactory.ReadTextDateTime(in cell, new ExcelRowContext { IsDate1904 = isDate1904 }, out value);
-                // Text with a "Z" or an offset parses to the machine's local time; the wire value is UTC.
-                if (value.Kind == DateTimeKind.Local)
-                {
-                    value = value.ToUniversalTime();
-                }
-                return Append(_longs, ok, (value - DateTime.UnixEpoch).Ticks / 10);
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private bool Append<T>(GrowableNativeBuffer<T> target, bool converted, T value) where T : unmanaged
-            {
-                if (!converted && !nullable)
-                {
-                    return false;
-                }
-                target.Add(converted ? value : default);
-                RecordValidity(converted);
-                return true;
-            }
-
-            /// <summary>
-            /// Tracks validity without touching the bitmap until the first null: a column with no nulls
-            /// ships no bitmap, so writing one bit per cell up to then is wasted work. The first null
-            /// backfills every earlier row as valid.
-            /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void RecordValidity(bool valid)
-            {
-                if (!_anyNull && valid)
-                {
-                    _rowCount++;
-                    return;
-                }
-                RecordValiditySlow(valid);
-            }
-
-            [MethodImpl(MethodImplOptions.NoInlining)]
-            private void RecordValiditySlow(bool valid)
-            {
-                if (!_anyNull)
-                {
-                    _anyNull = true;
-                    for (int i = 0; i < _rowCount >> 3; i++)
-                    {
-                        _validity.Add(0xFF);
-                    }
-                    if ((_rowCount & 7) != 0)
-                    {
-                        _validity.Add((byte)((1 << (_rowCount & 7)) - 1));
-                    }
-                }
-                if ((_rowCount & 7) == 0)
-                {
-                    _validity.Add(0);
-                }
-                if (valid)
-                {
-                    _validity.Last |= (byte)(1 << (_rowCount & 7));
-                }
-                _rowCount++;
-            }
-
-            internal static NativeColumn Build(ReadOnlySpan<ColumnBuilder> parts)
-            {
-                int type = parts[0].Type;
-                long rows = 0;
-                bool anyNull = false;
-                foreach (ColumnBuilder part in parts)
-                {
-                    rows += part._rowCount;
-                    anyNull |= part._anyNull;
-                }
-                NativeColumn column = new() { Type = type, Length = rows };
-                try
-                {
-                    if (anyNull)
-                    {
-                        column.Validity = ConcatValidity(parts, rows);
-                    }
-                    switch (type)
-                    {
-                        case NativeColumnType.String:
-                            column.Values = ConcatStringOffsets(parts);
-                            column.Data = Concat(parts, static part => part._stringData, out int dataLength);
-                            column.DataLen = dataLength;
-                            break;
-                        case NativeColumnType.Bool:
-                            column.Values = Concat(parts, static part => part._bools, out _);
-                            break;
-                        case NativeColumnType.Float64:
-                            column.Values = Concat(parts, static part => part._doubles, out _);
-                            break;
-                        case NativeColumnType.Date:
-                            column.Values = Concat(parts, static part => part._ints, out _);
-                            break;
-                        default:
-                            column.Values = Concat(parts, static part => part._longs, out _);
-                            break;
-                    }
-                }
-                catch
-                {
-                    FreeColumn(in column);
-                    throw;
-                }
-                return column;
-            }
-
-            private static IntPtr Concat<T>(ReadOnlySpan<ColumnBuilder> parts, Func<ColumnBuilder, GrowableNativeBuffer<T>> select, out int byteLength)
-                where T : unmanaged
-            {
-                if (CanHandOver(parts) && select(parts[0]).Count > 0)
-                {
-                    byteLength = select(parts[0]).ByteLength;
-                    return select(parts[0]).Detach();
-                }
-                byteLength = 0;
-                foreach (ColumnBuilder part in parts)
-                {
-                    byteLength = checked(byteLength + select(part).ByteLength);
-                }
-                IntPtr block = AllocBlock(Math.Max(byteLength, 1));
-                int offset = 0;
-                foreach (ColumnBuilder part in parts)
-                {
-                    GrowableNativeBuffer<T> buffer = select(part);
-                    buffer.CopyTo(new Span<byte>((byte*)block + offset, buffer.ByteLength));
-                    offset += buffer.ByteLength;
-                }
-                return block;
-            }
-
-            // A single part's block already is the column, unless a test hook is tracking allocations.
-            private static bool CanHandOver(ReadOnlySpan<ColumnBuilder> parts)
-            {
-                return parts.Length == 1 && AllocOverride is null;
-            }
-
-            private static IntPtr ConcatStringOffsets(ReadOnlySpan<ColumnBuilder> parts)
-            {
-                if (CanHandOver(parts))
-                {
-                    return parts[0]._stringOffsets.Detach();
-                }
-                int count = 1;
-                foreach (ColumnBuilder part in parts)
-                {
-                    count = checked(count + part._stringOffsets.Count - 1);
-                }
-                IntPtr block = AllocBlock(checked(count * sizeof(int)));
-                Span<int> offsets = new((void*)block, count);
-                offsets[0] = 0;
-                int at = 0;
-                foreach (ColumnBuilder part in parts)
-                {
-                    int baseOffset = offsets[at];
-                    Span<int> slot = offsets.Slice(at, part._stringOffsets.Count);
-                    part._stringOffsets.CopyTo(MemoryMarshal.AsBytes(slot));
-                    if (baseOffset != 0)
-                    {
-                        foreach (ref int offset in slot)
-                        {
-                            offset += baseOffset;
-                        }
-                    }
-                    at += slot.Length - 1;
-                }
-                return block;
-            }
-
-            private static IntPtr ConcatValidity(ReadOnlySpan<ColumnBuilder> parts, long rows)
-            {
-                int byteLength = checked((int)((rows + 7) / 8));
-                IntPtr block = AllocBlock(Math.Max(byteLength, 1));
-                Span<byte> bits = new((void*)block, byteLength);
-                bits.Clear();
-                long at = 0;
-                foreach (ColumnBuilder part in parts)
-                {
-                    if (part._anyNull)
-                    {
-                        OrBits(bits, at, part._validity);
-                    }
-                    else
-                    {
-                        SetBits(bits, at, part._rowCount);
-                    }
-                    at += part._rowCount;
-                }
-                return block;
-            }
-
-            private static void OrBits(Span<byte> bits, long at, GrowableNativeBuffer<byte> validity)
-            {
-                int first = (int)(at >> 3);
-                int shift = (int)(at & 7);
-                if (shift == 0)
-                {
-                    validity.CopyTo(bits[first..]);
-                    return;
-                }
-                int count = validity.Count;
-                byte[] source = ArrayPool<byte>.Shared.Rent(count);
-                try
-                {
-                    validity.CopyTo(source);
-                    for (int i = 0; i < count; i++)
-                    {
-                        bits[first + i] |= (byte)(source[i] << shift);
-                        if (first + i + 1 < bits.Length)
-                        {
-                            bits[first + i + 1] |= (byte)(source[i] >> (8 - shift));
-                        }
-                    }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(source);
-                }
-            }
-
-            private static void SetBits(Span<byte> bits, long start, int count)
-            {
-                long end = start + count;
-                for (; start < end && (start & 7) != 0; start++)
-                {
-                    bits[(int)(start >> 3)] |= (byte)(1 << (int)(start & 7));
-                }
-                int fullBytes = (int)((end - start) >> 3);
-                bits.Slice((int)(start >> 3), fullBytes).Fill(0xFF);
-                for (start += (long)fullBytes << 3; start < end; start++)
-                {
-                    bits[(int)(start >> 3)] |= (byte)(1 << (int)(start & 7));
-                }
-            }
         }
     }
 }

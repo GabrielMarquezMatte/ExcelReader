@@ -40,6 +40,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         private int[]? _columnStyleLookup;
         private int[]? _baseColumnStyleLookup;
         private Dictionary<int, double>? _columnWidths;
+        private bool _hideGridLines;
         private int _activeRowStyle;
         private int _activeRowHeight;
         private int _pendingStyle = -1;
@@ -128,6 +129,13 @@ namespace ExcelReader.Core.Writer.Xlsb
         public void SetColumnWidth(int columnIndex, double width)
         {
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, ExcelLimits.MaxColumns, _state, this);
+        }
+
+        /// <inheritdoc/>
+        public void SetShowGridLines(bool show)
+        {
+            SheetColumnValidation.RequireNotStarted(_state, this, nameof(SetShowGridLines));
+            _hideGridLines = !show;
         }
 
         internal bool HasPendingStyle
@@ -719,10 +727,18 @@ namespace ExcelReader.Core.Writer.Xlsb
 
         private static ReadOnlySpan<byte> InitialWorksheetViewPayload => [0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         private static ReadOnlySpan<byte> SecondPayload => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01];
+        private const byte DisplayGridLinesFlag = 0x04;
+
         private void WriteWorksheetView()
         {
+            Span<byte> view = stackalloc byte[InitialWorksheetViewPayload.Length];
+            InitialWorksheetViewPayload.CopyTo(view);
+            if (_hideGridLines)
+            {
+                view[0] &= unchecked((byte)~DisplayGridLinesFlag);
+            }
             WriteRecord(Brt.BeginWsViews);
-            WriteBlobRecord(Brt.BeginWsView, InitialWorksheetViewPayload);
+            WriteBlobRecord(Brt.BeginWsView, view);
             WriteBlobRecord(Brt.Pane, SecondPayload);
             WriteRecord(Brt.EndWsView);
             WriteRecord(Brt.EndWsViews);

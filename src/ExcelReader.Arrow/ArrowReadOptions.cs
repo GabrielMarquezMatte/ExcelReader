@@ -5,7 +5,7 @@ namespace ExcelReader.Arrow
     /// <summary>Options for converting a sheet with <see cref="ArrowConversionExtensions.ToArrowRecordBatch"/>.</summary>
     public sealed class ArrowReadOptions
     {
-        /// <summary>Gets the default options: header on row 1, schema inferred from the sheet.</summary>
+        /// <summary>Gets the default options: header on row 1, schema inferred from the sheet, one thread.</summary>
         public static ArrowReadOptions Default { get; } = new();
 
         /// <summary>
@@ -20,5 +20,12 @@ namespace ExcelReader.Arrow
         /// row. Defaults to <c>1</c>.
         /// </summary>
         public int HeaderRow { get; init; } = 1;
+
+        /// <summary>
+        /// Gets the number of threads to read with: <c>1</c>, the default, reads on the calling thread and
+        /// <c>0</c> uses every processor. A CSV, XLSX or XLSB sheet too small to split, or any other
+        /// sheet, is read on one thread.
+        /// </summary>
+        public int DegreeOfParallelism { get; init; } = 1;
     }
 }
