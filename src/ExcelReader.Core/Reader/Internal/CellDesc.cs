@@ -19,14 +19,14 @@ namespace ExcelReader.Core.Reader.Internal
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared, ReadOnlySpan<byte> rowBuffer,
-            SharedStringCache? sharedStringCache = null, Utf8StringCache? contentCache = null)
+            SharedStringCache? sharedStringCache = null, ColumnStringCaches? contentCache = null)
         {
             if (Source == CellValueSource.Shared)
             {
-                return new Cell(Type, shared.Slice(Start, Length), Number, HasNumber, Style, SharedIndex, sharedStringCache, contentCache);
+                return new Cell(Type, shared.Slice(Start, Length), Number, HasNumber, Style, SharedIndex, sharedStringCache, contentCache?.ForColumn(Column));
             }
             ReadOnlySpan<byte> buf = Source == CellValueSource.RowBuffer ? rowBuffer : rowValues;
-            return new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style, sharedIndex: -1, sharedCache: null, contentCache);
+            return new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style, sharedIndex: -1, sharedCache: null, contentCache?.ForColumn(Column));
         }
     }
 }

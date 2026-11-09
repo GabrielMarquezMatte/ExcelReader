@@ -48,10 +48,10 @@ namespace ExcelReader.Core.Reader
         /// when materialized via <see cref="Cell.GetString"/>. Defaults to <see langword="false"/>.
         /// Has no effect on shared-string cells, which already dedup through the shared-string table's
         /// own index-keyed cache, nor on the zero-copy <see cref="Cell.Value"/> span path —
-        /// only <c>GetString()</c> consults this cache. Worth enabling only for genuinely categorical
-        /// (low-cardinality, repeated) text; for high-cardinality data every lookup is a cache miss, so the
-        /// per-call hashing cost is pure overhead — measured roughly doubling wall-clock time on a
-        /// real-world, mixed-cardinality CSV corpus.
+        /// only <c>GetString()</c> consults this cache. Each column has its own cache, and a column whose
+        /// values rarely repeat stops consulting it for a while, so mostly-unique columns cost little. It
+        /// trades time for allocation: on a real-world, mixed-cardinality CSV it allocated about half as
+        /// much and took about 20% longer.
         /// </summary>
         public bool InternStrings { get; init; }
 

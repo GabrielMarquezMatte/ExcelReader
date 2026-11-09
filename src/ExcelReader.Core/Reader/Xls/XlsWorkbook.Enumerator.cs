@@ -18,7 +18,7 @@ namespace ExcelReader.Core.Reader.Xls
             private readonly CancellationToken _ct;
             private readonly BiffCursor _cursor;
             private readonly CellAccumulator _acc;
-            private readonly Utf8StringCache? _contentCache;
+            private readonly ColumnStringCaches? _contentCache;
             private readonly Queue<int> _declaredRows = new();
             private bool _ended;
             private bool _sawBof;
@@ -34,7 +34,7 @@ namespace ExcelReader.Core.Reader.Xls
                 _cursor = reader.OpenCursor(sheetOffset);
                 _row = -1;
                 _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
-                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _contentCache = reader._options.InternStrings ? new ColumnStringCaches() : null;
                 _lease = reader.Lifetime;
             }
 
