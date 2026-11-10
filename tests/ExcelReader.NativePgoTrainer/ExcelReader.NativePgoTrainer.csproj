@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\ExcelReader.Benchmarks\Data\65K_Records_Data.xlsx;..\ExcelReader.Benchmarks\Data\65K_Records_Data.xlsb;..\ExcelReader.Benchmarks\Data\65K_Records_Data.csv"
+    <Content Include="..\ExcelReader.Benchmarks\Data\65K_Records_Data.xlsx;..\ExcelReader.Benchmarks\Data\65K_Records_Data.xlsb;..\ExcelReader.Benchmarks\Data\65K_Records_Data.csv;..\ExcelReader.Benchmarks\Data\65K_Records_Data.xls"
              LinkBase="data" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

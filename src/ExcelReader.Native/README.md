@@ -26,7 +26,7 @@ example) silently drops its profile. That happened after the namespace refactor 
 look for `; No PGO data` in the listing header.
 
 `tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_parse_arrow` (with `XL_T_STRING_DICT` columns), `xl_rows_next`,
-`xl_rows_next_view`, `xl_rows_next_cells` and `xl_rows_foreach` over the 65K benchmark fixtures in XLSX, XLSB and CSV, and writes each parsed
+`xl_rows_next_view`, `xl_rows_next_cells` and `xl_rows_foreach` over the 65K benchmark fixtures in XLSX, XLSB, CSV and XLS, and writes each parsed
 table back out with `xl_write_typed_to_memory` in XLSX, XLSB and CSV, serially and in parallel.
 Record it and convert the trace (needs `dotnet-trace` and `dotnet-pgo`):
 
