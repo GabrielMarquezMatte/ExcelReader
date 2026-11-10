@@ -368,10 +368,10 @@ Writing a 50,000-row workbook (`WriteBenchmark`):
 
 | Workload | Default | `PrefetchWrite = true` | Gain |
 |---|---:|---:|---:|
-| XLSX | 8.191 ms | 5.351 ms | 35% |
-| XLSB | 5.462 ms | 3.282 ms | 40% |
+| XLSX | 8.213 ms | 5.577 ms | 32% |
+| XLSB | 5.388 ms | 3.271 ms | 39% |
 
-Allocations are unchanged (4.02 MB either way) — the background writer hands over buffers the row
+Allocations are unchanged (4.02–4.03 MB either way) — the background writer hands over buffers the row
 writer already owns rather than copying them.
 
 The same caveat as the read side applies: **do not enable it for concurrent server workloads**. A
@@ -433,13 +433,13 @@ Writing 1,000,000 rows of four columns (text, integer, date, number) to a `Memor
 
 | Write | XLSX | XLSB |
 |---|---:|---:|
-| Serial | 165.08 ms | 113.61 ms |
-| Serial, `PrefetchWrite` | 102.18 ms | 62.39 ms |
-| Parallel, 1 batch in flight | 164.23 ms | 114.03 ms |
-| Parallel, 2 | 84.48 ms | 58.53 ms |
-| Parallel, 4 | 44.27 ms | 30.04 ms |
-| Parallel, 8 | 27.54 ms | 19.48 ms |
-| Parallel, 16 | 21.64 ms | 15.37 ms |
+| Serial | 160.09 ms | 110.06 ms |
+| Serial, `PrefetchWrite` | 99.24 ms | 61.54 ms |
+| Parallel, 1 batch in flight | 174.04 ms | 107.89 ms |
+| Parallel, 2 | 87.64 ms | 53.74 ms |
+| Parallel, 4 | 45.61 ms | 28.72 ms |
+| Parallel, 8 | 28.93 ms | 18.66 ms |
+| Parallel, 16 | 22.07 ms | 15.11 ms |
 
 The file comes out 0.18% (XLSX) or 0.04% (XLSB) larger, because each batch is compressed on its own.
 As with `PrefetchWrite`, this is for single-file batch work: a server already writing many files at
