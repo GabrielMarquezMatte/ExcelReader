@@ -78,6 +78,29 @@ namespace ExcelReader.Core.Reader.Xls
             return true;
         }
 
+        /// <summary>The stream bytes from <see cref="Position"/> that are already addressable without a copy.</summary>
+        internal ReadOnlySpan<byte> LoadedSpan()
+        {
+            long pos = Position;
+            if (pos >= Length)
+            {
+                return default;
+            }
+            if (_kind == WorkbookStream.SourceKind.Contiguous)
+            {
+                return _wb.Memory(pos, (int)(Length - pos));
+            }
+            if (_kind == WorkbookStream.SourceKind.Chained && pos >= _runStart && pos < _runEnd)
+            {
+                return _file.AsSpan(_fileBase + (int)(_runBufferOffset + pos - _runStart), (int)(_runEnd - pos));
+            }
+            if (_kind == WorkbookStream.SourceKind.Streamed && pos >= _windowStart && pos < _windowEnd)
+            {
+                return _sector.AsSpan((int)(pos - _windowStart), (int)(Math.Min(_windowEnd, Length) - pos));
+            }
+            return default;
+        }
+
         private ReadOnlySpan<byte> ReadSpan(long pos, int len)
         {
             if (_kind == WorkbookStream.SourceKind.Contiguous)
