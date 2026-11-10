@@ -45,6 +45,7 @@ namespace ExcelReader.NativePgoTrainer
                 ("65K_Records_Data.xlsx", NativeFormat.Xlsx),
                 ("65K_Records_Data.xlsb", NativeFormat.Xlsb),
                 ("65K_Records_Data.csv", NativeFormat.Csv),
+                ("65K_Records_Data.xls", NativeFormat.Xls),
             ];
             byte[] rowBuffer = new byte[1 << 16];
             foreach ((string file, int format) in fixtures)
