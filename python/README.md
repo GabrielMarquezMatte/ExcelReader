@@ -17,7 +17,7 @@ package installs as `excelreader-native` and imports as `excelreader`.
 ## Install (from source)
 
 ```bash
-python python/scripts/build_native.py   # requires the .NET 10 SDK, once per machine
+python python/scripts/build_native.py   # requires the .NET 11 SDK, once per machine
 pip install -e "python[dev]"
 ```
 

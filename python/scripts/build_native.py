@@ -49,7 +49,7 @@ def publish_environment() -> dict[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rid", default=default_rid(), help="dotnet runtime identifier")
-    parser.add_argument("--framework", default="net10.0")
+    parser.add_argument("--framework", default="net11.0")
     args = parser.parse_args()
 
     subprocess.run(

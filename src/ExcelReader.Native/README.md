@@ -8,9 +8,9 @@ NativeAOT shared library exposing ExcelReader's readers over a C ABI, so non-.NE
 
 ## Build
 
-    dotnet publish src/ExcelReader.Native/ExcelReader.Native.csproj -c Release -f net10.0 -r <rid>
+    dotnet publish src/ExcelReader.Native/ExcelReader.Native.csproj -c Release -f net11.0 -r <rid>
 
-Output lands in `bin/Release/net10.0/<rid>/publish/ExcelReader.Native.{dll,so,dylib}`.
+Output lands in `bin/Release/net11.0/<rid>/publish/ExcelReader.Native.{dll,so,dylib}`.
 
 ## Static PGO profile
 
@@ -33,7 +33,7 @@ Record it and convert the trace (needs `dotnet-trace` and `dotnet-pgo`):
     dotnet build tests/ExcelReader.NativePgoTrainer -c Release
     DOTNET_TieredPGO=1 DOTNET_ReadyToRun=0 DOTNET_TC_QuickJitForLoops=1 \
       dotnet-trace collect --providers Microsoft-Windows-DotNETRuntime:0x1F000080018:5 -o pgo.nettrace \
-      -- "$PWD/tests/ExcelReader.NativePgoTrainer/bin/Release/net10.0/ExcelReader.NativePgoTrainer"
+      -- "$PWD/tests/ExcelReader.NativePgoTrainer/bin/Release/net11.0/ExcelReader.NativePgoTrainer"
     dotnet-pgo create-mibc -t pgo.nettrace -o src/ExcelReader.Native/pgo/excelreader.mibc
 
 Until 2026-10 the profile excluded `Xlsb|Biff12`: the old XLSB cell loop got 3-22% slower with its
