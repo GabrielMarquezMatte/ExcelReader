@@ -58,7 +58,7 @@ namespace ExcelReader.Benchmarks
         public long ExcelParserSyncInterned()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = Excel.FromXlsx(ms, options: new ExcelReaderOptions { InternStrings = true });
+            using var reader = Excel.FromXlsx(ms, options: new Core.Reader.ExcelReaderOptions { InternStrings = true });
             long acc = 0;
             foreach (Record rec in ExcelParser.FromAttributes<Record>().Parse(reader.FirstSheet))
             {
@@ -149,7 +149,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long OfficeIMO()
         {
-            using var reader = ExcelDocument.OpenDataReader(_workbook, new ExcelReadOptions { HasHeaderRow = true });
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = ExcelDocument.OpenReader(ms, new OfficeIMO.Excel.ExcelReaderOptions { HasHeaderRow = true });
             long acc = 0;
             while (reader.Read())
             {
