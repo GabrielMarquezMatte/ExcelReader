@@ -5,7 +5,7 @@
 # Run from the repository root:  sh python/scripts/build_musl_wheel.sh
 set -eu
 
-docker run --rm -v "$PWD:/repo" -w /repo mcr.microsoft.com/dotnet/sdk:10.0-alpine \
+docker run --rm -v "$PWD:/repo" -w /repo mcr.microsoft.com/dotnet/sdk:11.0-alpine \
   sh -c 'apk add --no-cache clang build-base zlib-dev python3 && python3 python/scripts/build_native.py'
 
 docker run --rm -v "$PWD:/repo" -w /repo python:3.12-alpine \

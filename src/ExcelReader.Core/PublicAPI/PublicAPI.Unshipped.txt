@@ -1,7 +1,1 @@
 #nullable enable
-ExcelReader.Core.Writer.Csv.CsvSheetWriter.SetShowGridLines(bool show) -> void
-ExcelReader.Core.Writer.ISheetWriter<TRow>.SetShowGridLines(bool show) -> void
-ExcelReader.Core.Writer.Xls.XlsSheetWriter.SetShowGridLines(bool show) -> void
-ExcelReader.Core.Writer.Xlsb.XlsbSheetWriter.SetShowGridLines(bool show) -> void
-ExcelReader.Core.Writer.Xlsx.XlsxSheetWriter.SetShowGridLines(bool show) -> void
-ExcelReader.Core.Reader.Schema.ExcelColumnType.StringDictionaryColumn = 7 -> ExcelReader.Core.Reader.Schema.ExcelColumnType

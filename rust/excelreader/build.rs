@@ -78,11 +78,10 @@ fn main() {
         }
         println!("cargo:rustc-link-search=native={}", out_dir.display());
         println!("cargo:rustc-link-lib=dylib=excelreader_native");
-        if let Some(profile_dir) = out_dir.ancestors().nth(3) {
-            let deps_dir = profile_dir.join("deps");
-            fs::create_dir_all(&deps_dir)
-                .unwrap_or_else(|e| panic!("failed to create {}: {e}", deps_dir.display()));
-            let dest = deps_dir.join(&dll_basename);
+        // cargo puts link-search dirs inside the build dir on PATH for `cargo test`/`run`; an
+        // EXCELREADER_NATIVE_LIB_DIR outside it isn't, so the DLL goes next to the import lib.
+        if lib_dir != out_dir {
+            let dest = out_dir.join(&dll_basename);
             fs::copy(lib_dir.join(&dll_basename), &dest).unwrap_or_else(|e| {
                 panic!("failed to copy {dll_basename} to {}: {e}", dest.display())
             });

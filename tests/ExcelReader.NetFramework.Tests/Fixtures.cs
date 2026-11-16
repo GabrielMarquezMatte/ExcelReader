@@ -4,8 +4,7 @@ namespace ExcelReader.NetFramework.Tests
     {
         internal static string Path(params string[] parts)
         {
-            string root = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
-            return System.IO.Path.Combine(root, System.IO.Path.Combine(parts));
+            return System.IO.Path.Combine([AppDomain.CurrentDomain.BaseDirectory, "data", .. parts]);
         }
     }
 }

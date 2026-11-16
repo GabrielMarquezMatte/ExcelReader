@@ -128,7 +128,7 @@ A callback that writes to a database or sends messages must be idempotent on a C
 
 [`ExcelParseException.Row`](xref:ExcelReader.Core.Parser.ExcelParseException.Row) on `ParseAsync` counts the rows emitted so far. On `ForEachAsync` and `AggregateAsync` it is the row a sequential read reports, whether or not the read was partitioned.
 
-See the [parallel sheet benchmarks](../performance/benchmarks.md#parallel-sheet-reading) and the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. On a real-data XLSX the sheet stage drops from 24 ms (prefetched, sequential) to about 17 ms, and on XLSB from 17 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its `AggregateAsync` at dop 4 is ~2.0x faster than the typed path while allocating ~630x less, with zero garbage collections.
+See the [parallel sheet benchmarks](../performance/benchmarks.md#parallel-sheet-reading) and the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. On a real-data XLSX a typed aggregate drops from 44 ms on one thread to about 16 ms at dop 4, and on XLSB from 24 ms to about 13 ms; the floor is inflate, which runs on one thread. CSV has no such floor: its `AggregateAsync` at dop 4 is ~1.9x faster than the typed path while allocating ~670x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.
 
@@ -356,16 +356,16 @@ Measured across both read benchmarks (see [Real data reads](../performance/bench
 
 | Workload | Default | `PrefetchDecompression = true` | Gain |
 |---|---:|---:|---:|
-| XLSX, real data | 37.2 ms | 23.7 ms | 36% |
-| XLSM, real data | 38.0 ms | 23.1 ms | 39% |
-| XLSB, real data | 24.7 ms | 16.6 ms | 33% |
-| XLSX, string-heavy | 30.0 ms | 20.0 ms | 33% |
-| XLSB, string-heavy | 33.6 ms | 19.5 ms | 42% |
+| XLSX, real data | 38.4 ms | 25.0 ms | 35% |
+| XLSM, real data | 37.8 ms | 24.5 ms | 35% |
+| XLSB, real data | 18.9 ms | 10.4 ms | 45% |
+| XLSX, string-heavy | 30.5 ms | 20.5 ms | 33% |
+| XLSB, string-heavy | 26.4 ms | 16.8 ms | 36% |
 
 The gain tracks how much of a read is decompression rather than parsing, so it is smallest
-on XLSB real data and string-heavy XLSX (about a third) and largest on string-heavy XLSB (42%). Allocations rise from the producer task and the
-pooled decompression buffers — on the real-data corpus, roughly 7 KB to 23 KB for XLSX
-and 7 KB to 15 KB for XLSB — and neither path triggers a garbage collection.
+on string-heavy XLSX (about a third) and largest on XLSB real data (45%). Allocations rise from the producer task and the
+pooled decompression buffers — on the real-data corpus, roughly 5 KB to 22 KB for XLSX
+and 5 KB to 11 KB for XLSB — and neither path triggers a garbage collection.
 
 Do **not** enable it for concurrent server workloads: a caller already reading many files
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread

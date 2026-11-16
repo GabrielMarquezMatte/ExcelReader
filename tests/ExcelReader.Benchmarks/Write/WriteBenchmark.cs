@@ -177,13 +177,16 @@ namespace ExcelReader.Benchmarks
         public long OfficeIMO()
         {
             using var ms = new MemoryStream(4 * 1024 * 1024);
-            ExcelDocument.WriteRows(ms, _records, ["Name", "Id", "Date", "Value"], static (row, rec) =>
+            using (ExcelWorkbookWriter writer = ExcelDocument.CreateWriter(ms, leaveOpen: true))
             {
-                row.Write(rec.Name);
-                row.Write(rec.Id);
-                row.Write(rec.Date);
-                row.Write(rec.Value);
-            });
+                writer.WriteTable("S1", _records, ["Name", "Id", "Date", "Value"], static (row, rec) =>
+                {
+                    row.Write(rec.Name);
+                    row.Write(rec.Id);
+                    row.Write(rec.Date);
+                    row.Write(rec.Value);
+                });
+            }
             return ms.Length;
         }
 
