@@ -103,14 +103,16 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long OfficeIMO()
         {
-            using var reader = ExcelDocument.OpenDataReader(_workbook, new ExcelReadOptions { HasHeaderRow = false });
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = ExcelDocument.OpenReader(ms, new OfficeIMO.Excel.ExcelReaderOptions { HasHeaderRow = false });
             return AccumulateDataReader(reader);
         }
 
         [Benchmark]
         public long OfficeIMOXlsb()
         {
-            using var reader = ExcelDocument.OpenDataReader(_xlsbWorkbook, new ExcelReadOptions { HasHeaderRow = false });
+            using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
+            using var reader = ExcelDocument.OpenReader(ms, new OfficeIMO.Excel.ExcelReaderOptions { HasHeaderRow = false });
             return AccumulateDataReader(reader);
         }
     }
