@@ -76,8 +76,8 @@
 <p>Throwaway numbers go stale; these are regenerated from the benchmark suite in
 <code>tests/ExcelReader.Benchmarks</code>. Live results: <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/">https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/</a></p>
 <h2 id="benchmarks-1">Benchmarks</h2>
-<p>Benchmarks were run with BenchmarkDotNet v0.16.0-preview.1 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.13 (built with SDK 11.0.100-rc.2, targeting <code>net10.0</code>). Generated-data benchmarks use 50,000 rows, except the string-heavy reads, which use 65,536. Raw results: <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/">GitHub Pages benchmark dashboard</a> — <code>tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/</code> is <code>.gitignore</code>-excluded and never actually reaches GitHub, so a link to it 404s for every reader.</p>
-<p>Every BenchmarkDotNet table is a <code>--job Short</code> run (1 launch, 3 warmup and 3 measured iterations) on an otherwise idle machine. Methods whose 99.9% confidence interval came out wider than 10% of the mean on any row were run again with <code>--job Medium</code> (2 launches, 15 iterations) and carry those figures instead: the parallel CSV tables (except Sep's sequential rows), the large-sheet tables, the parallel sheet read, the serial, <code>PrefetchWrite</code>, 2-batch XLSB and 16-batch XLSX parallel writes, the XLS and XLSX rows of the XLS writer comparison, the XLS typed record write, the XLSB <code>PrefetchWrite</code> write, the XLSX real-data matched-work read, the string-heavy XLSX matched-work read, the interned XLSB matched-work read and the Sylvan XLSX string-heavy read, the stored whole read, the inferred-schema Arrow conversion, the decoded native read-all and the batched native typed reads. The read and typed-parse rows of the XLSX and XLSB tables, the generated-workbook matched-work read, the <code>ref struct</code> parsing table, the ADO.NET bridge table and the encrypted-workbook table come from later <code>--job Short --launchCount 5</code> runs instead: Tiered PGO settles each process into a different code shape, which moved these rows by up to ±10% between single-launch runs. The cold-start rows set their own launch count, and the file-size and working-set figures under the parallel record writes, the managed deflate and CRC-32 figures, the Python/C++/Rust figures and the native-library comparison come from other harnesses that were not re-run.</p>
+<p>Benchmarks were run with BenchmarkDotNet v0.16.0-preview.2 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.14 (built with SDK 10.0.403, targeting <code>net10.0</code>). Generated-data benchmarks use 50,000 rows, except the string-heavy reads, which use 65,536. Raw results: <a href="https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/">GitHub Pages benchmark dashboard</a> — <code>tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/</code> is <code>.gitignore</code>-excluded and never actually reaches GitHub, so a link to it 404s for every reader.</p>
+<p>Every BenchmarkDotNet table is one <code>--job Medium</code> run of the whole suite (2 launches, 10 warmup and 15 measured iterations) on an otherwise idle machine. Tiered PGO settles each process into a different code shape, so a row can still move by up to ±10% between runs; compare rows within a table, not across releases. The cold-start rows set their own launch count, and the file-size and working-set figures under the parallel record writes, the managed deflate and CRC-32 figures, the Python/C++/Rust figures and the native-library comparison come from other harnesses that were not re-run.</p>
 <p><strong>Benchmark methodology.</strong> In the Excel-format tables below, the <strong>&quot;Cell-by-cell read&quot;</strong> rows (including the per-format rows in &quot;Real data reads&quot; / &quot;String-heavy reads&quot;) read ExcelReader's <code>cell.Value</code> — a zero-copy <code>ReadOnlySpan&lt;byte&gt;</code>, no decode or allocation — against each competitor's own idiomatic read call. For Sylvan.Data.Excel, that's the ADO.NET-style <code>GetString(i)</code>, which is forced to materialize a UTF-16 <code>string</code>; its API has no zero-copy accessor, so it cannot avoid that cost. These rows are therefore not matched work: part of the reported gap is &quot;we parse faster&quot; and part is &quot;we skipped an allocation you were never offered a way to skip.&quot; Each affected benchmark class also has a <code>*_Materialized</code> sibling (calling <code>cell.GetString()</code>, the same UTF-16 materialization Sylvan pays) so the matched-work number is measurable — see <code>tests/ExcelReader.Benchmarks/Shared/BenchmarkAccumulators.cs</code>. <strong>Those results are published under <a href="#matched-work-reads-_materialized">Matched-work reads</a>, and reading them is the honest way to judge the comparison:</strong> treat the Excel cell-by-cell ratios in the tables below as an upper bound, not a like-for-like number. The CSV cell-by-cell rows are matched work: Sep and Sylvan.Data.Csv both expose span accessors (<code>row[i].Span</code>, <code>GetFieldSpan(i)</code>), and the benchmarks use them. The <strong>&quot;Typed row parsing&quot;</strong> / <strong>&quot;Typed record writing&quot;</strong> rows are unaffected — both sides already materialize real objects/strings there, so those comparisons are matched work as published.</p>
 <h3 id="xlsx">XLSX</h3>
 <p>Compares ExcelReader against established XLSX libraries on the same generated workbook shape.</p>
@@ -95,15 +95,15 @@
 <tbody>
 <tr>
 <td>Cell-by-cell read</td>
-<td style="text-align: right;">7.098 ms, 3.44 KB</td>
-<td style="text-align: right;">37.056 ms, 1.89 MB</td>
-<td style="text-align: right;">87.075 ms, 32.88 MB</td>
-<td style="text-align: right;">13.892 ms, 3.51 MB</td>
+<td style="text-align: right;">6.363 ms, 3.48 KB</td>
+<td style="text-align: right;">37.532 ms, 1.89 MB</td>
+<td style="text-align: right;">90.746 ms, 32.88 MB</td>
+<td style="text-align: right;">12.554 ms, 3.51 MB</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Cell-by-cell read async</td>
-<td style="text-align: right;">7.428 ms, 3.51 KB</td>
+<td style="text-align: right;">6.613 ms, 3.55 KB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
@@ -111,23 +111,23 @@
 </tr>
 <tr>
 <td>Typed row parsing</td>
-<td style="text-align: right;">10.913 ms, 3.87 MB</td>
-<td style="text-align: right;">60.050 ms, 10.48 MB</td>
+<td style="text-align: right;">8.875 ms, 3.87 MB</td>
+<td style="text-align: right;">57.041 ms, 10.48 MB</td>
 <td style="text-align: right;">-</td>
-<td style="text-align: right;">11.790 ms, 2.36 MB</td>
+<td style="text-align: right;">10.327 ms, 2.36 MB</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Typed row parsing async</td>
-<td style="text-align: right;">10.223 ms, 3.87 MB</td>
-<td style="text-align: right;">58.884 ms, 10.48 MB</td>
+<td style="text-align: right;">10.120 ms, 3.87 MB</td>
+<td style="text-align: right;">60.316 ms, 10.48 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Typed row parsing, shared strings</td>
-<td style="text-align: right;">7.737 ms, 2.29 MB</td>
+<td style="text-align: right;">7.629 ms, 2.29 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
@@ -135,7 +135,7 @@
 </tr>
 <tr>
 <td>Typed row parsing, <code>InternStrings</code></td>
-<td style="text-align: right;">10.633 ms, 2.30 MB</td>
+<td style="text-align: right;">9.103 ms, 2.34 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
@@ -143,15 +143,15 @@
 </tr>
 <tr>
 <td>Workbook writing</td>
-<td style="text-align: right;">8.191 ms, 4.02 MB</td>
+<td style="text-align: right;">8.213 ms, 4.02 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
-<td style="text-align: right;">18.162 ms, 4.04 MB</td>
-<td style="text-align: right;">14.828 ms, 15.84 MB</td>
+<td style="text-align: right;">18.105 ms, 4.04 MB</td>
+<td style="text-align: right;">15.310 ms, 15.84 MB</td>
 </tr>
 <tr>
 <td>Workbook writing, shared strings</td>
-<td style="text-align: right;">7.981 ms, 4.03 MB</td>
+<td style="text-align: right;">7.965 ms, 4.03 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
@@ -159,9 +159,9 @@
 </tr>
 </tbody>
 </table>
-<p>ExcelReader is ~5.2x faster than Sylvan for raw XLSX reads, allocating ~564x less, ~12.3x faster than ExcelDataReader, and ~2.0x faster than OfficeIMO. For typed parsing it is ~5.5x faster than Sylvan (~5.8x async against async) and ~1.1x faster than OfficeIMO, which allocates less (2.36 MB against 3.87 MB) because it always interns strings. <code>ExcelReaderOptions.InternStrings</code> is off by default; turned on, ExcelReader allocates 2.30 MB at 10.633 ms, ~10% faster than OfficeIMO in the same run. For XLSX writing, ExcelReader is ~1.8x faster than SpreadCheetah while allocating ~3.9x less memory, and ~2.2x faster than OfficeIMO. The OfficeIMO rows are OfficeIMO.Excel 3.5.1, and the ExcelDataReader rows ExcelDataReader 3.9.0.</p>
+<p>ExcelReader is ~5.9x faster than Sylvan for raw XLSX reads, allocating ~558x less, ~14.3x faster than ExcelDataReader, and ~2.0x faster than OfficeIMO. For typed parsing it is ~6.4x faster than Sylvan (~6.0x async against async) and ~1.2x faster than OfficeIMO, which allocates less (2.36 MB against 3.87 MB) because it always interns strings. <code>ExcelReaderOptions.InternStrings</code> is off by default; turned on, ExcelReader allocates 2.34 MB at 9.103 ms, ~12% faster than OfficeIMO in the same run. For XLSX writing, ExcelReader is ~1.9x faster than SpreadCheetah while allocating ~3.9x less memory, and ~2.2x faster than OfficeIMO. The OfficeIMO rows are OfficeIMO.Excel 3.5.3, and the ExcelDataReader rows ExcelDataReader 3.9.0.</p>
 <p>OfficeIMO.Excel's typed parsing is hand-mapped from its <code>OpenDataReader</code>, because <code>RowsAs&lt;T&gt;</code> needs an <code>r</code> attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.</p>
-<p>Reading a shared-strings XLSX workbook with typed parsing is ~29% faster than the inline-string sheet above (7.737 ms vs. 10.913 ms) and allocates ~41% less (2.29 MB vs. 3.87 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.</p>
+<p>Reading a shared-strings XLSX workbook with typed parsing is ~14% faster than the inline-string sheet above (7.629 ms vs. 8.875 ms) and allocates ~41% less (2.29 MB vs. 3.87 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.</p>
 <h3 id="xlsb-biff12">XLSB (BIFF12)</h3>
 <table>
 <thead>
@@ -175,43 +175,43 @@
 <tbody>
 <tr>
 <td>Cell-by-cell read</td>
-<td style="text-align: right;">4.942 ms, 3.67 KB</td>
-<td style="text-align: right;">28.106 ms, 18.06 MB</td>
-<td style="text-align: right;">9.841 ms, 5.12 MB</td>
+<td style="text-align: right;">4.427 ms, 3.71 KB</td>
+<td style="text-align: right;">28.009 ms, 18.06 MB</td>
+<td style="text-align: right;">10.117 ms, 5.12 MB</td>
 </tr>
 <tr>
 <td>Cell-by-cell read async</td>
-<td style="text-align: right;">5.071 ms, 3.74 KB</td>
+<td style="text-align: right;">4.432 ms, 3.78 KB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Typed row parsing</td>
-<td style="text-align: right;">7.375 ms, 3.87 MB</td>
+<td style="text-align: right;">7.070 ms, 3.87 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Typed row parsing async</td>
-<td style="text-align: right;">7.276 ms, 3.87 MB</td>
+<td style="text-align: right;">7.139 ms, 3.87 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Workbook writing</td>
-<td style="text-align: right;">5.462 ms, 4.02 MB</td>
+<td style="text-align: right;">5.388 ms, 4.02 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Workbook writing, shared strings</td>
-<td style="text-align: right;">5.521 ms, 4.03 MB</td>
+<td style="text-align: right;">5.377 ms, 4.03 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 </tbody>
 </table>
-<p>XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x faster than their XLSX counterparts, and typed parsing and writing ~1.5x. Against OfficeIMO's XLSB reader, ExcelReader is ~2.0x faster while allocating ~1,430x less, and against ExcelDataReader's ~5.7x faster. The XLSB writer is also ~2.7x faster than SpreadCheetah's XLSX writer on this benchmark while allocating ~75% less memory.</p>
+<p>XLSB is the fastest generated Excel format in these results: raw reads are ~1.4x faster than their XLSX counterparts, typed parsing ~1.3x and writing ~1.5x. Against OfficeIMO's XLSB reader, ExcelReader is ~2.3x faster while allocating ~1,410x less, and against ExcelDataReader's ~6.3x faster. The XLSB writer is also ~2.8x faster than SpreadCheetah's XLSX writer on this benchmark while allocating ~75% less memory.</p>
 <h3 id="xls-biff8">XLS (BIFF8)</h3>
 <table>
 <thead>
@@ -226,28 +226,28 @@
 <tbody>
 <tr>
 <td>Cell-by-cell read</td>
-<td style="text-align: right;">3.529 ms, 2.84 KB</td>
-<td style="text-align: right;">5.199 ms, 1,717.73 KB</td>
-<td style="text-align: right;">38.718 ms, 43,522.77 KB</td>
-<td style="text-align: right;">7.629 ms, 10,499.44 KB</td>
+<td style="text-align: right;">2.956 ms, 3.14 KB</td>
+<td style="text-align: right;">5.369 ms, 1,717.73 KB</td>
+<td style="text-align: right;">38.608 ms, 43,522.77 KB</td>
+<td style="text-align: right;">7.941 ms, 10,499.44 KB</td>
 </tr>
 <tr>
 <td>Cell-by-cell read async</td>
-<td style="text-align: right;">3.279 ms, 2.91 KB</td>
+<td style="text-align: right;">3.498 ms, 3.21 KB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Workbook writing</td>
-<td style="text-align: right;">4.736 ms, 16.31 MB</td>
+<td style="text-align: right;">4.557 ms, 16.32 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 </tbody>
 </table>
-<p>ExcelReader is ~1.5x faster than Sylvan for generated XLS reads while allocating ~605x less memory, ~2.2x faster than OfficeIMO, and ~11x faster than ExcelDataReader. The XLS writer is ~1.7x faster than the XLSX writer in this benchmark (<code>XlsWriteBenchmark</code>, 4.736 ms vs 7.941 ms in the same run). Most of its 16.31 MB is the benchmark's pre-sized 16 MB destination <code>MemoryStream</code>; the typed-record table below measures it at 4.31 MB, close to the other formats.</p>
+<p>ExcelReader is ~1.8x faster than Sylvan for generated XLS reads while allocating ~547x less memory, ~2.7x faster than OfficeIMO, and ~13x faster than ExcelDataReader. The XLS writer is ~1.8x faster than the XLSX writer in this benchmark (<code>XlsWriteBenchmark</code>, 4.557 ms vs 8.243 ms in the same run). Most of its 16.32 MB is the benchmark's pre-sized 16 MB destination <code>MemoryStream</code>; the typed-record table below measures it at 4.32 MB, close to the other formats.</p>
 <h3 id="csv">CSV</h3>
 <table>
 <thead>
@@ -261,37 +261,37 @@
 <tbody>
 <tr>
 <td>Cell-by-cell read</td>
-<td style="text-align: right;">2.986 ms, 888 B</td>
-<td style="text-align: right;">8.005 ms, 3.93 KB</td>
-<td style="text-align: right;">4.034 ms, 37.78 KB</td>
+<td style="text-align: right;">3.080 ms, 896 B</td>
+<td style="text-align: right;">7.814 ms, 3.93 KB</td>
+<td style="text-align: right;">4.109 ms, 37.78 KB</td>
 </tr>
 <tr>
 <td>Cell-by-cell read async</td>
-<td style="text-align: right;">2.907 ms, 960 B</td>
+<td style="text-align: right;">3.359 ms, 968 B</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Typed row parsing</td>
-<td style="text-align: right;">4.618 ms, 3.86 MB</td>
-<td style="text-align: right;">8.438 ms, 3.87 MB</td>
-<td style="text-align: right;">11.703 ms, 10.95 MB</td>
+<td style="text-align: right;">4.474 ms, 3.86 MB</td>
+<td style="text-align: right;">8.588 ms, 3.87 MB</td>
+<td style="text-align: right;">12.068 ms, 10.95 MB</td>
 </tr>
 <tr>
 <td>Typed row parsing async</td>
-<td style="text-align: right;">4.876 ms, 3.86 MB</td>
+<td style="text-align: right;">4.840 ms, 3.86 MB</td>
 <td style="text-align: right;">-</td>
 <td style="text-align: right;">-</td>
 </tr>
 <tr>
 <td>Row writing</td>
-<td style="text-align: right;">4.634 ms, 4.00 MB</td>
-<td style="text-align: right;">6.861 ms, 4.01 MB</td>
-<td style="text-align: right;">6.925 ms, 4.04 MB</td>
+<td style="text-align: right;">4.660 ms, 4.00 MB</td>
+<td style="text-align: right;">6.979 ms, 4.01 MB</td>
+<td style="text-align: right;">7.149 ms, 4.04 MB</td>
 </tr>
 </tbody>
 </table>
-<p>For raw CSV reads, all three libraries read text through spans. ExcelReader is ~2.7x faster than Sep while allocating ~4.5x less, and ~1.4x faster than Sylvan.Data.Csv while allocating ~44x less. For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.8x faster than Sep and ~2.5x faster than Sylvan.Data.Csv, with the lowest allocation of the group. For CSV writing, ExcelReader is ~1.5x faster than both Sep and Sylvan.Data.Csv, which are tied; the ~4 MB shown across all three is primarily the benchmark's pre-sized destination <code>MemoryStream</code>, not per-row writer state.</p>
+<p>For raw CSV reads, all three libraries read text through spans. ExcelReader is ~2.5x faster than Sep while allocating ~4.5x less, and ~1.3x faster than Sylvan.Data.Csv while allocating ~43x less. For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.9x faster than Sep and ~2.7x faster than Sylvan.Data.Csv, with the lowest allocation of the group. For CSV writing, ExcelReader is ~1.5x faster than both Sep and Sylvan.Data.Csv, which are tied; the ~4 MB shown across all three is primarily the benchmark's pre-sized destination <code>MemoryStream</code>, not per-row writer state.</p>
 <h3 id="parallel-csv">Parallel CSV</h3>
 <p><code>SheetParallel.ParseAsync&lt;T&gt;</code> and <code>SheetParallel.AggregateAsync</code> over a <code>CsvSheet</code>, on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by <code>degreeOfParallelism</code>. The machine has 8 physical / 16 logical cores.</p>
 <table>
@@ -308,51 +308,51 @@
 <tbody>
 <tr>
 <td style="text-align: right;">1</td>
-<td style="text-align: right;">612.4 ms, 671.42 MB</td>
-<td style="text-align: right;">561.2 ms, 1.64 MB</td>
-<td style="text-align: right;">512.1 ms, 245.76 MB</td>
-<td style="text-align: right;">453.5 ms, 1.21 MB</td>
-<td style="text-align: right;">410.6 ms, 1.20 MB</td>
+<td style="text-align: right;">574.1 ms, 671.41 MB</td>
+<td style="text-align: right;">547.7 ms, 1.68 MB</td>
+<td style="text-align: right;">464.7 ms, 245.75 MB</td>
+<td style="text-align: right;">453.4 ms, 1.21 MB</td>
+<td style="text-align: right;">432.2 ms, 1.21 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">2</td>
-<td style="text-align: right;">472.5 ms, 680.04 MB</td>
-<td style="text-align: right;">447.5 ms, 10.86 MB</td>
-<td style="text-align: right;">399.0 ms, 254.48 MB</td>
-<td style="text-align: right;">263.3 ms, 0.91 MB</td>
-<td style="text-align: right;">245.3 ms, 0.92 MB</td>
+<td style="text-align: right;">452.2 ms, 679.93 MB</td>
+<td style="text-align: right;">452.6 ms, 10.86 MB</td>
+<td style="text-align: right;">405.1 ms, 254.36 MB</td>
+<td style="text-align: right;">253.6 ms, 0.85 MB</td>
+<td style="text-align: right;">247.7 ms, 0.86 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">4</td>
-<td style="text-align: right;">268.9 ms, 680.10 MB</td>
-<td style="text-align: right;">254.9 ms, 11.33 MB</td>
-<td style="text-align: right;">224.3 ms, 254.56 MB</td>
-<td style="text-align: right;">136.1 ms, 1.07 MB</td>
-<td style="text-align: right;">130.5 ms, 1.09 MB</td>
+<td style="text-align: right;">257.8 ms, 680.00 MB</td>
+<td style="text-align: right;">248.7 ms, 11.43 MB</td>
+<td style="text-align: right;">230.5 ms, 254.43 MB</td>
+<td style="text-align: right;">137.2 ms, 1.02 MB</td>
+<td style="text-align: right;">130.1 ms, 1.02 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">8</td>
-<td style="text-align: right;">219.9 ms, 680.10 MB</td>
-<td style="text-align: right;">197.2 ms, 12.21 MB</td>
-<td style="text-align: right;">193.7 ms, 254.52 MB</td>
-<td style="text-align: right;">92.2 ms, 1.27 MB</td>
-<td style="text-align: right;">93.3 ms, 1.26 MB</td>
+<td style="text-align: right;">208.1 ms, 679.99 MB</td>
+<td style="text-align: right;">189.7 ms, 12.28 MB</td>
+<td style="text-align: right;">192.1 ms, 254.41 MB</td>
+<td style="text-align: right;">90.7 ms, 1.20 MB</td>
+<td style="text-align: right;">90.1 ms, 1.19 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
-<td style="text-align: right;">419.6 ms, 680.12 MB</td>
-<td style="text-align: right;">171.3 ms, 14.17 MB</td>
-<td style="text-align: right;">255.5 ms, 255.02 MB</td>
-<td style="text-align: right;">68.1 ms, 1.38 MB</td>
-<td style="text-align: right;">70.5 ms, 1.34 MB</td>
+<td style="text-align: right;">486.8 ms, 680.03 MB</td>
+<td style="text-align: right;">167.5 ms, 14.31 MB</td>
+<td style="text-align: right;">268.3 ms, 254.91 MB</td>
+<td style="text-align: right;">67.2 ms, 1.32 MB</td>
+<td style="text-align: right;">70.1 ms, 1.28 MB</td>
 </tr>
 </tbody>
 </table>
-<p>The typed path scales ~2.3x by dop 4 on both corpora (612.4 to 268.9 ms conversion-heavy, 512.1 to 224.3 ms narrow), then flattens out: narrow ints reach 193.7 ms at dop 8 and slow to 255.5 ms at dop 16, and the conversion-heavy corpus gets <em>slower</em> past dop 8 (419.6 ms at dop 16 against 219.9 ms at dop 8, standard deviation 105.4 ms). Its ~680 MB is one materialized row object and two strings per record, and at dop 16 that costs 42,000 Gen0 plus 41,000 Gen1 collections.</p>
-<p>The struct + <code>InternStrings</code> column parses the same rows into a <code>struct</code> with <code>ExcelReaderOptions.InternStrings</code> on, so there is no row object and each repeated region or country name is one cached string. It never slows down: 197.2 ms at dop 8, 171.3 ms at dop 16, 2.4x faster than the class at dop 16 while allocating ~48x less (14.17 MB, under one Gen0 collection per run). What remains is per-worker caches and the ordered merge's buffers. The interning win depends on the data: the corpus has 4 regions and 6 countries, so every string is a cache hit. Text columns with mostly distinct values (names, ids, free text) allocate a string per cell either way, and on those the struct alone removes only the row object.</p>
-<p>The aggregate columns fold each record into a per-partition accumulator through a <code>ref struct</code> model, so text columns stay as <code>ReadOnlySpan&lt;byte&gt;</code> and no row object is ever materialized. They scale better than the typed path — ~4.9x (conversion-heavy) and ~4.4x (narrow) at dop 8, ~6.7x and ~5.8x at dop 16 — because they are not fighting the allocator: at dop 4 the conversion-heavy aggregate is ~2.0x faster than typed while allocating ~630x less (1.07 MB against 680.10 MB), with <strong>zero</strong> garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.</p>
-<p>The typed path's slowdown past dop 8 is the garbage collector. Every degree allocates the same ~680 MB and runs 42 gen0 collections, but at dop 16 each of them also collects gen1 (41 gen1 collections against 26 at dop 8), and the pauses add up to 100-200 ms against 39 ms. In a console harness on the 4.3 million row corpus, with the default workstation GC, dop 16 took 365 ms; with <code>DOTNET_gcServer=1</code> it took 182 ms, faster than dop 8. Not allocating per row, as the struct + <code>InternStrings</code> and aggregate columns do, avoids it without changing the GC mode.</p>
-<p>Type conversion is the floor under all of them. A single-threaded pass that allocates nothing still costs 453.5 ms, so parsing bytes into <code>DateTime</code>/<code>decimal</code>/<code>int</code> — not allocation and not I/O — is what the parallelism is actually buying down.</p>
+<p>The typed path scales ~2.2x by dop 4 on the conversion-heavy corpus and ~2.0x on the narrow one (574.1 to 257.8 ms, 464.7 to 230.5 ms), then flattens out: narrow ints reach 192.1 ms at dop 8 and slow to 268.3 ms at dop 16, and the conversion-heavy corpus gets <em>slower</em> past dop 8 (486.8 ms at dop 16 against 208.1 ms at dop 8, standard deviation 24.1 ms). Its ~680 MB is one materialized row object and two strings per record, and at dop 16 that costs 42,000 Gen0 plus 41,000 Gen1 collections.</p>
+<p>The struct + <code>InternStrings</code> column parses the same rows into a <code>struct</code> with <code>ExcelReaderOptions.InternStrings</code> on, so there is no row object and each repeated region or country name is one cached string. It never slows down: 189.7 ms at dop 8, 167.5 ms at dop 16, 2.9x faster than the class at dop 16 while allocating ~48x less (14.31 MB, under one Gen0 collection per run). What remains is per-worker caches and the ordered merge's buffers. The interning win depends on the data: the corpus has 4 regions and 6 countries, so every string is a cache hit. Text columns with mostly distinct values (names, ids, free text) allocate a string per cell either way, and on those the struct alone removes only the row object.</p>
+<p>The aggregate columns fold each record into a per-partition accumulator through a <code>ref struct</code> model, so text columns stay as <code>ReadOnlySpan&lt;byte&gt;</code> and no row object is ever materialized. They scale better than the typed path — ~5.0x (conversion-heavy) and ~4.8x (narrow) at dop 8, ~6.7x and ~6.2x at dop 16 — because they are not fighting the allocator: at dop 4 the conversion-heavy aggregate is ~1.9x faster than typed while allocating ~670x less (1.02 MB against 680.00 MB), with <strong>zero</strong> garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.</p>
+<p>The typed path's slowdown past dop 8 is the garbage collector. Every degree allocates the same ~680 MB and runs 42 gen0 collections, but at dop 16 each of them also collects gen1 (41 gen1 collections against 24 at dop 8), and the pauses add up to 100-200 ms against 39 ms. In a console harness on the 4.3 million row corpus, with the default workstation GC, dop 16 took 365 ms; with <code>DOTNET_gcServer=1</code> it took 182 ms, faster than dop 8. Not allocating per row, as the struct + <code>InternStrings</code> and aggregate columns do, avoids it without changing the GC mode.</p>
+<p>Type conversion is the floor under all of them. A single-threaded pass that allocates nothing still costs 453.4 ms, so parsing bytes into <code>DateTime</code>/<code>decimal</code>/<code>int</code> — not allocation and not I/O — is what the parallelism is actually buying down.</p>
 <p>Against <a href="https://github.com/nietras/Sep">Sep</a>'s own <code>ParallelEnumerate</code> (all cores; 8,000,000 narrow rows, 3,000,000 conversion-heavy rows):</p>
 <table>
 <thead>
@@ -367,36 +367,36 @@
 <tbody>
 <tr>
 <td>Narrow ints, class</td>
-<td style="text-align: right;">474.9 ms, 244.15 MB</td>
-<td style="text-align: right;">269.1 ms, 255.02 MB</td>
-<td style="text-align: right;">507.5 ms, 244.15 MB</td>
-<td style="text-align: right;">433.0 ms, 245.46 MB</td>
+<td style="text-align: right;">451.0 ms, 244.14 MB</td>
+<td style="text-align: right;">271.5 ms, 255.06 MB</td>
+<td style="text-align: right;">502.0 ms, 244.15 MB</td>
+<td style="text-align: right;">446.5 ms, 247.41 MB</td>
 </tr>
 <tr>
 <td>Narrow ints, struct</td>
-<td style="text-align: right;">392.0 ms, 13.93 KB</td>
-<td style="text-align: right;">162.0 ms, 12.15 MB</td>
-<td style="text-align: right;">476.2 ms, 9.34 KB</td>
-<td style="text-align: right;">251.7 ms, 2.81 MB</td>
+<td style="text-align: right;">444.6 ms, 38.24 KB</td>
+<td style="text-align: right;">153.0 ms, 11.90 MB</td>
+<td style="text-align: right;">480.0 ms, 9.34 KB</td>
+<td style="text-align: right;">257.3 ms, 4.22 MB</td>
 </tr>
 <tr>
 <td>Conversion-heavy, class</td>
-<td style="text-align: right;">407.6 ms, 467.31 MB</td>
-<td style="text-align: right;">353.3 ms, 474.68 MB</td>
-<td style="text-align: right;">835.3 ms, 467.31 MB</td>
-<td style="text-align: right;">596.5 ms, 468.41 MB</td>
+<td style="text-align: right;">375.6 ms, 467.30 MB</td>
+<td style="text-align: right;">320.6 ms, 474.61 MB</td>
+<td style="text-align: right;">830.7 ms, 467.31 MB</td>
+<td style="text-align: right;">602.3 ms, 469.10 MB</td>
 </tr>
 <tr>
 <td>Conversion-heavy, struct + pooled strings</td>
-<td style="text-align: right;">377.3 ms, 14.55 KB</td>
-<td style="text-align: right;">119.6 ms, 11.28 MB</td>
-<td style="text-align: right;">857.6 ms, 10.77 KB</td>
-<td style="text-align: right;">392.7 ms, 9.33 MB</td>
+<td style="text-align: right;">389.5 ms, 75.22 KB</td>
+<td style="text-align: right;">114.7 ms, 11.41 MB</td>
+<td style="text-align: right;">918.5 ms, 10.77 KB</td>
+<td style="text-align: right;">380.5 ms, 5.01 MB</td>
 </tr>
 </tbody>
 </table>
-<p>The struct rows give both libraries the same help: the row is a <code>struct</code>, and repeated text is pooled, through <code>ExcelReaderOptions.InternStrings</code> on ExcelReader's side and <code>SepToString.PoolPerCol()</code> (sequential) or <code>PoolPerColThreadSafe()</code> (parallel) on Sep's. Every row except Sep's sequential ones is from a Medium job, since the Short run spread too much; Sep's conversion-heavy parallel struct row still has a 35.1 ms standard deviation, and ExcelReader's conversion-heavy parallel class row 29.4 ms.</p>
-<p>Sequentially, ExcelReader's typed parser is ~1.1x faster than Sep on narrow ints (474.9 ms vs. 507.5 ms), and ~2.0x faster on the conversion-heavy corpus, where decimal parsing dominates. In parallel ExcelReader is ~1.6x (narrow) and ~1.7x (conversion-heavy) faster than Sep's, while yielding rows in file order. With struct rows and pooled strings both libraries speed up and stop collecting, and ExcelReader stays ahead: ~1.2x and ~2.3x sequentially, ~1.6x and ~3.3x in parallel. The class rows gain less from parallelism (353.3 ms against 407.6 ms sequential on the conversion-heavy corpus) because they are bound by the allocator, like the typed dop 16 row above: 28 Gen1 collections per run; the struct rows run 3.2x faster in parallel on the same corpus. As in the table above, pooling pays off here because the conversion-heavy corpus repeats 4 regions and 6 countries.</p>
+<p>The struct rows give both libraries the same help: the row is a <code>struct</code>, and repeated text is pooled, through <code>ExcelReaderOptions.InternStrings</code> on ExcelReader's side and <code>SepToString.PoolPerCol()</code> (sequential) or <code>PoolPerColThreadSafe()</code> (parallel) on Sep's. The parallel rows spread the most: ExcelReader's narrow and conversion-heavy parallel class rows have a 33.3 ms and 28.0 ms standard deviation, and Sep's conversion-heavy parallel struct row 27.6 ms.</p>
+<p>Sequentially, ExcelReader's typed parser is ~1.1x faster than Sep on narrow ints (451.0 ms vs. 502.0 ms), and ~2.2x faster on the conversion-heavy corpus, where decimal parsing dominates. In parallel ExcelReader is ~1.6x (narrow) and ~1.9x (conversion-heavy) faster than Sep's, while yielding rows in file order. With struct rows and pooled strings both libraries stop collecting, and ExcelReader stays ahead: ~1.1x and ~2.4x sequentially, ~1.7x and ~3.3x in parallel. The class rows gain less from parallelism (320.6 ms against 375.6 ms sequential on the conversion-heavy corpus) because they are bound by the allocator, like the typed dop 16 row above: ~28 Gen1 collections per run; the struct rows run 3.4x faster in parallel on the same corpus. As in the table above, pooling pays off here because the conversion-heavy corpus repeats 4 regions and 6 countries.</p>
 <h3 id="parallel-sheet-reading">Parallel sheet reading</h3>
 <p><code>SheetParallel.AggregateAsync&lt;TAccumulator, TModel&gt;</code> over the first sheet of the real-data workbook (65,535 rows, 14 columns; XLSX 6.7 MB compressed, 34.4 MB sheet XML; XLSB 3.7 MB, 15.9 MB sheet records), folding every row of a typed model into a per-partition sum (<code>SheetParallelBenchmark</code>). One thread inflates the sheet and cuts it into row-aligned chunks; <code>Dop - 1</code> workers parse them.</p>
 <table>
@@ -410,27 +410,27 @@
 <tbody>
 <tr>
 <td style="text-align: right;">1</td>
-<td style="text-align: right;">46.07 ms, 8.02 MB</td>
-<td style="text-align: right;">29.86 ms, 8.02 MB</td>
+<td style="text-align: right;">44.39 ms, 8.02 MB</td>
+<td style="text-align: right;">24.34 ms, 8.02 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">2</td>
-<td style="text-align: right;">29.36 ms, 8.13 MB</td>
-<td style="text-align: right;">22.49 ms, 8.07 MB</td>
+<td style="text-align: right;">28.55 ms, 8.14 MB</td>
+<td style="text-align: right;">15.01 ms, 8.07 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">4</td>
-<td style="text-align: right;">16.69 ms, 8.12 MB</td>
-<td style="text-align: right;">13.28 ms, 8.07 MB</td>
+<td style="text-align: right;">16.13 ms, 8.11 MB</td>
+<td style="text-align: right;">12.91 ms, 8.07 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">8</td>
-<td style="text-align: right;">16.79 ms, 8.17 MB</td>
-<td style="text-align: right;">13.18 ms, 8.09 MB</td>
+<td style="text-align: right;">16.25 ms, 8.17 MB</td>
+<td style="text-align: right;">12.96 ms, 8.09 MB</td>
 </tr>
 </tbody>
 </table>
-<p>At dop 4 XLSX reads ~2.8x faster than sequentially and XLSB ~2.2x. Dop 2 is a single parse worker running alongside the inflating thread. Past dop 4 nothing improves: the one inflating thread is the floor (~14 ms for XLSX, ~9 ms for XLSB, see <a href="#inflate">Inflate</a>, plus the XLSB record walk that finds row boundaries). Allocation barely moves with dop (8.02 to 8.17 MB): it is the typed model's strings.</p>
+<p>At dop 4 XLSX reads ~2.8x faster than sequentially and XLSB ~1.9x. Dop 2 is a single parse worker running alongside the inflating thread. Past dop 4 nothing improves: the one inflating thread is the floor (~14 ms for XLSX, ~9 ms for XLSB, see <a href="#inflate">Inflate</a>, plus the XLSB record walk that finds row boundaries). Allocation barely moves with dop (8.02 to 8.17 MB): it is the typed model's strings.</p>
 <h3 id="large-sheets">Large sheets</h3>
 <p><code>LargeSheetParallelBenchmark</code> reads sheets generated in memory at the largest sizes the formats allow. XLSX and XLSB hold 1,000,000 rows by four columns (text, integer, date, number), the limit being 1,048,576 rows per sheet; CSV holds 4,000,000 conversion-heavy rows (two strings, a date, two decimals and an int), and has no such limit. &quot;Aggregate&quot; folds every row into a per-partition sum; &quot;typed parse&quot; is the ordered <code>ParseAsync</code> into a class (<code>ref struct</code> for the CSV aggregate).</p>
 <table>
@@ -444,28 +444,28 @@
 <tbody>
 <tr>
 <td style="text-align: right;">1</td>
-<td style="text-align: right;">223.16 ms, 77.25 MB</td>
-<td style="text-align: right;">249.45 ms, 77.25 MB</td>
+<td style="text-align: right;">179.48 ms, 77.25 MB</td>
+<td style="text-align: right;">205.45 ms, 77.25 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">2</td>
-<td style="text-align: right;">163.11 ms, 77.62 MB</td>
-<td style="text-align: right;">190.50 ms, 106.81 MB</td>
+<td style="text-align: right;">134.76 ms, 77.68 MB</td>
+<td style="text-align: right;">145.41 ms, 106.87 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">4</td>
-<td style="text-align: right;">59.25 ms, 77.57 MB</td>
-<td style="text-align: right;">73.08 ms, 106.75 MB</td>
+<td style="text-align: right;">48.73 ms, 77.58 MB</td>
+<td style="text-align: right;">60.19 ms, 106.78 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">8</td>
-<td style="text-align: right;">45.08 ms, 77.64 MB</td>
-<td style="text-align: right;">55.79 ms, 106.78 MB</td>
+<td style="text-align: right;">39.57 ms, 77.66 MB</td>
+<td style="text-align: right;">48.65 ms, 106.84 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
-<td style="text-align: right;">44.48 ms, 77.95 MB</td>
-<td style="text-align: right;">55.15 ms, 107.11 MB</td>
+<td style="text-align: right;">39.85 ms, 78.00 MB</td>
+<td style="text-align: right;">50.17 ms, 107.17 MB</td>
 </tr>
 </tbody>
 </table>
@@ -480,28 +480,28 @@
 <tbody>
 <tr>
 <td style="text-align: right;">1</td>
-<td style="text-align: right;">157.36 ms, 77.25 MB</td>
-<td style="text-align: right;">170.55 ms, 77.25 MB</td>
+<td style="text-align: right;">130.43 ms, 77.25 MB</td>
+<td style="text-align: right;">155.74 ms, 77.25 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">2</td>
-<td style="text-align: right;">108.82 ms, 77.53 MB</td>
-<td style="text-align: right;">118.56 ms, 99.69 MB</td>
+<td style="text-align: right;">95.28 ms, 77.57 MB</td>
+<td style="text-align: right;">104.01 ms, 99.73 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">4</td>
-<td style="text-align: right;">47.71 ms, 77.48 MB</td>
-<td style="text-align: right;">56.25 ms, 99.62 MB</td>
+<td style="text-align: right;">45.25 ms, 77.48 MB</td>
+<td style="text-align: right;">51.91 ms, 99.62 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">8</td>
-<td style="text-align: right;">49.58 ms, 77.61 MB</td>
-<td style="text-align: right;">54.14 ms, 99.76 MB</td>
+<td style="text-align: right;">45.65 ms, 77.62 MB</td>
+<td style="text-align: right;">52.67 ms, 99.76 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
-<td style="text-align: right;">49.46 ms, 77.87 MB</td>
-<td style="text-align: right;">53.82 ms, 100.03 MB</td>
+<td style="text-align: right;">45.75 ms, 77.88 MB</td>
+<td style="text-align: right;">53.06 ms, 100.02 MB</td>
 </tr>
 </tbody>
 </table>
@@ -517,38 +517,38 @@
 <tbody>
 <tr>
 <td style="text-align: right;">1</td>
-<td style="text-align: right;">418.65 ms, 1.99 KB</td>
-<td style="text-align: right;">509.94 ms, 623.07 MB</td>
-<td style="text-align: right;">506.93 ms, 14.05 KB</td>
+<td style="text-align: right;">500.39 ms, 1.99 KB</td>
+<td style="text-align: right;">497.73 ms, 623.07 MB</td>
+<td style="text-align: right;">508.79 ms, 74.70 KB</td>
 </tr>
 <tr>
 <td style="text-align: right;">2</td>
-<td style="text-align: right;">204.59 ms, 11.58 KB</td>
-<td style="text-align: right;">325.09 ms, 626.87 MB</td>
-<td style="text-align: right;">323.26 ms, 4.46 MB</td>
+<td style="text-align: right;">206.19 ms, 7.05 KB</td>
+<td style="text-align: right;">326.13 ms, 626.88 MB</td>
+<td style="text-align: right;">321.23 ms, 4.50 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">4</td>
-<td style="text-align: right;">115.50 ms, 10.94 KB</td>
-<td style="text-align: right;">200.87 ms, 626.68 MB</td>
-<td style="text-align: right;">178.60 ms, 4.70 MB</td>
+<td style="text-align: right;">106.38 ms, 10.94 KB</td>
+<td style="text-align: right;">180.35 ms, 626.72 MB</td>
+<td style="text-align: right;">169.94 ms, 4.80 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">8</td>
-<td style="text-align: right;">84.80 ms, 18.88 KB</td>
-<td style="text-align: right;">165.18 ms, 626.40 MB</td>
-<td style="text-align: right;">139.31 ms, 5.33 MB</td>
+<td style="text-align: right;">76.57 ms, 25.73 KB</td>
+<td style="text-align: right;">154.98 ms, 626.40 MB</td>
+<td style="text-align: right;">127.37 ms, 5.48 MB</td>
 </tr>
 <tr>
 <td style="text-align: right;">16</td>
-<td style="text-align: right;">61.33 ms, 35.14 KB</td>
-<td style="text-align: right;">216.44 ms, 626.55 MB</td>
-<td style="text-align: right;">122.48 ms, 7.40 MB</td>
+<td style="text-align: right;">58.07 ms, 35.14 KB</td>
+<td style="text-align: right;">201.60 ms, 626.54 MB</td>
+<td style="text-align: right;">120.13 ms, 7.65 MB</td>
 </tr>
 </tbody>
 </table>
 <p>The XLSX and XLSB aggregates and typed parses each materialize a <code>Record</code> and its name string per row, which is where their ~77-107 MB comes from; the CSV aggregate binds a <code>ref struct</code> and allocates kilobytes, while the CSV typed parse allocates ~626 MB at every degree, one row object and two strings per record. The struct + <code>InternStrings</code> parse drops both (the corpus repeats 4 regions and 6 countries, see <a href="#parallel-csv">Parallel CSV</a>) and keeps a few MB of per-worker caches and merge buffers.</p>
-<p>XLSX and XLSB reach ~3.0-3.8x at dop 4. The XLSB aggregate stops there (3.3x), as in the real-data table above, while the XLSX aggregate improves to 5.0x at dop 8 and then stops. The CSV aggregate keeps scaling because nothing but the parser runs on the workers: 4.9x at dop 8 and 6.8x at dop 16. The typed CSV parse reaches 3.1x at dop 8 and then loses 31% at dop 16 to the collector, while the struct + <code>InternStrings</code> parse keeps going to 4.1x at dop 16, 1.8x faster than the class. The aggregate is still the fastest, ~2.0x ahead of the struct parse at dop 16, because it never builds the row at all.</p>
+<p>XLSX and XLSB reach ~2.9-3.7x at dop 4. The XLSB aggregate stops there (2.9x), as in the real-data table above, while the XLSX aggregate improves to 4.5x at dop 8 and then stops. The CSV aggregate keeps scaling because nothing but the parser runs on the workers: 206.19 ms at dop 2, 76.57 ms at dop 8 and 58.07 ms at dop 16. Its dop 1 row (500.39 ms) is no faster than the typed parse at dop 1 in this run, so ratios against it would overstate the scaling. The typed CSV parse reaches 3.2x at dop 8 and then loses 30% at dop 16 to the collector, while the struct + <code>InternStrings</code> parse keeps going to 4.2x at dop 16, 1.7x faster than the class. The aggregate is still the fastest, ~2.1x ahead of the struct parse at dop 16, because it never builds the row at all.</p>
 <h3 id="real-data-reads">Real data reads</h3>
 <p>This benchmark reads a real workbook exported in multiple formats.</p>
 <table>
@@ -563,37 +563,37 @@
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">37.237 ms, 7.20 KB</td>
-<td style="text-align: right;">23.663 ms, 23.34 KB</td>
-<td style="text-align: right;">195.758 ms, 644.27 KB</td>
+<td style="text-align: right;">38.378 ms, 5.46 KB</td>
+<td style="text-align: right;">24.991 ms, 21.60 KB</td>
+<td style="text-align: right;">194.303 ms, 644.27 KB</td>
 </tr>
 <tr>
 <td>XLSM</td>
-<td style="text-align: right;">37.999 ms, 7.20 KB</td>
-<td style="text-align: right;">23.061 ms, 23.35 KB</td>
-<td style="text-align: right;">199.923 ms, 644.35 KB</td>
+<td style="text-align: right;">37.822 ms, 5.46 KB</td>
+<td style="text-align: right;">24.501 ms, 21.52 KB</td>
+<td style="text-align: right;">192.195 ms, 644.33 KB</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">24.746 ms, 6.72 KB</td>
-<td style="text-align: right;">16.642 ms, 15.09 KB</td>
-<td style="text-align: right;">29.421 ms, 338.55 KB</td>
+<td style="text-align: right;">18.939 ms, 4.98 KB</td>
+<td style="text-align: right;">10.395 ms, 11.35 KB</td>
+<td style="text-align: right;">30.055 ms, 338.55 KB</td>
 </tr>
 <tr>
 <td>XLS</td>
-<td style="text-align: right;">11.196 ms, 12.02 KB</td>
+<td style="text-align: right;">9.383 ms, 10.55 KB</td>
 <td style="text-align: right;">n/a</td>
-<td style="text-align: right;">18.221 ms, 185.90 KB</td>
+<td style="text-align: right;">18.110 ms, 185.90 KB</td>
 </tr>
 <tr>
 <td>CSV</td>
-<td style="text-align: right;">4.949 ms, 888 B</td>
+<td style="text-align: right;">4.958 ms, 896 B</td>
 <td style="text-align: right;">n/a</td>
-<td style="text-align: right;">4.502 ms, 40.26 KB</td>
+<td style="text-align: right;">4.595 ms, 40.26 KB</td>
 </tr>
 </tbody>
 </table>
-<p>On this real-data workload, ExcelReader is ~5.3x faster than Sylvan for XLSX and XLSM, ~1.2x faster for XLSB, and ~1.6x faster for XLS — allocating ~90x less for XLSX and XLSM, ~50x less for XLSB and ~15x less for XLS. On CSV, where both sides read text through spans, Sylvan.Data.Csv is ~10% faster, while ExcelReader allocates ~46x less. The prefetch column is the opt-in <a href="../guide/reading.html#prefetch-decompression-xlsxxlsb"><code>PrefetchDecompression</code></a> option; XLS and CSV are uncompressed, so it does not apply to them.</p>
+<p>On this real-data workload, ExcelReader is ~5.1x faster than Sylvan for XLSX and XLSM, ~1.6x faster for XLSB, and ~1.9x faster for XLS — allocating ~118x less for XLSX and XLSM, ~68x less for XLSB and ~18x less for XLS. On CSV, where both sides read text through spans, Sylvan.Data.Csv is ~7% faster, while ExcelReader allocates ~46x less. The prefetch column is the opt-in <a href="../guide/reading.html#prefetch-decompression-xlsxxlsb"><code>PrefetchDecompression</code></a> option; XLS and CSV are uncompressed, so it does not apply to them.</p>
 <h3 id="in-memory-real-data-reads">In-memory real-data reads</h3>
 <p>The real-data benchmark also measures the in-memory path for workbook content loaded directly into memory, in the same run as the stream-based rows above (no cross-run comparison needed).</p>
 <table>
@@ -608,56 +608,56 @@
 <tbody>
 <tr>
 <td>Xlsx_ExcelReader_Memory</td>
-<td style="text-align: right;">37.534 ms</td>
-<td style="text-align: right;">0.007 ms</td>
-<td style="text-align: right;">6.71 KB</td>
+<td style="text-align: right;">38.792 ms</td>
+<td style="text-align: right;">0.197 ms</td>
+<td style="text-align: right;">5.09 KB</td>
 </tr>
 <tr>
 <td>Xlsx_ExcelReader_Memory_Prefetch</td>
-<td style="text-align: right;">23.609 ms</td>
-<td style="text-align: right;">0.043 ms</td>
-<td style="text-align: right;">22.83 KB</td>
+<td style="text-align: right;">24.980 ms</td>
+<td style="text-align: right;">0.390 ms</td>
+<td style="text-align: right;">21.17 KB</td>
 </tr>
 <tr>
 <td>Xlsm_ExcelReader_Memory</td>
-<td style="text-align: right;">37.225 ms</td>
-<td style="text-align: right;">0.045 ms</td>
-<td style="text-align: right;">6.71 KB</td>
+<td style="text-align: right;">38.033 ms</td>
+<td style="text-align: right;">0.208 ms</td>
+<td style="text-align: right;">5.09 KB</td>
 </tr>
 <tr>
 <td>Xlsm_ExcelReader_Memory_Prefetch</td>
-<td style="text-align: right;">23.467 ms</td>
-<td style="text-align: right;">0.052 ms</td>
-<td style="text-align: right;">22.78 KB</td>
+<td style="text-align: right;">24.836 ms</td>
+<td style="text-align: right;">0.080 ms</td>
+<td style="text-align: right;">21.17 KB</td>
 </tr>
 <tr>
 <td>Xlsb_ExcelReader_Memory</td>
-<td style="text-align: right;">24.418 ms</td>
-<td style="text-align: right;">0.012 ms</td>
-<td style="text-align: right;">8.31 KB</td>
+<td style="text-align: right;">18.590 ms</td>
+<td style="text-align: right;">0.083 ms</td>
+<td style="text-align: right;">4.70 KB</td>
 </tr>
 <tr>
 <td>Xlsb_ExcelReader_Memory_Prefetch</td>
-<td style="text-align: right;">15.382 ms</td>
-<td style="text-align: right;">0.047 ms</td>
-<td style="text-align: right;">16.58 KB</td>
+<td style="text-align: right;">10.433 ms</td>
+<td style="text-align: right;">0.049 ms</td>
+<td style="text-align: right;">9.20 KB</td>
 </tr>
 <tr>
 <td>Xls_ExcelReader_Memory</td>
-<td style="text-align: right;">11.031 ms</td>
-<td style="text-align: right;">0.051 ms</td>
-<td style="text-align: right;">11.87 KB</td>
+<td style="text-align: right;">9.080 ms</td>
+<td style="text-align: right;">0.098 ms</td>
+<td style="text-align: right;">10.39 KB</td>
 </tr>
 <tr>
 <td>Csv_ExcelReader_Memory</td>
-<td style="text-align: right;">4.744 ms</td>
+<td style="text-align: right;">4.761 ms</td>
 <td style="text-align: right;">0.004 ms</td>
 <td style="text-align: right;">616 B</td>
 </tr>
 </tbody>
 </table>
-<p><code>Csv_ExcelReader_Memory</code> is both faster (4.744 ms vs. 4.949 ms for <code>Csv_ExcelReader</code>) and allocates less (616 B vs. 888 B) than its stream twin.</p>
-<p><code>Xls_ExcelReader_Memory</code> is ~1% faster than its stream twin (11.031 ms vs. 11.196 ms for <code>Xls_ExcelReader</code>), with near-identical allocation (11.87 KB vs. 12.02 KB). In earlier runs the in-memory path was ~33% faster, thanks to <code>BiffCursor</code> caching the enclosing contiguous sector run; the stream path has since mostly caught up.</p>
+<p><code>Csv_ExcelReader_Memory</code> is both faster (4.761 ms vs. 4.958 ms for <code>Csv_ExcelReader</code>) and allocates less (616 B vs. 896 B) than its stream twin.</p>
+<p><code>Xls_ExcelReader_Memory</code> is ~3% faster than its stream twin (9.080 ms vs. 9.383 ms for <code>Xls_ExcelReader</code>), with near-identical allocation (10.39 KB vs. 10.55 KB). In earlier runs the in-memory path was ~33% faster, thanks to <code>BiffCursor</code> caching the enclosing contiguous sector run; the stream path has since mostly caught up.</p>
 <h3 id="string-heavy-reads">String-heavy reads</h3>
 <p>The real-data corpus above is mostly numbers and dates — its shared-string table is only 5 KB across ~910K cells, so it barely exercises shared strings at all. This benchmark uses a generated 65,536-row workbook with 8 text columns and ~190,000 distinct shared strings (a 7.5 MB uncompressed <code>sharedStrings.xml</code>), which is closer to a typical business export.</p>
 <table>
@@ -672,19 +672,19 @@
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">30.00 ms, 2.18 MB</td>
-<td style="text-align: right;">20.01 ms, 2.21 MB</td>
-<td style="text-align: right;">176.47 ms, 17.41 MB</td>
+<td style="text-align: right;">30.50 ms, 746.87 KB</td>
+<td style="text-align: right;">20.47 ms, 783.11 KB</td>
+<td style="text-align: right;">184.25 ms, 17.41 MB</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">33.56 ms, 2.18 MB</td>
-<td style="text-align: right;">19.52 ms, 2.20 MB</td>
-<td style="text-align: right;">58.80 ms, 17.38 MB</td>
+<td style="text-align: right;">26.40 ms, 746.34 KB</td>
+<td style="text-align: right;">16.81 ms, 791.60 KB</td>
+<td style="text-align: right;">60.08 ms, 17.38 MB</td>
 </tr>
 </tbody>
 </table>
-<p>Both formats handle this well: ~5.9x and ~1.8x faster than Sylvan for XLSX and XLSB respectively, at roughly ~8x less memory in both cases, with no garbage collections in either configuration. XLSB's shared-string path previously materialized its table eagerly (~27 MB here); <code>ParseSharedStreaming</code> brought it in line with the XLSX streaming/pooling path, cutting allocation by ~12x on this workload.</p>
+<p>Both formats handle this well: ~6.0x and ~2.3x faster than Sylvan for XLSX and XLSB respectively, at ~24x less memory in both cases, with no garbage collections in either configuration. XLSB's shared-string path previously materialized its table eagerly (~27 MB here); <code>ParseSharedStreaming</code> brought it in line with the XLSX streaming/pooling path.</p>
 <p><code>XlsxSharedStringHotPathBenchmark</code> splits the XLSX read into stages on the same workbook. The stored rows re-zip it without compression, so they show what parsing costs once inflate is gone:</p>
 <table>
 <thead>
@@ -697,32 +697,32 @@
 <tbody>
 <tr>
 <td>Whole read</td>
-<td style="text-align: right;">30.01 ms</td>
-<td style="text-align: right;">2.18 MB</td>
+<td style="text-align: right;">32.20 ms</td>
+<td style="text-align: right;">747 KB</td>
 </tr>
 <tr>
 <td>Whole read, prefetch</td>
-<td style="text-align: right;">19.56 ms</td>
-<td style="text-align: right;">2.21 MB</td>
+<td style="text-align: right;">19.94 ms</td>
+<td style="text-align: right;">782 KB</td>
 </tr>
 <tr>
 <td>Shared-string table only (open + first row)</td>
-<td style="text-align: right;">9.22 ms</td>
+<td style="text-align: right;">9.57 ms</td>
 <td style="text-align: right;">747 KB</td>
 </tr>
 <tr>
 <td>Whole read, stored</td>
-<td style="text-align: right;">17.65 ms</td>
-<td style="text-align: right;">2.18 MB</td>
+<td style="text-align: right;">18.80 ms</td>
+<td style="text-align: right;">746 KB</td>
 </tr>
 <tr>
 <td>Shared-string table only, stored</td>
-<td style="text-align: right;">3.34 ms</td>
+<td style="text-align: right;">3.56 ms</td>
 <td style="text-align: right;">746 KB</td>
 </tr>
 </tbody>
 </table>
-<p>About 41% of the default read is inflate: without it the whole read drops from 30.01 ms to 17.65 ms, and the shared-string table from 9.22 ms to 3.34 ms. What remains, ~14 ms, is the worksheet scan.</p>
+<p>About 42% of the default read is inflate: without it the whole read drops from 32.20 ms to 18.80 ms, and the shared-string table from 9.57 ms to 3.56 ms. What remains, ~15 ms, is the worksheet scan.</p>
 <h3 id="inflate">Inflate</h3>
 <p><code>InflateBenchmark</code> decompresses one ZIP entry per method with <code>System.IO.Compression.DeflateStream</code> and with the library's managed <code>InflateStream</code>, which every ZIP-based reader now uses:</p>
 <table>
@@ -737,21 +737,21 @@
 <tbody>
 <tr>
 <td>XLSX <code>sheet1.xml</code> (6.7 MB → 34.4 MB)</td>
-<td style="text-align: right;">22.244 ms, 280 B</td>
-<td style="text-align: right;">13.463 ms, 200 B</td>
-<td style="text-align: right;">0.61</td>
+<td style="text-align: right;">22.908 ms, 280 B</td>
+<td style="text-align: right;">13.537 ms, 200 B</td>
+<td style="text-align: right;">0.59</td>
 </tr>
 <tr>
 <td>XLSB <code>sheet1.bin</code> (3.7 MB → 15.9 MB)</td>
-<td style="text-align: right;">12.600 ms, 280 B</td>
-<td style="text-align: right;">9.040 ms, 200 B</td>
-<td style="text-align: right;">0.72</td>
+<td style="text-align: right;">12.977 ms, 280 B</td>
+<td style="text-align: right;">9.139 ms, 200 B</td>
+<td style="text-align: right;">0.70</td>
 </tr>
 <tr>
 <td>String-heavy <code>sharedStrings.xml</code></td>
-<td style="text-align: right;">10.360 ms, 280 B</td>
-<td style="text-align: right;">5.763 ms, 200 B</td>
-<td style="text-align: right;">0.56</td>
+<td style="text-align: right;">10.721 ms, 280 B</td>
+<td style="text-align: right;">5.842 ms, 200 B</td>
+<td style="text-align: right;">0.54</td>
 </tr>
 </tbody>
 </table>
@@ -871,56 +871,56 @@
 <tbody>
 <tr>
 <td>Serial</td>
-<td style="text-align: right;">165.08 ms, 16.09 KB</td>
+<td style="text-align: right;">160.09 ms, 19.44 KB</td>
 <td style="text-align: right;">1.0x</td>
-<td style="text-align: right;">113.61 ms, 13.42 KB</td>
+<td style="text-align: right;">110.06 ms, 16.98 KB</td>
 <td style="text-align: right;">1.0x</td>
 </tr>
 <tr>
 <td>Serial, <code>PrefetchWrite</code></td>
-<td style="text-align: right;">102.18 ms, 18.35 KB</td>
+<td style="text-align: right;">99.24 ms, 21.72 KB</td>
 <td style="text-align: right;">1.6x</td>
-<td style="text-align: right;">62.39 ms, 15.64 KB</td>
+<td style="text-align: right;">61.54 ms, 19.22 KB</td>
 <td style="text-align: right;">1.8x</td>
 </tr>
 <tr>
 <td>Parallel, 1 batch in flight</td>
-<td style="text-align: right;">164.23 ms, 16.15 KB</td>
-<td style="text-align: right;">1.0x</td>
-<td style="text-align: right;">114.03 ms, 13.48 KB</td>
+<td style="text-align: right;">174.04 ms, 19.52 KB</td>
+<td style="text-align: right;">0.9x</td>
+<td style="text-align: right;">107.89 ms, 17.04 KB</td>
 <td style="text-align: right;">1.0x</td>
 </tr>
 <tr>
 <td>Parallel, 2</td>
-<td style="text-align: right;">84.48 ms, 82.67 KB</td>
+<td style="text-align: right;">87.64 ms, 86.28 KB</td>
+<td style="text-align: right;">1.8x</td>
+<td style="text-align: right;">53.74 ms, 86.70 KB</td>
 <td style="text-align: right;">2.0x</td>
-<td style="text-align: right;">58.53 ms, 81.12 KB</td>
-<td style="text-align: right;">1.9x</td>
 </tr>
 <tr>
 <td>Parallel, 4</td>
-<td style="text-align: right;">44.27 ms, 79.71 KB</td>
-<td style="text-align: right;">3.7x</td>
-<td style="text-align: right;">30.04 ms, 78.45 KB</td>
+<td style="text-align: right;">45.61 ms, 83.28 KB</td>
+<td style="text-align: right;">3.5x</td>
+<td style="text-align: right;">28.72 ms, 83.38 KB</td>
 <td style="text-align: right;">3.8x</td>
 </tr>
 <tr>
 <td>Parallel, 8</td>
-<td style="text-align: right;">27.54 ms, 74.09 KB</td>
-<td style="text-align: right;">6.0x</td>
-<td style="text-align: right;">19.48 ms, 70.47 KB</td>
-<td style="text-align: right;">5.8x</td>
+<td style="text-align: right;">28.93 ms, 77.82 KB</td>
+<td style="text-align: right;">5.5x</td>
+<td style="text-align: right;">18.66 ms, 74.32 KB</td>
+<td style="text-align: right;">5.9x</td>
 </tr>
 <tr>
 <td>Parallel, 16</td>
-<td style="text-align: right;">21.64 ms, 79.04 KB</td>
-<td style="text-align: right;">7.6x</td>
-<td style="text-align: right;">15.37 ms, 67.00 KB</td>
-<td style="text-align: right;">7.4x</td>
+<td style="text-align: right;">22.07 ms, 81.85 KB</td>
+<td style="text-align: right;">7.3x</td>
+<td style="text-align: right;">15.11 ms, 70.65 KB</td>
+<td style="text-align: right;">7.3x</td>
 </tr>
 </tbody>
 </table>
-<p>It scales because a write is bound by building rows, not by deflate: <code>PrefetchWrite</code> already takes deflate off the calling thread and stops at 1.6x to 1.8x, so compressing chunks in parallel would add nothing on top of it, while formatting the rows in parallel does. Past dop 8 the gain shrinks (6.0x to 7.6x for XLSX, 5.8x to 7.4x for XLSB), because the machine has 8 physical cores. None of the rows triggers a garbage collection, and every write allocates under 85 KB for 1,000,000 rows.</p>
+<p>It scales because a write is bound by building rows, not by deflate: <code>PrefetchWrite</code> already takes deflate off the calling thread and stops at 1.6x to 1.8x, so compressing chunks in parallel would add nothing on top of it, while formatting the rows in parallel does. Past dop 8 the gain shrinks (5.5x to 7.3x for XLSX, 5.9x to 7.3x for XLSB), because the machine has 8 physical cores. None of the rows triggers a garbage collection, and every write allocates under 90 KB for 1,000,000 rows.</p>
 <p>Each batch is compressed with no reference to the one before it, which costs 0.18% of file size for XLSX (15,481,372 B to 15,508,760 B) and 0.04% for XLSB (16,863,131 B to 16,869,306 B). The process's peak working set rose by 12 MB over the serial write with 4 batches in flight and by 23 MB with 8, about 3 MB per batch, and does not depend on the number of rows. The file sizes and working sets come from a console harness, because BenchmarkDotNet does not report them.</p>
 <h3 id="matched-work-reads-_materialized">Matched-work reads (<code>*_Materialized</code>)</h3>
 <p>Every read benchmark class has a <code>*_Materialized</code> sibling that calls <code>cell.GetString()</code> per text cell — the same UTF-16 materialization Sylvan's ADO.NET-style API is forced to pay — while keeping <code>TryParse</code>/<code>TryGetDateTime</code> for numeric and date cells, exactly mirroring the competitor accumulator. These are the matched-work counterparts to the zero-copy rows above.</p>
@@ -938,33 +938,33 @@
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">39.13 ms</td>
-<td style="text-align: right;">0.08 ms</td>
-<td style="text-align: right;">16.66 KB</td>
+<td style="text-align: right;">39.44 ms</td>
+<td style="text-align: right;">0.78 ms</td>
+<td style="text-align: right;">16.61 KB</td>
 </tr>
 <tr>
 <td>XLSM</td>
-<td style="text-align: right;">39.48 ms</td>
-<td style="text-align: right;">0.04 ms</td>
-<td style="text-align: right;">16.66 KB</td>
+<td style="text-align: right;">39.51 ms</td>
+<td style="text-align: right;">0.22 ms</td>
+<td style="text-align: right;">16.61 KB</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">27.93 ms</td>
-<td style="text-align: right;">0.01 ms</td>
-<td style="text-align: right;">16.19 KB</td>
+<td style="text-align: right;">19.77 ms</td>
+<td style="text-align: right;">0.03 ms</td>
+<td style="text-align: right;">16.13 KB</td>
 </tr>
 <tr>
 <td>XLS</td>
-<td style="text-align: right;">12.73 ms</td>
-<td style="text-align: right;">0.02 ms</td>
-<td style="text-align: right;">21.48 KB</td>
+<td style="text-align: right;">10.29 ms</td>
+<td style="text-align: right;">0.07 ms</td>
+<td style="text-align: right;">21.70 KB</td>
 </tr>
 <tr>
 <td>CSV</td>
-<td style="text-align: right;">18.95 ms</td>
-<td style="text-align: right;">0.09 ms</td>
-<td style="text-align: right;">35.71 MB</td>
+<td style="text-align: right;">12.85 ms</td>
+<td style="text-align: right;">0.06 ms</td>
+<td style="text-align: right;">34.21 MB</td>
 </tr>
 </tbody>
 </table>
@@ -981,8 +981,8 @@
 <tbody>
 <tr>
 <td>Cell-by-cell read, materialized</td>
-<td style="text-align: right;">8.42 ms</td>
-<td style="text-align: right;">0.24 ms</td>
+<td style="text-align: right;">7.03 ms</td>
+<td style="text-align: right;">0.16 ms</td>
 <td style="text-align: right;">1.58 MB</td>
 </tr>
 </tbody>
@@ -1003,29 +1003,29 @@
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">50.77 ms</td>
-<td style="text-align: right;">0.30 ms</td>
-<td style="text-align: right;">1,100.0</td>
-<td style="text-align: right;">1,000.0</td>
-<td style="text-align: right;">300.0</td>
+<td style="text-align: right;">48.52 ms</td>
+<td style="text-align: right;">0.72 ms</td>
+<td style="text-align: right;">1,181.8</td>
+<td style="text-align: right;">1,090.9</td>
+<td style="text-align: right;">363.6</td>
 <td style="text-align: right;">15.25 MB</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">54.01 ms</td>
-<td style="text-align: right;">0.24 ms</td>
-<td style="text-align: right;">1,100.0</td>
-<td style="text-align: right;">1,000.0</td>
-<td style="text-align: right;">300.0</td>
+<td style="text-align: right;">46.11 ms</td>
+<td style="text-align: right;">0.34 ms</td>
+<td style="text-align: right;">1,181.8</td>
+<td style="text-align: right;">1,090.9</td>
+<td style="text-align: right;">363.6</td>
 <td style="text-align: right;">15.25 MB</td>
 </tr>
 </tbody>
 </table>
 <p>Reading the allocation columns against the tables above gives the honest shape of the tradeoff:</p>
 <ul>
-<li><strong>CSV real data:</strong> 35.71 MB materialized against 888 B for the span-based read of the same file. Every CSV field is a distinct string, so nothing dedupes — this is where zero-copy reading earns its keep outright.</li>
-<li><strong>XLSB real data:</strong> 16.19 KB, essentially cheap. That corpus repeats a small set of values, so the shared-string table dedupes and the reader's string cache materializes each distinct value once.</li>
-<li><strong>String-heavy XLSX:</strong> 15.25 MB materialized, against <strong>Sylvan's 17.41 MB on the same workload</strong> — doing matched work here, ExcelReader allocates ~12% <em>less</em> than Sylvan and is still ~3.5x faster (50.77 ms vs. 176.47 ms). The same allocation holds for XLSB (15.25 MB vs. Sylvan's 17.38 MB, also ~12% less), where matched-work time is ~8% ahead of Sylvan (54.01 ms vs. 58.80 ms). This was previously an inversion (ExcelReader allocated ~1.75x <em>more</em> than Sylvan here): the per-reader shared-string dedup cache was an unpresized <code>Dictionary&lt;int,string&gt;</code>, and at ~190,000 distinct values its resize/rehash churn (several of the largest resizes landing on the LOH) accounted for the entire gap — the strings themselves were never the problem, since both readers retain the same ~190,000 distinct instances. Replacing the dictionary with a <code>string?[]</code> indexed by shared-string index (sized exactly from the table's known count, no resizing) cut the allocation in half and cut wall-clock time by 14-16% on this benchmark too, since the churn was costing cycles, not just memory.</li>
+<li><strong>CSV real data:</strong> 34.21 MB materialized against 896 B for the span-based read of the same file. Every CSV field is a distinct string, so nothing dedupes — this is where zero-copy reading earns its keep outright.</li>
+<li><strong>XLSB real data:</strong> 16.13 KB, essentially cheap. That corpus repeats a small set of values, so the shared-string table dedupes and the reader's string cache materializes each distinct value once.</li>
+<li><strong>String-heavy XLSX:</strong> 15.25 MB materialized, against <strong>Sylvan's 17.41 MB on the same workload</strong> — doing matched work here, ExcelReader allocates ~12% <em>less</em> than Sylvan and is still ~3.8x faster (48.52 ms vs. 184.25 ms). The same allocation holds for XLSB (15.25 MB vs. Sylvan's 17.38 MB, also ~12% less), where matched-work time is ~23% ahead of Sylvan (46.11 ms vs. 60.08 ms). This was previously an inversion (ExcelReader allocated ~1.75x <em>more</em> than Sylvan here): the per-reader shared-string dedup cache was an unpresized <code>Dictionary&lt;int,string&gt;</code>, and at ~190,000 distinct values its resize/rehash churn (several of the largest resizes landing on the LOH) accounted for the entire gap — the strings themselves were never the problem, since both readers retain the same ~190,000 distinct instances. Replacing the dictionary with a <code>string?[]</code> indexed by shared-string index (sized exactly from the table's known count, no resizing) cut the allocation in half and cut wall-clock time by 14-16% on this benchmark too, since the churn was costing cycles, not just memory.</li>
 </ul>
 <p>The takeaway is not that one column beats the other: it is that ExcelReader's headline read numbers come from a zero-copy path competitors do not expose, and when it does the same work as them, the gap narrows — and here, with the dedup cache fixed, no longer inverts even at high shared-string cardinality.</p>
 <h3 id="typed-record-writing">Typed record writing</h3>
@@ -1041,27 +1041,27 @@
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">8.381 ms</td>
+<td style="text-align: right;">8.194 ms</td>
 <td style="text-align: right;">4.02 MB</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">5.838 ms</td>
+<td style="text-align: right;">6.053 ms</td>
 <td style="text-align: right;">4.02 MB</td>
 </tr>
 <tr>
 <td>XLS</td>
-<td style="text-align: right;">6.182 ms</td>
-<td style="text-align: right;">4.31 MB</td>
+<td style="text-align: right;">4.938 ms</td>
+<td style="text-align: right;">4.32 MB</td>
 </tr>
 <tr>
 <td>CSV</td>
-<td style="text-align: right;">4.814 ms</td>
+<td style="text-align: right;">4.961 ms</td>
 <td style="text-align: right;">4.00 MB</td>
 </tr>
 </tbody>
 </table>
-<p>Relative ordering: CSV at the front, XLSB and XLS close behind it, then XLSX — the record-mapping layer adds little overhead over hand-written cell-by-cell writes (XLSB 5.838 ms vs. 5.462 ms, XLSX 8.381 ms vs. 8.191 ms).</p>
+<p>Relative ordering: XLS and CSV tied at the front, then XLSB, then XLSX. Against hand-written cell-by-cell writes the record-mapping layer adds nothing for XLSX (8.194 ms vs. 8.213 ms) and ~12% for XLSB (6.053 ms vs. 5.388 ms).</p>
 <h3 id="native-and-arrow-string-writes">Native and Arrow string writes</h3>
 <p><code>WritePathBenchmark</code>: 100,000 rows of four text columns written from UTF-8 buffers, the way the C ABI's <code>xl_write_typed</code> and <code>ArrowWriteExtensions.WriteRecordBatch</code> hand them over, plus 100,000 rows that each carry a row style.</p>
 <table>
@@ -1075,27 +1075,27 @@
 <tbody>
 <tr>
 <td>Native string columns → XLSX</td>
-<td style="text-align: right;">14.275 ms</td>
-<td style="text-align: right;">15.93 KB</td>
+<td style="text-align: right;">19.732 ms</td>
+<td style="text-align: right;">19.27 KB</td>
 </tr>
 <tr>
 <td>Native string columns → CSV</td>
-<td style="text-align: right;">5.525 ms</td>
-<td style="text-align: right;">416 B</td>
+<td style="text-align: right;">4.460 ms</td>
+<td style="text-align: right;">424 B</td>
 </tr>
 <tr>
 <td>Arrow <code>StringArray</code> → XLSX</td>
-<td style="text-align: right;">20.674 ms</td>
-<td style="text-align: right;">15.94 KB</td>
+<td style="text-align: right;">20.812 ms</td>
+<td style="text-align: right;">19.32 KB</td>
 </tr>
 <tr>
 <td>Styled rows → XLSX</td>
-<td style="text-align: right;">5.817 ms</td>
-<td style="text-align: right;">16.10 KB</td>
+<td style="text-align: right;">5.260 ms</td>
+<td style="text-align: right;">19.47 KB</td>
 </tr>
 </tbody>
 </table>
-<p>Text arrives through <code>IRowWriter.WriteUtf8</code>, which the XLSX and CSV writers copy through as bytes whenever the text needs no escaping, so none of these allocate per cell: the ~16 KB is per-workbook ZIP and part setup, which CSV does not have.</p>
+<p>Text arrives through <code>IRowWriter.WriteUtf8</code>, which the XLSX and CSV writers copy through as bytes whenever the text needs no escaping, so none of these allocate per cell: the ~19 KB is per-workbook ZIP and part setup, which CSV does not have.</p>
 <h3 id="ref-struct-typed-parsing-zero-copy">Ref struct typed parsing (zero-copy)</h3>
 <p>A <code>ref struct</code> model (see <a href="../guide/parsing.html#parse-into-a-ref-struct-zero-copy">Parse into a ref struct</a>) extends <code>ExcelParser.FromAttributes&lt;T&gt;</code>'s reflection/attribute-driven column mapping to <code>ref struct</code> targets, binding a <code>ReadOnlySpan&lt;byte&gt;</code> property directly to the cell's raw bytes instead of allocating a <code>string</code>. Same generated XLSX workbook, same 50,000 rows, same four columns — only the target type and binding strategy change:</p>
 <table>
@@ -1109,22 +1109,22 @@
 <tbody>
 <tr>
 <td><code>class</code> (<code>ExcelParser&lt;T&gt;</code>)</td>
-<td style="text-align: right;">10.91 ms</td>
+<td style="text-align: right;">8.88 ms</td>
 <td style="text-align: right;">3.87 MB</td>
 </tr>
 <tr>
 <td><code>struct</code> (<code>ExcelParser&lt;T&gt;</code>)</td>
-<td style="text-align: right;">10.68 ms</td>
+<td style="text-align: right;">8.98 ms</td>
 <td style="text-align: right;">1.58 MB</td>
 </tr>
 <tr>
 <td><code>ref struct</code> + span binding (<code>ExcelParser&lt;T&gt;</code>)</td>
-<td style="text-align: right;">9.02 ms</td>
-<td style="text-align: right;">3.98 KB</td>
+<td style="text-align: right;">8.15 ms</td>
+<td style="text-align: right;">4.02 KB</td>
 </tr>
 </tbody>
 </table>
-<p>Parsing into a <code>ref struct</code> with a <code>ReadOnlySpan&lt;byte&gt;</code> text column removes essentially all per-row allocation — ~99.9% less than the <code>class</code> baseline — and is ~16% faster than the <code>struct</code> target, since there's no per-row <code>string</code> allocation for the text column. It is not AOT/trim-safe (reflection-based, same tradeoff as <code>ExcelParser.FromAttributes&lt;T&gt;</code>). It can be consumed with <code>foreach</code> or <code>await foreach</code> but not through <code>IEnumerable&lt;T&gt;</code>/<code>IAsyncEnumerable&lt;T&gt;</code>/LINQ — a <code>ref struct</code> element can't be boxed through those interfaces.</p>
+<p>Parsing into a <code>ref struct</code> with a <code>ReadOnlySpan&lt;byte&gt;</code> text column removes essentially all per-row allocation — ~99.9% less than the <code>class</code> baseline — and is ~9% faster than the <code>struct</code> target, since there's no per-row <code>string</code> allocation for the text column. It is not AOT/trim-safe (reflection-based, same tradeoff as <code>ExcelParser.FromAttributes&lt;T&gt;</code>). It can be consumed with <code>foreach</code> or <code>await foreach</code> but not through <code>IEnumerable&lt;T&gt;</code>/<code>IAsyncEnumerable&lt;T&gt;</code>/LINQ — a <code>ref struct</code> element can't be boxed through those interfaces.</p>
 <h3 id="adonet-bridge-idatareader">ADO.NET bridge (<code>IDataReader</code>)</h3>
 <p><code>DataReaderBenchmark</code>: the generated 50,000-row XLSX workbook (header plus four columns) read through <a href="../guide/reading.html#bridge-to-adonet-idatareader"><code>SheetDataReader</code></a>, against iterating the same rows directly. The reader is held as <code>IDataReader</code>, the way <code>SqlBulkCopy</code>, <code>DataTable.Load</code> and Dapper hold it.</p>
 <table>
@@ -1139,37 +1139,37 @@
 <tbody>
 <tr>
 <td>Raw rows (<code>row[i].Value</code>, baseline)</td>
-<td style="text-align: right;">6.542 ms</td>
+<td style="text-align: right;">6.139 ms</td>
 <td style="text-align: right;">1.00</td>
-<td style="text-align: right;">3.48 KB</td>
+<td style="text-align: right;">3.52 KB</td>
 </tr>
 <tr>
 <td><code>GetBytes</code> (text column only)</td>
-<td style="text-align: right;">6.983 ms</td>
-<td style="text-align: right;">1.07</td>
-<td style="text-align: right;">4.18 KB</td>
+<td style="text-align: right;">6.037 ms</td>
+<td style="text-align: right;">0.99</td>
+<td style="text-align: right;">4.68 KB</td>
 </tr>
 <tr>
 <td><code>GetValue</code> (every column)</td>
-<td style="text-align: right;">9.568 ms</td>
-<td style="text-align: right;">1.46</td>
+<td style="text-align: right;">8.473 ms</td>
+<td style="text-align: right;">1.39</td>
 <td style="text-align: right;">5.01 MB</td>
 </tr>
 <tr>
 <td>Typed getters (<code>GetString</code>/<code>GetInt32</code>/<code>GetDateTime</code>/<code>GetDouble</code>)</td>
-<td style="text-align: right;">9.357 ms</td>
-<td style="text-align: right;">1.43</td>
+<td style="text-align: right;">8.565 ms</td>
+<td style="text-align: right;">1.40</td>
 <td style="text-align: right;">1.58 MB</td>
 </tr>
 <tr>
 <td><code>DataTable.Load</code></td>
-<td style="text-align: right;">62.94 ms</td>
-<td style="text-align: right;">9.62</td>
-<td style="text-align: right;">22.84 MB</td>
+<td style="text-align: right;">35.01 ms</td>
+<td style="text-align: right;">5.73</td>
+<td style="text-align: right;">16.60 MB</td>
 </tr>
 </tbody>
 </table>
-<p>The bridge costs ~1.4x over reading rows directly. <code>GetValue</code> boxes every value (the 5 MB), and the typed getters allocate only the text column's <code>string</code>s. <code>GetBytes</code> copies UTF-8 without making a <code>string</code>, so it allocates nothing per row and costs ~7% over the raw read. <code>DataTable.Load</code> is dominated by <code>DataTable</code>'s own row storage: the same values cost 9.568 ms to read through <code>GetValue</code> alone.</p>
+<p>The bridge costs ~1.4x over reading rows directly. <code>GetValue</code> boxes every value (the 5 MB), and the typed getters allocate only the text column's <code>string</code>s. <code>GetBytes</code> copies UTF-8 without making a <code>string</code>, so it allocates nothing per row and costs nothing measurable over the raw read (6.037 ms vs. 6.139 ms, against a 0.46 ms standard deviation on the baseline). <code>DataTable.Load</code> is dominated by <code>DataTable</code>'s own row storage: the same values cost 8.473 ms to read through <code>GetValue</code> alone.</p>
 <h3 id="arrow-conversion">Arrow conversion</h3>
 <p><code>ArrowConversionBenchmark</code>: <code>ToArrowRecordBatch</code> from <a href="../guide/reading.html#apache-arrow-conversion-opt-in">ExcelReader.Arrow</a>, 100,000 rows into one <code>RecordBatch</code>. The typed rows use the generated records (a text name, an int64 id, a timestamp, a double) as CSV and as XLSB. The all-string row is a separate header-less CSV with 8 text columns.</p>
 <table>
@@ -1183,22 +1183,22 @@
 <tbody>
 <tr>
 <td>CSV, typed, explicit schema</td>
-<td style="text-align: right;">8.56 ms</td>
+<td style="text-align: right;">8.81 ms</td>
 <td style="text-align: right;">3.13 MB</td>
 </tr>
 <tr>
 <td>CSV, typed, inferred schema</td>
-<td style="text-align: right;">7.42 ms</td>
+<td style="text-align: right;">7.28 ms</td>
 <td style="text-align: right;">5.62 MB</td>
 </tr>
 <tr>
 <td>XLSB, typed, explicit schema</td>
-<td style="text-align: right;">11.89 ms</td>
+<td style="text-align: right;">12.01 ms</td>
 <td style="text-align: right;">3.13 MB</td>
 </tr>
 <tr>
 <td>CSV, 8 text columns, explicit schema</td>
-<td style="text-align: right;">10.61 ms</td>
+<td style="text-align: right;">10.24 ms</td>
 <td style="text-align: right;">6.69 MB</td>
 </tr>
 </tbody>
@@ -1218,47 +1218,47 @@
 <tbody>
 <tr>
 <td>Small, plain</td>
-<td style="text-align: right;">0.208 ms</td>
+<td style="text-align: right;">0.215 ms</td>
 <td style="text-align: right;">8.72 KB</td>
 </tr>
 <tr>
 <td>Small, encrypted, stream</td>
-<td style="text-align: right;">26.133 ms</td>
-<td style="text-align: right;">37.93 KB</td>
+<td style="text-align: right;">25.094 ms</td>
+<td style="text-align: right;">38.67 KB</td>
 </tr>
 <tr>
 <td>Small, encrypted, stream, <code>VerifyEncryptedIntegrity</code></td>
-<td style="text-align: right;">26.505 ms</td>
-<td style="text-align: right;">40.05 KB</td>
+<td style="text-align: right;">24.696 ms</td>
+<td style="text-align: right;">40.81 KB</td>
 </tr>
 <tr>
 <td>Small, encrypted, in memory</td>
-<td style="text-align: right;">25.552 ms</td>
-<td style="text-align: right;">52.98 KB</td>
+<td style="text-align: right;">24.761 ms</td>
+<td style="text-align: right;">53.75 KB</td>
 </tr>
 <tr>
 <td>Small, encrypted, open only</td>
-<td style="text-align: right;">26.099 ms</td>
-<td style="text-align: right;">32.37 KB</td>
+<td style="text-align: right;">25.578 ms</td>
+<td style="text-align: right;">33.05 KB</td>
 </tr>
 <tr>
 <td>300,000 rows, plain</td>
-<td style="text-align: right;">37.640 ms</td>
-<td style="text-align: right;">3.48 KB</td>
+<td style="text-align: right;">33.942 ms</td>
+<td style="text-align: right;">3.52 KB</td>
 </tr>
 <tr>
 <td>300,000 rows, encrypted</td>
-<td style="text-align: right;">64.103 ms</td>
-<td style="text-align: right;">29.41 KB</td>
+<td style="text-align: right;">59.446 ms</td>
+<td style="text-align: right;">29.87 KB</td>
 </tr>
 <tr>
 <td>300,000 rows, encrypted, open only</td>
-<td style="text-align: right;">25.471 ms</td>
-<td style="text-align: right;">28.72 KB</td>
+<td style="text-align: right;">24.877 ms</td>
+<td style="text-align: right;">29.16 KB</td>
 </tr>
 </tbody>
 </table>
-<p>Nearly all of the cost is a fixed ~25 ms paid when the workbook is opened: deriving the key through 100,000 SHA-512 iterations, which the format requires so that passwords are slow to brute-force. It does not depend on file size (open-only is 26.10 ms for 15 KB and 25.47 ms for 300,000 rows). After that, decrypting while reading costs ~3% over a plain read: 64.10 ms − 25.47 ms = 38.63 ms, against 37.64 ms unencrypted. On the small fixture, integrity verification and the in-memory path stay within ~3% of the plain encrypted read, inside the spread of the key derivation itself. The fixture is too small to show the extra pass that verification makes over a large stream.</p>
+<p>Nearly all of the cost is a fixed ~25 ms paid when the workbook is opened: deriving the key through 100,000 SHA-512 iterations, which the format requires so that passwords are slow to brute-force. It does not depend on file size (open-only is 25.58 ms for 15 KB and 24.88 ms for 300,000 rows). After that, decrypting while reading costs ~2% over a plain read: 59.45 ms − 24.88 ms = 34.57 ms, against 33.94 ms unencrypted. On the small fixture, integrity verification and the in-memory path stay within ~2% of the plain encrypted read, inside the spread of the key derivation itself. The fixture is too small to show the extra pass that verification makes over a large stream.</p>
 <h3 id="cold-start">Cold start</h3>
 <p>First use of <code>ExcelParser.FromAttributes&lt;T&gt;</code>/<code>ExcelRecordLayout.FromAttributes&lt;T&gt;</code> in a process pays a one-time reflection + <code>Expression.Compile</code> cost (16 launches, cold JIT, 200 rows):</p>
 <table>
@@ -1272,13 +1272,13 @@
 <tbody>
 <tr>
 <td>First typed parse</td>
-<td style="text-align: right;">46.05 ms</td>
-<td style="text-align: right;">20.72 KB</td>
+<td style="text-align: right;">56.25 ms</td>
+<td style="text-align: right;">20.54 KB</td>
 </tr>
 <tr>
 <td>First typed record write</td>
-<td style="text-align: right;">16.66 ms</td>
-<td style="text-align: right;">80.81 KB</td>
+<td style="text-align: right;">17.90 ms</td>
+<td style="text-align: right;">84.20 KB</td>
 </tr>
 </tbody>
 </table>
@@ -1295,22 +1295,22 @@
 <tbody>
 <tr>
 <td>First typed parse (<code>ExcelParser.FromAttributes&lt;T&gt;</code>)</td>
-<td style="text-align: right;">46.05 ms</td>
-<td style="text-align: right;">20.72 KB</td>
+<td style="text-align: right;">56.25 ms</td>
+<td style="text-align: right;">20.54 KB</td>
 </tr>
 <tr>
 <td>First fluent parse (<code>ExcelParser.Build&lt;T&gt;</code>)</td>
-<td style="text-align: right;">41.57 ms</td>
-<td style="text-align: right;">23.66 KB</td>
+<td style="text-align: right;">44.98 ms</td>
+<td style="text-align: right;">23.70 KB</td>
 </tr>
 <tr>
 <td>First fluent parse (<code>BuildWithAttributeFallback</code>)</td>
-<td style="text-align: right;">49.10 ms</td>
-<td style="text-align: right;">25.78 KB</td>
+<td style="text-align: right;">58.96 ms</td>
+<td style="text-align: right;">25.60 KB</td>
 </tr>
 </tbody>
 </table>
-<p><code>Build</code> is ~10% faster than the reflection-based parser here; <code>BuildWithAttributeFallback</code> is slower than reflection (~7%, with a 0.5 ms standard deviation), since it runs the same <code>TypeMapper&lt;T&gt;.GetInfo()</code> path plus the fluent build on top.</p>
+<p><code>Build</code> is ~20% faster than the reflection-based parser here; <code>BuildWithAttributeFallback</code> is slower than reflection (~5%, with a 0.3 ms standard deviation), since it runs the same <code>TypeMapper&lt;T&gt;.GetInfo()</code> path plus the fluent build on top.</p>
 <p>Run the benchmarks locally:</p>
 <pre><code class="lang-bash">dotnet run --project tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release -- --filter *
 </code></pre>
@@ -1329,43 +1329,43 @@
 <tr>
 <td><code>xl_rows_next</code></td>
 <td>one row per call, serialized into a caller buffer</td>
-<td style="text-align: right;">32.06 ms</td>
+<td style="text-align: right;">31.65 ms</td>
 <td style="text-align: right;">3.71 MB</td>
 </tr>
 <tr>
 <td><code>xl_rows_next_cells</code></td>
 <td>one row per call, cursor-owned cell views, numbers binary</td>
-<td style="text-align: right;">19.98 ms</td>
+<td style="text-align: right;">19.49 ms</td>
 <td style="text-align: right;">3.71 MB</td>
 </tr>
 <tr>
 <td><code>xl_rows_read_all_blob</code></td>
 <td>whole sheet in one buffer</td>
-<td style="text-align: right;">35.27 ms</td>
+<td style="text-align: right;">35.24 ms</td>
 <td style="text-align: right;">21.05 MB</td>
 </tr>
 <tr>
 <td><code>xl_rows_read_all_decoded</code></td>
 <td>whole sheet as native row structs</td>
-<td style="text-align: right;">47.12 ms</td>
+<td style="text-align: right;">46.44 ms</td>
 <td style="text-align: right;">5.71 MB</td>
 </tr>
 <tr>
 <td><code>xl_parse_typed</code></td>
 <td>typed native columns</td>
-<td style="text-align: right;">27.03 ms</td>
+<td style="text-align: right;">25.75 ms</td>
 <td style="text-align: right;">3.71 MB</td>
 </tr>
 <tr>
 <td><code>xl_parse_arrow</code></td>
 <td>Arrow C Data Interface arrays</td>
-<td style="text-align: right;">27.14 ms</td>
+<td style="text-align: right;">26.01 ms</td>
 <td style="text-align: right;">3.72 MB</td>
 </tr>
 </tbody>
 </table>
 <p>The allocation column is <strong>managed memory only</strong>. <code>MemoryDiagnoser</code> cannot see the native blocks that <code>xl_rows_read_all_decoded</code>, <code>xl_parse_typed</code> and <code>xl_parse_arrow</code> return their data in.</p>
-<p>Every cell that crosses the ABI as text costs time: each binary XLSB number is formatted to UTF-8 on the way out. <code>xl_rows_next_cells</code> passes numbers as doubles and copies only the text, so it reads the sheet ~38% faster than <code>xl_rows_next</code>, and faster than <code>xl_parse_typed</code>, which also converts every cell to its column type. <code>xl_rows_read_all_blob</code> adds ~10% over <code>xl_rows_next</code>, because the whole sheet is buffered before it is copied out. <code>xl_rows_read_all_decoded</code> adds ~47%, because it allocates a native block per row. <code>xl_parse_typed</code> and <code>xl_parse_arrow</code> return columnar native buffers with numbers still binary, so they are the path to use for bulk typed loads; <code>xl_rows_next_cells</code> is the one for reading cells as they are.</p>
+<p>Every cell that crosses the ABI as text costs time: each binary XLSB number is formatted to UTF-8 on the way out. <code>xl_rows_next_cells</code> passes numbers as doubles and copies only the text, so it reads the sheet ~38% faster than <code>xl_rows_next</code>, and faster than <code>xl_parse_typed</code>, which also converts every cell to its column type. <code>xl_rows_read_all_blob</code> adds ~11% over <code>xl_rows_next</code>, because the whole sheet is buffered before it is copied out. <code>xl_rows_read_all_decoded</code> adds ~47%, because it allocates a native block per row. <code>xl_parse_typed</code> and <code>xl_parse_arrow</code> return columnar native buffers with numbers still binary, so they are the path to use for bulk typed loads; <code>xl_rows_next_cells</code> is the one for reading cells as they are.</p>
 <p><code>ChunkedParseBenchmark</code> compares <code>xl_parse_typed</code> on a whole sheet against draining the same sheet in batches through <code>xl_typed_reader_open</code>/<code>xl_typed_reader_next</code>. It uses the generated 50,000-row XLSX file, read from disk, with three nullable columns (string, int64, float64):</p>
 <table>
 <thead>
@@ -1378,22 +1378,22 @@
 <tbody>
 <tr>
 <td>Whole sheet (<code>xl_parse_typed</code>)</td>
-<td style="text-align: right;">8.76 ms</td>
-<td style="text-align: right;">9.87 KB</td>
+<td style="text-align: right;">6.97 ms</td>
+<td style="text-align: right;">10.63 KB</td>
 </tr>
 <tr>
 <td>Batches of 10,000 rows</td>
-<td style="text-align: right;">8.83 ms</td>
-<td style="text-align: right;">16.82 KB</td>
+<td style="text-align: right;">6.68 ms</td>
+<td style="text-align: right;">18.97 KB</td>
 </tr>
 <tr>
 <td>Batches of 1,000 rows</td>
-<td style="text-align: right;">8.14 ms</td>
-<td style="text-align: right;">81.15 KB</td>
+<td style="text-align: right;">7.00 ms</td>
+<td style="text-align: right;">97.37 KB</td>
 </tr>
 </tbody>
 </table>
-<p>Batching costs nothing in time: batches of 10,000 rows land within 1% of one whole-sheet table, and batches of 1,000 rows are ~7% faster. A caller can bound its native memory to one batch at a time without paying for it.</p>
+<p>Batching costs nothing in time: batches of 10,000 rows are ~4% faster than one whole-sheet table, and batches of 1,000 rows land within 1% of it. A caller can bound its native memory to one batch at a time without paying for it.</p>
 <h3 id="c-and-rust-bindings">C++ and Rust bindings</h3>
 <p>The C++ and Rust wrappers around the native library each have their own benchmark suite (Google
 Benchmark and Criterion respectively), measured on the same machine as the .NET results above.

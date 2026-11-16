@@ -395,19 +395,19 @@ they have nothing to overlap and do not offer it.</p>
 <tbody>
 <tr>
 <td>XLSX</td>
-<td style="text-align: right;">8.191 ms</td>
-<td style="text-align: right;">5.351 ms</td>
-<td style="text-align: right;">35%</td>
+<td style="text-align: right;">8.213 ms</td>
+<td style="text-align: right;">5.577 ms</td>
+<td style="text-align: right;">32%</td>
 </tr>
 <tr>
 <td>XLSB</td>
-<td style="text-align: right;">5.462 ms</td>
-<td style="text-align: right;">3.282 ms</td>
-<td style="text-align: right;">40%</td>
+<td style="text-align: right;">5.388 ms</td>
+<td style="text-align: right;">3.271 ms</td>
+<td style="text-align: right;">39%</td>
 </tr>
 </tbody>
 </table>
-<p>Allocations are unchanged (4.02 MB either way) — the background writer hands over buffers the row
+<p>Allocations are unchanged (4.02–4.03 MB either way) — the background writer hands over buffers the row
 writer already owns rather than copying them.</p>
 <p>The same caveat as the read side applies: <strong>do not enable it for concurrent server workloads</strong>. A
 caller already writing many files in parallel is CPU-saturated, and an extra background thread per
@@ -470,38 +470,38 @@ compressed result), whatever the size of the sheet.</p>
 <tbody>
 <tr>
 <td>Serial</td>
-<td style="text-align: right;">165.08 ms</td>
-<td style="text-align: right;">113.61 ms</td>
+<td style="text-align: right;">160.09 ms</td>
+<td style="text-align: right;">110.06 ms</td>
 </tr>
 <tr>
 <td>Serial, <code>PrefetchWrite</code></td>
-<td style="text-align: right;">102.18 ms</td>
-<td style="text-align: right;">62.39 ms</td>
+<td style="text-align: right;">99.24 ms</td>
+<td style="text-align: right;">61.54 ms</td>
 </tr>
 <tr>
 <td>Parallel, 1 batch in flight</td>
-<td style="text-align: right;">164.23 ms</td>
-<td style="text-align: right;">114.03 ms</td>
+<td style="text-align: right;">174.04 ms</td>
+<td style="text-align: right;">107.89 ms</td>
 </tr>
 <tr>
 <td>Parallel, 2</td>
-<td style="text-align: right;">84.48 ms</td>
-<td style="text-align: right;">58.53 ms</td>
+<td style="text-align: right;">87.64 ms</td>
+<td style="text-align: right;">53.74 ms</td>
 </tr>
 <tr>
 <td>Parallel, 4</td>
-<td style="text-align: right;">44.27 ms</td>
-<td style="text-align: right;">30.04 ms</td>
+<td style="text-align: right;">45.61 ms</td>
+<td style="text-align: right;">28.72 ms</td>
 </tr>
 <tr>
 <td>Parallel, 8</td>
-<td style="text-align: right;">27.54 ms</td>
-<td style="text-align: right;">19.48 ms</td>
+<td style="text-align: right;">28.93 ms</td>
+<td style="text-align: right;">18.66 ms</td>
 </tr>
 <tr>
 <td>Parallel, 16</td>
-<td style="text-align: right;">21.64 ms</td>
-<td style="text-align: right;">15.37 ms</td>
+<td style="text-align: right;">22.07 ms</td>
+<td style="text-align: right;">15.11 ms</td>
 </tr>
 </tbody>
 </table>

@@ -82,7 +82,7 @@ required — the shared library is self-contained.</p>
 <p>Wheels ship for Windows x64, macOS (arm64, x64) and Linux (glibc and musl, x64 and arm64). The
 package installs as <code>excelreader-native</code> and imports as <code>excelreader</code>.</p>
 <h2 id="install-from-source">Install (from source)</h2>
-<pre><code class="lang-bash">python python/scripts/build_native.py   # requires the .NET 10 SDK, once per machine
+<pre><code class="lang-bash">python python/scripts/build_native.py   # requires the .NET 11 SDK, once per machine
 pip install -e &quot;python[dev]&quot;
 </code></pre>
 <p><code>build_native.py</code> publishes <code>src/ExcelReader.Native</code> for your platform and copies the resulting

@@ -1943,7 +1943,7 @@ devirtualization changes nothing. The static profile does not recover it. The <c
 regenerating it from this tree moves XLSX by ≤0.5% (85.1 against 85.4 ms). <code>IlcInstructionSet=x86-64-v3</code>
 is worth ~1%.</p>
 <p>A trap for whoever regenerates the profile: the ILC publish is incremental and ignores a changed
-<code>.mibc</code>, producing a byte-identical library. Delete <code>src/ExcelReader.Native/obj/Release/net10.0/&lt;rid&gt;/native</code>
+<code>.mibc</code>, producing a byte-identical library. Delete <code>src/ExcelReader.Native/obj/Release/net11.0/&lt;rid&gt;/native</code>
 before publishing.</p>
 <p>The C++ binding's full XLSX read moved from 93.2 to ~85.4 ms with no native change, from the
 XLSX changes above.</p>

@@ -95,7 +95,7 @@
 <p>Every open checks it against the <code>XL_ABI_VERSION</code> this header was compiled with and fails on a mismatch.</p>
 <p><strong>Returns</strong> int32_t</p>
 <h2 id="i64_column">i64_column</h2>
-<pre><code class="lang-cpp">constexpr ColumnRef i64_column(
+<pre><code class="lang-cpp">ColumnRef i64_column(
     std::string_view name,
     std::span&lt;const int64_t&gt; values,
     std::span&lt;const uint8_t&gt; validity = {}) noexcept
@@ -134,7 +134,7 @@
 </table>
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>values</code> and <code>validity</code>.</p>
 <h2 id="f64_column">f64_column</h2>
-<pre><code class="lang-cpp">constexpr ColumnRef f64_column(
+<pre><code class="lang-cpp">ColumnRef f64_column(
     std::string_view name,
     std::span&lt;const double&gt; values,
     std::span&lt;const uint8_t&gt; validity = {}) noexcept
@@ -173,7 +173,7 @@
 </table>
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>values</code> and <code>validity</code>.</p>
 <h2 id="bool_column">bool_column</h2>
-<pre><code class="lang-cpp">constexpr ColumnRef bool_column(
+<pre><code class="lang-cpp">ColumnRef bool_column(
     std::string_view name,
     std::span&lt;const uint8_t&gt; values,
     std::span&lt;const uint8_t&gt; validity = {}) noexcept
@@ -212,7 +212,7 @@
 </table>
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>values</code> and <code>validity</code>.</p>
 <h2 id="date_column">date_column</h2>
-<pre><code class="lang-cpp">constexpr ColumnRef date_column(
+<pre><code class="lang-cpp">ColumnRef date_column(
     std::string_view name,
     std::span&lt;const int32_t&gt; days_since_epoch,
     std::span&lt;const uint8_t&gt; validity = {}) noexcept
@@ -251,7 +251,7 @@
 </table>
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>days_since_epoch</code> and <code>validity</code>.</p>
 <h2 id="time_column">time_column</h2>
-<pre><code class="lang-cpp">constexpr ColumnRef time_column(
+<pre><code class="lang-cpp">ColumnRef time_column(
     std::string_view name,
     std::span&lt;const int64_t&gt; micros_since_midnight,
     std::span&lt;const uint8_t&gt; validity = {}) noexcept
@@ -290,7 +290,7 @@
 </table>
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>micros_since_midnight</code> and <code>validity</code>.</p>
 <h2 id="timestamp_column">timestamp_column</h2>
-<pre><code class="lang-cpp">constexpr ColumnRef timestamp_column(
+<pre><code class="lang-cpp">ColumnRef timestamp_column(
     std::string_view name,
     std::span&lt;const int64_t&gt; micros_since_epoch,
     std::span&lt;const uint8_t&gt; validity = {}) noexcept
@@ -329,7 +329,7 @@
 </table>
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>micros_since_epoch</code> and <code>validity</code>.</p>
 <h2 id="string_column">string_column</h2>
-<pre><code class="lang-cpp">constexpr ColumnRef string_column(
+<pre><code class="lang-cpp">ColumnRef string_column(
     std::string_view name,
     std::span&lt;const int32_t&gt; offsets,
     std::span&lt;const uint8_t&gt; data,
@@ -376,9 +376,9 @@
 <p><strong>Returns</strong> <a href="ColumnRef.html">ColumnRef</a>: A column borrowing <code>offsets</code>, <code>data</code> and <code>validity</code>.</p>
 <h2 id="make_field">make_field</h2>
 <pre><code class="lang-cpp">template &lt;typename Class, typename T&gt;
-constexpr detail::FieldBinding&lt;Class, T&gt; make_field(const char *name, T Class::*member)
+detail::FieldBinding&lt;Class, T&gt; make_field(const char *name, T Class::*member)
 template &lt;typename Class, typename T, std::size_t N&gt;
-constexpr detail::FieldBinding&lt;Class, T, N&gt; make_field(const char *(&amp;&amp;names)[N], T Class::*member)
+detail::FieldBinding&lt;Class, T, N&gt; make_field(const char *(&amp;&amp;names)[N], T Class::*member)
 </code></pre>
 <p>Binds a member to the column with one header.</p>
 <p>Binds a member to the column headed by any of several names.</p>
