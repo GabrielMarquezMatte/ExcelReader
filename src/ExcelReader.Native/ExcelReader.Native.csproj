@@ -12,6 +12,9 @@
          managed assembly, which is what ExcelReader.Tests references. -->
     <PublishAot>true</PublishAot>
     <NativeLib>Shared</NativeLib>
+    <!-- .NET 11 names Unix outputs libExcelReader.Native.so/.dylib by default; the bindings and the
+         release assets load ExcelReader.Native.*. -->
+    <UseNativeLibPrefix>false</UseNativeLibPrefix>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <!-- Keeps ICU out of the shared library; this layer does no culture-sensitive formatting. -->
     <InvariantGlobalization>true</InvariantGlobalization>
