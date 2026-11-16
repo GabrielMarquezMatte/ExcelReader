@@ -1026,7 +1026,7 @@ regenerating it from this tree moves XLSX by ≤0.5% (85.1 against 85.4 ms). `Il
 is worth ~1%.
 
 A trap for whoever regenerates the profile: the ILC publish is incremental and ignores a changed
-`.mibc`, producing a byte-identical library. Delete `src/ExcelReader.Native/obj/Release/net10.0/<rid>/native`
+`.mibc`, producing a byte-identical library. Delete `src/ExcelReader.Native/obj/Release/net11.0/<rid>/native`
 before publishing.
 
 The C++ binding's full XLSX read moved from 93.2 to ~85.4 ms with no native change, from the
