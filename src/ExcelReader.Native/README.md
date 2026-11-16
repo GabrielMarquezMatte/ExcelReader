@@ -8,9 +8,9 @@ NativeAOT shared library exposing ExcelReader's readers over a C ABI, so non-.NE
 
 ## Build
 
-    dotnet publish src/ExcelReader.Native/ExcelReader.Native.csproj -c Release -f net10.0 -r <rid>
+    dotnet publish src/ExcelReader.Native/ExcelReader.Native.csproj -c Release -f net11.0 -r <rid>
 
-Output lands in `bin/Release/net10.0/<rid>/publish/ExcelReader.Native.{dll,so,dylib}`.
+Output lands in `bin/Release/net11.0/<rid>/publish/ExcelReader.Native.{dll,so,dylib}`.
 
 ## Static PGO profile
 
@@ -26,14 +26,14 @@ example) silently drops its profile. That happened after the namespace refactor 
 look for `; No PGO data` in the listing header.
 
 `tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_parse_arrow` (with `XL_T_STRING_DICT` columns), `xl_rows_next`,
-`xl_rows_next_view`, `xl_rows_next_cells` and `xl_rows_foreach` over the 65K benchmark fixtures in XLSX, XLSB and CSV, and writes each parsed
+`xl_rows_next_view`, `xl_rows_next_cells` and `xl_rows_foreach` over the 65K benchmark fixtures in XLSX, XLSB, CSV and XLS, and writes each parsed
 table back out with `xl_write_typed_to_memory` in XLSX, XLSB and CSV, serially and in parallel.
 Record it and convert the trace (needs `dotnet-trace` and `dotnet-pgo`):
 
     dotnet build tests/ExcelReader.NativePgoTrainer -c Release
     DOTNET_TieredPGO=1 DOTNET_ReadyToRun=0 DOTNET_TC_QuickJitForLoops=1 \
       dotnet-trace collect --providers Microsoft-Windows-DotNETRuntime:0x1F000080018:5 -o pgo.nettrace \
-      -- "$PWD/tests/ExcelReader.NativePgoTrainer/bin/Release/net10.0/ExcelReader.NativePgoTrainer"
+      -- "$PWD/tests/ExcelReader.NativePgoTrainer/bin/Release/net11.0/ExcelReader.NativePgoTrainer"
     dotnet-pgo create-mibc -t pgo.nettrace -o src/ExcelReader.Native/pgo/excelreader.mibc
 
 Until 2026-10 the profile excluded `Xlsb|Biff12`: the old XLSB cell loop got 3-22% slower with its

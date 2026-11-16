@@ -111,6 +111,7 @@ namespace ExcelReader.Core.Reader.Schema
             return dataRowCount;
         }
 
+        [SuppressMessage("Performance", "CA1517", Justification = "False positive: the foreach ref loop writes through the span.")]
         private static void MarkSparseColumnsNullable(Span<ColumnStat> stats, int dataRowCount)
         {
             foreach (ref ColumnStat stat in stats)

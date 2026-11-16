@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- net11.0 is the shipped AOT library (publish with -f net11.0): its ILC measured ~5% faster
+         than net10's. net10.0 only exists so the net10 tests and benchmarks can reference the
+         managed *Api layer. -->
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
     <!-- Publishing this project with -r <rid> produces the C-ABI shared library
@@ -9,6 +12,9 @@
          managed assembly, which is what ExcelReader.Tests references. -->
     <PublishAot>true</PublishAot>
     <NativeLib>Shared</NativeLib>
+    <!-- .NET 11 names Unix outputs libExcelReader.Native.so/.dylib by default; the bindings and the
+         release assets load ExcelReader.Native.*. -->
+    <UseNativeLibPrefix>false</UseNativeLibPrefix>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <!-- Keeps ICU out of the shared library; this layer does no culture-sensitive formatting. -->
     <InvariantGlobalization>true</InvariantGlobalization>

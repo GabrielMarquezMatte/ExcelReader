@@ -2,6 +2,8 @@
 ExcelReader.Arrow.ArrowConversionExtensions
 ExcelReader.Arrow.ArrowReadOptions
 ExcelReader.Arrow.ArrowReadOptions.ArrowReadOptions() -> void
+ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism.get -> int
+ExcelReader.Arrow.ArrowReadOptions.DegreeOfParallelism.init -> void
 ExcelReader.Arrow.ArrowReadOptions.HeaderRow.get -> int
 ExcelReader.Arrow.ArrowReadOptions.HeaderRow.init -> void
 ExcelReader.Arrow.ArrowReadOptions.Schema.get -> System.Collections.Generic.IReadOnlyList<ExcelReader.Core.Reader.Schema.ExcelColumnSchema>?

@@ -63,6 +63,10 @@ namespace ExcelReader.Core.Reader.Xls
                     BiffCursor cursor = _cursor;
                     while (true)
                     {
+                        if (_row >= 0)
+                        {
+                            DrainCells(cursor);
+                        }
                         long recordStart = cursor.Position;
                         if (!cursor.TryReadRecord(out int id, out ReadOnlySpan<byte> data))
                         {
@@ -152,6 +156,91 @@ namespace ExcelReader.Core.Reader.Xls
                     default:
                         return true;
                 }
+            }
+
+            // Writes the current row's number and shared-string records straight into the cell array.
+            // Stops at the first record it is not sure about and leaves it to ReadRecord.
+            private void DrainCells(BiffCursor cursor)
+            {
+                ReadOnlySpan<byte> data = cursor.LoadedSpan();
+                CellDesc[] cells = _acc.RawCells;
+                int count = _acc.Count;
+                int lastCol = _acc.LastColumn;
+                bool sorted = true;
+                int position = 0;
+                while (position + 14 <= data.Length)
+                {
+                    int id = ReadU16(data, position);
+                    int length = ReadU16(data, position + 2);
+                    if (length < 10 || position + 4 + length > data.Length || ReadU16(data, position + 4) != _row)
+                    {
+                        break;
+                    }
+                    ReadOnlySpan<byte> payload = data.Slice(position + 4, length);
+                    int col = ReadU16(payload, 2);
+                    int added = id == Rec.MulRk ? (length - 6) / 6 : 1;
+                    if (added == 0 || col + added > ExcelLimits.MaxColumns || count + added > cells.Length || !TryDrainCell(id, payload, cells.AsSpan(count, added)))
+                    {
+                        break;
+                    }
+                    sorted &= col >= lastCol;
+                    lastCol = col + added - 1;
+                    count += added;
+                    position += 4 + length;
+                }
+                _acc.Commit(count, lastCol, sorted);
+                cursor.Position += position;
+            }
+
+            private bool TryDrainCell(int id, ReadOnlySpan<byte> payload, Span<CellDesc> destination)
+            {
+                int col = ReadU16(payload, 2);
+                int style = ReadU16(payload, 4);
+                switch (id)
+                {
+                    case Rec.LabelSst:
+                        var (start, len, sharedIndex) = _reader.SharedAt(ReadI32(payload, 6));
+                        destination[0] = new CellDesc
+                        {
+                            Column = col,
+                            Start = start,
+                            Length = len,
+                            Type = CellType.ExcelString,
+                            Style = style,
+                            Source = CellValueSource.Shared,
+                            SharedIndex = sharedIndex,
+                        };
+                        return true;
+                    case Rec.Number when payload.Length >= 14:
+                        destination[0] = NumberCell(col, style, BinaryPrimitives.ReadDoubleLittleEndian(payload.Slice(6, 8)));
+                        return true;
+                    case Rec.Rk:
+                        destination[0] = NumberCell(col, style, Rk(ReadU32(payload, 6)));
+                        return true;
+                    case Rec.MulRk:
+                        for (int i = 0; i < destination.Length; i++)
+                        {
+                            destination[i] = NumberCell(col + i, ReadU16(payload, 4 + (i * 6)), Rk(ReadU32(payload, 6 + (i * 6))));
+                        }
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            private CellDesc NumberCell(int col, int style, double value)
+            {
+                return new CellDesc
+                {
+                    Column = col,
+                    Start = _acc.ValueLength,
+                    Type = _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
+                    Style = style,
+                    Source = CellValueSource.RowValues,
+                    Number = value,
+                    HasNumber = true,
+                    SharedIndex = -1,
+                };
             }
 
             private void ReadBof(BiffCursor cursor, ReadOnlySpan<byte> data)
