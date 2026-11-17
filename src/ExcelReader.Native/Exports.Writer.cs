@@ -147,9 +147,17 @@ namespace ExcelReader.Native
             }
             *outBuffer = default;
             NativeWriterHandle? writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
-            int status = WriteApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
-            PublishBuffer(bytes, outBuffer);
-            return status;
+            try
+            {
+                int status = WriteApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
+                PublishBuffer(bytes, outBuffer);
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_start_sheet")]

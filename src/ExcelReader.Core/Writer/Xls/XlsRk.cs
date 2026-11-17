@@ -14,6 +14,12 @@ namespace ExcelReader.Core.Writer.Xls
         {
             // Excel picks the truncated double whenever it is exact, so that form goes first.
             long bits = BitConverter.DoubleToInt64Bits(value);
+            // Excel refuses an .xlsb holding the sign-bit-only RK that -0.0 truncates to.
+            if (bits == long.MinValue)
+            {
+                rk = 0;
+                return false;
+            }
             if ((bits & LowBits) == 0)
             {
                 rk = (int)(bits >> 32);

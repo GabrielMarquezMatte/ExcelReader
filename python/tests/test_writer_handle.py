@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import datetime
 import io
+import os
 import re
+import subprocess
+import sys
+import textwrap
 import zipfile
 from array import array
 
@@ -150,6 +154,39 @@ def test_an_exception_inside_with_keeps_the_existing_file(tmp_path):
 
     assert path.read_bytes() == b"ORIGINAL"
     assert list(tmp_path.iterdir()) == [path]
+
+
+_LOCKED_FOLDER_CLOSE = textwrap.dedent(
+    """
+    import glob, os, stat, sys, tempfile
+    from excelreader import ExcelReaderError, open_writer
+
+    folder = tempfile.mkdtemp()
+    destination = os.path.join(folder, "out.csv")
+    open(destination, "w").close()
+    writer = open_writer(destination, "csv")
+    writer.start_sheet("Data")
+    writer.write_row(["new"])
+    writer.end_sheet()
+    if os.name == "nt":
+        for path in [destination, *glob.glob(os.path.join(folder, ".excelreader-*.tmp"))]:
+            os.chmod(path, stat.S_IREAD)
+    else:
+        os.chmod(folder, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        writer.close()
+    except ExcelReaderError:
+        sys.exit(0)
+    sys.exit(3)
+    """
+)
+
+
+@pytest.mark.skipif(os.name != "nt" and os.geteuid() == 0, reason="root ignores folder permissions")
+def test_close_raises_instead_of_crashing_when_neither_the_commit_nor_the_cleanup_can_touch_the_folder():
+    # A child process, because the failure this guards against takes the whole process down.
+    result = subprocess.run([sys.executable, "-c", _LOCKED_FOLDER_CLOSE], capture_output=True, text=True)
+    assert result.returncode == 0, f"exit {result.returncode}: {result.stderr.strip()[:400]}"
 
 
 def test_an_exception_inside_with_hands_a_stream_nothing():

@@ -262,7 +262,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();
 
-            Task moveNext = Task.Run(async () => await e.MoveNextAsync(), openCt);
+            Task moveNext = Task.Run(async () => await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync()), openCt);
             await AssertCompletesWithinGuardAsync(moveNext, openCt);
         }
 

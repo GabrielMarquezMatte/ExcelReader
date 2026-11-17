@@ -93,6 +93,17 @@ namespace ExcelReader.Tests.Writer.Csv
             Assert.Equal(["José", "São Paulo"], cells);
         }
 
+        [Theory]
+        [InlineData(0xA7, (byte)'"')]
+        [InlineData((byte)',', 0x80)]
+        public void Should_Reject_When_TheDelimiterOrQuoteIsNotAscii(byte delimiter, byte quote)
+        {
+            var stream = new MemoryStream();
+
+            Assert.Throws<ArgumentException>(
+                () => CsvWriter.Create(stream, leaveOpen: true, CsvWriterOptions.Default with { Delimiter = delimiter, Quote = quote }));
+        }
+
         [Fact]
         public void Should_Reject_When_NewLineIsNotADefinedValue()
         {

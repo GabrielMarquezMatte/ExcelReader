@@ -60,11 +60,12 @@ namespace ExcelReader.Tests.Writer
         [MemberData(nameof(Formats))]
         public void SheetNamesExcelRefusesAreRejected(string format)
         {
-            foreach (string name in new[] { "'a", "a'", "'", "a\u0001b", "a\tb", "a\nb", "a￾b", "a￿b" })
+            foreach (string name in new[] { "'a", "a'", "'", "a\u0001b", "a\tb", "a\nb", "a\uD800b", "\uDC00", "a\uDBFF", "a￾b", "a￿b" })
             {
                 Assert.Throws<ArgumentException>(() => WithWorkbook(format, wb => wb.AddSheet(name)));
             }
             WithWorkbook(format, wb => wb.AddSheet("it's"));
+            WithWorkbook(format, wb => wb.AddSheet("pair \uD83D\uDE00"));
         }
 
         [Theory]
@@ -112,7 +113,7 @@ namespace ExcelReader.Tests.Writer
         [MemberData(nameof(Formats))]
         public void NumberFormatsXmlCannotHoldAreRejected(string format)
         {
-            foreach (string numberFormat in new[] { "0\u0001", "0\t", "0\n", "0\uFFFE", "0\uFFFF" })
+            foreach (string numberFormat in new[] { "0\u0001", "0\t", "0\n", "0\uFFFE", "0\uFFFF", "0\uD800", "\uDC000" })
             {
                 Assert.Throws<ArgumentException>(() => WithWorkbook(format, wb => wb.AddStyle(new CellStyle { NumberFormat = numberFormat })));
             }

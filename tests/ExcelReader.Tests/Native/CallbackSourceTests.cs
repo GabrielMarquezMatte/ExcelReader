@@ -296,6 +296,24 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(1, test.Releases);
         }
 
+        [Theory]
+        [InlineData(false, true, 3)]
+        [InlineData(true, false, 3)]
+        [InlineData(true, true, -1)]
+        public void A_Rejected_Source_Is_Released_Once(bool hasOutHandle, bool hasReadAt, long length)
+        {
+            TestSource test = new([1, 2, 3]);
+            using Pinned pinned = new(test);
+            NativeSourceRaw raw = pinned.Raw(length);
+            if (!hasReadAt)
+            {
+                raw.ReadAt = null;
+            }
+            Assert.False(CallbackByteSource.TryCreate(&raw, hasOutHandle, out _, out string? error));
+            Assert.Contains("xl_open_source", error, StringComparison.Ordinal);
+            Assert.Equal(1, test.Releases);
+        }
+
         [Fact]
         public void Invalid_Options_Release_The_Source_Once()
         {
@@ -382,20 +400,14 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void Invalid_Source_Structs_Are_Rejected_Without_Taking_Ownership()
+        public void An_Unreadable_Source_Struct_Is_Rejected_Without_Taking_Ownership()
         {
             TestSource test = new([1, 2, 3]);
             using Pinned pinned = new(test);
-            NativeSourceRaw good = pinned.Raw();
-            NativeSourceRaw wrongSize = good with { StructSize = 8 };
-            NativeSourceRaw noRead = good with { ReadAt = null };
-            NativeSourceRaw negative = good with { Length = -1 };
+            NativeSourceRaw wrongSize = pinned.Raw() with { StructSize = 8 };
 
             Assert.False(CallbackByteSource.TryCreate(null, true, out _, out _));
-            Assert.False(CallbackByteSource.TryCreate(&good, false, out _, out _));
-            Assert.False(CallbackByteSource.TryCreate(&wrongSize, true, out _, out _));
-            Assert.False(CallbackByteSource.TryCreate(&noRead, true, out _, out _));
-            Assert.False(CallbackByteSource.TryCreate(&negative, true, out _, out string? error));
+            Assert.False(CallbackByteSource.TryCreate(&wrongSize, true, out _, out string? error));
             Assert.Contains("xl_open_source", error, StringComparison.Ordinal);
             Assert.Equal(0, test.Releases);
         }

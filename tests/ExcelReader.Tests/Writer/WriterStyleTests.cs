@@ -245,6 +245,23 @@ namespace ExcelReader.Tests.Writer
         }
 
         [Fact]
+        public async Task StyleOnlyColumnKeepsExcelsDefaultWidthXlsx()
+        {
+            await using MemoryStream ms = await WriteXlsxAsync(async wb =>
+            {
+                int bold = wb.AddStyle(new CellStyle { Bold = true });
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+                sheet.SetColumnStyle(1, bold);
+                sheet.SetColumnWidth(2, 12);
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            Assert.Contains(
+                "<cols><col min=\"2\" max=\"2\" style=\"2\" width=\"9.140625\"/><col min=\"3\" max=\"3\" width=\"12\" customWidth=\"1\"/></cols>",
+                ReadZipEntryText(ms, "xl/worksheets/sheet1.xml"), StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task ColumnStyleAfterFirstRowThrowsXlsb()
         {
             await using var ms = new MemoryStream();
