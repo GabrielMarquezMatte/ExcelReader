@@ -5,6 +5,9 @@ namespace ExcelReader.Native.Reading
 {
     internal sealed unsafe class CallbackReadStream : ReadOnlyStream
     {
+        private const string Requirements =
+            "xl_open_stream needs a non-NULL stream whose struct_size is sizeof(xl_stream) and whose read is set, and a non-NULL out_handle.";
+
         private readonly delegate* unmanaged<void*, byte*, long, long> _read;
         private readonly delegate* unmanaged<void*, void> _release;
         private readonly void* _userData;
@@ -22,9 +25,15 @@ namespace ExcelReader.Native.Reading
             NativeStreamRaw* raw, bool hasOutHandle, [NotNullWhen(true)] out CallbackReadStream? stream, [NotNullWhen(false)] out string? error)
         {
             stream = null;
-            if (raw is null || !hasOutHandle || raw->StructSize != sizeof(NativeStreamRaw) || raw->Read is null)
+            if (raw is null || raw->StructSize != sizeof(NativeStreamRaw))
             {
-                error = "xl_open_stream needs a non-NULL stream whose struct_size is sizeof(xl_stream) and whose read is set, and a non-NULL out_handle.";
+                error = Requirements;
+                return false;
+            }
+            if (!hasOutHandle || raw->Read is null)
+            {
+                new CallbackReadStream(*raw).Dispose();
+                error = Requirements;
                 return false;
             }
             error = null;
