@@ -56,6 +56,9 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 "Name,Age,Note\n\"" + new string('q', 400) + "\",1,x\n",
                 "Name,Age,Note\nAda,36,x\n\nBob,41,y\n",
                 "Name,Age,Note\rAda,36,x\rBob,41,y\r",
+                "Name,Age,Note\nAda,36,x\r\nBob,41,y\rCid,7,z\n",
+                "Name,Age,Note\nab\"c,1,x\nd\"e,2,y\n",
+                "Name,Age,Note\n\"a\"b,1,x\n\"c\"d,2,\"e\nf\"\n",
             };
             return data;
         }
@@ -89,6 +92,28 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 List<string> actual = await ParallelAsync(csv, dop: 4, chunkSize);
                 Assert.Equal(expected, actual);
             }
+        }
+
+        [Fact]
+        public async Task ReportsTheSequentialFailureRowAcrossQuotedNewlinesAndBlankLines()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes("junk\nName,Age,Note\n\"a\nb\",1,x\n\nc,2,\"d\r\ne\"\r\n\n\"f\ng\",bad,y\nh,3,z\n");
+            var options = new ExcelParserOptions { HeaderRow = 2, ThrowOnParseFailure = true };
+            ExcelParser<Row> parser = ExcelParser.FromAttributes<Row>(options);
+            using var reader = Excel.FromCsv(csv);
+            int expected = Assert.Throws<ExcelParseException>(() => parser.Parse(reader.FirstSheet).ToList()).Row;
+
+            for (int chunkSize = 1; chunkSize <= csv.Length; chunkSize++)
+            {
+                ExcelParseException parallel = await Assert.ThrowsAsync<ExcelParseException>(async () =>
+                {
+                    await foreach (Row _ in ParallelCsvFactory.CreateWithChunkSize(csv.AsMemory(), 3, chunkSize, null, parser, CancellationToken.None))
+                    {
+                    }
+                });
+                Assert.Equal(expected, parallel.Row);
+            }
+            Assert.Equal(7, expected);
         }
 
         [Fact]
