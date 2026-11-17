@@ -123,6 +123,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             /// <inheritdoc/>
             public bool MoveNext()
             {
+                _ct.ThrowIfCancellationRequested();
                 if (!_nsChecked)
                 {
                     DetectNamespace();
@@ -161,6 +162,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
+                _ct.ThrowIfCancellationRequested();
                 if (!_nsChecked)
                 {
                     return DetectNamespaceThenMoveNextAsync();
