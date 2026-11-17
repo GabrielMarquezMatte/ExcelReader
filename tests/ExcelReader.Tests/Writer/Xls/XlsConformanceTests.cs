@@ -133,13 +133,16 @@ namespace ExcelReader.Tests.Writer.Xls
         }
 
         [Fact]
+        public void RkRefusesNegativeZeroWhichExcelCannotLoadAsAnRkCell()
+        {
+            Assert.False(XlsRk.TryEncode(-0.0, out _));
+        }
+
+        [Fact]
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "A seeded generator picks reproducible test inputs; nothing here is secret.")]
         public void RkNeverChangesAValue()
         {
-            Assert.True(XlsRk.TryEncode(-0.0, out int negativeZero));
-            Assert.Equal(BitConverter.DoubleToInt64Bits(-0.0), BitConverter.DoubleToInt64Bits(XlsRk.Decode(negativeZero)));
-
             var random = new Random(1234);
             for (int i = 0; i < 100_000; i++)
             {

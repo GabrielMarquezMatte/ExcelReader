@@ -450,13 +450,13 @@ namespace ExcelReader.Tests.Writer.Xlsb
         }
 
         [Fact]
-        public async Task NegativeZeroKeepsItsSignInAnRkCell()
+        public async Task NegativeZeroKeepsItsSignInARealCellSinceExcelRefusesItAsAnRk()
         {
             (int Id, int PayloadLength)[] cells;
             double readBack;
             (cells, readBack) = await NumericCellAsync(-0.0);
 
-            Assert.Equal([(Brt.CellRk, CellHeaderLength + 4)], cells);
+            Assert.Equal([(Brt.CellReal, CellHeaderLength + 8)], cells);
             Assert.True(double.IsNegative(readBack));
         }
 
