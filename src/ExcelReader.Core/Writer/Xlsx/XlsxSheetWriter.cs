@@ -252,9 +252,10 @@ namespace ExcelReader.Core.Writer.Xlsx
                 }
                 if (_columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double width))
                 {
-                    sb.Append(CultureInfo.InvariantCulture, $" width=\"{width}\" customWidth=\"1\"");
+                    sb.Append(CultureInfo.InvariantCulture, $" width=\"{width}\" customWidth=\"1\"/>");
+                    continue;
                 }
-                sb.Append("/>");
+                sb.Append(CultureInfo.InvariantCulture, $" width=\"{SheetColumnValidation.DefaultColumnWidth}\"/>");
             }
             sb.Append("</cols>");
             return sb.ToString();

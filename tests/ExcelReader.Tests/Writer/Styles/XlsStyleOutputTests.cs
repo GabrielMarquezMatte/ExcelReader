@@ -10,6 +10,7 @@ namespace ExcelReader.Tests.Writer.Styles
 
         private const int BoundSheet = 0x0085;
         private const int Eof = 0x000A;
+        private const int ColInfo = 0x007D;
 
         private static ExcelColor Color(int rgb)
         {
@@ -206,6 +207,24 @@ namespace ExcelReader.Tests.Writer.Styles
             }
             var ex = Assert.Throws<ExcelLimitExceededException>(() => wb.AddStyle(new CellStyle { FontName = "F507" }));
             Assert.Equal("Fonts", ex.LimitName);
+        }
+
+        [Fact]
+        public void StyleOnlyColumnKeepsExcelsDefaultWidth()
+        {
+            var ms = new MemoryStream();
+            using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                int bold = wb.AddStyle(new CellStyle { Bold = true });
+                using XlsSheetWriter sheet = wb.AddSheet("Sheet1");
+                sheet.SetColumnStyle(1, bold);
+                sheet.End();
+                wb.End();
+            }
+
+            byte[] colInfo = Assert.Single(StyleProbe.XlsPayloads(StyleProbe.XlsRecords(ms.ToArray()), ColInfo));
+            Assert.Equal(1, BitConverter.ToUInt16(colInfo, 0));
+            Assert.Equal(2304, BitConverter.ToUInt16(colInfo, 4));
         }
 
         [Fact]
