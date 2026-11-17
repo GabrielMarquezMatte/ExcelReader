@@ -392,6 +392,24 @@ namespace ExcelReader.Tests.Cli
         }
 
         [Fact]
+        public void Should_WriteTheSerialNumber_When_ADateCellIsPastTheLastDate()
+        {
+            string source = TemporaryPath("xlsx");
+            using (MemoryStream built = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" s="1"><v>3000000</v></c></row>""",
+                styles: """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/></cellXfs></styleSheet>"""))
+            {
+                File.WriteAllBytes(source, built.ToArray());
+            }
+
+            (int code, string output, string error) = Convert(source);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal("3000000", FirstCsvLine(output));
+        }
+
+        [Fact]
         public void Should_KeepTheExistingOutput_When_ConversionFails()
         {
             string directory = Path.Combine(Path.GetTempPath(), $"excelreader-cli-{Guid.NewGuid():N}");

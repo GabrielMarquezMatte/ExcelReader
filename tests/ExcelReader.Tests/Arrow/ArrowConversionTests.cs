@@ -193,6 +193,43 @@ namespace ExcelReader.Tests.Arrow
             Assert.Equal([0, 1, 0, 2], ((int[])[0, 1, 3, 4]).Select(i => indices.GetValue(i)!.Value));
         }
 
+        private static ExcelColumnSchema[] EveryBufferShape(bool nullable)
+        {
+            return
+            [
+                new() { Index = 0, Name = "s", Type = ExcelColumnType.StringColumn, IsNullable = nullable },
+                new() { Index = 1, Name = "d", Type = ExcelColumnType.StringDictionaryColumn, IsNullable = nullable },
+                new() { Index = 2, Name = "i", Type = ExcelColumnType.Int64Column, IsNullable = nullable },
+                new() { Index = 3, Name = "b", Type = ExcelColumnType.BoolColumn, IsNullable = nullable },
+            ];
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ToArrowRecordBatch_Should_Return_An_Empty_Batch_For_A_Header_Only_Sheet(bool nullable)
+        {
+            using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("s,d,i,b\n"));
+
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = EveryBufferShape(nullable) });
+
+            Assert.Equal((0, 4), (batch.Length, batch.ColumnCount));
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ToArrowRecordBatch_Should_Convert_Text_Columns_Holding_Only_Blank_Cells(bool nullable)
+        {
+            using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("s,d,i,b\n,,1,true\n,,2,false\n"));
+
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(new ArrowReadOptions { Schema = EveryBufferShape(nullable) });
+
+            Assert.Equal(2, batch.Length);
+            Assert.Equal(nullable ? null : "", Assert.IsType<StringArray>(batch.Column(0)).GetString(1));
+            Assert.Equal(nullable ? 2 : 0, Assert.IsType<DictionaryArray>(batch.Column(1)).NullCount);
+        }
+
         [Fact]
         public void ToArrowRecordBatch_Should_Read_In_Parallel_Like_On_One_Thread()
         {

@@ -163,12 +163,11 @@ namespace ExcelReader.Cli
                             var boolValue = ExcelCellReaders.Bool(in cellValue, default, out bool flag) ? flag : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a boolean but holds '{cellValue.GetString()}'.");
                             row.Write(boolValue);
                             break;
-                        case CellType.Number:
-                            WriteNumber(row, in cellValue);
+                        case CellType.Date when cellValue.TryGetDateTime(sheet.IsDate1904, out DateTime date):
+                            row.Write(date);
                             break;
-                        case CellType.Date:
-                            var dateValue = cellValue.TryGetDateTime(sheet.IsDate1904, out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");
-                            row.Write(dateValue);
+                        case CellType.Number or CellType.Date:
+                            WriteNumber(row, in cellValue);
                             break;
                         default:
                             row.Write(cellValue.GetString());

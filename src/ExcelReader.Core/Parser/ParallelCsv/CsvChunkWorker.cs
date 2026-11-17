@@ -128,7 +128,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 return new ValueTask<CsvChunkResult<T>>(new CsvChunkResult<T>(chunk.Index, models, start, long.MaxValue));
             }
 
-            CsvReaderOptions chunkOptions = readerOptions with { DetectEncodingFromByteOrderMark = start == 0 };
+            CsvReaderOptions chunkOptions = readerOptions with { DetectEncodingFromByteOrderMark = readerOptions.DetectEncodingFromByteOrderMark && start == 0 };
             return ParseFromAsync(source, chunk, start, models, map, info, chunkOptions, config, contentCache, ct);
         }
 
