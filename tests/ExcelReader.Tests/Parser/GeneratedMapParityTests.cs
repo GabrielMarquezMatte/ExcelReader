@@ -170,6 +170,57 @@ namespace ExcelReader.Tests.Parser
             public string HiddenValue => Hidden;
         }
 
+        public class GenericInitBase<TValue>
+        {
+            public TValue Value { get; init; } = default!;
+        }
+
+        public class GenericInitMiddle<TMiddle> : GenericInitBase<TMiddle>
+        {
+        }
+
+        public class ConstrainedInitBase<TNumber>
+            where TNumber : struct, IComparable<TNumber>
+        {
+            public TNumber? Maybe { get; init; }
+        }
+
+#pragma warning disable CA1034, CA1052
+        public class GenericInitOuter<TOuter>
+        {
+            public class Inner<TInner>
+            {
+                public TOuter Outer { get; init; } = default!;
+                public TInner Inner2 { get; init; } = default!;
+            }
+        }
+#pragma warning restore CA1034, CA1052
+
+        [ExcelSerializable]
+        public partial class ClosedGenericInitModel : GenericInitBase<int>
+        {
+        }
+
+        [ExcelSerializable]
+        public partial class NullableArgumentInitModel : GenericInitBase<int?>
+        {
+        }
+
+        [ExcelSerializable]
+        public partial class TwoLevelGenericInitModel : GenericInitMiddle<string>
+        {
+        }
+
+        [ExcelSerializable]
+        public partial class ConstrainedGenericInitModel : ConstrainedInitBase<long>
+        {
+        }
+
+        [ExcelSerializable]
+        public partial class NestedGenericInitModel : GenericInitOuter<int>.Inner<string>
+        {
+        }
+
 #pragma warning disable CA1815
         [ExcelSerializable]
         public partial struct InitStructModel
@@ -273,6 +324,24 @@ namespace ExcelReader.Tests.Parser
             Assert.Equal(reflectionStruct, generatedStruct);
             Assert.Equal("Alice", reflectionRecord.Name);
             Assert.Equal(reflectionRecord, generatedRecord);
+        }
+
+        [Fact]
+        public async Task GeneratedMapSetsInitOnlyPropertiesDeclaredOnAClosedGenericBase()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Value", "Maybe", "Outer", "Inner2"], ["42", "7", "3", "x"]);
+
+            ClosedGenericInitModel closed = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<ClosedGenericInitModel>().Parse(reader.FirstSheet));
+            NullableArgumentInitModel nullable = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<NullableArgumentInitModel>().Parse(reader.FirstSheet));
+            TwoLevelGenericInitModel twoLevel = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<TwoLevelGenericInitModel>().Parse(reader.FirstSheet));
+            ConstrainedGenericInitModel constrained = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<ConstrainedGenericInitModel>().Parse(reader.FirstSheet));
+            NestedGenericInitModel nested = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<NestedGenericInitModel>().Parse(reader.FirstSheet));
+
+            Assert.Equal(42, closed.Value);
+            Assert.Equal(42, nullable.Value);
+            Assert.Equal("42", twoLevel.Value);
+            Assert.Equal(7L, constrained.Maybe);
+            Assert.Equal((3, "x"), (nested.Outer, nested.Inner2));
         }
 
         [Fact]
