@@ -1,3 +1,6 @@
+using System.Buffers;
+using System.Text;
+
 namespace ExcelReader.Core.Writer.Internal
 {
     internal static class WriterStateGuard
@@ -83,18 +86,21 @@ namespace ExcelReader.Core.Writer.Internal
             }
             if (HasUnwritableCharacter(name))
             {
-                throw new ArgumentException("Sheet names cannot contain control characters, U+FFFE or U+FFFF.", nameof(name));
+                throw new ArgumentException("Sheet names cannot contain control characters, U+FFFE, U+FFFF or an unpaired surrogate.", nameof(name));
             }
         }
 
         internal static bool HasUnwritableCharacter(string name)
         {
-            foreach (char c in name)
+            ReadOnlySpan<char> rest = name;
+            while (!rest.IsEmpty)
             {
-                if (c < ' ' || c >= '\uFFFE')
+                if (Rune.DecodeFromUtf16(rest, out Rune rune, out int consumed) != OperationStatus.Done
+                    || rune.Value < ' ' || rune.Value is 0xFFFE or 0xFFFF)
                 {
                     return true;
                 }
+                rest = rest[consumed..];
             }
             return false;
         }
