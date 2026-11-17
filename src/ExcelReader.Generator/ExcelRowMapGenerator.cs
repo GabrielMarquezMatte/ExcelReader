@@ -403,9 +403,67 @@ namespace ExcelReader.Generator
             }
             string accessor = $"__ExcelInit_{property.Name}";
             string byRef = init.ContainingType.IsValueType ? "ref " : "";
+            if (IsGenericTypeOrContainer(init.ContainingType))
+            {
+                return GenericInitAccessor(init, accessor, byRef);
+            }
             string target = init.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             string decl = $"    [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = {Literal(init.MetadataName)})] private static extern void {accessor}({byRef}{target} target, {qualifiedProperty} value);";
             return ($"{accessor}({byRef}m, v)", decl);
+        }
+
+        // UnsafeAccessor binds a generic type's member only through a generic holder whose parameters mirror the open type's.
+        private static (string Assign, string InitAccessorDecl) GenericInitAccessor(IMethodSymbol init, string accessor, string byRef)
+        {
+            var containers = new List<INamedTypeSymbol>();
+            for (INamedTypeSymbol? type = init.ContainingType; type is not null; type = type.ContainingType)
+            {
+                containers.Insert(0, type);
+            }
+            ITypeParameterSymbol[] parameters = [.. containers.SelectMany(static t => t.OriginalDefinition.TypeParameters)];
+            string arguments = string.Join(", ", containers.SelectMany(static t => t.TypeArguments).Select(static a => a.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            IMethodSymbol open = init.OriginalDefinition;
+            string target = open.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string value = open.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string names = string.Join(", ", parameters.Select(static p => p.Name));
+            string constraints = string.Concat(parameters.Select(ConstraintClause));
+            string decl = $"    private static class {accessor}<{names}>{constraints} {{ [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = {Literal(init.MetadataName)})] internal static extern void Set({byRef}{target} target, {value} value); }}";
+            return ($"{accessor}<{arguments}>.Set({byRef}m, v)", decl);
+        }
+
+        private static string ConstraintClause(ITypeParameterSymbol parameter)
+        {
+            var parts = new List<string>();
+            if (parameter.HasReferenceTypeConstraint)
+            {
+                parts.Add("class");
+            }
+            if (parameter.HasUnmanagedTypeConstraint)
+            {
+                parts.Add("unmanaged");
+            }
+            if (parameter.HasValueTypeConstraint && !parameter.HasUnmanagedTypeConstraint)
+            {
+                parts.Add("struct");
+            }
+            if (parameter.HasNotNullConstraint)
+            {
+                parts.Add("notnull");
+            }
+            parts.AddRange(parameter.ConstraintTypes.Select(static t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            if (parameter.HasConstructorConstraint)
+            {
+                parts.Add("new()");
+            }
+            if (parameter.AllowsRefLikeType)
+            {
+                parts.Add("allows ref struct");
+            }
+            if (parts.Count == 0)
+            {
+                return "";
+            }
+            return $" where {parameter.Name} : {string.Join(", ", parts)}";
         }
 
         private static string ColumnEmit(string header, string write, string? style)
