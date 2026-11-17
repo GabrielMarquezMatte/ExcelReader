@@ -105,6 +105,8 @@ typedef struct xl_source {
     void (*release)(void* user_data);
 } xl_source;
 
+/* Once source is non-NULL with struct_size == sizeof(xl_source), the library owns user_data: release
+   runs exactly once, also when this call fails. */
 int32_t xl_open_source(const xl_source* source, int32_t format,
                        const xl_open_options* options, xl_workbook** out_handle);
 
@@ -115,6 +117,8 @@ typedef struct xl_stream {
     void (*release)(void* user_data);
 } xl_stream;
 
+/* Once stream is non-NULL with struct_size == sizeof(xl_stream), the library owns user_data: release
+   runs exactly once, also when this call fails. */
 int32_t xl_open_stream(const xl_stream* stream, int32_t format,
                        const xl_open_options* options, xl_workbook** out_handle);
 
