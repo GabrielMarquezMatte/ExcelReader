@@ -5,6 +5,9 @@ namespace ExcelReader.Native.Reading
 {
     internal sealed unsafe class CallbackByteSource : ByteSource
     {
+        private const string Requirements =
+            "xl_open_source needs a non-NULL source whose struct_size is sizeof(xl_source), whose read_at is set and whose length is 0 or more, and a non-NULL out_handle.";
+
         private readonly delegate* unmanaged<void*, long, byte*, long, long> _readAt;
         private readonly delegate* unmanaged<void*, void> _release;
         private readonly void* _userData;
@@ -24,9 +27,15 @@ namespace ExcelReader.Native.Reading
             NativeSourceRaw* raw, bool hasOutHandle, [NotNullWhen(true)] out CallbackByteSource? source, [NotNullWhen(false)] out string? error)
         {
             source = null;
-            if (raw is null || !hasOutHandle || raw->StructSize != sizeof(NativeSourceRaw) || raw->ReadAt is null || raw->Length < 0)
+            if (raw is null || raw->StructSize != sizeof(NativeSourceRaw))
             {
-                error = "xl_open_source needs a non-NULL source whose struct_size is sizeof(xl_source), whose read_at is set and whose length is 0 or more, and a non-NULL out_handle.";
+                error = Requirements;
+                return false;
+            }
+            if (!hasOutHandle || raw->ReadAt is null || raw->Length < 0)
+            {
+                new CallbackByteSource(*raw).Dispose();
+                error = Requirements;
                 return false;
             }
             error = null;

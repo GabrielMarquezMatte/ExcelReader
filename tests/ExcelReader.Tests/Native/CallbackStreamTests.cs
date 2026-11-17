@@ -83,6 +83,23 @@ namespace ExcelReader.Tests.Native
             return rows;
         }
 
+        [Theory]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        public void A_Rejected_Stream_Is_Released_Once(bool hasOutHandle, bool hasRead)
+        {
+            TestStream test = new([]);
+            using Pinned pinned = new(test);
+            NativeStreamRaw raw = pinned.Raw();
+            if (!hasRead)
+            {
+                raw.Read = null;
+            }
+            Assert.False(CallbackReadStream.TryCreate(&raw, hasOutHandle, out _, out string? error));
+            Assert.Contains("xl_open_stream", error, StringComparison.Ordinal);
+            Assert.Equal(1, test.Releases);
+        }
+
         [Fact]
         public void A_Csv_Streams_Through_One_Cursor_At_A_Time_And_Is_Released_On_Close()
         {
@@ -199,16 +216,13 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
-        public void Invalid_Stream_Structs_Are_Rejected_Without_Taking_Ownership()
+        public void An_Unreadable_Stream_Struct_Is_Rejected_Without_Taking_Ownership()
         {
             TestStream test = new([]);
             using Pinned pinned = new(test);
-            NativeStreamRaw good = pinned.Raw();
-            NativeStreamRaw noRead = good with { Read = null };
-            NativeStreamRaw wrongSize = good with { StructSize = 4 };
+            NativeStreamRaw wrongSize = pinned.Raw() with { StructSize = 4 };
+
             Assert.False(CallbackReadStream.TryCreate(null, true, out _, out _));
-            Assert.False(CallbackReadStream.TryCreate(&good, false, out _, out _));
-            Assert.False(CallbackReadStream.TryCreate(&noRead, true, out _, out _));
             Assert.False(CallbackReadStream.TryCreate(&wrongSize, true, out _, out string? error));
             Assert.Contains("xl_open_stream", error, StringComparison.Ordinal);
             Assert.Equal(0, test.Releases);
