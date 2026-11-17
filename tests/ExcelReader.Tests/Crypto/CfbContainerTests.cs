@@ -45,6 +45,79 @@ namespace ExcelReader.Tests.Crypto
             BinaryPrimitives.WriteInt32LittleEndian(entry[76..], child);
         }
 
+        // FAT entry i points to i + 1, so the directory chain walks sectors far past the end of the file.
+        private static byte[] BuildLongFatChain(int fatSectors)
+        {
+            const int SectorSize = 512;
+            const int EntriesPerSector = SectorSize / 4;
+            int difatSectors = fatSectors > 109 ? ((fatSectors - 109) + 126) / 127 : 0;
+            byte[] bytes = new byte[SectorSize * (1 + fatSectors + difatSectors)];
+            Span<byte> header = bytes.AsSpan(0, SectorSize);
+            ReadOnlySpan<byte> signature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+            signature.CopyTo(header);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[0x18..], 0x3E);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[0x1A..], 3);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[0x1C..], 0xFFFE);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[0x1E..], 9);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[0x20..], 6);
+            BinaryPrimitives.WriteInt32LittleEndian(header[0x2C..], fatSectors);
+            BinaryPrimitives.WriteInt32LittleEndian(header[0x30..], 0);
+            BinaryPrimitives.WriteInt32LittleEndian(header[0x38..], 4096);
+            BinaryPrimitives.WriteInt32LittleEndian(header[0x3C..], -2);
+            BinaryPrimitives.WriteInt32LittleEndian(header[0x40..], 0);
+            BinaryPrimitives.WriteInt32LittleEndian(header[0x44..], difatSectors > 0 ? fatSectors : -2);
+            BinaryPrimitives.WriteInt32LittleEndian(header[0x48..], difatSectors);
+            for (int i = 0; i < 109; i++)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(header[(0x4C + (i * 4))..], i < fatSectors ? i : -1);
+            }
+
+            int nextFat = 109;
+            for (int d = 0; d < difatSectors; d++)
+            {
+                Span<byte> sector = bytes.AsSpan(SectorSize * (1 + fatSectors + d), SectorSize);
+                for (int j = 0; j < 127; j++)
+                {
+                    BinaryPrimitives.WriteInt32LittleEndian(sector[(j * 4)..], nextFat < fatSectors ? nextFat++ : -1);
+                }
+                BinaryPrimitives.WriteInt32LittleEndian(sector[(127 * 4)..], d + 1 < difatSectors ? fatSectors + d + 1 : -2);
+            }
+
+            int totalEntries = fatSectors * EntriesPerSector;
+            for (int k = 0; k < fatSectors; k++)
+            {
+                Span<byte> sector = bytes.AsSpan(SectorSize * (1 + k), SectorSize);
+                for (int j = 0; j < EntriesPerSector; j++)
+                {
+                    int index = (k * EntriesPerSector) + j;
+                    BinaryPrimitives.WriteInt32LittleEndian(sector[(j * 4)..], index + 1 < totalEntries ? index + 1 : -2);
+                }
+            }
+            return bytes;
+        }
+
+        [Fact]
+        public void Should_Throw_Without_Allocating_The_Chain_When_The_Directory_Chain_Runs_Past_The_File()
+        {
+            byte[] bytes = BuildLongFatChain(fatSectors: 2048);
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            Exception? thrown = Record.Exception(() => Excel.FromXls(bytes));
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.IsType<InvalidDataException>(thrown);
+            Assert.True(allocated < 16L * bytes.Length, $"file {bytes.Length:N0} bytes, allocated {allocated:N0} bytes");
+        }
+
+        [Fact]
+        public void Should_Reject_As_Corrupt_When_The_Directory_Chain_Exceeds_Int32_Bytes()
+        {
+            byte[] bytes = BuildLongFatChain(fatSectors: 33_000);
+
+            Assert.Equal(ExcelFileFormat.Xls, Excel.DetectFileFormat(bytes));
+            Assert.Throws<InvalidDataException>(() => Excel.FromXls(bytes));
+        }
+
         [Fact]
         public void Should_Ignore_Streams_Inside_Embedded_Storages_When_Looking_Up_By_Name()
         {

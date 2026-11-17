@@ -391,7 +391,8 @@ namespace ExcelReader.Core.Crypto
             {
                 return [];
             }
-            byte[] result = new byte[ChainByteLength(fat, sectorSize, startSector, byteLimit)];
+            long fileSectors = ((source.Length + sectorSize - 1) / sectorSize) - 1;
+            byte[] result = new byte[ChainByteLength(fat, sectorSize, startSector, byteLimit, fileSectors)];
             int sector = startSector;
             int written = 0;
             while (written < result.Length)
@@ -413,25 +414,33 @@ namespace ExcelReader.Core.Crypto
             return result;
         }
 
-        private static int ChainByteLength(ReadOnlySpan<int> fat, int sectorSize, int startSector, int byteLimit)
+        private static int ChainByteLength(ReadOnlySpan<int> fat, int sectorSize, int startSector, int byteLimit, long fileSectors)
         {
             bool[] visited = ArrayPool<bool>.Shared.Rent(Math.Max(1, fat.Length));
             Array.Clear(visited, 0, fat.Length);
             try
             {
                 int sector = startSector;
-                int length = 0;
+                long length = 0;
                 while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || length < byteLimit))
                 {
                     if ((uint)sector >= (uint)fat.Length || visited[sector])
                     {
                         throw new InvalidDataException("OLE FAT chain contains a cycle.");
                     }
+                    if (sector >= fileSectors)
+                    {
+                        throw new InvalidDataException("The OLE compound file references a sector outside the container.");
+                    }
                     visited[sector] = true;
-                    length = checked(length + (byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - length)));
+                    length += byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - length);
                     sector = NextSector(fat, sector);
                 }
-                return length;
+                if (length > Array.MaxLength)
+                {
+                    throw new InvalidDataException("The OLE FAT chain is too long.");
+                }
+                return (int)length;
             }
             finally
             {
