@@ -5,6 +5,9 @@ namespace ExcelReader.Core.Writer.Internal
         // Excel's widest column; BIFF8 stores the width in 16 bits as 256ths of a character.
         private const double MaxColumnWidth = 255;
 
+        // The stored width, padding included, that Excel shows as its default 8.43 characters.
+        internal const double DefaultColumnWidth = 9.140625;
+
         // Excel's tallest row, in points; every format stores the height in twips (1/20 point).
         private const double MaxRowHeight = 409;
 

@@ -146,6 +146,7 @@ namespace ExcelReader.Core.Reader.Csv
             /// <inheritdoc/>
             public bool MoveNext()
             {
+                _ct.ThrowIfCancellationRequested();
                 if (_batchNext < _batchSize)
                 {
                     DeliverBatched();
@@ -177,6 +178,7 @@ namespace ExcelReader.Core.Reader.Csv
             /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
+                _ct.ThrowIfCancellationRequested();
                 if (_batchNext < _batchSize)
                 {
                     DeliverBatched();

@@ -17,12 +17,12 @@ namespace ExcelReader.Core.Writer.Internal
                 }
                 if (WriterStateGuard.HasUnwritableCharacter(format))
                 {
-                    throw new ArgumentException("A number format cannot contain control characters, U+FFFE or U+FFFF.", paramName);
+                    throw new ArgumentException("A number format cannot contain control characters, U+FFFE, U+FFFF or an unpaired surrogate.", paramName);
                 }
             }
             if (style.FontName is { } fontName && (fontName.Length is 0 or > MaxFontNameLength || WriterStateGuard.HasUnwritableCharacter(fontName)))
             {
-                throw new ArgumentException($"FontName must be 1 to {MaxFontNameLength} characters with no control characters.", paramName);
+                throw new ArgumentException($"FontName must be 1 to {MaxFontNameLength} characters with no control characters or unpaired surrogates.", paramName);
             }
             if (style.FontSize is { } size && !(size >= 1 && size <= 409))
             {

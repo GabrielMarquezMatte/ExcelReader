@@ -150,7 +150,7 @@ namespace ExcelReader.Native.Writer
             }
             finally
             {
-                handle.Dispose();
+                FailureCleanup.Dispose(handle);
             }
         }
 

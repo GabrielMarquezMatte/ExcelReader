@@ -223,6 +223,14 @@ namespace ExcelReader.Core.Parser
             }
             ColumnBinding<T>[] bindings = [.. _indexBindings];
             Array.Sort(bindings, static (left, right) => left.Column.CompareTo(right.Column));
+            for (int i = 1; i < bindings.Length; i++)
+            {
+                if (bindings[i].Column == bindings[i - 1].Column)
+                {
+                    throw new InvalidOperationException(
+                        $"Ambiguous column binding on {typeof(T)}: PropertyAt binds more than one property to column {bindings[i].Column}. Give each property a distinct column index.");
+                }
+            }
             return new TypeMapInfo<T>(bindings, _factory, useDefault: _factory is null);
         }
     }

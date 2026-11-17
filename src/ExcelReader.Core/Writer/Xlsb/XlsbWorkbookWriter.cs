@@ -203,11 +203,17 @@ namespace ExcelReader.Core.Writer.Xlsb
             Biff12RecordWriter.WriteWideString(payload, string.Empty);
             Biff12RecordWriter.WriteRecord(data, Brt.WbProp, payload.Span);
 
+            int activeTab = _sheets.FindIndex(static sheet => sheet.Visibility is ExcelSheetVisibility.Visible);
+            WriterStateGuard.RequireVisibleSheet(activeTab >= 0, nameof(XlsbWorkbookWriter));
+            // Excel unhides the active tab, which defaults to the first sheet.
+            if (activeTab > 0)
+            {
+                WriteBookView(data, payload, activeTab);
+            }
+
             Biff12RecordWriter.WriteRecord(data, Brt.BeginBundleShs);
-            bool anyVisible = false;
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
-                anyVisible |= sheet.Visibility is ExcelSheetVisibility.Visible;
                 payload.Reset();
                 payload.WriteU32((uint)sheet.Visibility);
                 payload.WriteU32((uint)sheet.SheetId);
@@ -215,9 +221,27 @@ namespace ExcelReader.Core.Writer.Xlsb
                 Biff12RecordWriter.WriteWideString(payload, sheet.Name);
                 Biff12RecordWriter.WriteRecord(data, Brt.BundleSh, payload.Span);
             }
-            WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsbWorkbookWriter));
             Biff12RecordWriter.WriteRecord(data, Brt.EndBundleShs);
             Biff12RecordWriter.WriteRecord(data, Brt.EndBook);
+        }
+
+        // Both scroll bars, the sheet tabs and AutoFilter date grouping, as Excel writes them.
+        private const byte BookViewFlags = 0x78;
+
+        private static void WriteBookView(BiffBuffer data, BiffBuffer payload, int activeTab)
+        {
+            Biff12RecordWriter.WriteRecord(data, Brt.BeginBookViews);
+            payload.Reset();
+            payload.WriteU32(0);
+            payload.WriteU32(0);
+            payload.WriteU32(0x7080);
+            payload.WriteU32(0x3930);
+            payload.WriteU32(600);
+            payload.WriteU32((uint)activeTab);
+            payload.WriteU32((uint)activeTab);
+            payload.WriteByte(BookViewFlags);
+            Biff12RecordWriter.WriteRecord(data, Brt.BookView, payload.Span);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndBookViews);
         }
 
         private void WriteWorkbook()

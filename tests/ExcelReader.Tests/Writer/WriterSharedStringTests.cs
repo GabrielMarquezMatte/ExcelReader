@@ -149,7 +149,7 @@ namespace ExcelReader.Tests.Writer
             Assert.Contains(Brt.EndSheetData, sheetRecords);
             Assert.Equal(Brt.EndSheet, sheetRecords[^1]);
             Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.BeginWsView && record.Length == 30);
-            Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.Pane && record.Length == 29);
+            Assert.DoesNotContain(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.Pane);
             Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.RowHdr && record.Length == 25);
 
             int[] styleRecords = ReadRecordIds(ReadEntry(zip, "xl/styles.bin"));

@@ -64,6 +64,22 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public async Task CsvCancellationAfterCancelThrowsOnNextMoveNext()
+        {
+            CancellationToken outer = TestContext.Current.CancellationToken;
+            using CancellationTokenSource cts = new();
+
+            await using MemoryStream ms = new("a,1\nb,2\nc,3\n"u8.ToArray(), writable: false);
+            await using CsvReader reader = await Excel.FromCsvAsync(ms, ct: outer);
+            await using CsvReader.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
+
+            Assert.True(await e.MoveNextAsync());
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
+        }
+
+        [Fact]
         public async Task XlsCancellationAfterCancelThrowsOnNextMoveNext()
         {
             CancellationToken outer = TestContext.Current.CancellationToken;
@@ -72,6 +88,25 @@ namespace ExcelReader.Tests.Reader
 
             await using XlsWorkbook reader = await Excel.FromXlsAsync(ms, ct: outer);
             await using XlsWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
+
+            Assert.True(await e.MoveNextAsync());
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
+        }
+
+        [Fact]
+        public async Task XlsxCancellationAfterCancelThrowsOnNextMoveNext()
+        {
+            CancellationToken outer = TestContext.Current.CancellationToken;
+            using MemoryStream built = WorkbookBuilder.Build(
+                "<row r=\"1\"><c r=\"A1\"><v>1</v></c></row><row r=\"2\"><c r=\"A2\"><v>2</v></c></row><row r=\"3\"><c r=\"A3\"><v>3</v></c></row>");
+            byte[] bytes = built.ToArray();
+            using CancellationTokenSource cts = new();
+
+            await using MemoryStream ms = new(bytes, writable: false);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: outer);
+            await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();

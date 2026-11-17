@@ -132,6 +132,61 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void CloseWriteHandle_Should_Return_An_Error_When_Neither_The_Commit_Nor_The_Cleanup_Can_Touch_The_Folder()
+        {
+            Assert.SkipWhen(!OperatingSystem.IsWindows() && string.Equals(Environment.UserName, "root", StringComparison.Ordinal), "root ignores folder permissions");
+            string directory = Path.Combine(Path.GetTempPath(), $"excelreader-writer-handle-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "out.csv");
+            File.WriteAllText(path, "ORIGINAL");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenWriteHandle(path, NativeFormat.Csv, out NativeWriterHandle? handle));
+                Assert.NotNull(handle);
+                handle.StartSheet("Dados");
+                handle.StartRow();
+                handle.WriteString("new");
+                handle.EndRow();
+                LockFolder(directory);
+
+                Assert.Equal(NativeStatus.Error, WriteApi.CloseWriteHandle(handle));
+                Assert.NotEmpty(NativeApi.LastErrorText());
+            }
+            finally
+            {
+                UnlockFolder(directory);
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+
+        // Windows refuses to replace or delete a read-only file; elsewhere a folder without write permission does both.
+        private static void LockFolder(string directory)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+                return;
+            }
+            foreach (string file in Directory.GetFiles(directory))
+            {
+                File.SetAttributes(file, FileAttributes.ReadOnly);
+            }
+        }
+
+        private static void UnlockFolder(string directory)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                return;
+            }
+            foreach (string file in Directory.GetFiles(directory))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+            }
+        }
+
+        [Fact]
         public void OpenWriteHandle_Should_Reject_An_Empty_Path()
         {
             Assert.Equal(NativeStatus.InvalidArgument,

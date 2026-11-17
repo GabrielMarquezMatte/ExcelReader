@@ -450,14 +450,52 @@ namespace ExcelReader.Tests.Writer.Xlsb
         }
 
         [Fact]
-        public async Task NegativeZeroKeepsItsSignInAnRkCell()
+        public async Task NegativeZeroKeepsItsSignInARealCellSinceExcelRefusesItAsAnRk()
         {
             (int Id, int PayloadLength)[] cells;
             double readBack;
             (cells, readBack) = await NumericCellAsync(-0.0);
 
-            Assert.Equal([(Brt.CellRk, CellHeaderLength + 4)], cells);
+            Assert.Equal([(Brt.CellReal, CellHeaderLength + 8)], cells);
             Assert.True(double.IsNegative(readBack));
+        }
+
+        [Fact]
+        public async Task RowSpanningEveryColumnBlockReadsBackEveryCell()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            int[] columns = [0, 1500, 3000, 16_383];
+            await using MemoryStream ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
+                {
+                    int next = 0;
+                    foreach (int column in columns)
+                    {
+                        row.Skip(column - next);
+                        row.Write(column);
+                        next = column + 1;
+                    }
+                }
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
+                {
+                    row.Write("next");
+                }
+                await sheet.EndAsync(ct);
+            });
+
+            await using XlsbWorkbook reader = Excel.FromXlsb(ms, leaveOpen: true);
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+            Assert.True(e.MoveNext());
+            foreach (int column in columns)
+            {
+                Assert.True(e.Current[column].TryGetDouble(out double value));
+                Assert.Equal(column, value);
+            }
+            Assert.True(e.MoveNext());
+            Assert.Equal("next", e.Current[0].GetString());
+            Assert.False(e.MoveNext());
         }
 
         private const int CellHeaderLength = 8;
