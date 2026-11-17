@@ -42,7 +42,7 @@ namespace ExcelReader.Core.Writer.Internal
                 return;
             }
             FailureCleanup.Dispose(Stream);
-            File.Delete(_temporary);
+            DeleteTemporary();
         }
 
         public async ValueTask DisposeAsync()
@@ -52,7 +52,19 @@ namespace ExcelReader.Core.Writer.Internal
                 return;
             }
             await FailureCleanup.DisposeAsync(Stream).ConfigureAwait(false);
-            File.Delete(_temporary);
+            DeleteTemporary();
+        }
+
+        // Best effort: a leftover temp file must not replace the failure that left it behind.
+        private void DeleteTemporary()
+        {
+            try
+            {
+                File.Delete(_temporary);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 }
