@@ -301,6 +301,18 @@ namespace ExcelReader.Tests.Parser
         }
 
         [Fact]
+        public void PropertyAtRejectsTwoPropertiesOnTheSameColumn()
+        {
+            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
+                ExcelParser.Build<SharedModel>(static b => b
+                    .Factory(static () => new SharedModel())
+                    .PropertyAt(0, ExcelCellReaders.String, static (ref m, v) => m.Name = v)
+                    .PropertyAt(0, ExcelCellReaders.Parsable, static (ref SharedModel m, int v) => m.Age = v)));
+
+            Assert.Contains("column 0", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public void PlainConstructorRejectsReferenceTypeModelWithNoFactory()
         {
             InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
