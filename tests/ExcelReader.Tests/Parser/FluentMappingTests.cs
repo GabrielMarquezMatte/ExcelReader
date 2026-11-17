@@ -280,6 +280,26 @@ namespace ExcelReader.Tests.Parser
             Assert.Contains("PropertyAt", ex.Message, StringComparison.Ordinal);
         }
 
+        private sealed class DatedModel
+        {
+            public string Name { get; set; } = "";
+            public DateTime When { get; set; }
+        }
+
+        [Fact]
+        public void WithAttributeFallbackReadsCsvDateTextLikeFromAttributes()
+        {
+            byte[] csv = "Name,When\nx,01/15/2024\n"u8.ToArray();
+
+            ExcelParser<DatedModel> parser = ExcelParser.BuildWithAttributeFallback<DatedModel>(static b => b
+                .Factory(static () => new DatedModel())
+                .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v));
+            using CsvReader reader = Excel.FromCsv(csv);
+            DatedModel result = Assert.Single(parser.Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(new DateTime(2024, 1, 15), result.When);
+        }
+
         [Fact]
         public void PlainConstructorRejectsReferenceTypeModelWithNoFactory()
         {
