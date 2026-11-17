@@ -64,6 +64,22 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public async Task CsvCancellationAfterCancelThrowsOnNextMoveNext()
+        {
+            CancellationToken outer = TestContext.Current.CancellationToken;
+            using CancellationTokenSource cts = new();
+
+            await using MemoryStream ms = new("a,1\nb,2\nc,3\n"u8.ToArray(), writable: false);
+            await using CsvReader reader = await Excel.FromCsvAsync(ms, ct: outer);
+            await using CsvReader.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
+
+            Assert.True(await e.MoveNextAsync());
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
+        }
+
+        [Fact]
         public async Task XlsCancellationAfterCancelThrowsOnNextMoveNext()
         {
             CancellationToken outer = TestContext.Current.CancellationToken;
