@@ -188,7 +188,9 @@ namespace ExcelReader.Core.Parser
             TypeMapInfo<T> fluent = builder.Build(requireFactory: false);
             TypeMapInfo<T> merged = TypeMapInfo<T>.MergeFluentOverAttributes(
                 fluent, TypeMapper<T>.GetInfo(), effective.ColumnNameComparer, effective.HeaderNormalization);
-            return Fixed(effective, merged);
+            TypeMapInfo<T> mergedCsv = TypeMapInfo<T>.MergeFluentOverAttributes(
+                fluent, TypeMapper<T>.GetCsvInfo(), effective.ColumnNameComparer, effective.HeaderNormalization);
+            return new ExcelParser<T>(effective, () => merged, () => mergedCsv);
         }
 
         private static ExcelParser<T> Fixed<T>(ExcelParserOptions config, TypeMapInfo<T> info)
