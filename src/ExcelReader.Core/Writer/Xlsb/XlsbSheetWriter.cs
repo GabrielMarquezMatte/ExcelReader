@@ -211,8 +211,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriteRecord(Brt.BeginSheetData);
         }
 
-        private const double DefaultColumnWidth = 8.43;
-
         private const int DimLength = 16;
 
         private const int ColInfoUserSet = 0x0002;
@@ -227,7 +225,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 int styleId = _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int s) ? s : 0;
                 bool hasWidth = false;
-                double width = DefaultColumnWidth;
+                double width = SheetColumnValidation.DefaultColumnWidth;
                 if (_columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double explicitWidth))
                 {
                     hasWidth = true;
