@@ -40,6 +40,9 @@ namespace ExcelReader.Core.Reader.Xlsb
         internal const int EndBook = 132;
         internal const int BeginWsViews = 133;
         internal const int EndWsViews = 134;
+        internal const int BeginBookViews = 135;
+        internal const int EndBookViews = 136;
+        internal const int BookView = 158;
         internal const int BeginWsView = 137;
         internal const int EndWsView = 138;
         internal const int BeginSheetData = 145;

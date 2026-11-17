@@ -225,15 +225,12 @@ namespace ExcelReader.Core.Writer.Xlsb
             Biff12RecordWriter.WriteRecord(data, Brt.EndBook);
         }
 
-        private const int BeginBookViews = 0x87;
-        private const int BookView = 0x9E;
-        private const int EndBookViews = 0x88;
         // Both scroll bars, the sheet tabs and AutoFilter date grouping, as Excel writes them.
         private const byte BookViewFlags = 0x78;
 
         private static void WriteBookView(BiffBuffer data, BiffBuffer payload, int activeTab)
         {
-            Biff12RecordWriter.WriteRecord(data, BeginBookViews);
+            Biff12RecordWriter.WriteRecord(data, Brt.BeginBookViews);
             payload.Reset();
             payload.WriteU32(0);
             payload.WriteU32(0);
@@ -243,8 +240,8 @@ namespace ExcelReader.Core.Writer.Xlsb
             payload.WriteU32((uint)activeTab);
             payload.WriteU32((uint)activeTab);
             payload.WriteByte(BookViewFlags);
-            Biff12RecordWriter.WriteRecord(data, BookView, payload.Span);
-            Biff12RecordWriter.WriteRecord(data, EndBookViews);
+            Biff12RecordWriter.WriteRecord(data, Brt.BookView, payload.Span);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndBookViews);
         }
 
         private void WriteWorkbook()
