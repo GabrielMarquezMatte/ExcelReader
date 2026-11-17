@@ -133,6 +133,21 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
+        public async Task AnIndexBasedMapKeepsTheByteOrderMarkWhenDetectionIsOffLikeTheSequentialParser()
+        {
+            byte[] csv = [0xEF, 0xBB, 0xBF, .. BuildHeaderlessCsv(40_000)];
+            var options = new ExcelReaderOptions { Csv = new CsvReaderOptions { DetectEncodingFromByteOrderMark = false } };
+
+            using CsvReader sequentialSource = Excel.FromCsv(csv, options);
+            string? sequential = IndexParser().Parse(sequentialSource.FirstSheet).First().Name;
+            using CsvReader parallelSource = Excel.FromCsv(csv, options);
+            List<Row> parallel = await DrainAsync(SheetParallel.ParseAsync(parallelSource.FirstSheet, IndexParser(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal("﻿name00000", sequential);
+            Assert.Equal(sequential, parallel[0].Name);
+        }
+
+        [Fact]
         public async Task AnIndexBasedMapReportsAFailureAtTheSequentialRow()
         {
             byte[] csv = BuildHeaderlessCsv(40_000, badRow: 30_000);
