@@ -50,7 +50,7 @@ namespace ExcelReader.Core.Writer.Csv
         /// <param name="stream">The destination stream.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, the stream is left open when the writer is disposed.</param>
         /// <param name="options">Dialect, encoding, and record-terminator options; defaults to <see cref="CsvWriterOptions.Default"/> when omitted.</param>
-        /// <exception cref="ArgumentException">The delimiter and quote byte are the same, either is a carriage return or line feed, or <see cref="CsvWriterOptions.NewLine"/> is not a defined value.</exception>
+        /// <exception cref="ArgumentException">The delimiter and quote byte are the same, either is a carriage return, a line feed or not ASCII, or <see cref="CsvWriterOptions.NewLine"/> is not a defined value.</exception>
         public static CsvWriter Create(Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
@@ -86,6 +86,10 @@ namespace ExcelReader.Core.Writer.Csv
             if (options.Quote is (byte)'\r' or (byte)'\n')
             {
                 throw new ArgumentException("Quote cannot be a carriage return or line feed.", nameof(options));
+            }
+            if (options.Delimiter >= 0x80 || options.Quote >= 0x80)
+            {
+                throw new ArgumentException("Delimiter and Quote must be ASCII: fields are written as UTF-8, where a byte from 0x80 up is part of another character.", nameof(options));
             }
             if (options.NewLine is not (CsvNewLine.CarriageReturnLineFeed or CsvNewLine.LineFeed))
             {
