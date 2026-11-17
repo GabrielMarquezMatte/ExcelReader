@@ -16,6 +16,8 @@ namespace ExcelReader.Core.Writer.Xls
         private const int MaxRow = 65535;
         internal const int MaxColumn = 255;
         private const int MaxSheetNameLength = 31;
+        // The stored width Excel shows as the default 8.38 under this writer's Arial 11 font.
+        private const double DefaultColumnWidth = 9;
 
         private readonly XlsWorkbookWriter _owner;
         private readonly bool _date1904;
@@ -199,7 +201,7 @@ namespace ExcelReader.Core.Writer.Xls
             foreach (int columnIndex in columns)
             {
                 int abstractStyle = _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int s) ? s : 0;
-                double width = _columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double w) ? w : 8.43;
+                double width = _columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double w) ? w : DefaultColumnWidth;
                 BiffRecordWriter.WriteColInfo(_colInfos, columnIndex, (int)Math.Round(width * 256), XlsGlobals.CustomXf(abstractStyle));
             }
         }

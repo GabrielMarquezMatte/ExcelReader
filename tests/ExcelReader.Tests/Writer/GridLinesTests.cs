@@ -138,6 +138,23 @@ namespace ExcelReader.Tests.Writer
             Assert.DoesNotContain("sheetView", sheet, StringComparison.Ordinal);
         }
 
+        [Fact]
+        public void Should_FreezeNoPane_When_WritingAnXlsbSheetView()
+        {
+            byte[] sheet = Entry(WriteXlsb(showGridLines: null), "xl/worksheets/sheet1.bin");
+            var ids = new List<int>();
+            int position = 0;
+            while (position < sheet.Length)
+            {
+                ids.Add(ReadVarint(sheet, ref position, 2));
+                int length = ReadVarint(sheet, ref position, 4);
+                position += length;
+            }
+
+            Assert.Contains(Brt.BeginWsView, ids);
+            Assert.DoesNotContain(Brt.Pane, ids);
+        }
+
         [Theory]
         [InlineData(null, true)]
         [InlineData(true, true)]
