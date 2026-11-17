@@ -211,8 +211,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriteRecord(Brt.BeginSheetData);
         }
 
-        private const double DefaultColumnWidth = 8.43;
-
         private const int DimLength = 16;
 
         private const int ColInfoUserSet = 0x0002;
@@ -227,7 +225,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 int styleId = _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int s) ? s : 0;
                 bool hasWidth = false;
-                double width = DefaultColumnWidth;
+                double width = SheetColumnValidation.DefaultColumnWidth;
                 if (_columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double explicitWidth))
                 {
                     hasWidth = true;
@@ -726,7 +724,6 @@ namespace ExcelReader.Core.Writer.Xlsb
         }
 
         private static ReadOnlySpan<byte> InitialWorksheetViewPayload => [0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        private static ReadOnlySpan<byte> SecondPayload => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01];
         private const byte DisplayGridLinesFlag = 0x04;
 
         private void WriteWorksheetView()
@@ -739,7 +736,6 @@ namespace ExcelReader.Core.Writer.Xlsb
             }
             WriteRecord(Brt.BeginWsViews);
             WriteBlobRecord(Brt.BeginWsView, view);
-            WriteBlobRecord(Brt.Pane, SecondPayload);
             WriteRecord(Brt.EndWsView);
             WriteRecord(Brt.EndWsViews);
         }

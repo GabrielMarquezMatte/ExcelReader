@@ -248,14 +248,76 @@ namespace ExcelReader.Tests.Reader
             Assert.DoesNotContain("state=", Encoding.UTF8.GetString(WorkbookPart(ms)), StringComparison.Ordinal);
         }
 
-        private static byte[] WorkbookPart(MemoryStream xlsx)
+        private static byte[] WorkbookPart(MemoryStream package, string entryName = "xl/workbook.xml")
         {
-            xlsx.Position = 0;
-            using var zip = new ZipArchive(xlsx, ZipArchiveMode.Read, leaveOpen: true);
-            using Stream entry = zip.GetEntry("xl/workbook.xml")!.Open();
+            package.Position = 0;
+            using var zip = new ZipArchive(package, ZipArchiveMode.Read, leaveOpen: true);
+            using Stream entry = zip.GetEntry(entryName)!.Open();
             using var copy = new MemoryStream();
             entry.CopyTo(copy);
             return copy.ToArray();
+        }
+
+        private static readonly (string Name, ExcelSheetVisibility Visibility)[] _hiddenFirst =
+        [
+            ("Hidden", ExcelSheetVisibility.Hidden),
+            ("Visible", ExcelSheetVisibility.Visible),
+        ];
+
+        [Fact]
+        public void Should_ActivateTheFirstVisibleSheet_When_TheFirstXlsxSheetIsHidden()
+        {
+            using var ms = new MemoryStream();
+            using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                WriteSheets<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, _hiddenFirst);
+            }
+
+            Assert.Contains("<bookViews><workbookView firstSheet=\"1\" activeTab=\"1\"/></bookViews><sheets>",
+                Encoding.UTF8.GetString(WorkbookPart(ms)), StringComparison.Ordinal);
+            ms.Position = 0;
+            using IExcelWorkbook read = Excel.Open(ms);
+            Assert.Equal(ExcelSheetVisibility.Hidden, read.FirstSheet.Visibility);
+            Assert.Equal(ExcelSheetVisibility.Visible, read.SheetAt(1).Visibility);
+        }
+
+        [Fact]
+        public void Should_ActivateTheFirstVisibleSheet_When_TheFirstXlsbSheetIsHidden()
+        {
+            const int bookView = 0x009E;
+            using var ms = new MemoryStream();
+            using (XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                WriteSheets<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(workbook, _hiddenFirst);
+            }
+
+            byte[] part = WorkbookPart(ms, "xl/workbook.bin");
+            var reader = new Biff12RecordReader(part);
+            (uint FirstTab, uint ActiveTab)? view = null;
+            while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
+            {
+                if (id == bookView)
+                {
+                    view = (BitConverter.ToUInt32(payload.Slice(20, 4)), BitConverter.ToUInt32(payload.Slice(24, 4)));
+                }
+            }
+            Assert.Equal((1u, 1u), view);
+            ms.Position = 0;
+            using IExcelWorkbook read = Excel.Open(ms);
+            Assert.Equal(ExcelSheetVisibility.Hidden, read.FirstSheet.Visibility);
+            Assert.Equal(ExcelSheetVisibility.Visible, read.SheetAt(1).Visibility);
+        }
+
+        [Fact]
+        public void Should_WriteNoWorkbookView_When_TheFirstSheetIsVisible()
+        {
+            using var ms = new MemoryStream();
+            using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                WriteSheets<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, _mixedSheets);
+            }
+
+            Assert.DoesNotContain("bookViews", Encoding.UTF8.GetString(WorkbookPart(ms)), StringComparison.Ordinal);
         }
 
         [Theory]

@@ -443,6 +443,8 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         private string BuildWorkbookXml()
         {
+            int activeTab = _sheets.FindIndex(static sheet => sheet.Visibility is ExcelSheetVisibility.Visible);
+            WriterStateGuard.RequireVisibleSheet(activeTab >= 0, nameof(XlsxWorkbookWriter));
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append($"<workbook xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">");
@@ -450,15 +452,17 @@ namespace ExcelReader.Core.Writer.Xlsx
             {
                 sb.Append("<workbookPr date1904=\"1\"/>");
             }
+            // Excel unhides the active tab, which defaults to the first sheet.
+            if (activeTab > 0)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"<bookViews><workbookView firstSheet=\"{activeTab}\" activeTab=\"{activeTab}\"/></bookViews>");
+            }
             sb.Append("<sheets>");
-            bool anyVisible = false;
             foreach ((string name, int sheetId, ExcelSheetVisibility visibility) in _sheets)
             {
-                anyVisible |= visibility is ExcelSheetVisibility.Visible;
                 sb.Append(CultureInfo.InvariantCulture,
                     $"<sheet name=\"{EscapeAttribute(name)}\" sheetId=\"{sheetId}\"{StateAttribute(visibility)} r:id=\"rId{sheetId + 1}\"/>");
             }
-            WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsxWorkbookWriter));
             sb.Append("</sheets></workbook>");
             return sb.ToString();
         }

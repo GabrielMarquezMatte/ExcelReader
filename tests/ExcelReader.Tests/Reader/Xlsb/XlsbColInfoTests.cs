@@ -76,11 +76,12 @@ namespace ExcelReader.Tests.Reader.Xlsb
         }
 
         [Fact]
-        public async Task StyleWithoutExplicitWidthLeavesUserSetClear()
+        public async Task StyleWithoutExplicitWidthKeepsExcelsDefaultWidthAndLeavesUserSetClear()
         {
             byte[] sheet = await WriteSheetBinAsync(s => s.SetColumnStyle(2, 0));
             byte[] payload = Assert.Single(ReadColInfoPayloads(sheet));
 
+            Assert.Equal(2340u, BitConverter.ToUInt32(payload, 8));
             Assert.Equal(0, BitConverter.ToUInt16(payload, 16));
         }
 
