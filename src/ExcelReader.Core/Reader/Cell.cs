@@ -105,6 +105,11 @@ namespace ExcelReader.Core.Reader
             provider = TextProvider(provider);
             if (!_hasNumber)
             {
+                if (Value.IsEmpty && NeverParsesEmpty<T>())
+                {
+                    result = default;
+                    return false;
+                }
                 if (typeof(T) == typeof(double) && UsesDotDecimalSeparator(provider) && FastDouble.TryParse(Value, out double fast))
                 {
                     result = Unsafe.As<double, T>(ref fast);
@@ -169,6 +174,16 @@ namespace ExcelReader.Core.Reader
             return CellFormatter.TryFormatDouble(_number, buffer, out int written)
                 ? T.TryParse(buffer[..written], CultureInfo.InvariantCulture, out result)
                 : T.TryParse(Value, provider, out result);
+        }
+
+        // Types whose BCL parser rejects an empty span under any provider; a custom IUtf8SpanParsable type may accept one.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool NeverParsesEmpty<T>()
+        {
+            return typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half) || typeof(T) == typeof(decimal)
+                || typeof(T) == typeof(int) || typeof(T) == typeof(long) || typeof(T) == typeof(short) || typeof(T) == typeof(sbyte)
+                || typeof(T) == typeof(uint) || typeof(T) == typeof(ulong) || typeof(T) == typeof(ushort) || typeof(T) == typeof(byte)
+                || typeof(T) == typeof(Guid);
         }
 
         internal IFormatProvider TextProvider(IFormatProvider? provider)
@@ -386,6 +401,11 @@ namespace ExcelReader.Core.Reader
         /// <param name="result">The parsed date, when this method returns true.</param>
         public bool TryGetDateTime(bool isDate1904, out DateTime result)
         {
+            if (!_hasNumber && Value.IsEmpty)
+            {
+                result = default;
+                return false;
+            }
             if (!_hasNumber && FastDate.TryParse(Value, out result))
             {
                 return true;
