@@ -34,7 +34,10 @@ namespace ExcelReader.Cli
             // ponytail: progress is a carriage-returned line on stderr rather than a spinner widget.
             int code = CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr, rowsWritten =>
                 Console.Error.Write($"\rConverting... {rowsWritten.ToString("N0", CultureInfo.InvariantCulture)} rows written"), password, inputDelimiter);
-            Console.Error.WriteLine();
+            if (code == 0)
+            {
+                Console.Error.WriteLine();
+            }
             return code;
         }
 

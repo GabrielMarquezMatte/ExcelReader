@@ -30,11 +30,14 @@ namespace ExcelReader.Native
         public static int EncryptPackageToMemory(byte* package, int packageLength, byte* password, int passwordLength, NativeBuffer* outBuffer)
         {
             NativeApi.ClearLastError();
+            if (outBuffer is not null)
+            {
+                *outBuffer = default;
+            }
             if (package is null || packageLength <= 0 || password is null || passwordLength <= 0 || outBuffer is null)
             {
                 return NativeStatus.InvalidArgument;
             }
-            *outBuffer = default;
 
             try
             {
@@ -106,6 +109,12 @@ namespace ExcelReader.Native
                 {
                     if (!TypedApi.IsValidNameLength(raw.NameLens[n]))
                     {
+                        decoded = [];
+                        return false;
+                    }
+                    if (raw.Names[n] is null)
+                    {
+                        NativeApi.SetLastError("a column spec name must not be NULL.");
                         decoded = [];
                         return false;
                     }
