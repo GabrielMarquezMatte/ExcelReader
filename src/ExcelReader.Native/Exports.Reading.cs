@@ -329,6 +329,14 @@ namespace ExcelReader.Native
         public static int RowsNextCells(nint rows, NativeCellView** outCells, int* outCount)
         {
             NativeApi.ClearLastError();
+            if (outCells is not null)
+            {
+                *outCells = null;
+            }
+            if (outCount is not null)
+            {
+                *outCount = 0;
+            }
 
             if (outCells is null || outCount is null)
             {

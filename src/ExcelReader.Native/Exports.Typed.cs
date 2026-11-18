@@ -10,6 +10,10 @@ namespace ExcelReader.Native
             int degreeOfParallelism, NativeTable* outTable)
         {
             NativeApi.ClearLastError();
+            if (outTable is not null)
+            {
+                *outTable = default;
+            }
 
             if (specs is null || outTable is null || !TypedApi.IsValidSpecCount(specCount))
             {
