@@ -566,6 +566,187 @@ namespace ExcelReader.Tests.Generator
             Assert.Equal("Alpha", values[7]);
         }
 
+        private const string OverrideSource = """
+            using System.IO;
+            using System.Threading.Tasks;
+            using ExcelReader.Core.Parser;
+            using ExcelReader.Core.Reader;
+            using ExcelReader.Core.Reader.Xlsx;
+            using ExcelReader.Core.Writer;
+            using ExcelReader.Core.Writer.Xlsx;
+
+            namespace GeneratorTests.OverrideParity
+            {
+                public sealed class UpperCaseConverter : IExcelCellConverter<string>
+                {
+                    public bool TryConvert(in Cell cell, in ExcelRowContext context, out string value)
+                    {
+                        value = cell.GetString().ToUpperInvariant();
+                        return true;
+                    }
+                }
+
+                public class BaseRow
+                {
+                    [ExcelColumn("Full Name")]
+                    public virtual string Name { get; set; } = "";
+                    [ExcelIgnore]
+                    public virtual string Secret { get; set; } = "";
+                    [ExcelRequired]
+                    public virtual string Code { get; set; } = "";
+                    [ExcelConverter(typeof(UpperCaseConverter))]
+                    public virtual string Tag { get; set; } = "";
+                    public virtual string Plain { get; set; } = "";
+                }
+
+                public class MiddleRow : BaseRow
+                {
+                    public override string Plain { get; set; } = "";
+                    [ExcelIgnore]
+                    public override string Code { get; set; } = "";
+                }
+
+                [ExcelSerializable]
+                public partial class Row : BaseRow
+                {
+                    public override string Name { get; set; } = "";
+                    public override string Secret { get; set; } = "";
+                    public override string Code { get; set; } = "";
+                    public override string Tag { get; set; } = "";
+                }
+
+                [ExcelSerializable]
+                public partial class IgnoredRow : MiddleRow
+                {
+                    public override string Plain { get; set; } = "";
+                    [ExcelColumn("Derived Name")]
+                    public override string Name { get; set; } = "";
+                }
+
+                public static class TestRunner
+                {
+                    public static async Task<string> RunAsync()
+                    {
+                        var stream = new MemoryStream();
+                        await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true))
+                        {
+                            XlsxSheetWriter sheet = wb.AddSheet("S1");
+                            XlsxRowWriter header = await sheet.StartRowAsync();
+                            await using (header.ConfigureAwait(false))
+                            {
+                                header.Write("Full Name");
+                                header.Write("Secret");
+                                header.Write("Code");
+                                header.Write("Tag");
+                            }
+                            XlsxRowWriter data = await sheet.StartRowAsync();
+                            await using (data.ConfigureAwait(false))
+                            {
+                                data.Write("Ada");
+                                data.Write("hidden");
+                                data.Write("C1");
+                                data.Write("abc");
+                            }
+                            await sheet.EndAsync();
+                            await wb.EndAsync();
+                        }
+                        stream.Position = 0;
+                        await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream);
+                        Row generated = Single(ExcelParser.Generated<Row>().Parse(reader.FirstSheet));
+                        Row reflected = Single(ExcelParser.FromAttributes<Row>().Parse(reader.FirstSheet));
+                        return Describe(generated) + "/" + Describe(reflected);
+                    }
+
+                    private static Row Single(System.Collections.Generic.IEnumerable<Row> rows)
+                    {
+                        foreach (Row row in rows)
+                        {
+                            return row;
+                        }
+                        return null;
+                    }
+
+                    private static string Describe(Row row) => row.Name + "|" + row.Secret + "|" + row.Code + "|" + row.Tag;
+                }
+            }
+            """;
+
+        [Fact]
+        public async Task GeneratedMapHonorsParserAttributesInheritedByOverrides()
+        {
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(OverrideSource);
+            Assert.Empty(diagnostics);
+            string ignoredMap = generated[generated.IndexOf("IgnoredRow", StringComparison.Ordinal)..];
+            Assert.Contains("\"Derived Name\"", ignoredMap, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Code\"", ignoredMap, StringComparison.Ordinal);
+            (EmitResult Emit, byte[] AssemblyBytes) emitted = result.EmitToBytes();
+            Assert.True(emitted.Emit.Success, string.Join(Environment.NewLine, emitted.Emit.Diagnostics.Select(static d => d.ToString())));
+            Assembly assembly = Assembly.Load(emitted.AssemblyBytes);
+            MethodInfo method = assembly.GetType("GeneratorTests.OverrideParity.TestRunner")!.GetMethod("RunAsync")!;
+            string text = await (Task<string>)method.Invoke(null, null)!;
+            string[] sides = text.Split('/');
+            Assert.Equal("Ada||C1|ABC", sides[0]);
+            Assert.Equal(sides[1], sides[0]);
+        }
+
+        [Fact]
+        public void IgnoredOverrideIsNotBoundThroughTheBaseDeclaration()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.IgnoredOverride
+                {
+                    public class BaseRow
+                    {
+                        public virtual string? Code { get; set; }
+                    }
+
+                    [ExcelSerializable]
+                    public partial class Row : BaseRow
+                    {
+                        [ExcelIgnore]
+                        public override string? Code { get; set; }
+                        public string? Name { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(source);
+            Assert.Empty(diagnostics);
+            Assert.True(result.Emit().Success);
+            Assert.Contains("\"Name\"", generated, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Code\"", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void IgnoredHidingPropertyIsNotBoundThroughTheBaseDeclaration()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.IgnoredHidingProperty
+                {
+                    public class BaseRow
+                    {
+                        public string? Code { get; set; }
+                    }
+
+                    [ExcelSerializable]
+                    public partial class Row : BaseRow
+                    {
+                        [ExcelIgnore]
+                        public new string? Code { get; set; }
+                        public string? Name { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(source);
+            Assert.Empty(diagnostics);
+            Assert.True(result.Emit().Success);
+            Assert.Contains("\"Name\"", generated, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Code\"", generated, StringComparison.Ordinal);
+        }
+
         [Fact]
         public void GenericTypeReportsEXR007()
         {
