@@ -43,6 +43,25 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal(35.840000000000003m, ParseUnderBrazilianCulture<decimal>(cell));
         }
 
+        [Theory]
+        [InlineData("pt-BR", CellType.Number)]
+        [InlineData("fr-FR", CellType.Number)]
+        [InlineData("de-DE", CellType.Date)]
+        public void WorkbookNumberTextParsesInvariantlyWhateverTheProvider(string culture, CellType type)
+        {
+            var provider = CultureInfo.GetCultureInfo(culture);
+            var cell = new Cell(type, "35.840000000000003"u8);
+
+            Assert.True(cell.TryParse(provider, out double d));
+            Assert.Equal(35.840000000000003, d);
+            Assert.True(cell.TryParse(provider, out decimal m));
+            Assert.Equal(35.840000000000003m, m);
+            Assert.True(cell.TryParse(provider, out float f));
+            Assert.Equal(35.84f, f);
+            Assert.True(cell.TryParse(provider, out Half h));
+            Assert.Equal((Half)35.84, h);
+        }
+
         [Fact]
         public void StoredNumberFallbackParsesItsInvariantTextWhateverTheProvider()
         {

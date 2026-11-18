@@ -309,6 +309,7 @@ namespace ExcelReader.Core.Parser.Internal
         internal static bool TryParseSpanParsable<TValue>(in Cell cell, IFormatProvider provider, [MaybeNullWhen(false)] out TValue value)
             where TValue : ISpanParsable<TValue>
         {
+            provider = cell.TextProvider(provider);
             // XLSB and XLS keep a number in binary, with no text in Value to parse.
             if (cell.Value.IsEmpty && cell.Type is CellType.Number or CellType.Date)
             {

@@ -90,6 +90,17 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.False(index.TryGetEntry("xl/worksheets/sheet2.xml"u8, out _));
         }
 
+        [Fact]
+        public void HasEntryWithPrefixMatchesAsciiCaseInsensitively()
+        {
+            byte[] zipBytes = BuildZipWithOneEntry("xl/Tables/table1.xml", "x"u8.ToArray(), CompressionLevel.NoCompression);
+
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.HasEntryWithPrefix("xl/tables/"u8));
+            Assert.False(index.HasEntryWithPrefix("xl/pivotTables/"u8));
+            Assert.False(index.HasEntryWithPrefix("xl/Tables/table1.xml.rels"u8));
+        }
+
         [Theory]
         [InlineData(0)]
         [InlineData(100)]

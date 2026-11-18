@@ -131,6 +131,42 @@ namespace ExcelReader.Tests.Reader
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
         }
 
+        [Fact]
+        public async Task XlsxMemoryBackedEnumeratorHonorsCancellation()
+        {
+            using MemoryStream built = WorkbookBuilder.Build("<row r=\"1\"><c r=\"A1\"><v>1</v></c></row>");
+            using CancellationTokenSource cts = new();
+            cts.Cancel();
+
+            await using XlsxWorkbook fromMemory = Excel.FromXlsx(built.ToArray());
+            await using XlsxWorkbook fromWritableStream = await Excel.FromXlsxAsync(new MemoryStream(built.ToArray()), ct: TestContext.Current.CancellationToken);
+
+            await AssertCancelsAsync(fromMemory.FirstSheet.GetAsyncEnumerator(cts.Token));
+            await AssertCancelsAsync(fromWritableStream.FirstSheet.GetAsyncEnumerator(cts.Token));
+        }
+
+        [Fact]
+        public async Task XlsbMemoryBackedEnumeratorHonorsCancellation()
+        {
+            byte[] bytes = await BuildSmallXlsbAsync(TestContext.Current.CancellationToken);
+            using CancellationTokenSource cts = new();
+            cts.Cancel();
+
+            await using XlsbWorkbook fromMemory = Excel.FromXlsb(bytes);
+            await using XlsbWorkbook fromWritableStream = await Excel.FromXlsbAsync(new MemoryStream(bytes), ct: TestContext.Current.CancellationToken);
+
+            await AssertCancelsAsync(fromMemory.FirstSheet.GetAsyncEnumerator(cts.Token));
+            await AssertCancelsAsync(fromWritableStream.FirstSheet.GetAsyncEnumerator(cts.Token));
+        }
+
+        private static async Task AssertCancelsAsync(IExcelRowEnumerator e)
+        {
+            await using (e)
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
+            }
+        }
+
         private static byte[] BuildLargeXlsx()
         {
             StringBuilder sb = new(512 * 1024);

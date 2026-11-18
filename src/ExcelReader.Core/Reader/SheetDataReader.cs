@@ -209,13 +209,13 @@ namespace ExcelReader.Core.Reader
         }
 
         [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
-        private static Type TypeOf(Cell cell)
+        private Type TypeOf(Cell cell)
         {
             return cell.Type switch
             {
-                CellType.Number => typeof(double),
-                CellType.Date => typeof(DateTime),
-                CellType.Boolean => typeof(bool),
+                CellType.Number when cell.TryGetDouble(out _) => typeof(double),
+                CellType.Date when cell.TryGetDateTime(_isDate1904, out _) => typeof(DateTime),
+                CellType.Boolean when ExcelCellReaders.Bool(in cell, default, out _) => typeof(bool),
                 _ => typeof(string),
             };
         }
