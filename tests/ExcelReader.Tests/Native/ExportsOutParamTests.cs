@@ -204,5 +204,30 @@ namespace ExcelReader.Tests.Native
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
         }
+
+        [Fact]
+        public void OpenMemoryAcceptsANullPointerWithZeroLength()
+        {
+            nint outHandle = Sentinel;
+
+            int status = ((delegate* unmanaged<byte*, int, int, NativeOpenOptionsRaw*, nint*, int>)&Exports.OpenMemory)(
+                null, 0, NativeFormat.Csv, null, &outHandle);
+
+            Assert.Equal(NativeStatus.Ok, status);
+            Assert.NotEqual(0, outHandle);
+            ((delegate* unmanaged<nint, int>)&Exports.Close)(outHandle);
+        }
+
+        [Fact]
+        public void OpenMemoryRejectingANullPointerWithLengthSetsALastError()
+        {
+            nint outHandle = Sentinel;
+
+            int status = ((delegate* unmanaged<byte*, int, int, NativeOpenOptionsRaw*, nint*, int>)&Exports.OpenMemory)(
+                null, 5, NativeFormat.Csv, null, &outHandle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.NotEmpty(NativeApi.LastErrorText());
+        }
     }
 }
