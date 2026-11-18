@@ -425,8 +425,17 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     return default;
                 }
-                if (src[i] is (byte)'?' or (byte)'!' or (byte)'/')
+                if (src[i] == (byte)'/')
                 {
+                    continue;
+                }
+                if (src[i] is (byte)'?' or (byte)'!')
+                {
+                    i = MarkupEnd(src, i);
+                    if (i < 0)
+                    {
+                        return default;
+                    }
                     continue;
                 }
                 int nameStart = i;
@@ -444,6 +453,33 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
                 return default;
             }
+        }
+
+        private static int MarkupEnd(ReadOnlySpan<byte> src, int i)
+        {
+            ReadOnlySpan<byte> rest = src[i..];
+            if (src[i] == (byte)'?')
+            {
+                int pi = rest.IndexOf("?>"u8);
+                return pi < 0 ? -1 : i + pi + 2;
+            }
+            if (rest.StartsWith("!--"u8))
+            {
+                int comment = rest[3..].IndexOf("-->"u8);
+                return comment < 0 ? -1 : i + comment + 6;
+            }
+            int depth = 0;
+            for (int j = 0; j < rest.Length; j++)
+            {
+                byte c = rest[j];
+                depth += c == (byte)'[' ? 1 : 0;
+                depth -= c == (byte)']' ? 1 : 0;
+                if (c == (byte)'>' && depth <= 0)
+                {
+                    return i + j + 1;
+                }
+            }
+            return -1;
         }
 
         internal static byte[] Token(ReadOnlySpan<byte> lead, ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> rest)
