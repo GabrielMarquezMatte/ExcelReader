@@ -221,5 +221,58 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 Assert.Equal(baseline, actual);
             }
         }
+
+        [Fact]
+        public async Task AParseFailureYieldsTheSequentialRowsBeforeItAndThenEnds()
+        {
+            var sb = new StringBuilder("Name,Age\n");
+            for (int i = 0; i < 400; i++)
+            {
+                string age = i == 250 ? "not-a-number" : i.ToString(CultureInfo.InvariantCulture);
+                sb.Append(CultureInfo.InvariantCulture, $"name{i:D5},{age}\n");
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
+
+            using CsvReader sequentialReader = Excel.FromCsv(csv);
+            int sequentialRows = 0;
+            ExcelParseException expected = Assert.Throws<ExcelParseException>(() =>
+            {
+                foreach (Row row in ExcelParser.FromAttributes<Row>(config).Parse(sequentialReader.FirstSheet))
+                {
+                    sequentialRows++;
+                }
+            });
+
+            IAsyncEnumerator<Row> enumerator = Build<Row>(csv, dop: 4, chunkSizeOverride: 64, config)
+                .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            int parallelRows = 0;
+            ExcelParseException actual = await Assert.ThrowsAsync<ExcelParseException>(async () =>
+            {
+                while (await enumerator.MoveNextAsync())
+                {
+                    parallelRows++;
+                }
+            });
+
+            Assert.Equal(expected.Row, actual.Row);
+            Assert.Equal(expected.Message, actual.Message);
+            Assert.Equal(250, sequentialRows);
+            Assert.Equal(sequentialRows, parallelRows);
+            Assert.False(await enumerator.MoveNextAsync());
+            await enumerator.DisposeAsync();
+            await enumerator.DisposeAsync();
+        }
+
+        [Fact]
+        public async Task DisposingBeforeTheFirstMoveNextIsSafe()
+        {
+            IAsyncEnumerator<Row> enumerator = Build(BuildCsv(500), dop: 4, chunkSizeOverride: 64)
+                .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+
+            await enumerator.DisposeAsync();
+
+            Assert.False(await enumerator.MoveNextAsync());
+        }
     }
 }
