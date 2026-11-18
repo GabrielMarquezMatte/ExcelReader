@@ -390,15 +390,23 @@ namespace ExcelReader.Core.Writer.Xls
             }
         }
 
+        private string TruncatedBaseName(int maxLength)
+        {
+            if (_baseName.Length <= maxLength)
+            {
+                return _baseName;
+            }
+            int length = char.IsHighSurrogate(_baseName[maxLength - 1]) ? maxLength - 1 : maxLength;
+            return _baseName[..length];
+        }
+
         private XlsSheetWriter CreateContinuation()
         {
             string contName;
             for (int n = _owner.SheetCount + 1; ; n++)
             {
                 string suffix = $" ({n})";
-                contName = _baseName.Length + suffix.Length <= MaxSheetNameLength
-                    ? _baseName + suffix
-                    : _baseName[..(MaxSheetNameLength - suffix.Length)] + suffix;
+                contName = TruncatedBaseName(MaxSheetNameLength - suffix.Length) + suffix;
                 if (_owner.TryClaimSheetName(contName))
                 {
                     break;

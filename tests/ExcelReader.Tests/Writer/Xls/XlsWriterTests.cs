@@ -90,6 +90,16 @@ namespace ExcelReader.Tests.Writer.Xls
         }
 
         [Fact]
+        public async Task ContinuationSheetNameDoesNotSplitASurrogatePair()
+        {
+            string baseName = new string('a', 26) + "😀" + "bc";
+            byte[] bytes = await WriteAsync(wb => WriteRows(wb.AddSheet(baseName), 65_537), ct: TestContext.Current.CancellationToken);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            Assert.Equal([baseName, new string('a', 26) + " (2)"], [.. reader.Sheets.Select(static s => s.Name)]);
+        }
+
+        [Fact]
         public async Task SheetCannotTakeTheNameOfAContinuationSheet()
         {
             await Assert.ThrowsAsync<InvalidOperationException>(() => WriteAsync(wb =>
