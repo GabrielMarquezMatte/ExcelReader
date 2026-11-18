@@ -545,12 +545,13 @@ fn an_out_of_range_value_in_an_unnamed_binding_reports_instead_of_panicking() {
         .format(Format::Csv)
         .open(&path)
         .expect("open must succeed");
-    let error = workbook
+    let Err(error) = workbook
         .sheet(0)
         .expect("sheet 0")
         .parse::<HandWritten>(&ReadOptions::new())
-        .err()
-        .expect("300 does not fit");
+    else {
+        panic!("300 does not fit");
+    };
     assert_eq!(error.kind(), excelreader::ErrorKind::InvalidArgument);
     drop(workbook);
     let _ = std::fs::remove_file(path);
