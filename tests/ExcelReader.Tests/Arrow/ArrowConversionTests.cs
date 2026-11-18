@@ -67,6 +67,42 @@ namespace ExcelReader.Tests.Arrow
         }
 
         [Fact]
+        public void ToArrowRecordBatch_Should_Infer_Nullable_Columns_When_A_Blank_Follows_The_Sample()
+        {
+            using MemoryStream ms = new();
+            using (Core.Writer.Xlsb.XlsbWorkbookWriter workbook = Core.Writer.Xlsb.XlsbWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                using Core.Writer.Xlsb.XlsbSheetWriter sheet = workbook.AddSheet("S");
+                using (Core.Writer.Xlsb.XlsbRowWriter header = sheet.StartRow())
+                {
+                    header.Write("Amount");
+                }
+                for (int i = 1; i <= 150; i++)
+                {
+                    using Core.Writer.Xlsb.XlsbRowWriter row = sheet.StartRow();
+                    if (i == 120)
+                    {
+                        row.Skip();
+                        continue;
+                    }
+                    row.Write(i);
+                }
+                sheet.End();
+                workbook.End();
+            }
+            ms.Position = 0;
+            using var reader = Excel.FromXlsb(ms);
+
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch();
+
+            var amount = Assert.IsType<Int64Array>(batch.Column(0));
+            Assert.Equal(150, batch.Length);
+            Assert.True(amount.IsNull(119));
+            Assert.Equal(1, amount.NullCount);
+            Assert.Equal(121L, amount.GetValue(120));
+        }
+
+        [Fact]
         public void ToArrowRecordBatch_Should_Append_Null_For_Blank_Cells_On_Nullable_String_Columns()
         {
             using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("name,qty\nwidget,1\n,2\n"));
