@@ -400,5 +400,17 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Assert.Equal(20_000, actual.Count);
             Assert.Equal(19_999, actual[^1].Age);
         }
+
+        [Fact]
+        public async Task APartitionedParseHonorsTheTokenPassedToParseAsync()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(20_000));
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: cts.Token);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => DrainAsync(rows));
+        }
     }
 }
