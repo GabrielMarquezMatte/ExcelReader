@@ -80,7 +80,10 @@ namespace ExcelReader.NetFramework.Reader
                 return null;
             }
 
-            return _cell->Number.ToString("R", CultureInfo.InvariantCulture);
+            double number = _cell->Number;
+            string shortest = number.ToString("R", CultureInfo.InvariantCulture);
+            // .NET Framework's "R" can lose the last bit on x64.
+            return double.Parse(shortest, NumberStyles.Float, CultureInfo.InvariantCulture) == number ? shortest : number.ToString("G17", CultureInfo.InvariantCulture);
         }
     }
 }

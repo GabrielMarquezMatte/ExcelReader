@@ -16,13 +16,8 @@ namespace ExcelReader.NetFramework.Parser.Internal
             }
 
             List<PropertyBinder<T>> properties = new List<PropertyBinder<T>>();
-            foreach (PropertyInfo property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (PropertyInfo property in MappedProperties.Of(typeof(T)))
             {
-                if (Attribute.IsDefined(property, typeof(ExcelIgnoreAttribute)))
-                {
-                    continue;
-                }
-
                 if (property.GetSetMethod() is null)
                 {
                     RejectMappedGetOnly(property);
