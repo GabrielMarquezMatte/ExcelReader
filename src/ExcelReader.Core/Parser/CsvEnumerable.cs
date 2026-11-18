@@ -25,15 +25,13 @@ namespace ExcelReader.Core.Parser
         private readonly ExcelParserOptions _config;
         private readonly CancellationToken _ct;
         private readonly TypeMapInfo<T> _info;
-        private readonly CsvReader? _ownedReader;
 
-        internal CsvEnumerable(CsvSheet sheet, ExcelParserOptions config, TypeMapInfo<T> info, CsvReader? ownedReader, CancellationToken ct)
+        internal CsvEnumerable(CsvSheet sheet, ExcelParserOptions config, TypeMapInfo<T> info, CancellationToken ct)
         {
             _sheet = sheet;
             _config = config;
             _info = info;
             _ct = ct;
-            _ownedReader = ownedReader;
         }
 
         internal CsvEnumerable(CsvSheet sheet, ExcelParserOptions config, TypeMapInfo<T> explicitInfo)
@@ -69,7 +67,7 @@ namespace ExcelReader.Core.Parser
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _ownedReader, effective);
+            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
@@ -107,7 +105,6 @@ namespace ExcelReader.Core.Parser
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvSheet, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;
-            private readonly CsvReader? _ownedReader;
 
             internal AsyncEnumerator(
                 CsvSheet sheet,
@@ -117,22 +114,16 @@ namespace ExcelReader.Core.Parser
                 int headerRow,
                 IFormatProvider provider,
                 bool throwOnParseFailure,
-                CsvReader? ownedReader,
                 CancellationToken ct)
                 : base(sheet, ct)
             {
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
-                _ownedReader = ownedReader;
             }
 
             /// <inheritdoc/>
-            public override async ValueTask DisposeAsync()
+            public override ValueTask DisposeAsync()
             {
-                await base.DisposeAsync().ConfigureAwait(false);
-                if (_ownedReader is not null)
-                {
-                    await _ownedReader.DisposeAsync().ConfigureAwait(false);
-                }
+                return base.DisposeAsync();
             }
 
             private protected override ProjectionStep Classify()

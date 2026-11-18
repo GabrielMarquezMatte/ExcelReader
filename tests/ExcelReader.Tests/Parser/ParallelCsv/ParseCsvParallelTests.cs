@@ -412,5 +412,16 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => DrainAsync(rows));
         }
+
+        [Fact]
+        public async Task TheSequentialFallbackAfterAHugeHeaderCanBeEnumeratedTwice()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes("Name,Age," + new string('x', 300_000) + "\nada,1\ngrace,2\n");
+            using CsvReader source = Excel.FromCsv(csv);
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, (await DrainAsync(rows)).Count);
+            Assert.Equal(2, (await DrainAsync(rows)).Count);
+        }
     }
 }
