@@ -652,6 +652,29 @@ namespace ExcelReader.Tests.Cli
         }
 
         [Fact]
+        public void Should_StartTheErrorOnItsOwnLine_When_ConvertFailsAfterProgressWasPrinted()
+        {
+            using MemoryStream stdout = new();
+            StringWriter stderr = new();
+
+            int code = CliCommands.Convert(Fixture("RealExcel.xlsb"), null, null, null, ',', stdout, stderr,
+                static _ => throw new IOException("boom"));
+
+            Assert.Equal(1, code);
+            Assert.Equal(Environment.NewLine + "boom" + Environment.NewLine, stderr.ToString());
+        }
+
+        [Fact]
+        public void Should_NotBufferEveryRequestedRowUpFront_When_RowsIsHuge()
+        {
+            (int code, string[] lines, string error) = Preview(CsvFile("id\n1\n2\n3\n"), rows: 2_000_000_000);
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            Assert.Equal("shape: (3, 1)", lines[0]);
+        }
+
+        [Fact]
         public void Should_PrintAPolarsStyleTable_When_RunningPreview()
         {
             (int code, string[] lines, string error) = Preview(CsvFile("id,name\n1,Ana\n2,\n"));
