@@ -42,8 +42,9 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static TypeMapInfo<T> Build(bool csvTextDates)
         {
-            PropertyInfo[] properties = typeof(T)
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            PropertyInfo[] properties = [.. typeof(T)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(static prop => prop.GetIndexParameters().Length == 0)];
 
             var propertyMaps = new List<PropertyMap<T>>(properties.Length);
 
