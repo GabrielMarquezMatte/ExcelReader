@@ -304,11 +304,17 @@ namespace ExcelReader.Core.Writer.Xlsb
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
         {
             BeginRow(styleId: 0, heightTwips: 0);
-            for (int i = 0; i < values.Length; i++)
+            try
             {
-                WriteCell(i, values[i]);
+                for (int i = 0; i < values.Length; i++)
+                {
+                    WriteCell(i, values[i]);
+                }
             }
-            FinishRow();
+            finally
+            {
+                FinishRow();
+            }
         }
 
         internal void NotifyRowEnded()
