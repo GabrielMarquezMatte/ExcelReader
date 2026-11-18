@@ -851,21 +851,22 @@ namespace ExcelReader.Core.Writer.Xlsb
             MaybeFlush();
         }
 
-        internal void WriteDateSerialCell(int columnIndex, double serial)
+        internal void WriteDateSerialCell(int columnIndex, double oadate)
         {
+            double serial = ExcelEpoch.OADateToSerial(oadate, _date1904);
             int styleId = EffectiveStyle(columnIndex);
-            WriteDoubleCellCore(columnIndex, ExcelEpoch.OADateToSerial(serial, _date1904), styleId == 0 ? 1 : _owner.DateStyle(styleId));
+            WriteDoubleCellCore(columnIndex, serial, styleId == 0 ? 1 : _owner.DateStyle(styleId));
         }
 
         internal void WriteDoubleCell(int columnIndex, double value)
         {
+            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             WriteDoubleCellCore(columnIndex, value, EffectiveStyle(columnIndex));
         }
 
         private void WriteDoubleCellCore(int columnIndex, double value, int style)
         {
             ValidateColumn(columnIndex);
-            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             TrackColumn(columnIndex);
             if (XlsRk.TryEncode(value, out int rk))
             {
