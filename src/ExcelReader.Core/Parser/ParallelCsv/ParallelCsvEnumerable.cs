@@ -47,57 +47,9 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             _ct = ct;
         }
 
-        [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks",
-            Justification = "The CTS and semaphore handed to the workers outlive them by construction: the finally block cancels and then awaits every worker task to completion, and only the enclosing `using` declarations' finally — which runs after it — disposes them.")]
-        public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            _lease?.Acquire(_owner!);
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _ct);
-            CancellationToken ct = cts.Token;
-
-            int inFlight = _dop;
-            using var slots = new SemaphoreSlim(inFlight, inFlight);
-
-            int ring = inFlight + 1;
-
-            var lists = new ConcurrentBag<List<T>>();
-            MergeState state = StartWorkers(slots, lists, ring, ct);
-            Task allWorkers = Task.WhenAll(state.Workers);
-            long recordsBefore = 0;
-
-            try
-            {
-                long confirmedNextStart = _firstDataRecordOffset;
-                for (int i = 0; i < _plan.Count; i++)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    CsvChunkResult<T> result = await TakeChunkAsync(
-                        state, slots, i, ring, confirmedNextStart, allWorkers, ct).ConfigureAwait(false);
-
-                    List<T> models = result.Models;
-                    int count = models.Count;
-                    for (int m = 0; m < count; m++)
-                    {
-                        yield return models[m];
-                    }
-
-                    models.Clear();
-                    lists.Add(models);
-
-                    confirmedNextStart = AdvanceOrThrow(result, recordsBefore);
-                    recordsBefore += result.Records;
-                    if (confirmedNextStart >= long.MaxValue)
-                    {
-                        break;
-                    }
-                }
-            }
-            finally
-            {
-                await cts.CancelAsync().ConfigureAwait(false);
-                await allWorkers.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-                _lease?.Release();
-            }
+            return new Enumerator(this, cancellationToken);
         }
 
         private long AdvanceOrThrow(CsvChunkResult<T> result, long recordsBefore)
@@ -222,6 +174,134 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 await allWorkers.ConfigureAwait(false);
             }
             await chunkReady.ConfigureAwait(false);
+        }
+
+        private sealed class Enumerator : IAsyncEnumerator<T>
+        {
+            private readonly ParallelCsvEnumerable<T> _parent;
+            private readonly CancellationToken _cancellationToken;
+            private readonly ConcurrentBag<List<T>> _lists = new();
+            private CancellationTokenSource? _cts;
+            private SemaphoreSlim? _slots;
+            private CancellationToken _ct;
+            private MergeState _state;
+            private Task _allWorkers = Task.CompletedTask;
+            private int _ring;
+            private int _next;
+            private long _confirmedNextStart;
+            private long _recordsBefore;
+            private CsvChunkResult<T>? _chunk;
+            private List<T>? _list;
+            private int _index;
+            private int _count;
+            private bool _done;
+
+            internal Enumerator(ParallelCsvEnumerable<T> parent, CancellationToken cancellationToken)
+            {
+                _parent = parent;
+                _cancellationToken = cancellationToken;
+                _confirmedNextStart = parent._firstDataRecordOffset;
+            }
+
+            public T Current { get; private set; } = default!;
+
+            public ValueTask<bool> MoveNextAsync()
+            {
+                if (_list is not null && _index < _count)
+                {
+                    Current = _list[_index++];
+                    return new ValueTask<bool>(true);
+                }
+                return NextChunkAsync();
+            }
+
+            private async ValueTask<bool> NextChunkAsync()
+            {
+                if (_done)
+                {
+                    return false;
+                }
+                try
+                {
+                    if (_cts is null)
+                    {
+                        Start();
+                    }
+                    while (true)
+                    {
+                        if ((_chunk is not null && !FinishChunk()) || _next >= _parent._plan.Count)
+                        {
+                            await DisposeAsync().ConfigureAwait(false);
+                            return false;
+                        }
+                        _ct.ThrowIfCancellationRequested();
+                        CsvChunkResult<T> result = await _parent.TakeChunkAsync(
+                            _state, _slots!, _next, _ring, _confirmedNextStart, _allWorkers, _ct).ConfigureAwait(false);
+                        _next++;
+                        _chunk = result;
+                        _list = result.Models;
+                        _count = _list.Count;
+                        _index = 0;
+                        if (_count > 0)
+                        {
+                            Current = _list[_index++];
+                            return true;
+                        }
+                    }
+                }
+                catch
+                {
+                    await DisposeAsync().ConfigureAwait(false);
+                    throw;
+                }
+            }
+
+            [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks",
+                Justification = "The CTS and semaphore handed to the workers outlive them by construction: DisposeAsync cancels and then awaits every worker task to completion before disposing them.")]
+            private void Start()
+            {
+                _parent._lease?.Acquire(_parent._owner!);
+                _cts = CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken, _parent._ct);
+                _ct = _cts.Token;
+                _slots = new SemaphoreSlim(_parent._dop, _parent._dop);
+                _ring = _parent._dop + 1;
+                _state = _parent.StartWorkers(_slots, _lists, _ring, _ct);
+                _allWorkers = Task.WhenAll(_state.Workers);
+            }
+
+            // The chunk's list goes back to the workers' pool only once the consumer has moved past its last row.
+            private bool FinishChunk()
+            {
+                CsvChunkResult<T> chunk = _chunk!;
+                _chunk = null;
+                _list = null;
+                List<T> models = chunk.Models;
+                models.Clear();
+                _lists.Add(models);
+                _confirmedNextStart = _parent.AdvanceOrThrow(chunk, _recordsBefore);
+                _recordsBefore += chunk.Records;
+                return _confirmedNextStart < long.MaxValue;
+            }
+
+            public async ValueTask DisposeAsync()
+            {
+                if (_done)
+                {
+                    return;
+                }
+                _done = true;
+                _list = null;
+                _chunk = null;
+                if (_cts is null)
+                {
+                    return;
+                }
+                await _cts.CancelAsync().ConfigureAwait(false);
+                await _allWorkers.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                _parent._lease?.Release();
+                _slots?.Dispose();
+                _cts.Dispose();
+            }
         }
     }
 }
