@@ -187,11 +187,12 @@ text to bound properties, and handles cells that fail to parse.</p>
 
   <h3 id="ExcelReader_Core_Parser_ExcelParserOptions_Culture" data-uid="ExcelReader.Core.Parser.ExcelParserOptions.Culture">
   Culture
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParserOptions.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParserOptions.cs/#L26"><i class="bi bi-code-slash"></i></a>
   </h3>
 
-  <div class="markdown level1 summary"><p>Gets the culture used when parsing text-backed numeric and <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.guid">Guid</a> cells (e.g. pt-BR
-&quot;1.234,56&quot;). Binary numeric cells from XLS/XLSB carry a raw double and ignore this setting.
+  <div class="markdown level1 summary"><p>Gets the culture used when parsing text cells (CSV fields, XLSX/XLSB/XLS strings) as numbers or
+<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.guid">Guid</a> (e.g. pt-BR &quot;1.234,56&quot;). Numeric and date cells stored by the workbook are
+always read invariantly and ignore this setting.
 Defaults to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.globalization.cultureinfo.invariantculture">InvariantCulture</a>.</p>
 </div>
   <div class="markdown level1 conceptual"></div>
@@ -285,7 +286,7 @@ Defaults to <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.
 
   <h3 id="ExcelReader_Core_Parser_ExcelParserOptions_ThrowOnParseFailure" data-uid="ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure">
   ThrowOnParseFailure
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParserOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParserOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Gets whether a non-empty cell that fails to parse into its bound property's type throws

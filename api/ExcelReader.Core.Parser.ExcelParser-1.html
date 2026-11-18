@@ -166,7 +166,7 @@ skips the per-row model allocation a class <code class="typeparamref">T</code> r
 
   <h3 id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_Csv_CsvSheet_" data-uid="ExcelReader.Core.Parser.ExcelParser`1.Parse(ExcelReader.Core.Reader.Csv.CsvSheet)">
   Parse(CsvSheet)
-  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  <a class="header-action link-secondary" title="View source" href="https://github.com/GabrielMarquezMatte/ExcelReader/blob/master/src/ExcelReader.Core/Parser/ExcelParser.cs/#L92"><i class="bi bi-code-slash"></i></a>
   </h3>
 
   <div class="markdown level1 summary"><p>Parses the records of a CSV sheet into <code class="typeparamref">T</code> instances, lazily as the result is enumerated.</p>
@@ -200,7 +200,7 @@ skips the per-row model allocation a class <code class="typeparamref">T</code> r
   <h4 class="section" id="ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_Csv_CsvSheet__remarks">Remarks</h4>
   <div class="markdown level1 remarks"><p>Uses a specialized enumerable (dense field binding, single-pass projection), since CSV rows have
 no gaps or styles. Prefer this overload over <a class="xref" href="ExcelReader.Core.Parser.ExcelParser-1.html#ExcelReader_Core_Parser_ExcelParser_1_Parse_ExcelReader_Core_Reader_IExcelSheet_">Parse(IExcelSheet)</a> for CSV: a sheet
-held as <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a> goes through the generic path.</p>
+held as <a class="xref" href="ExcelReader.Core.Reader.IExcelSheet.html">IExcelSheet</a> binds the same way but through the slower generic path.</p>
 </div>
 
 
