@@ -74,6 +74,10 @@ namespace ExcelReader.Core.Parser
         {
             ArgumentNullException.ThrowIfNull(sheet);
             ExcelTableSheet.ThrowIfHeaderless(sheet);
+            if (sheet is CsvSheet)
+            {
+                return new ExcelEnumerable<T, IExcelSheet, IExcelRowEnumerator>(sheet, _config, _csvInfo());
+            }
             return new ExcelEnumerable<T, IExcelSheet, IExcelRowEnumerator>(sheet, _config, _info());
         }
 
@@ -83,7 +87,7 @@ namespace ExcelReader.Core.Parser
         /// <remarks>
         /// Uses a specialized enumerable (dense field binding, single-pass projection), since CSV rows have
         /// no gaps or styles. Prefer this overload over <see cref="Parse(IExcelSheet)"/> for CSV: a sheet
-        /// held as <see cref="IExcelSheet"/> goes through the generic path.
+        /// held as <see cref="IExcelSheet"/> binds the same way but through the slower generic path.
         /// </remarks>
         public CsvEnumerable<T> Parse(CsvSheet sheet)
         {
