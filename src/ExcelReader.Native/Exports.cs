@@ -112,6 +112,12 @@ namespace ExcelReader.Native
                         decoded = [];
                         return false;
                     }
+                    if (raw.Names[n] is null)
+                    {
+                        NativeApi.SetLastError("a column spec name must not be NULL.");
+                        decoded = [];
+                        return false;
+                    }
                     names[n] = Encoding.UTF8.GetString(raw.Names[n], raw.NameLens[n]);
                 }
                 decoded[i] = new NativeColumnSpec

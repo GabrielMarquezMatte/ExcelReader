@@ -190,5 +190,19 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.InvalidArgument, status);
             Assert.Equal(0, outCount);
         }
+
+        [Fact]
+        public void ParseTypedWithANullColumnNameRejectsItAsInvalidArgument()
+        {
+            int nameLen = 0;
+            byte* name = null;
+            NativeColumnSpecRaw spec = new() { Names = &name, NameLens = &nameLen, NameCount = 1 };
+            NativeTable table;
+
+            int status = ((delegate* unmanaged<nint, int, NativeColumnSpecRaw*, int, int, int, NativeTable*, int>)&Exports.ParseTyped)(
+                0, 0, &spec, 1, 0, 0, &table);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+        }
     }
 }
