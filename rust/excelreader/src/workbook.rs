@@ -862,13 +862,16 @@ fn out_of_range<T>(table: &XlTable, bindings: &[ColumnBinding<T>]) -> Option<Str
         let Some(fits) = binding.fits else {
             continue;
         };
+        if col.r#type != ffi::XL_T_I64 {
+            continue;
+        }
         let values = col.values as *const i64;
-        for row in 0..table.row_count {
+        for row in 0..table.row_count.min(col.length) {
             let value = unsafe { *values.offset(row as isize) };
             if is_valid(col, row) && !fits(value) {
                 return Some(format!(
                     "column '{}' holds {value} at row {row}, which its field's type cannot represent",
-                    binding.names[0]
+                    binding.names.first().copied().unwrap_or("")
                 ));
             }
         }
