@@ -99,6 +99,15 @@ namespace ExcelReader.NetFramework.Tests.Reader
         }
 
         [Fact]
+        public void NewPropertyHidesTheBaseOne()
+        {
+            using ExcelWorkbook workbook = OpenCsv(QtyCsv);
+            HidingQty[] rows = workbook.Sheet(0).Read<HidingQty>();
+            Assert.Equal(OneThenZero, rows.Select(r => r.Qty).ToArray());
+            Assert.All(rows, r => Assert.Null(((HiddenQty)r).Qty));
+        }
+
+        [Fact]
         public void NonNullableGetsDefaultForEmptyCells()
         {
             using ExcelWorkbook workbook = OpenCsv(QtyCsv);
@@ -410,6 +419,16 @@ namespace ExcelReader.NetFramework.Tests.Reader
                 get => null;
                 set { }
             }
+        }
+
+        public class HiddenQty
+        {
+            public string? Qty { get; set; }
+        }
+
+        public sealed class HidingQty : HiddenQty
+        {
+            public new int Qty { get; set; }
         }
     }
 }
