@@ -267,11 +267,16 @@ namespace ExcelReader.Core.Reader.Xlsb
 
         internal Enumerator OpenSheet(int index)
         {
+            return OpenSheet(index, CancellationToken.None);
+        }
+
+        private Enumerator OpenSheet(int index, CancellationToken ct)
+        {
             Lifetime.Acquire(this);
             try
             {
                 ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![index].Path);
-                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes.ForRead(), _options), entry.UncompressedSize);
+                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes.ForRead(), _options), entry.UncompressedSize, ct);
             }
             catch
             {
@@ -315,7 +320,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         {
             if (_zip!.HasMemory)
             {
-                return OpenSheet(index);
+                return OpenSheet(index, ct);
             }
             Lifetime.Acquire(this);
             try

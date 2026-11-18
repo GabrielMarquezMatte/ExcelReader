@@ -378,7 +378,8 @@ namespace ExcelReader.Core.Reader.Zip
             ReadOnlySpan<byte> directory = _directory.Span;
             foreach (ref readonly ZipEntryRef candidate in _entries.AsSpan(0, Count))
             {
-                if (directory.Slice(candidate.NameStart, candidate.NameLength).StartsWith(utf8Prefix))
+                if (candidate.NameLength >= utf8Prefix.Length
+                    && EqualsIgnoringAsciiCase(directory.Slice(candidate.NameStart, utf8Prefix.Length), utf8Prefix))
                 {
                     return true;
                 }
