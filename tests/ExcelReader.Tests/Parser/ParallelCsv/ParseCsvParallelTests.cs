@@ -414,6 +414,19 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
+        public async Task ASequentialParseKeepsTheParseAsyncTokenWhenEnumeratedWithAnother()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(3));
+            using var cts = new CancellationTokenSource();
+            using var other = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 1 }, ct: cts.Token);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await rows.ToListAsync(other.Token));
+        }
+
+        [Fact]
         public async Task TheSequentialFallbackAfterAHugeHeaderCanBeEnumeratedTwice()
         {
             byte[] csv = Encoding.UTF8.GetBytes("Name,Age," + new string('x', 300_000) + "\nada,1\ngrace,2\n");
