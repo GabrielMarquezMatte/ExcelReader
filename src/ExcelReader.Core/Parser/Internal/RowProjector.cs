@@ -13,12 +13,13 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly int _headerRow;
         private readonly ExcelRowContext _context;
         private readonly bool _throwOnParseFailure;
+        private readonly bool _skipBlankRows;
         private ColumnBinding<T>[]? _bindings;
         private bool[] _seen;
         private int _requireValueCount;
         private int _rowNumber;
 
-        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904, IFormatProvider provider, bool throwOnParseFailure = false)
+        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904, IFormatProvider provider, bool throwOnParseFailure = false, bool skipBlankRows = false)
         {
             _typeInfo = typeInfo;
             _comparer = comparer;
@@ -26,6 +27,7 @@ namespace ExcelReader.Core.Parser.Internal
             _headerRow = headerRow;
             _context = new ExcelRowContext { IsDate1904 = isDate1904, FormatProvider = provider };
             _throwOnParseFailure = throwOnParseFailure;
+            _skipBlankRows = skipBlankRows;
             _seen = [];
         }
 
@@ -38,15 +40,29 @@ namespace ExcelReader.Core.Parser.Internal
                     BuildIndexColumnMap();
                 }
                 _rowNumber++;
-                return ProjectionStep.Yield;
+                return YieldUnlessBlank(in row);
             }
             ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null);
+            if (step == ProjectionStep.Yield)
+            {
+                return YieldUnlessBlank(in row);
+            }
             if (step != ProjectionStep.BuildMap)
             {
                 return step;
             }
             BuildColumnMap(in row);
             return ProjectionStep.Skip;
+        }
+
+        // A CSV blank line is a record of one empty field; the CSV-specialized projector skips it the same way.
+        private readonly ProjectionStep YieldUnlessBlank(in Row row)
+        {
+            if (_skipBlankRows && row.Descriptors is [{ Type: CellType.Empty }])
+            {
+                return ProjectionStep.Skip;
+            }
+            return ProjectionStep.Yield;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
