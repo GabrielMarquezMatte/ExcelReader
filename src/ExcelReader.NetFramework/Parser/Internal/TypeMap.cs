@@ -18,7 +18,7 @@ namespace ExcelReader.NetFramework.Parser.Internal
             List<PropertyBinder<T>> properties = new List<PropertyBinder<T>>();
             foreach (PropertyInfo property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
-                if (Attribute.IsDefined(property, typeof(ExcelIgnoreAttribute)))
+                if (property.GetIndexParameters().Length > 0 || Attribute.IsDefined(property, typeof(ExcelIgnoreAttribute)))
                 {
                     continue;
                 }
