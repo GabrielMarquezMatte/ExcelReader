@@ -42,11 +42,14 @@ namespace ExcelReader.Native
         public static int WriteTypedToMemory(int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options, NativeBuffer* outBuffer)
         {
             NativeApi.ClearLastError();
+            if (outBuffer is not null)
+            {
+                *outBuffer = default;
+            }
             if (specs is null || table is null || outBuffer is null || !TypedApi.IsValidSpecCount(table->ColumnCount))
             {
                 return NativeStatus.InvalidArgument;
             }
-            *outBuffer = default;
 
             try
             {
@@ -99,11 +102,14 @@ namespace ExcelReader.Native
         public static int OpenWriteHandle(byte* path, int pathLength, int format, NativeWriteOptionsRaw* options, nint* outHandle)
         {
             NativeApi.ClearLastError();
+            if (outHandle is not null)
+            {
+                *outHandle = 0;
+            }
             if (!IsValidOpenRequest(path, pathLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
             }
-            *outHandle = 0;
             if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
             {
                 return NativeStatus.InvalidArgument;
@@ -351,12 +357,15 @@ namespace ExcelReader.Native
         public static int AddStyle(nint handle, NativeCellStyleRaw* style, int* outStyleId)
         {
             NativeApi.ClearLastError();
+            if (outStyleId is not null)
+            {
+                *outStyleId = 0;
+            }
             if (style is null || outStyleId is null)
             {
                 NativeApi.SetLastError("xl_add_style needs a style and an out_style_id.");
                 return NativeStatus.InvalidArgument;
             }
-            *outStyleId = 0;
             if (!NativeCellStyle.TryDecode(style, out CellStyle? decoded, out string? error))
             {
                 NativeApi.SetLastError(error);
