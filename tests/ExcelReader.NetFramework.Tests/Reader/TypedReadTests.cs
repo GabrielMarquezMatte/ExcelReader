@@ -91,6 +91,14 @@ namespace ExcelReader.NetFramework.Tests.Reader
         }
 
         [Fact]
+        public void IndexerIsNotMapped()
+        {
+            using ExcelWorkbook workbook = OpenCsv(QtyCsv);
+            WithIndexer[] rows = workbook.Sheet(0).Read<WithIndexer>();
+            Assert.Equal(OneThenNull, rows.Select(r => r.Qty).ToArray());
+        }
+
+        [Fact]
         public void NonNullableGetsDefaultForEmptyCells()
         {
             using ExcelWorkbook workbook = OpenCsv(QtyCsv);
@@ -391,6 +399,17 @@ namespace ExcelReader.NetFramework.Tests.Reader
         public sealed class ProductOnly
         {
             public string? Product { get; set; }
+        }
+
+        public sealed class WithIndexer
+        {
+            public int? Qty { get; set; }
+
+            public object? this[string key]
+            {
+                get => null;
+                set { }
+            }
         }
     }
 }
