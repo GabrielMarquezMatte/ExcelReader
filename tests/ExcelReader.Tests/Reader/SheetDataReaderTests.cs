@@ -354,6 +354,28 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public void GetFieldTypeMatchesGetValueForCellsWhoseValueCannotBeRead()
+        {
+            const string styles =
+                """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
+            using var ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" s="1"><v>3000000</v></c><c r="B1" s="1"><v>45000</v></c><c r="C1"><v>abc</v></c><c r="D1" t="b"><v>x</v></c></row>""",
+                styles: styles);
+            using var reader = Excel.FromXlsx(ms);
+            using var data = new SheetDataReader(reader.FirstSheet, new SheetDataReaderOptions { HeaderRow = 0 });
+
+            DataTable schema = data.GetSchemaTable();
+            Assert.True(data.Read());
+
+            Assert.Equal([typeof(string), typeof(DateTime), typeof(string), typeof(string)],
+                Enumerable.Range(0, 4).Select(i => data.GetValue(i).GetType()));
+            Assert.Equal([typeof(string), typeof(DateTime), typeof(string), typeof(string)],
+                Enumerable.Range(0, 4).Select(data.GetFieldType));
+            Assert.Equal([typeof(string), typeof(DateTime), typeof(string), typeof(string)],
+                schema.Rows.Cast<DataRow>().Select(r => (Type)r[SchemaTableColumn.DataType]));
+        }
+
+        [Fact]
         public async Task IndexersAndTheFixedAdoMembersReportTheDocumentedValues()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "Name"], [1, "alice"]);
