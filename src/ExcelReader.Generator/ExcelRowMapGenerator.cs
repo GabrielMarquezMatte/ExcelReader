@@ -283,8 +283,12 @@ namespace ExcelReader.Generator
             {
                 foreach (IPropertySymbol property in current.GetMembers().OfType<IPropertySymbol>()
                     .Where(p => !p.IsStatic && p.Parameters.Length == 0 && p.DeclaredAccessibility == Accessibility.Public
-                        && !HasAttribute(p, IgnoreAttribute) && seenNames.Add(p.Name)))
+                        && seenNames.Add(p.Name)))
                 {
+                    if (HasAttribute(property, IgnoreAttribute))
+                    {
+                        continue;
+                    }
                     yield return property;
                 }
             }
@@ -298,14 +302,25 @@ namespace ExcelReader.Generator
                 .Any(static d => d.Modifiers.Any(SyntaxKind.PartialKeyword));
         }
 
+        private static IEnumerable<AttributeData> InheritedAttributes(IPropertySymbol property)
+        {
+            for (IPropertySymbol? current = property; current is not null; current = current.OverriddenProperty)
+            {
+                foreach (AttributeData attribute in current.GetAttributes())
+                {
+                    yield return attribute;
+                }
+            }
+        }
+
         private static bool HasAttribute(IPropertySymbol property, string fullName)
         {
-            return property.GetAttributes().Any(a => string.Equals(a.AttributeClass?.ToDisplayString(), fullName, StringComparison.Ordinal));
+            return InheritedAttributes(property).Any(a => string.Equals(a.AttributeClass?.ToDisplayString(), fullName, StringComparison.Ordinal));
         }
 
         private static PropertyPlan BuildPlan(List<DiagnosticInfo> diagnostics, INamedTypeSymbol owner, IPropertySymbol property, ref bool hadPropertyError)
         {
-            string[] names = [.. property.GetAttributes()
+            string[] names = [.. InheritedAttributes(property)
                 .Where(a => string.Equals(a.AttributeClass?.ToDisplayString(), ColumnAttribute, StringComparison.Ordinal))
                 .Select(static a => (string?)a.ConstructorArguments.FirstOrDefault().Value)
                 .Where(static n => n is not null)!];
@@ -314,7 +329,7 @@ namespace ExcelReader.Generator
                 names = [property.Name];
             }
 
-            AttributeData? required = property.GetAttributes()
+            AttributeData? required = InheritedAttributes(property)
                 .FirstOrDefault(a => string.Equals(a.AttributeClass?.ToDisplayString(), RequiredAttribute, StringComparison.Ordinal));
             bool isRequired = required is not null;
             bool allowEmpty = required?.NamedArguments.FirstOrDefault(static kv => string.Equals(kv.Key, "AllowEmpty", StringComparison.Ordinal)).Value.Value is true;
@@ -331,7 +346,7 @@ namespace ExcelReader.Generator
                 hadPropertyError = true;
             }
 
-            AttributeData? converterAttr = property.GetAttributes()
+            AttributeData? converterAttr = InheritedAttributes(property)
                 .FirstOrDefault(a => string.Equals(a.AttributeClass?.ToDisplayString(), ConverterAttribute, StringComparison.Ordinal));
 
             string? style = StyleExpression(diagnostics, property, ref hadPropertyError);
@@ -478,7 +493,7 @@ namespace ExcelReader.Generator
         // The attribute's own ToCellStyle maps it to a CellStyle, so the generated map and reflection agree.
         private static string? StyleExpression(List<DiagnosticInfo> diagnostics, IPropertySymbol property, ref bool hadPropertyError)
         {
-            AttributeData? attribute = property.GetAttributes()
+            AttributeData? attribute = InheritedAttributes(property)
                 .FirstOrDefault(a => string.Equals(a.AttributeClass?.ToDisplayString(), StyleAttribute, StringComparison.Ordinal));
             if (attribute is null)
             {

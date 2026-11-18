@@ -16,16 +16,21 @@ use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// The status a shim returns to signal "a callback panicked". The library treats it like any other
-/// caller code: from `accumulate` it may be discarded along with the partition instead of ending the
-/// run, while from `seed` or `combine` it always ends the run, freeing every state and returning the
-/// status verbatim. Either way, the wrapper then resumes the stored payload instead of turning it
-/// into an [`Error`]. Positive, so it can never collide with a library status (every one of those is
-/// `<= 0`) - but it CAN collide with a caller's own `Err(i32::MAX)`. `finish` does not disambiguate
-/// the two by status; it keys on whether the panic slot actually holds a payload, so an ordinary
-/// `Err(i32::MAX)` from `accumulate` or `combine` still surfaces as a normal [`Error`] rather than
-/// being resumed as a panic.
+/// The first of the positive statuses a shim returns for a callback failure. The library hands a
+/// callback's non-zero status back verbatim, and a panic in `accumulate` can be discarded along with
+/// its partition while the run goes on, so each failure gets its own status (`PANIC_STATUS - n`,
+/// `n < RESERVED`) and `finish` maps the status the run ended on back to that exact failure. A
+/// caller's own `Err` code inside that window is recorded the same way, so it never reads as a
+/// panic; every library status is `<= 0`.
 pub(crate) const PANIC_STATUS: i32 = i32::MAX;
+
+/// How many distinct failure statuses one run hands out; a failure past this overwrites the last.
+const RESERVED: usize = 1 << 16;
+
+enum Failure {
+    Panic(Box<dyn Any + Send>),
+    Code(i32),
+}
 
 /// What each seeded accumulator is boxed in. The trailing byte keeps the allocation non-zero-sized,
 /// so `seed` hands the library a distinct pointer per partition even when `A` is zero-sized, as the
@@ -129,31 +134,48 @@ impl<'a, const N: usize> From<&'a [u8; N]> for CsvInput<'a> {
 
 /// What every shim reaches through `user_data`. The C ABI shares one `user_data` across all worker
 /// threads and requires it to be read-only or internally synchronized, so the seed closure is held
-/// by shared reference and the panic slot behind a `Mutex` - the shims never take `&mut Shared`.
+/// by shared reference and the failure list behind a `Mutex` - the shims never take `&mut Shared`.
 struct Shared<'a, A, F> {
     seed: &'a F,
-    panic: Mutex<Option<Box<dyn Any + Send>>>,
+    failures: Mutex<Vec<Failure>>,
     _marker: std::marker::PhantomData<fn() -> A>,
 }
 
 impl<A, F> Shared<'_, A, F> {
-    /// Keeps the FIRST payload: later panics from sibling workers are dropped rather than racing to
-    /// overwrite the one that started the abort.
-    fn store_panic(&self, payload: Box<dyn Any + Send>) -> i32 {
-        let mut slot = self
-            .panic
+    fn record(&self, failure: Failure) -> i32 {
+        let mut failures = self
+            .failures
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if slot.is_none() {
-            *slot = Some(payload);
+        if failures.len() == RESERVED {
+            failures.pop();
         }
-        PANIC_STATUS
+        failures.push(failure);
+        PANIC_STATUS - (failures.len() - 1) as i32
     }
 
-    /// Runs one user callback: its error code passes through and a panic is stored as above.
+    fn store_panic(&self, payload: Box<dyn Any + Send>) -> i32 {
+        self.record(Failure::Panic(payload))
+    }
+
+    /// The failure `status` was handed out for, or `None` when it is not one of this run's.
+    fn failure(self, status: i32) -> Option<Failure> {
+        let index = usize::try_from(PANIC_STATUS.checked_sub(status)?).ok()?;
+        self.failures
+            .into_inner()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .into_iter()
+            .nth(index)
+    }
+
+    /// Runs one user callback: an error code passes through (one inside the failure window is
+    /// recorded so it cannot be mistaken for a panic) and a panic is stored as above.
     fn guard(&self, body: impl FnOnce() -> Result<(), i32>) -> i32 {
         match catch_unwind(AssertUnwindSafe(body)) {
             Ok(Ok(())) => XL_OK,
+            Ok(Err(code)) if code > PANIC_STATUS - RESERVED as i32 => {
+                self.record(Failure::Code(code))
+            }
             Ok(Err(code)) => code,
             Err(payload) => self.store_panic(payload),
         }
@@ -329,7 +351,7 @@ where
 fn shared<A, F>(seed: &F) -> Shared<'_, A, F> {
     Shared {
         seed,
-        panic: Mutex::new(None),
+        failures: Mutex::new(Vec::new()),
         _marker: std::marker::PhantomData,
     }
 }
@@ -415,16 +437,11 @@ where
 
 /// Turns the run's outcome into a `Result`, taking ownership of the surviving state.
 ///
-/// A stored panic only wins over the status if the status itself is [`PANIC_STATUS`]: an
-/// `accumulate` panic on a chunk whose boundary guess was wrong is discarded exactly like a
-/// non-panic error would be once the library re-reads that chunk from the confirmed start, so the
-/// panic payload can be stale by the time this runs even though `shared.panic` still holds it. Only
-/// resume it when the library's own verdict says the run actually ended on a panic; otherwise a
-/// discarded panic from an abandoned first attempt would wrongly kill an otherwise-successful run
-/// (or shadow the real error from an unrelated later failure). When the status does say the run
-/// ended on a panic, the library has already unwound and freed every state it owns by the time it
-/// returns, so resuming here delivers the original payload to the caller without it ever having
-/// crossed a foreign frame.
+/// The status the run ended on picks the failure to report. An `accumulate` panic on a chunk whose
+/// boundary guess was wrong is discarded once the library re-reads that chunk, so its payload can
+/// still be stored when the run ends; resuming only the failure the final status names keeps it from
+/// killing an otherwise-successful run or shadowing the real outcome. A panic is resumed here, on the
+/// calling thread, after the library has freed every state it owns.
 fn finish<A, F>(shared: Shared<'_, A, F>, status: i32, state: *mut c_void) -> Result<A, Error>
 where
     F: Fn() -> A,
@@ -435,15 +452,13 @@ where
         Some(unsafe { Box::from_raw(state as *mut State<A>) })
     };
 
-    if status == PANIC_STATUS {
-        if let Some(payload) = shared
-            .panic
-            .into_inner()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-        {
+    match shared.failure(status) {
+        Some(Failure::Panic(payload)) => {
             drop(winner);
             resume_unwind(payload);
         }
+        Some(Failure::Code(code)) => return Err(status_error(code)),
+        None => {}
     }
     if status != XL_OK {
         return Err(status_error(status));
@@ -467,5 +482,54 @@ pub(crate) fn status_error(status: i32) -> Error {
         )
     } else {
         workbook::last_error(status)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn payload_text(payload: Box<dyn Any + Send>) -> String {
+        payload.downcast::<&str>().map(|s| s.to_string()).unwrap()
+    }
+
+    #[test]
+    fn a_stale_panic_does_not_replace_a_later_one() {
+        let seed = || 0u8;
+        let shared = shared::<u8, _>(&seed);
+        shared.store_panic(Box::new("discarded"));
+        let status = shared.store_panic(Box::new("real"));
+
+        let payload = catch_unwind(AssertUnwindSafe(|| {
+            let _ = finish(shared, status, std::ptr::null_mut());
+        }))
+        .expect_err("the run ended on a panic");
+        assert_eq!(payload_text(payload), "real");
+    }
+
+    #[test]
+    fn a_stale_panic_does_not_shadow_a_callback_code() {
+        let seed = || 0u8;
+        let shared = shared::<u8, _>(&seed);
+        shared.store_panic(Box::new("discarded"));
+        let status = shared.guard(|| Err(PANIC_STATUS));
+
+        let error = finish(shared, status, std::ptr::null_mut())
+            .expect_err("the run ended on a callback code");
+        assert_eq!(error.kind(), ErrorKind::Callback(PANIC_STATUS));
+    }
+
+    #[test]
+    fn a_discarded_panic_does_not_fail_an_ok_run() {
+        let seed = || 0u8;
+        let shared = shared::<u8, _>(&seed);
+        shared.store_panic(Box::new("discarded"));
+        let state = Box::into_raw(Box::new(State {
+            value: 7u8,
+            _nonzero: 0,
+        }));
+
+        let value = finish(shared, XL_OK, state as *mut c_void).expect("the run succeeded");
+        assert_eq!(value, 7);
     }
 }

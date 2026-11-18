@@ -494,3 +494,65 @@ fn out_of_range_integer_is_an_error_not_a_panic() {
 fn in_range_and_null_integers_still_parse() {
     assert_eq!(parse_narrow("narrow-ok", "small,maybe\n255,\n0,4294967295\n").unwrap(), 2);
 }
+
+#[derive(Default)]
+struct HandWritten {
+    value: i64,
+    flag: bool,
+}
+
+impl ExcelMapper for HandWritten {
+    fn bindings() -> Vec<excelreader::__private::ColumnBinding<Self>> {
+        use excelreader::__private::{column_bool, column_i64, ColumnBinding};
+        vec![
+            ColumnBinding {
+                names: &[],
+                column_type: ColumnType::I64,
+                assign: |row: &mut HandWritten, col, i| row.value = column_i64(col, i),
+                fits: Some(|value| value < 100),
+            },
+            ColumnBinding {
+                names: &["flag"],
+                column_type: ColumnType::Bool,
+                assign: |row: &mut HandWritten, col, i| row.flag = column_bool(col, i),
+                fits: Some(|_| false),
+            },
+        ]
+    }
+}
+
+#[test]
+fn a_range_check_on_a_non_integer_column_is_ignored() {
+    let path = write_csv("hand-written", "n,flag\n1,true\n2,false\n");
+    let workbook = OpenOptions::new()
+        .format(Format::Csv)
+        .open(&path)
+        .expect("open must succeed");
+    let table = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<HandWritten>(&ReadOptions::new())
+        .expect("a fits check on a bool column must not read it as i64");
+    assert_eq!(table.len(), 2);
+    drop(workbook);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn an_out_of_range_value_in_an_unnamed_binding_reports_instead_of_panicking() {
+    let path = write_csv("hand-written-range", "n,flag\n300,true\n");
+    let workbook = OpenOptions::new()
+        .format(Format::Csv)
+        .open(&path)
+        .expect("open must succeed");
+    let Err(error) = workbook
+        .sheet(0)
+        .expect("sheet 0")
+        .parse::<HandWritten>(&ReadOptions::new())
+    else {
+        panic!("300 does not fit");
+    };
+    assert_eq!(error.kind(), excelreader::ErrorKind::InvalidArgument);
+    drop(workbook);
+    let _ = std::fs::remove_file(path);
+}

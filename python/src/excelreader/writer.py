@@ -345,6 +345,8 @@ def _table_from_arrow(batch: Any) -> tuple[TypedTable, list[ColumnType]]:
 
     if isinstance(batch, pyarrow.Table):
         batches = batch.combine_chunks().to_batches()
+        if len(batches) > 1:
+            raise ValueError("a column past 2 GiB stays split into chunks, which the int32-offset ABI cannot take")
         batch = batches[0] if batches else pyarrow.RecordBatch.from_pylist([], schema=batch.schema)
 
     types = [_arrow_column_type(field) for field in batch.schema]
@@ -433,7 +435,7 @@ def encrypt_package(
         )
     )
     try:
-        encrypted = ctypes.string_at(buffer.data, buffer.len)
+        encrypted = _native.copy_bytes(buffer.data, buffer.len)
     finally:
         lib.xl_free_buffer(ctypes.byref(buffer))
     if isinstance(destination, (str, os.PathLike)):

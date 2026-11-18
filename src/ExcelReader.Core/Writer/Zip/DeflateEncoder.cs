@@ -26,6 +26,15 @@ namespace ExcelReader.Core.Writer.Zip
         // each symbol writes ahead of the position it advances to.
         private const int MaxEncodedBlock = (MaxBlockLength * 9 / 8) + 24;
 
+        // A table reused from below this base leaves a stream 3 GiB before its positions wrap.
+        private const uint MaxTableBase = 1u << 30;
+
+        [ThreadStatic]
+        private static HashTable? _threadTable;
+
+        internal static bool AlwaysClearTable;
+
+        private readonly HashTable _hash;
         private byte[] _window = [];
         private uint[] _table;
         private int _encoded;
@@ -34,10 +43,24 @@ namespace ExcelReader.Core.Writer.Zip
         private ulong _bits;
         private int _bitCount;
 
+        // Slots from earlier streams sit below _windowStart, so the distance check rejects them as it rejects zeros.
         internal DeflateEncoder()
         {
-            _table = ArrayPool<uint>.Shared.Rent(1 << HashBits);
-            Array.Clear(_table, 0, 1 << HashBits);
+            _hash = _threadTable ?? new HashTable();
+            _threadTable = null;
+            if (_hash.Base >= MaxTableBase || AlwaysClearTable)
+            {
+                Array.Clear(_hash.Slots);
+                _hash.Base = 0;
+            }
+            _table = _hash.Slots;
+            _windowStart = _hash.Base;
+        }
+
+        internal static void SetThreadTableBase(uint value)
+        {
+            _threadTable ??= new HashTable();
+            _threadTable.Base = value;
         }
 
         /// <summary>
@@ -107,9 +130,21 @@ namespace ExcelReader.Core.Writer.Zip
             {
                 ArrayPool<byte>.Shared.Return(_window);
             }
-            ArrayPool<uint>.Shared.Return(_table);
+            ReleaseTable();
             _window = [];
             _table = [];
+        }
+
+        // A slid stream may have wrapped its positions; an interrupted block may have hashed past _encoded.
+        private void ReleaseTable()
+        {
+            _threadTable ??= _hash;
+            if (_windowStart != _hash.Base)
+            {
+                _hash.Base = MaxTableBase;
+                return;
+            }
+            _hash.Base = _windowStart + (uint)_encoded + MaxBlockLength;
         }
 
         private void FlushSync(ReadOnlySpan<byte> source, BiffBuffer output)
@@ -284,6 +319,12 @@ namespace ExcelReader.Core.Writer.Zip
                 length++;
             }
             return length;
+        }
+
+        private sealed class HashTable
+        {
+            internal readonly uint[] Slots = new uint[1 << HashBits];
+            internal uint Base;
         }
 
         [StructLayout(LayoutKind.Auto)]

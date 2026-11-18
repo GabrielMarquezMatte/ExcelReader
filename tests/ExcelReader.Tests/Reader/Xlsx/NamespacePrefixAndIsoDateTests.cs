@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Xlsx;
 
@@ -5,6 +7,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
 {
     public class NamespacePrefixAndIsoDateTests
     {
+        private const string Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
         [Fact]
         public void PrefixedNumberAndInlineStringCellsAreRead()
@@ -244,6 +247,92 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal(CellType.Date, e.Current[0].Type);
             Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime dt));
             Assert.Equal(new DateTime(2026, 3, 4), dt);
+        }
+
+        [Theory]
+        [InlineData("10:30:00", false)]
+        [InlineData("10:30:00", true)]
+        [InlineData("10:30:00-03:00", false)]
+        [InlineData("10:30:00-03:00", true)]
+        [InlineData("10:30:00+05:00", true)]
+        [InlineData("10:30:00Z", true)]
+        public void TimeOnlyIsoValueReadsAsTheSameFractionInEitherDateSystem(string text, bool date1904)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                $"""<row r="1"><c r="A1" t="d"><v>{text}</v></c></row>""", date1904: date1904);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.Equal("0.4375", e.Current[0].GetString());
+            Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime dt));
+            Assert.Equal(TimeSpan.FromHours(10.5), dt.TimeOfDay);
+        }
+
+        [Fact]
+        public void PrefixedSheetIsReadWhenAnXmlCommentContainsATag()
+        {
+            using MemoryStream ms = Package(
+                sheet: $"""<?xml version="1.0"?><!-- made by <Tool> --><x:worksheet xmlns:x="{Main}"><x:sheetData><x:row r="1"><x:c r="A1"><x:v>5</x:v></x:c></x:row></x:sheetData></x:worksheet>""",
+                sharedStrings: null);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal("5", e.Current[0].GetString());
+        }
+
+        [Fact]
+        public void PrefixedSharedStringsAreReadWhenAnXmlCommentContainsATag()
+        {
+            using MemoryStream ms = Package(
+                sheet: $"""<worksheet xmlns="{Main}"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>""",
+                sharedStrings: $"""<?xml version="1.0"?><!-- made by <Tool> --><x:sst xmlns:x="{Main}"><x:si><x:t>alpha</x:t></x:si></x:sst>""");
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal("alpha", e.Current[0].GetString());
+        }
+
+        [Theory]
+        [InlineData("<?xml version=\"1.0\"?><!-- <Tool> --><x:a xmlns:x=\"u\"/>", "x:")]
+        [InlineData("<?xml version=\"1.0\" ?><?pi <Tool>?><x:a/>", "x:")]
+        [InlineData("<!DOCTYPE a [<!ENTITY e \"<Tool>\">]><x:a/>", "x:")]
+        [InlineData("<!-- <x:Tool> --><a xmlns=\"u\"/>", "")]
+        [InlineData("<!-- unterminated <x:a>", "")]
+        public void DetectElementPrefixSkipsCommentsProcessingInstructionsAndDoctype(string xml, string expected)
+        {
+            Assert.Equal(expected, Encoding.UTF8.GetString(XlsxXml.DetectElementPrefix(Encoding.UTF8.GetBytes(xml))));
+        }
+
+        private static MemoryStream Package(string sheet, string? sharedStrings)
+        {
+            const string rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+            const string pkgRel = "http://schemas.openxmlformats.org/package/2006/relationships";
+            var ms = new MemoryStream();
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                Entry(zip, "xl/worksheets/sheet1.xml", sheet);
+                Entry(zip, "xl/workbook.xml",
+                    $"""<workbook xmlns="{Main}" xmlns:r="{rel}"><sheets><sheet name="S1" sheetId="1" r:id="rId1"/></sheets></workbook>""");
+                Entry(zip, "xl/_rels/workbook.xml.rels",
+                    $"""<Relationships xmlns="{pkgRel}"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>""");
+                if (sharedStrings is not null)
+                {
+                    Entry(zip, "xl/sharedStrings.xml", sharedStrings);
+                }
+            }
+            ms.Position = 0;
+            return ms;
+        }
+
+        private static void Entry(ZipArchive zip, string name, string content)
+        {
+            using Stream s = zip.CreateEntry(name).Open();
+            byte[] bytes = Encoding.UTF8.GetBytes(content);
+            s.Write(bytes, 0, bytes.Length);
         }
     }
 }

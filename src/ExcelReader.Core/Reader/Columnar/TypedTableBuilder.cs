@@ -25,6 +25,10 @@ namespace ExcelReader.Core.Reader.Columnar
             for (int i = 0; i < _columns.Length; i++)
             {
                 int index = row.IndexOf(columnIndices[i]);
+                if ((index < 0 || cells[index] is { Type: CellType.Empty, Length: 0, HasNumber: false }) && _columns[i].TryAppendNull())
+                {
+                    continue;
+                }
                 if (index >= 0 && _columns[i].CanAppendDirect(in cells[index]) && _columns[i].TryAppendDirect(in cells[index], in row))
                 {
                     continue;

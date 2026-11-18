@@ -11,6 +11,14 @@ namespace ExcelReader.Native
             int degreeOfParallelism, ArrowArray* outArray, ArrowSchema* outSchema)
         {
             NativeApi.ClearLastError();
+            if (outArray is not null)
+            {
+                *outArray = default;
+            }
+            if (outSchema is not null)
+            {
+                *outSchema = default;
+            }
 
             if (specs is null || outArray is null || outSchema is null || !TypedApi.IsValidSpecCount(specCount))
             {

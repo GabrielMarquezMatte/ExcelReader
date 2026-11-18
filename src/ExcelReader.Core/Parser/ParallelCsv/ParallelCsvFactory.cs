@@ -22,7 +22,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             int dop = Normalize(degreeOfParallelism);
             if (!reader.TryGetChunkSource(out CsvChunkSource source) || !CanPartition(dop, source.Length, reader.Options))
             {
-                return new CsvEnumerable<T>(reader.FirstSheet, parser.Config, parser.CsvInfo, ownedReader: null, ct);
+                return new CsvEnumerable<T>(reader.FirstSheet, parser.Config, parser.CsvInfo, ct);
             }
             return Build(source, reader.Options, parser, dop, chunkSizeOverride: 0, ct, reader.Lifetime, reader);
         }
@@ -49,7 +49,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             int chunkSizeOverride,
             CancellationToken ct,
             ReaderLifetime? lease = null,
-            object? owner = null)
+            CsvReader? owner = null)
         {
             ExcelParserOptions config = parser.Config;
             TypeMapInfo<T> info = parser.CsvInfo;
@@ -68,16 +68,17 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             CsvChunkPlan plan = CsvChunkPlan.Create(dataStart, source.Length - dataStart, dop, chunkSizeOverride);
             if (plan.Count <= 1)
             {
-                return Sequential(source.OpenReader(options), parser, ct);
+                // Without an owner the source is in memory, so the reader opened here holds nothing to release.
+                return Sequential(owner ?? source.OpenReader(options), parser, ct);
             }
 
-            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, lease, owner);
+            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, lease, owner, ct);
         }
 
         private static CsvEnumerable<T> Sequential<T>(
             CsvReader reader, ExcelParser<T> parser, CancellationToken ct)
         {
-            return new CsvEnumerable<T>(reader.Sheets[0], parser.Config, parser.CsvInfo, ownedReader: reader, ct);
+            return new CsvEnumerable<T>(reader.FirstSheet, parser.Config, parser.CsvInfo, ct);
         }
 
         private static async IAsyncEnumerable<T> Empty<T>()

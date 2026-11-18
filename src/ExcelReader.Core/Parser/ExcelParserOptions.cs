@@ -18,8 +18,9 @@ namespace ExcelReader.Core.Parser
         public HeaderNormalization HeaderNormalization { get; init; } = HeaderNormalization.Trim;
 
         /// <summary>
-        /// Gets the culture used when parsing text-backed numeric and <see cref="Guid"/> cells (e.g. pt-BR
-        /// "1.234,56"). Binary numeric cells from XLS/XLSB carry a raw double and ignore this setting.
+        /// Gets the culture used when parsing text cells (CSV fields, XLSX/XLSB/XLS strings) as numbers or
+        /// <see cref="Guid"/> (e.g. pt-BR "1.234,56"). Numeric and date cells stored by the workbook are
+        /// always read invariantly and ignore this setting.
         /// Defaults to <see cref="CultureInfo.InvariantCulture"/>.
         /// </summary>
         public CultureInfo Culture { get; init; } = CultureInfo.InvariantCulture;

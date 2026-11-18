@@ -1,6 +1,7 @@
 using System.Reflection;
 using ExcelReader.NetFramework.Interop;
 using ExcelReader.NetFramework.Parser;
+using ExcelReader.NetFramework.Parser.Internal;
 
 namespace ExcelReader.NetFramework.Writer.Internal
 {
@@ -10,8 +11,8 @@ namespace ExcelReader.NetFramework.Writer.Internal
 
         private WriteMap()
         {
-            IEnumerable<PropertyInfo> properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.GetGetMethod() is not null && p.GetIndexParameters().Length == 0 && !Attribute.IsDefined(p, typeof(ExcelIgnoreAttribute)))
+            IEnumerable<PropertyInfo> properties = MappedProperties.Of(typeof(T))
+                .Where(p => p.GetGetMethod() is not null)
                 .OrderBy(p => Depth(p.DeclaringType!))
                 .ThenBy(p => p.MetadataToken);
             Columns = properties.Select(Create).ToArray();

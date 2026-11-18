@@ -115,5 +115,41 @@ namespace ExcelReader.Tests.Writer
                     break;
             }
         }
+
+        public class CodeBase
+        {
+            public int Code { get; set; }
+        }
+
+        public class HiddenCodeRecord : CodeBase
+        {
+            public new string? Code { get; set; }
+        }
+
+        [Fact]
+        public async Task APropertyHiddenWithNewWritesOnlyTheDerivedColumn()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            HiddenCodeRecord[] records = [new HiddenCodeRecord { Code = "A1" }];
+            using var ms = new MemoryStream();
+            await using (var w = CsvWorkbookWriter.Create(ms, leaveOpen: true))
+            await using (var s = w.AddSheet("S1"))
+            {
+                await s.WriteRecordsAsync(records, ExcelRecordLayout.FromAttributes<HiddenCodeRecord>(), ct);
+            }
+
+            ms.Position = 0;
+            using var reader = Excel.FromCsv(ms);
+            List<string> cells = [];
+            foreach (Row row in reader.FirstSheet)
+            {
+                foreach (RowCell cell in row.Cells)
+                {
+                    cells.Add(cell.Value.GetString());
+                }
+            }
+
+            Assert.Equal(["Code", "A1"], cells);
+        }
     }
 }

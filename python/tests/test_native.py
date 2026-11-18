@@ -293,3 +293,11 @@ def test_default_cell_style_marshals_every_color_as_unset():
     assert raw.struct_size == 104
     assert (raw.font_color, raw.fill_color) == (-1, -1)
     assert [edge.color for edge in (raw.left, raw.right, raw.top, raw.bottom)] == [-1] * 4
+
+
+def test_copy_bytes_reads_a_native_buffer_without_a_c_int_size_limit():
+    buffer = (ctypes.c_uint8 * 4)(1, 2, 3, 4)
+    pointer = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_uint8))
+    assert _native.copy_bytes(pointer, 4) == b"\x01\x02\x03\x04"
+    assert _native.copy_bytes(ctypes.addressof(buffer), 2) == b"\x01\x02"
+    assert _native.copy_bytes(pointer, 0) == b""

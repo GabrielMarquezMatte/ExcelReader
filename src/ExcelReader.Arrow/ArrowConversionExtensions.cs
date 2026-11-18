@@ -26,7 +26,7 @@ namespace ExcelReader.Arrow
             options ??= ArrowReadOptions.Default;
             ArgumentOutOfRangeException.ThrowIfNegative(options.DegreeOfParallelism, nameof(options));
             int headerRow = options.HeaderRow;
-            IReadOnlyList<ExcelColumnSchema> schema = options.Schema ?? Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = headerRow });
+            IReadOnlyList<ExcelColumnSchema> schema = options.Schema ?? InferNullableSchema(sheet, headerRow);
             TypedColumnSpec[] specs = ToSpecs(schema);
             using ColumnarTable table = TypedTableParser.Parse(sheet, specs, headerRow, options.DegreeOfParallelism, allowDictionary: true,
                 chunkSizeOverride: 0, out _, out string? specError) ?? throw new ArgumentException(specError, nameof(options));
@@ -39,6 +39,17 @@ namespace ExcelReader.Arrow
                 arrays[i] = ArrowColumns.ToArray(in table.Columns[i]);
             }
             return new RecordBatch(new Schema(fields, metadata: null), arrays, checked((int)table.RowCount));
+        }
+
+        private static ExcelColumnSchema[] InferNullableSchema(IExcelSheet sheet, int headerRow)
+        {
+            IReadOnlyList<ExcelColumnSchema> inferred = Excel.InferSchema(sheet, new SchemaInferenceOptions { HeaderRow = headerRow });
+            ExcelColumnSchema[] schema = new ExcelColumnSchema[inferred.Count];
+            for (int i = 0; i < schema.Length; i++)
+            {
+                schema[i] = inferred[i] with { IsNullable = true };
+            }
+            return schema;
         }
 
         private static TypedColumnSpec[] ToSpecs(IReadOnlyList<ExcelColumnSchema> schema)

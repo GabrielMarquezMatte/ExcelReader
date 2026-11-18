@@ -61,13 +61,11 @@ namespace ExcelReader.Core.Reader.Xls
             {
                 return (stream, !leaveOpen);
             }
-            MemoryStream ms = new();
-            stream.CopyTo(ms);
+            MemoryStream ms = new(StreamSpooler.Spool(stream), writable: false);
             if (!leaveOpen)
             {
                 stream.Dispose();
             }
-            ms.Position = 0;
             return (ms, true);
         }
 
@@ -77,13 +75,11 @@ namespace ExcelReader.Core.Reader.Xls
             {
                 return (stream, !leaveOpen);
             }
-            MemoryStream ms = new();
-            await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
+            MemoryStream ms = new(await StreamSpooler.SpoolAsync(stream, ct).ConfigureAwait(false), writable: false);
             if (!leaveOpen)
             {
                 await stream.DisposeAsync().ConfigureAwait(false);
             }
-            ms.Position = 0;
             return (ms, true);
         }
 

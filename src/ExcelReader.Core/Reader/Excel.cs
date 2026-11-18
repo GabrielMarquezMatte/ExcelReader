@@ -636,7 +636,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
         /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt, cannot be read (encrypted entries, an unsupported compression method, more entries than the default limit) or holds no XLSX/XLSB workbook part.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static ExcelFileFormat DetectFileFormat(Stream stream)
@@ -651,7 +651,7 @@ namespace ExcelReader.Core.Reader
                 zip?.Dispose();
                 return format;
             }
-            catch (InvalidDataException)
+            catch (Exception ex) when (IsNotAReadableWorkbook(ex))
             {
                 return ExcelFileFormat.Unknown;
             }
@@ -668,7 +668,7 @@ namespace ExcelReader.Core.Reader
         /// Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from an in-memory buffer's signature, without consuming it.
         /// </summary>
         /// <param name="data">A buffer containing the workbook data.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt, cannot be read (encrypted entries, an unsupported compression method, more entries than the default limit) or holds no XLSX/XLSB workbook part.</returns>
         public static ExcelFileFormat DetectFileFormat(ReadOnlyMemory<byte> data)
         {
             try
@@ -677,7 +677,7 @@ namespace ExcelReader.Core.Reader
                 memZip?.Dispose();
                 return format;
             }
-            catch (InvalidDataException)
+            catch (Exception ex) when (IsNotAReadableWorkbook(ex))
             {
                 return ExcelFileFormat.Unknown;
             }
@@ -686,7 +686,7 @@ namespace ExcelReader.Core.Reader
         /// <summary>Asynchronously detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
         /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection. Reading starts at the stream's current <see cref="Stream.Position"/>, which is treated as the start of the workbook; bytes before it are ignored.</param>
         /// <param name="ct">A token to cancel the detection operation.</param>
-        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt or holds no XLSX/XLSB workbook part.</returns>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format or the ZIP is corrupt, cannot be read (encrypted entries, an unsupported compression method, more entries than the default limit) or holds no XLSX/XLSB workbook part.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static async ValueTask<ExcelFileFormat> DetectFileFormatAsync(Stream stream, CancellationToken ct = default)
@@ -701,7 +701,7 @@ namespace ExcelReader.Core.Reader
                 zip?.Dispose();
                 return format;
             }
-            catch (InvalidDataException)
+            catch (Exception ex) when (IsNotAReadableWorkbook(ex))
             {
                 return ExcelFileFormat.Unknown;
             }
@@ -713,6 +713,11 @@ namespace ExcelReader.Core.Reader
                     stream.Position = start;
                 }
             }
+        }
+
+        private static bool IsNotAReadableWorkbook(Exception ex)
+        {
+            return ex is InvalidDataException or NotSupportedException or ExcelLimitExceededException;
         }
 
         private static IExcelWorkbook OpenSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions? options)

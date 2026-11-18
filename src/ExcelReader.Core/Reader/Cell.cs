@@ -95,15 +95,21 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <param name="provider">
         /// The format provider used for text parsing and for deciding whether '.' is the decimal separator;
-        /// null means <see cref="CultureInfo.InvariantCulture"/>, the culture XLSX and XLSB store numbers in.
+        /// null means <see cref="CultureInfo.InvariantCulture"/>. Ignored for <see cref="CellType.Number"/> and
+        /// <see cref="CellType.Date"/> cells, whose text is a workbook-stored number and always invariant.
         /// </param>
         /// <param name="result">The parsed value, when this method returns true.</param>
         [SkipLocalsInit]
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
-            provider ??= CultureInfo.InvariantCulture;
+            provider = TextProvider(provider);
             if (!_hasNumber)
             {
+                if (Value.IsEmpty && NeverParsesEmpty<T>())
+                {
+                    result = default;
+                    return false;
+                }
                 if (typeof(T) == typeof(double) && UsesDotDecimalSeparator(provider) && FastDouble.TryParse(Value, out double fast))
                 {
                     result = Unsafe.As<double, T>(ref fast);
@@ -168,6 +174,25 @@ namespace ExcelReader.Core.Reader
             return CellFormatter.TryFormatDouble(_number, buffer, out int written)
                 ? T.TryParse(buffer[..written], CultureInfo.InvariantCulture, out result)
                 : T.TryParse(Value, provider, out result);
+        }
+
+        // Types whose BCL parser rejects an empty span under any provider; a custom IUtf8SpanParsable type may accept one.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool NeverParsesEmpty<T>()
+        {
+            return typeof(T) == typeof(double) || typeof(T) == typeof(float) || typeof(T) == typeof(Half) || typeof(T) == typeof(decimal)
+                || typeof(T) == typeof(int) || typeof(T) == typeof(long) || typeof(T) == typeof(short) || typeof(T) == typeof(sbyte)
+                || typeof(T) == typeof(uint) || typeof(T) == typeof(ulong) || typeof(T) == typeof(ushort) || typeof(T) == typeof(byte)
+                || typeof(T) == typeof(Guid);
+        }
+
+        internal IFormatProvider TextProvider(IFormatProvider? provider)
+        {
+            if (Type is CellType.Number or CellType.Date)
+            {
+                return CultureInfo.InvariantCulture;
+            }
+            return provider ?? CultureInfo.InvariantCulture;
         }
 
         private static bool TryParseDecimalText(ReadOnlySpan<byte> utf8, IFormatProvider provider, out decimal value)
@@ -376,6 +401,11 @@ namespace ExcelReader.Core.Reader
         /// <param name="result">The parsed date, when this method returns true.</param>
         public bool TryGetDateTime(bool isDate1904, out DateTime result)
         {
+            if (!_hasNumber && Value.IsEmpty)
+            {
+                result = default;
+                return false;
+            }
             if (!_hasNumber && FastDate.TryParse(Value, out result))
             {
                 return true;
