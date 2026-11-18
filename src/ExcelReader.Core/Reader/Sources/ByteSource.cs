@@ -1,3 +1,4 @@
+using ExcelReader.Core.Reader.Internal;
 using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Reader.Sources
@@ -88,9 +89,7 @@ namespace ExcelReader.Core.Reader.Sources
             }
             try
             {
-                using MemoryStream copy = new();
-                stream.CopyTo(copy);
-                return new MemoryByteSource(copy.GetBuffer().AsMemory(0, (int)copy.Length), owner: null);
+                return new MemoryByteSource(StreamSpooler.Spool(stream), owner: null);
             }
             finally
             {
@@ -114,9 +113,7 @@ namespace ExcelReader.Core.Reader.Sources
             }
             try
             {
-                using MemoryStream copy = new();
-                await stream.CopyToAsync(copy, ct).ConfigureAwait(false);
-                return new MemoryByteSource(copy.GetBuffer().AsMemory(0, (int)copy.Length), owner: null);
+                return new MemoryByteSource(await StreamSpooler.SpoolAsync(stream, ct).ConfigureAwait(false), owner: null);
             }
             finally
             {
