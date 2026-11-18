@@ -12,6 +12,7 @@ namespace ExcelReader.Core.Reader.Internal
             List<(byte[] Buffer, int Length)> chunks = [];
             try
             {
+                long total = 0;
                 int size = firstChunk;
                 while (true)
                 {
@@ -24,9 +25,11 @@ namespace ExcelReader.Core.Reader.Internal
                         filled += read;
                     }
                     chunks.Add((buffer, filled));
+                    total += filled;
+                    ThrowIfTooLong(total);
                     if (read == 0)
                     {
-                        return Assemble(chunks);
+                        return Assemble(chunks, (int)total);
                     }
                     size = Math.Min(size * 2, maxChunk);
                 }
@@ -42,6 +45,7 @@ namespace ExcelReader.Core.Reader.Internal
             List<(byte[] Buffer, int Length)> chunks = [];
             try
             {
+                long total = 0;
                 int size = firstChunk;
                 while (true)
                 {
@@ -54,9 +58,11 @@ namespace ExcelReader.Core.Reader.Internal
                         filled += read;
                     }
                     chunks.Add((buffer, filled));
+                    total += filled;
+                    ThrowIfTooLong(total);
                     if (read == 0)
                     {
-                        return Assemble(chunks);
+                        return Assemble(chunks, (int)total);
                     }
                     size = Math.Min(size * 2, maxChunk);
                 }
@@ -67,18 +73,17 @@ namespace ExcelReader.Core.Reader.Internal
             }
         }
 
-        private static byte[] Assemble(List<(byte[] Buffer, int Length)> chunks)
+        private static void ThrowIfTooLong(long total)
         {
-            long total = 0;
-            foreach ((byte[] _, int length) in chunks)
-            {
-                total += length;
-            }
             if (total > Array.MaxLength)
             {
                 throw new IOException("Stream was too long.");
             }
-            byte[] result = GC.AllocateUninitializedArray<byte>((int)total);
+        }
+
+        private static byte[] Assemble(List<(byte[] Buffer, int Length)> chunks, int total)
+        {
+            byte[] result = GC.AllocateUninitializedArray<byte>(total);
             int offset = 0;
             foreach ((byte[] buffer, int length) in chunks)
             {
