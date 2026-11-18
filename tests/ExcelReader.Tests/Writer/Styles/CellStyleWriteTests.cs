@@ -175,6 +175,61 @@ namespace ExcelReader.Tests.Writer.Styles
             Assert.True(Probe(format, file, 0, 0).Bold);
         }
 
+        public static TheoryData<string, string> RejectedWrites
+        {
+            get
+            {
+                TheoryData<string, string> data = [];
+                foreach (string format in (string[])["xlsx", "xlsb", "xls"])
+                {
+                    foreach (string kind in (string[])["double", "float", "half", "DateTime", "DateOnly"])
+                    {
+                        data.Add(format, kind);
+                    }
+                }
+                return data;
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(RejectedWrites))]
+        public void RejectedWriteKeepsColumnAndPendingStyle(string format, string kind)
+        {
+            byte[] file = Build(format, book =>
+            {
+                int bold = book.AddStyle(Bold);
+                using IRowWriter row = book.StartRow();
+                row.Skip(2);
+                row.Style(bold);
+                Assert.ThrowsAny<ArgumentException>(() => WriteRejected(row, kind));
+                row.Write("x");
+            });
+            Assert.Equal("x", StringAt(format, file, 0, 2));
+            Assert.True(Probe(format, file, 0, 2).Bold);
+        }
+
+        private static void WriteRejected(IRowWriter row, string kind)
+        {
+            switch (kind)
+            {
+                case "double":
+                    row.Write(double.NaN);
+                    break;
+                case "float":
+                    row.Write(float.PositiveInfinity);
+                    break;
+                case "half":
+                    row.Write(Half.NaN);
+                    break;
+                case "DateTime":
+                    row.Write(new DateTime(1899, 1, 1));
+                    break;
+                default:
+                    row.Write(new DateOnly(1899, 1, 1));
+                    break;
+            }
+        }
+
         [Theory]
         [MemberData(nameof(Formats))]
         public void UnknownStyleIdThrows(string format)
@@ -296,6 +351,17 @@ namespace ExcelReader.Tests.Writer.Styles
                 Assert.True(rows.MoveNext());
             }
             return rows.Current[column];
+        }
+
+        private static string StringAt(string format, byte[] file, int row, int column)
+        {
+            using IExcelWorkbook reader = OpenReader(format, file);
+            using var rows = reader.FirstSheet.GetEnumerator();
+            for (int i = 0; i <= row; i++)
+            {
+                Assert.True(rows.MoveNext());
+            }
+            return rows.Current[column].GetString();
         }
 
         private static IExcelWorkbook OpenReader(string format, byte[] file)

@@ -22,6 +22,16 @@ namespace ExcelReader.Tests.Writer.Xls
         }
 
         [Fact]
+        public void WorkbookStreamPastTwoGiBThrowsLimitExceeded()
+        {
+            Assert.Equal(int.MaxValue, XlsWorkbookWriter.AdvanceSheetOffset(int.MaxValue - 10, 10));
+            var ex = Assert.Throws<ExcelLimitExceededException>(() => XlsWorkbookWriter.AdvanceSheetOffset(int.MaxValue - 10, 11));
+            Assert.Equal("WorkbookStreamBytes", ex.LimitName);
+            Assert.Equal(int.MaxValue, ex.Limit);
+            Assert.Equal(int.MaxValue + 1L, ex.Actual);
+        }
+
+        [Fact]
         public async Task RoundTripsAllCellTypes()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
@@ -77,6 +87,16 @@ namespace ExcelReader.Tests.Writer.Xls
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
             Assert.Equal(["Data (2)", "Data", "Data (3)"], [.. reader.Sheets.Select(static s => s.Name)]);
+        }
+
+        [Fact]
+        public async Task ContinuationSheetNameDoesNotSplitASurrogatePair()
+        {
+            string baseName = new string('a', 26) + "😀" + "bc";
+            byte[] bytes = await WriteAsync(wb => WriteRows(wb.AddSheet(baseName), 65_537), ct: TestContext.Current.CancellationToken);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            Assert.Equal([baseName, new string('a', 26) + " (2)"], [.. reader.Sheets.Select(static s => s.Name)]);
         }
 
         [Fact]

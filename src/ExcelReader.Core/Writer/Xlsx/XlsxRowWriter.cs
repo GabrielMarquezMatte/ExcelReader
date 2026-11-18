@@ -38,9 +38,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             if (_pendingStyle >= 0)
             {
-                int pending = _pendingStyle;
-                _pendingStyle = -1;
-                return pending;
+                return _pendingStyle;
             }
             return _rowStyleId != 0 ? _rowStyleId : _owner.GetColumnStyle(_columnIndex);
         }
@@ -90,8 +88,8 @@ namespace ExcelReader.Core.Writer.Xlsx
             ThrowIfDisposed();
             if (!_owner.UseSharedStrings && CellFormatter.IsPlainUtf8Text(utf8))
             {
-                CellFormatter.WritePlainUtf8String(_row, utf8, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
-                _columnIndex++;
+                CellFormatter.WritePlainUtf8String(_row, utf8, _columnIndex, _rowNumber, IncludeCellReference(), EffectiveStyle());
+                CompleteCell();
                 return;
             }
             Utf8Chars.Decode(utf8, this, static (chars, self) => self.WriteText(chars, owned: null));
@@ -103,12 +101,12 @@ namespace ExcelReader.Core.Writer.Xlsx
             if (_owner.UseSharedStrings)
             {
                 int index = owned is null ? _owner.GetSharedStringIndex(value) : _owner.GetSharedStringIndex(owned);
-                CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
-                _columnIndex++;
+                CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, IncludeCellReference(), EffectiveStyle());
+                CompleteCell();
                 return;
             }
-            CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
-            _columnIndex++;
+            CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, IncludeCellReference(), EffectiveStyle());
+            CompleteCell();
         }
 
         /// <inheritdoc/>
@@ -116,8 +114,8 @@ namespace ExcelReader.Core.Writer.Xlsx
         public void Write(bool value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteBool(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
-            _columnIndex++;
+            CellFormatter.WriteBool(_row, value, _columnIndex, _rowNumber, IncludeCellReference(), EffectiveStyle());
+            CompleteCell();
         }
 
         /// <inheritdoc/>
@@ -139,8 +137,8 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             ThrowIfDisposed();
             int styleId = EffectiveStyle();
-            CellFormatter.WriteDateTime(_row, value, _owner.Date1904, _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : _owner.DateStyle(styleId));
-            _columnIndex++;
+            CellFormatter.WriteDateTime(_row, value, _owner.Date1904, _columnIndex, _rowNumber, IncludeCellReference(), styleId == 0 ? 1 : _owner.DateStyle(styleId));
+            CompleteCell();
         }
 
         /// <inheritdoc/>
@@ -165,8 +163,8 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             ThrowIfDisposed();
             int styleId = EffectiveStyle();
-            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _owner.Date1904, _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : _owner.DateStyle(styleId));
-            _columnIndex++;
+            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _owner.Date1904, _columnIndex, _rowNumber, IncludeCellReference(), styleId == 0 ? 1 : _owner.DateStyle(styleId));
+            CompleteCell();
         }
 
         /// <inheritdoc/>
@@ -191,8 +189,8 @@ namespace ExcelReader.Core.Writer.Xlsx
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
-            _columnIndex++;
+            CellFormatter.WriteNumber(_row, value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, IncludeCellReference(), EffectiveStyle());
+            CompleteCell();
         }
 
         /// <inheritdoc/>
@@ -214,8 +212,8 @@ namespace ExcelReader.Core.Writer.Xlsx
             where T : IUtf8SpanFormattable
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
-            _columnIndex++;
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, IncludeCellReference(), EffectiveStyle());
+            CompleteCell();
         }
 
         /// <inheritdoc/>
@@ -255,18 +253,23 @@ namespace ExcelReader.Core.Writer.Xlsx
             _columnIndex += count;
         }
 
-        private bool ConsumeCellReference()
+        private bool IncludeCellReference()
         {
             ExcelLimits.ThrowIfColumnOutOfRange(_columnIndex);
-            bool result = _useCellReferences;
+            return _useCellReferences;
+        }
+
+        private void CompleteCell()
+        {
+            _pendingStyle = -1;
             _useCellReferences = false;
-            return result;
+            _columnIndex++;
         }
 
         private void WriteEmptyCell()
         {
-            CellFormatter.WriteEmpty(_row, _columnIndex, _rowNumber, includeReference: ConsumeCellReference(), styleId: EffectiveStyle());
-            _columnIndex++;
+            CellFormatter.WriteEmpty(_row, _columnIndex, _rowNumber, includeReference: IncludeCellReference(), styleId: EffectiveStyle());
+            CompleteCell();
         }
 
         /// <inheritdoc/>
