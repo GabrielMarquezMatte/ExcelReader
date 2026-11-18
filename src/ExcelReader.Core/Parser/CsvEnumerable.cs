@@ -66,8 +66,18 @@ namespace ExcelReader.Core.Parser
         /// <inheritdoc cref="IAsyncEnumerable{T}.GetAsyncEnumerator"/>
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
+            if (!cancellationToken.CanBeCanceled || !_ct.CanBeCanceled)
+            {
+                CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
+                return CreateAsyncEnumerator(linked: null, effective);
+            }
+            var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _ct);
+            return CreateAsyncEnumerator(linked, linked.Token);
+        }
+
+        private AsyncEnumerator CreateAsyncEnumerator(CancellationTokenSource? linked, CancellationToken ct)
+        {
+            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, linked, ct);
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
@@ -105,6 +115,7 @@ namespace ExcelReader.Core.Parser
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvSheet, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;
+            private readonly CancellationTokenSource? _linked;
 
             internal AsyncEnumerator(
                 CsvSheet sheet,
@@ -114,16 +125,25 @@ namespace ExcelReader.Core.Parser
                 int headerRow,
                 IFormatProvider provider,
                 bool throwOnParseFailure,
+                CancellationTokenSource? linked,
                 CancellationToken ct)
                 : base(sheet, ct)
             {
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
+                _linked = linked;
             }
 
             /// <inheritdoc/>
-            public override ValueTask DisposeAsync()
+            public override async ValueTask DisposeAsync()
             {
-                return base.DisposeAsync();
+                try
+                {
+                    await base.DisposeAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    _linked?.Dispose();
+                }
             }
 
             private protected override ProjectionStep Classify()
