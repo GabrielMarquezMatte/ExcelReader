@@ -468,5 +468,35 @@ namespace ExcelReader.Tests.Parser
                 () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(sheet).ToList());
             Assert.Equal("Start", ex.ColumnName);
         }
+
+        private sealed class IndexedRow
+        {
+            private readonly string[] _extra = new string[4];
+
+            public int Id { get; set; }
+
+            public string this[int index]
+            {
+                get
+                {
+                    return _extra[index];
+                }
+                set
+                {
+                    _extra[index] = value;
+                }
+            }
+        }
+
+        [Fact]
+        public void AModelWithAPublicIndexerBindsItsOtherProperties()
+        {
+            using var ms = Csv("Id,Item\n7,x\n");
+            using var reader = Excel.FromCsv(ms);
+
+            IndexedRow row = Assert.Single(ExcelParser.FromAttributes<IndexedRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(7, row.Id);
+        }
     }
 }
