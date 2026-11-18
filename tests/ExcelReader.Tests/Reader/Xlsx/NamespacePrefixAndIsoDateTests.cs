@@ -249,6 +249,27 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal(new DateTime(2026, 3, 4), dt);
         }
 
+        [Theory]
+        [InlineData("10:30:00", false)]
+        [InlineData("10:30:00", true)]
+        [InlineData("10:30:00-03:00", false)]
+        [InlineData("10:30:00-03:00", true)]
+        [InlineData("10:30:00+05:00", true)]
+        [InlineData("10:30:00Z", true)]
+        public void TimeOnlyIsoValueReadsAsTheSameFractionInEitherDateSystem(string text, bool date1904)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                $"""<row r="1"><c r="A1" t="d"><v>{text}</v></c></row>""", date1904: date1904);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.Equal("0.4375", e.Current[0].GetString());
+            Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime dt));
+            Assert.Equal(TimeSpan.FromHours(10.5), dt.TimeOfDay);
+        }
+
         [Fact]
         public void PrefixedSheetIsReadWhenAnXmlCommentContainsATag()
         {

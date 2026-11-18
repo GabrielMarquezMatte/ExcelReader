@@ -1137,7 +1137,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private void EmitIsoDate(ReadOnlySpan<byte> v, int col, int style)
             {
-                if (TryParseIsoDate(v, out DateTime dt))
+                if (TryParseIsoDate(v, _reader.IsDate1904, out DateTime dt))
                 {
                     if (!ExcelEpoch.TryOADateToSerial(dt.ToOADate(), _reader.IsDate1904, out double serial))
                     {
@@ -1160,7 +1160,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
 
             [SkipLocalsInit]
-            private static bool TryParseIsoDate(ReadOnlySpan<byte> utf8, out DateTime value)
+            private static bool TryParseIsoDate(ReadOnlySpan<byte> utf8, bool date1904, out DateTime value)
             {
                 if (utf8.Length is 0 or > 40)
                 {
@@ -1184,8 +1184,15 @@ namespace ExcelReader.Core.Reader.Xlsx
                     value = default;
                     return false;
                 }
-                value = utf8.Contains((byte)':') && utf8.IndexOfAny((byte)'-', (byte)'/') < 0 ? new DateTime(1899, 12, 31) + parsed.TimeOfDay : parsed.DateTime;
-                return value.Year >= 100 || RejectDate(out value);
+                int colon = utf8.IndexOf((byte)':');
+                bool timeOnly = colon >= 0 && utf8[..colon].IndexOfAny((byte)'-', (byte)'/') < 0;
+                if (!timeOnly)
+                {
+                    value = parsed.DateTime;
+                    return value.Year >= 100 || RejectDate(out value);
+                }
+                value = (date1904 ? new DateTime(1904, 1, 1) : new DateTime(1899, 12, 31)) + parsed.TimeOfDay;
+                return true;
             }
 
             private static bool RejectDate(out DateTime value)
