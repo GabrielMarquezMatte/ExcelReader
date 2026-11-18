@@ -221,7 +221,7 @@ class SheetWriter:
         try:
             if not buffer.data or buffer.len <= 0:
                 return b""
-            return ctypes.string_at(buffer.data, buffer.len)
+            return _native.copy_bytes(buffer.data, buffer.len)
         finally:
             self._lib.xl_free_buffer(ctypes.byref(buffer))
 
