@@ -20,6 +20,7 @@ from excelreader import (
 )
 from excelreader import _native
 from excelreader import arrow_stream as arrow_stream_module
+from excelreader import reader as reader_module
 
 ENCRYPTED = Path(__file__).resolve().parents[2] / "tests" / "ExcelReader.Tests" / "data" / "encrypted"
 
@@ -856,3 +857,32 @@ def test_to_polars_reads_a_string_dict_column_across_batches(city_csv):
 def test_parse_rejects_a_string_dict_column(city_csv):
     with open_workbook(city_csv) as workbook, pytest.raises(ExcelReaderError, match="Arrow outputs"):
         workbook.sheets[0].parse(_CITY_SCHEMA)
+
+
+def test_column_decoding_does_not_go_through_the_int_sized_string_at(monkeypatch):
+    values = (ctypes.c_int64 * 3)(10, 20, 30)
+    offsets = (ctypes.c_int32 * 3)(0, 1, 3)
+    data = (ctypes.c_uint8 * 3)(97, 98, 99)
+    validity = (ctypes.c_uint8 * 1)(0b101)
+
+    def refuse(*_args):
+        raise AssertionError("ctypes.string_at takes a C int size")
+
+    monkeypatch.setattr(ctypes, "string_at", refuse)
+
+    ints = _native.NativeColumn(type=int(ColumnType.I64), length=3, values=ctypes.addressof(values))
+    assert list(reader_module._decode_value_column(ints, 3)) == [10, 20, 30]
+
+    strings = _native.NativeColumn(
+        type=int(ColumnType.STRING),
+        length=2,
+        values=ctypes.addressof(offsets),
+        data=ctypes.cast(data, ctypes.POINTER(ctypes.c_uint8)),
+        data_len=3,
+    )
+    decoded = reader_module._decode_string_column(strings, 2)
+    assert list(decoded.offsets) == [0, 1, 3]
+    assert decoded.data == b"abc"
+
+    ints.validity = ctypes.cast(validity, ctypes.POINTER(ctypes.c_uint8))
+    assert reader_module._decode_validity(ints, 3) == b"\x05"

@@ -130,3 +130,18 @@ def test_a_validity_mask_off_a_byte_boundary_converts(monkeypatch):
 def test_an_unsupported_arrow_type_is_rejected():
     with pytest.raises(ValueError, match="int8"):
         _table_from_arrow(pa.record_batch({"small": pa.array([1], pa.int8())}))
+
+
+def test_a_table_that_stays_multi_chunk_after_combining_is_rejected(monkeypatch):
+    batch = pa.record_batch({"n": pa.array([1, 2], pa.int64())})
+
+    class SplitTable:
+        def combine_chunks(self):
+            return self
+
+        def to_batches(self):
+            return [batch, batch]
+
+    monkeypatch.setattr(pa, "Table", SplitTable)
+    with pytest.raises(ValueError, match="2 GiB"):
+        _table_from_arrow(SplitTable())
