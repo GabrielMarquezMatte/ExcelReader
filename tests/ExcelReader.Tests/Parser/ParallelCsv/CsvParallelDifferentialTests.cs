@@ -132,5 +132,62 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             Assert.Equal(expected, actual);
         }
+
+        private struct StructRow
+        {
+            public string? Name { get; set; }
+            public int Age { get; set; }
+            public string? Note { get; set; }
+        }
+
+        private static byte[] MultiChunkCsv()
+        {
+            var sb = new StringBuilder("Name,Age,Note\n");
+            for (int i = 0; i < 3_000; i++)
+            {
+                string name = i % 5 == 0 ? $"\"multi\nline{i}\"" : $"name{i}";
+                sb.Append(CultureInfo.InvariantCulture, $"{name},{i},note{i}\n");
+                if (i % 97 == 0)
+                {
+                    sb.Append('\n');
+                }
+            }
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+        private static async Task<List<string>> ParallelStructAsync(byte[] csv, int dop, int chunkSize)
+        {
+            var list = new List<string>();
+            await foreach (StructRow row in ParallelCsvFactory.CreateWithChunkSize(
+                csv.AsMemory(), dop, chunkSize, null, ExcelParser.FromAttributes<StructRow>(), CancellationToken.None))
+            {
+                list.Add($"{row.Name}{row.Age}{row.Note}");
+            }
+            return list;
+        }
+
+        [Fact]
+        public async Task StructAndClassModelsMatchSequentialAcrossManyChunks()
+        {
+            byte[] csv = MultiChunkCsv();
+            List<string> expected = Sequential(csv);
+            using var reader = Excel.FromCsv(csv);
+            var expectedStructs = new List<string>();
+            foreach (StructRow row in ExcelParser.FromAttributes<StructRow>().Parse(reader.FirstSheet))
+            {
+                expectedStructs.Add($"{row.Name}{row.Age}{row.Note}");
+            }
+            Assert.Equal(3_000, expected.Count);
+            Assert.Equal(expected, expectedStructs);
+
+            foreach (int dop in new[] { 2, 4, 8 })
+            {
+                foreach (int chunkSize in new[] { 64, 1_000, 4_096, 16_384 })
+                {
+                    Assert.Equal(expected, await ParallelAsync(csv, dop, chunkSize));
+                    Assert.Equal(expected, await ParallelStructAsync(csv, dop, chunkSize));
+                }
+            }
+        }
     }
 }
