@@ -33,7 +33,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static bool HasDateProperty()
         {
-            return typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).Any(static prop =>
+            return MappableProperties.Of(typeof(T)).Any(static prop =>
             {
                 Type effective = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
                 return effective == typeof(DateTime) || effective == typeof(DateOnly) || effective == typeof(TimeOnly);
@@ -42,17 +42,12 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static TypeMapInfo<T> Build(bool csvTextDates)
         {
-            PropertyInfo[] properties = typeof(T)
-                .GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            List<PropertyInfo> properties = MappableProperties.Of(typeof(T));
 
-            var propertyMaps = new List<PropertyMap<T>>(properties.Length);
+            var propertyMaps = new List<PropertyMap<T>>(properties.Count);
 
             foreach (PropertyInfo prop in properties)
             {
-                if (Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))
-                {
-                    continue;
-                }
                 ExcelRequiredAttribute? requiredAttr = prop.GetCustomAttribute<ExcelRequiredAttribute>();
                 bool isRequired = requiredAttr is not null;
                 if (prop.GetSetMethod() is null)
