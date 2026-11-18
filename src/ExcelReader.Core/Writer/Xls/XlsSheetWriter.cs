@@ -282,6 +282,7 @@ namespace ExcelReader.Core.Writer.Xls
         internal void EmitNumber(int row, int col, double value)
         {
             ValidateColumn(col);
+            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             int abstractStyle = EffectiveStyle(col);
             WriteNumberCell(row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
             Track(row, col);
@@ -290,8 +291,8 @@ namespace ExcelReader.Core.Writer.Xls
         internal void EmitDate(int row, int col, DateTime value)
         {
             ValidateColumn(col);
-            int abstractStyle = EffectiveStyle(col);
             double serial = ExcelEpoch.OADateToSerial(value.ToOADate(), _date1904);
+            int abstractStyle = EffectiveStyle(col);
             WriteNumberCell(row, col, abstractStyle == 0 ? XlsGlobals.DateXf : XlsGlobals.CustomXf(_owner.DateStyle(abstractStyle)), serial);
             Track(row, col);
         }
@@ -334,7 +335,6 @@ namespace ExcelReader.Core.Writer.Xls
 
         private void WriteNumberCell(int row, int col, int xf, double value)
         {
-            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             if (!XlsRk.TryEncode(value, out int rk))
             {
                 FlushRkRun();
@@ -390,15 +390,23 @@ namespace ExcelReader.Core.Writer.Xls
             }
         }
 
+        private string TruncatedBaseName(int maxLength)
+        {
+            if (_baseName.Length <= maxLength)
+            {
+                return _baseName;
+            }
+            int length = char.IsHighSurrogate(_baseName[maxLength - 1]) ? maxLength - 1 : maxLength;
+            return _baseName[..length];
+        }
+
         private XlsSheetWriter CreateContinuation()
         {
             string contName;
             for (int n = _owner.SheetCount + 1; ; n++)
             {
                 string suffix = $" ({n})";
-                contName = _baseName.Length + suffix.Length <= MaxSheetNameLength
-                    ? _baseName + suffix
-                    : _baseName[..(MaxSheetNameLength - suffix.Length)] + suffix;
+                contName = TruncatedBaseName(MaxSheetNameLength - suffix.Length) + suffix;
                 if (_owner.TryClaimSheetName(contName))
                 {
                     break;
