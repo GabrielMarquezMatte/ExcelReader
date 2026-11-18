@@ -22,6 +22,16 @@ namespace ExcelReader.Tests.Writer.Xls
         }
 
         [Fact]
+        public void WorkbookStreamPastTwoGiBThrowsLimitExceeded()
+        {
+            Assert.Equal(int.MaxValue, XlsWorkbookWriter.AdvanceSheetOffset(int.MaxValue - 10, 10));
+            var ex = Assert.Throws<ExcelLimitExceededException>(() => XlsWorkbookWriter.AdvanceSheetOffset(int.MaxValue - 10, 11));
+            Assert.Equal("WorkbookStreamBytes", ex.LimitName);
+            Assert.Equal(int.MaxValue, ex.Limit);
+            Assert.Equal(int.MaxValue + 1L, ex.Actual);
+        }
+
+        [Fact]
         public async Task RoundTripsAllCellTypes()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;

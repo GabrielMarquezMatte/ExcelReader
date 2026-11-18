@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xlsx;
 
@@ -141,7 +142,7 @@ namespace ExcelReader.Core.Writer.Xls
                 {
                     globals.PatchI32(offsetPositions[i], offset);
                     layouts[i].Place(offset);
-                    offset += layouts[i].Length;
+                    offset = AdvanceSheetOffset(offset, layouts[i].Length);
                 }
                 workbookSize = offset;
                 return globals;
@@ -151,6 +152,17 @@ namespace ExcelReader.Core.Writer.Xls
                 globals.Dispose();
                 throw;
             }
+        }
+
+        // BIFF8 stores sheet and DBCELL positions as 32-bit offsets, and a CFB v3 stream stays under 2 GiB.
+        internal static int AdvanceSheetOffset(int offset, int sheetLength)
+        {
+            long next = (long)offset + sheetLength;
+            if (next > int.MaxValue)
+            {
+                throw new ExcelLimitExceededException("WorkbookStreamBytes", int.MaxValue, next);
+            }
+            return (int)next;
         }
 
         private void ReleaseStream()
