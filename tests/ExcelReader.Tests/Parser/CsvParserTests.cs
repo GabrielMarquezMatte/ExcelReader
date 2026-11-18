@@ -498,5 +498,26 @@ namespace ExcelReader.Tests.Parser
 
             Assert.Equal(7, row.Id);
         }
+
+        private class CodeBase
+        {
+            public int Code { get; set; }
+        }
+
+        private sealed class HiddenCodeRow : CodeBase
+        {
+            public new string? Code { get; set; }
+        }
+
+        [Fact]
+        public void APropertyHiddenWithNewBindsTheDerivedOne()
+        {
+            using var ms = Csv("Code" + Environment.NewLine + "A1" + Environment.NewLine);
+            using var reader = Excel.FromCsv(ms);
+
+            HiddenCodeRow row = Assert.Single(ExcelParser.FromAttributes<HiddenCodeRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal("A1", row.Code);
+        }
     }
 }
