@@ -515,8 +515,7 @@ mod tests {
         let status = shared.guard(|| Err(PANIC_STATUS));
 
         let error = finish(shared, status, std::ptr::null_mut())
-            .err()
-            .expect("the run ended on a callback code");
+            .expect_err("the run ended on a callback code");
         assert_eq!(error.kind(), ErrorKind::Callback(PANIC_STATUS));
     }
 
