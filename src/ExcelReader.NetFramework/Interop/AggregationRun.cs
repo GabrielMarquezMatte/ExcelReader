@@ -18,7 +18,7 @@ namespace ExcelReader.NetFramework.Interop
         private static readonly IntPtr CombinePointer = Marshal.GetFunctionPointerForDelegate(CombineCallback);
         private static readonly IntPtr FreeStatePointer = Marshal.GetFunctionPointerForDelegate(FreeStateCallback);
 
-        private ExceptionDispatchInfo? _error;
+        private readonly List<ExceptionDispatchInfo> _errors = new List<ExceptionDispatchInfo>();
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int SeedFn(IntPtr* outState, IntPtr userData);
@@ -54,11 +54,7 @@ namespace ExcelReader.NetFramework.Interop
                 IntPtr state = IntPtr.Zero;
                 int status = NativeMethods.xl_aggregate(handle.DangerousGetHandle(), sheet, &aggregation, headerRow, degreeOfParallelism, &state);
                 object? result = Take(state);
-                if (status == CallbackFailed)
-                {
-                    run._error?.Throw();
-                }
-
+                run.FailureFor(status)?.Throw();
                 NativeError.ThrowIfFailed(status);
                 if (result is null)
                 {
@@ -168,11 +164,24 @@ namespace ExcelReader.NetFramework.Interop
             }
         }
 
-        // The native side may re-read a failed chunk and still succeed, so the exception surfaces only if the run fails.
+        // Each failure gets its own code; native returns the code of the failure the run ended on.
         private int Fail(Exception exception)
         {
-            Interlocked.CompareExchange(ref _error, ExceptionDispatchInfo.Capture(exception), null);
-            return CallbackFailed;
+            lock (_errors)
+            {
+                _errors.Add(ExceptionDispatchInfo.Capture(exception));
+                return CallbackFailed - (_errors.Count - 1);
+            }
+        }
+
+        private ExceptionDispatchInfo? FailureFor(int status)
+        {
+            if (status <= 0 || CallbackFailed - status >= _errors.Count)
+            {
+                return null;
+            }
+
+            return _errors[CallbackFailed - status];
         }
     }
 

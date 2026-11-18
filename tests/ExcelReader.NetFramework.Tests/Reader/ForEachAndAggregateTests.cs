@@ -128,6 +128,14 @@ namespace ExcelReader.NetFramework.Tests.Reader
         }
 
         [Fact]
+        public void AggregateRethrowsTheFailureASequentialReadHits()
+        {
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(LargeCsv(), new ExcelOpenOptions { Format = ExcelFormat.Csv });
+            InvalidTimeZoneException error = Assert.Throws<InvalidTimeZoneException>(() => workbook.Sheet(0).Aggregate(() => new ThrowingFrom(), degreeOfParallelism: 4));
+            Assert.Equal(ThrowingFrom.FirstFailingId.ToString(CultureInfo.InvariantCulture), error.Message);
+        }
+
+        [Fact]
         public void AggregateRejectsANullSeedResult()
         {
             using ExcelWorkbook workbook = OpenCsv("a\r\n1\r\n");
@@ -193,6 +201,29 @@ namespace ExcelReader.NetFramework.Tests.Reader
             {
                 Ids.AddRange(other.Ids);
                 Sum += other.Sum;
+            }
+        }
+
+        private sealed class ThrowingFrom : IExcelAccumulator<ThrowingFrom>
+        {
+            internal const int FirstFailingId = 100;
+
+            public void Accumulate(ExcelRowView row)
+            {
+                int id = (int)row[0].Number!.Value;
+                if (id == FirstFailingId - 1)
+                {
+                    Thread.Sleep(300);
+                }
+
+                if (id >= FirstFailingId)
+                {
+                    throw new InvalidTimeZoneException(id.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+
+            public void Combine(ThrowingFrom other)
+            {
             }
         }
 
