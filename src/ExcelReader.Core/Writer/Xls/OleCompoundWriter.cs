@@ -390,8 +390,8 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal static ValueTask WriteAsync(Stream destination, int workbookSize, Func<Stream, CancellationToken, ValueTask> writeBody, CancellationToken ct)
         {
-            int storedSize = Math.Max(CeilingDiv(workbookSize, SectorSize) * SectorSize, MiniCutoff);
-            int padding = storedSize - workbookSize;
+            long storedSize = Math.Max((long)CeilingDivLong(workbookSize, SectorSize) * SectorSize, MiniCutoff);
+            int padding = (int)(storedSize - workbookSize);
             CfbStreamSpec spec = new(
                 "Workbook",
                 storedSize,
@@ -406,8 +406,8 @@ namespace ExcelReader.Core.Writer.Xls
 
         internal static void Write(Stream destination, int workbookSize, Action<Stream> writeBody)
         {
-            int storedSize = Math.Max(CeilingDiv(workbookSize, SectorSize) * SectorSize, MiniCutoff);
-            int padding = storedSize - workbookSize;
+            long storedSize = Math.Max((long)CeilingDivLong(workbookSize, SectorSize) * SectorSize, MiniCutoff);
+            int padding = (int)(storedSize - workbookSize);
             CfbStreamSpec spec = new(
                 "Workbook",
                 storedSize,
