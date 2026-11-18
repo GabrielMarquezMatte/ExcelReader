@@ -433,7 +433,7 @@ def encrypt_package(
         )
     )
     try:
-        encrypted = ctypes.string_at(buffer.data, buffer.len)
+        encrypted = _native.copy_bytes(buffer.data, buffer.len)
     finally:
         lib.xl_free_buffer(ctypes.byref(buffer))
     if isinstance(destination, (str, os.PathLike)):
