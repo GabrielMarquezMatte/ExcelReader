@@ -95,13 +95,14 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <param name="provider">
         /// The format provider used for text parsing and for deciding whether '.' is the decimal separator;
-        /// null means <see cref="CultureInfo.InvariantCulture"/>, the culture XLSX and XLSB store numbers in.
+        /// null means <see cref="CultureInfo.InvariantCulture"/>. Ignored for <see cref="CellType.Number"/> and
+        /// <see cref="CellType.Date"/> cells, whose text is a workbook-stored number and always invariant.
         /// </param>
         /// <param name="result">The parsed value, when this method returns true.</param>
         [SkipLocalsInit]
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
-            provider ??= CultureInfo.InvariantCulture;
+            provider = TextProvider(provider);
             if (!_hasNumber)
             {
                 if (typeof(T) == typeof(double) && UsesDotDecimalSeparator(provider) && FastDouble.TryParse(Value, out double fast))
@@ -168,6 +169,15 @@ namespace ExcelReader.Core.Reader
             return CellFormatter.TryFormatDouble(_number, buffer, out int written)
                 ? T.TryParse(buffer[..written], CultureInfo.InvariantCulture, out result)
                 : T.TryParse(Value, provider, out result);
+        }
+
+        internal IFormatProvider TextProvider(IFormatProvider? provider)
+        {
+            if (Type is CellType.Number or CellType.Date)
+            {
+                return CultureInfo.InvariantCulture;
+            }
+            return provider ?? CultureInfo.InvariantCulture;
         }
 
         private static bool TryParseDecimalText(ReadOnlySpan<byte> utf8, IFormatProvider provider, out decimal value)

@@ -80,6 +80,21 @@ namespace ExcelReader.Tests.Parser
             Assert.Equal(1234.56m, row.Amount);
         }
 
+        [Theory]
+        [InlineData("pt-BR")]
+        [InlineData("fr-FR")]
+        public void CultureDoesNotApplyToWorkbookStoredNumbers(string culture)
+        {
+            using var ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" t="inlineStr"><is><t>Amount</t></is></c></row><row r="2"><c r="A2"><v>35.840000000000003</v></c></row>""");
+            using var reader = Excel.FromXlsx(ms);
+            var config = new ExcelParserOptions { Culture = CultureInfo.GetCultureInfo(culture) };
+
+            MoneyRow row = ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader.FirstSheet).Single();
+
+            Assert.Equal(35.840000000000003m, row.Amount);
+        }
+
         [Fact]
         public async Task InvariantCultureRejectsCommaDecimal()
         {
