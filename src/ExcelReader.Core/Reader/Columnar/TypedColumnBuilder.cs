@@ -71,6 +71,23 @@ namespace ExcelReader.Core.Reader.Columnar
             };
         }
 
+        // A blank cell in a nullable column: the null the failed parse would have recorded, without parsing.
+        internal bool TryAppendNull()
+        {
+            if (!_nullable)
+            {
+                return false;
+            }
+            return _type switch
+            {
+                ExcelColumnType.StringColumn => AppendNull(_stringOffsets, _stringData.Count),
+                ExcelColumnType.StringDictionaryColumn or ExcelColumnType.DateColumn => AppendNull(_ints, 0),
+                ExcelColumnType.Float64Column => AppendNull(_doubles, 0d),
+                ExcelColumnType.BoolColumn => AppendNull(_bools, (byte)0),
+                _ => AppendNull(_longs, 0L),
+            };
+        }
+
         // The common cases read straight from the cell's descriptor, with the same result AppendFrom
         // gives them: text bytes as they are, a binary number as Cell.TryParse<double/long> returns it.
         // Everything else returns false and goes through AppendFrom.
