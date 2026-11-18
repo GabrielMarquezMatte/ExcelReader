@@ -30,8 +30,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
                 firstDataRecordOffset = rows.MoveNext() ? rows.CurrentRecordStart : long.MaxValue;
                 return map;
             }
-            throw new InvalidOperationException(
-                $"The CSV source has no row at header index {config.HeaderRow}.");
+            firstDataRecordOffset = long.MaxValue;
+            return new CsvBoundColumnMap<T>([], [], [], []);
         }
     }
 }
