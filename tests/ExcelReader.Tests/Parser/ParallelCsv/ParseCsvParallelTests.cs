@@ -450,5 +450,116 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
 
             Assert.Empty(actual);
         }
+
+        [Fact]
+        public async Task BreakingEarlyLetsTheResultBeEnumeratedAgainAndStillClosesTheFile()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"exr-{Guid.NewGuid():N}.csv");
+            await File.WriteAllBytesAsync(path, BuildCsv(40_000), TestContext.Current.CancellationToken);
+            try
+            {
+                using (CsvReader source = Excel.FromCsvFile(path))
+                {
+                    IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken);
+                    int taken = 0;
+                    await foreach (Row row in rows)
+                    {
+                        taken++;
+                        if (taken == 10)
+                        {
+                            break;
+                        }
+                    }
+
+                    Assert.Equal(10, taken);
+                    Assert.Equal(40_000, (await DrainAsync(rows).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken)).Count);
+                }
+
+                await using var exclusive = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+                Assert.True(exclusive.Length > 0);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task DisposingAnEnumeratorTwiceReleasesTheReaderOnlyOnce()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(20_000));
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken);
+
+            IAsyncEnumerator<Row> enumerator = rows.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            Assert.True(await enumerator.MoveNextAsync());
+            Assert.Equal("name00000", enumerator.Current.Name);
+            await enumerator.DisposeAsync();
+            await enumerator.DisposeAsync();
+
+            Assert.False(await enumerator.MoveNextAsync());
+            Assert.Equal(20_000, (await DrainAsync(rows)).Count);
+        }
+
+        [Fact]
+        public async Task AConverterThrowingOnARealRowSurfacesTheSequentialExceptionAfterTheSameRows()
+        {
+            var sb = new StringBuilder("Name,Age\n");
+            for (int i = 0; i < 40_000; i++)
+            {
+                sb.Append(i == 30_000 ? "bad,BOOM\n" : $"name{i:D5},{i}\n");
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+
+            using CsvReader sequentialSource = Excel.FromCsv(csv);
+            int sequentialRows = 0;
+            InvalidOperationException sequential = Assert.Throws<InvalidOperationException>(() =>
+            {
+                foreach (StrictRow row in ExcelParser.FromAttributes<StrictRow>().Parse(sequentialSource.FirstSheet))
+                {
+                    sequentialRows++;
+                }
+            });
+
+            using CsvReader parallelSource = Excel.FromCsv(csv);
+            IAsyncEnumerator<StrictRow> enumerator = SheetParallel.ParseAsync(parallelSource.FirstSheet, ExcelParser.FromAttributes<StrictRow>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken)
+                .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            int parallelRows = 0;
+            InvalidOperationException parallel = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                while (await enumerator.MoveNextAsync())
+                {
+                    parallelRows++;
+                }
+            });
+
+            Assert.Equal(sequential.Message, parallel.Message);
+            Assert.Equal(30_000, sequentialRows);
+            Assert.Equal(sequentialRows, parallelRows);
+            Assert.False(await enumerator.MoveNextAsync());
+            await enumerator.DisposeAsync();
+        }
+
+        [Fact]
+        public async Task CancellingTheParseAsyncTokenMidEnumerationThrows()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(40_000));
+            using var cts = new CancellationTokenSource();
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: cts.Token);
+            int taken = 0;
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            {
+                await foreach (Row row in rows)
+                {
+                    taken++;
+                    if (taken == 5)
+                    {
+                        await cts.CancelAsync();
+                    }
+                }
+            });
+
+            Assert.InRange(taken, 5, 39_999);
+        }
     }
 }
