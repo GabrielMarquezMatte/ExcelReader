@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using ExcelReader.NetFramework.Reader;
+using ExcelReader.NetFramework.Writer;
 
 namespace ExcelReader.NetFramework.Tests.Reader
 {
@@ -75,6 +76,30 @@ namespace ExcelReader.NetFramework.Tests.Reader
 
             Assert.Equal(new double?[] { null, null, null, 1.5 }, numbers);
             Assert.Equal(CsvTexts, texts, StringComparer.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(ExcelFormat.Xlsx)]
+        [InlineData(ExcelFormat.Xlsb)]
+        [InlineData(ExcelFormat.Xls)]
+        public void NumberTextRoundTrips(ExcelFormat format)
+        {
+            double[] values = { 0.84551240822557006, 0.1 + 0.2, 1.0 / 3, 5e-324, double.MaxValue };
+            using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(format);
+            writer.StartSheet("N");
+            foreach (double value in values)
+            {
+                writer.StartRow();
+                writer.Write(value);
+                writer.EndRow();
+            }
+
+            writer.EndSheet();
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(writer.CloseToArray(), new ExcelOpenOptions { Format = format });
+            List<string?> texts = new List<string?>();
+            workbook.Sheet(0).ForEach(row => texts.Add(row[0].GetText()));
+
+            Assert.Equal(values.Select(v => BitConverter.DoubleToInt64Bits(v)), texts.Select(t => BitConverter.DoubleToInt64Bits(double.Parse(t!, CultureInfo.InvariantCulture))));
         }
 
         [Fact]
