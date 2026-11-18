@@ -309,6 +309,27 @@ namespace ExcelReader.Tests.Writer.Xlsb
         }
 
         [Fact]
+        public async Task BulkXlsbCellRowRejectedCellKeepsSheetUsable()
+        {
+            await using var ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                sheet.WriteRow([XlsbCell.Create("A"), XlsbCell.Empty, XlsbCell.Create("C")]);
+                Assert.Throws<ArgumentException>(() => sheet.WriteRow([XlsbCell.Create("aaa"), XlsbCell.Create(double.NaN)]));
+                sheet.WriteRow([XlsbCell.Create("bbb"), XlsbCell.Empty, XlsbCell.Create("ccc")]);
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            await using var reader = Excel.FromXlsb(ms);
+            var rows = ExcelParser.FromAttributes<SparseRow>().Parse(reader.FirstSheet).ToList();
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("aaa", rows[0].A);
+            Assert.Null(rows[0].C);
+            Assert.Equal("bbb", rows[1].A);
+            Assert.Equal("ccc", rows[1].C);
+        }
+
+        [Fact]
         public async Task BulkXlsbCellDate1904RoundTrips()
         {
             var date = new DateTime(1904, 1, 2, 0, 0, 0, DateTimeKind.Unspecified);
