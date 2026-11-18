@@ -65,7 +65,7 @@ namespace ExcelReader.Tests.Writer.Zip
 
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "A seeded generator picks reproducible test inputs; nothing here is secret.")]
-        private static byte[] RandomBytes(int length, int seed)
+        internal static byte[] RandomBytes(int length, int seed)
         {
             byte[] bytes = new byte[length];
             new Random(seed).NextBytes(bytes);
