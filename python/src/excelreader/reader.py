@@ -615,20 +615,20 @@ def _buffer_to_array(raw: bytes, typecode: str, dtype: str) -> object:
 
 def _decode_value_column(column: _native.NativeColumn, row_count: int) -> object:
     element, typecode, dtype = _COLUMN_BUFFERS[ColumnType(column.type)]
-    raw = ctypes.string_at(column.values, row_count * ctypes.sizeof(element))
+    raw = _native.copy_bytes(column.values, row_count * ctypes.sizeof(element))
     return _buffer_to_array(raw, typecode, dtype)
 
 
 def _decode_string_column(column: _native.NativeColumn, row_count: int) -> StringColumn:
-    offsets_bytes = ctypes.string_at(column.values, (row_count + 1) * ctypes.sizeof(ctypes.c_int32))
-    data = ctypes.string_at(column.data, int(column.data_len)) if column.data_len else b""
+    offsets_bytes = _native.copy_bytes(column.values, (row_count + 1) * ctypes.sizeof(ctypes.c_int32))
+    data = _native.copy_bytes(column.data, int(column.data_len)) if column.data_len else b""
     return StringColumn(_buffer_to_array(offsets_bytes, "i", "int32"), data)
 
 
 def _decode_validity(column: _native.NativeColumn, row_count: int) -> bytes | None:
     if not column.validity:
         return None
-    return ctypes.string_at(column.validity, (row_count + 7) // 8)
+    return _native.copy_bytes(column.validity, (row_count + 7) // 8)
 
 
 def _raw_options(

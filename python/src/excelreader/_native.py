@@ -12,7 +12,7 @@ import threading
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from excelreader.types import Border, CellStyle, OpenOptions, TableOptions, WriteOptions
@@ -82,6 +82,11 @@ def int32_len(buffer: bytes) -> int:
     if length > 0x7FFFFFFF:
         raise ValueError(f"{length} bytes is past the ABI's int32 length limit")
     return length
+
+
+def copy_bytes(pointer: Any, size: int) -> bytes:
+    """Copies `size` bytes from native memory; `ctypes.string_at` takes a C int, so it truncates past 2 GiB."""
+    return (ctypes.c_char * size).from_address(ctypes.cast(pointer, ctypes.c_void_p).value).raw
 
 
 class NativeColumnSpec(ctypes.Structure):
