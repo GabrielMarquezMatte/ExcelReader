@@ -37,7 +37,7 @@ namespace ExcelReader.Native
                 *outHandle = 0;
             }
 
-            if (!IsValidOpenRequest(data, dataLength, outHandle))
+            if (!IsValidOpenRequest(data, dataLength, outHandle, allowEmpty: true))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -441,9 +441,14 @@ namespace ExcelReader.Native
             }
         }
 
-        private static bool IsValidOpenRequest(byte* source, int sourceLength, nint* outHandle)
+        private static bool IsValidOpenRequest(byte* source, int sourceLength, nint* outHandle, bool allowEmpty = false)
         {
-            return source is not null && sourceLength >= 0 && outHandle is not null;
+            bool valid = (source is not null || (allowEmpty && sourceLength == 0)) && sourceLength >= 0 && outHandle is not null;
+            if (!valid)
+            {
+                NativeApi.SetLastError("the source must not be NULL (unless its length is 0 for an in-memory open), its length must not be negative and out_handle must not be NULL.");
+            }
+            return valid;
         }
 
         private static bool TryReadOpenOptions(NativeOpenOptionsRaw* options, out NativeOpenOptionsRaw? rawOptions)
