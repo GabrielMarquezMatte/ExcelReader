@@ -436,5 +436,19 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Assert.Equal(2, (await DrainAsync(rows)).Count);
             Assert.Equal(2, (await DrainAsync(rows)).Count);
         }
+
+        [Fact]
+        public async Task ASourceShorterThanTheHeaderRowYieldsNothingLikeTheSequentialParser()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes("Name,Age\n" + new string('x', 300_000) + "\n");
+            var parser = ExcelParser.FromAttributes<Row>(new ExcelParserOptions { HeaderRow = 5 });
+            using CsvReader sequential = Excel.FromCsv(csv);
+            Assert.Empty(parser.Parse(sequential.FirstSheet).ToList());
+
+            using CsvReader source = Excel.FromCsv(csv);
+            List<Row> actual = await DrainAsync(SheetParallel.ParseAsync(source.FirstSheet, parser, options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Empty(actual);
+        }
     }
 }
