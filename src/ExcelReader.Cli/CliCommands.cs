@@ -34,21 +34,35 @@ namespace ExcelReader.Cli
 
         internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null, string? password = null, char? inputDelimiter = null)
         {
+            bool progressPending = false;
+            Action<int>? progress = onProgress is null ? null : rows =>
+            {
+                progressPending = true;
+                onProgress(rows);
+            };
             return Execute(() =>
             {
-                string resolvedFormat = ResolveFormat(format, output);
-                ThrowIfOutputIsADirectory(output);
-                using IExcelWorkbook workbook = Open(path, sheet, out IExcelSheet selected, password, inputDelimiter);
-
-                if (output is null)
+                try
                 {
-                    WriteFormat(resolvedFormat, selected, stdout, leaveOpen: true, delimiter, onProgress);
+                    string resolvedFormat = ResolveFormat(format, output);
+                    ThrowIfOutputIsADirectory(output);
+                    using IExcelWorkbook workbook = Open(path, sheet, out IExcelSheet selected, password, inputDelimiter);
+
+                    if (output is null)
+                    {
+                        WriteFormat(resolvedFormat, selected, stdout, leaveOpen: true, delimiter, progress);
+                        return 0;
+                    }
+                    using StagedFile staged = new(output);
+                    WriteFormat(resolvedFormat, selected, staged.Stream, leaveOpen: true, delimiter, progress);
+                    staged.Commit();
                     return 0;
                 }
-                using StagedFile staged = new(output);
-                WriteFormat(resolvedFormat, selected, staged.Stream, leaveOpen: true, delimiter, onProgress);
-                staged.Commit();
-                return 0;
+                catch when (progressPending)
+                {
+                    stderr.WriteLine();
+                    throw;
+                }
             }, stderr);
         }
 
@@ -245,7 +259,7 @@ namespace ExcelReader.Cli
                 int headCount = fast ? rows : (rows + 1) / 2;
                 int tailCount = rows - headCount;
                 List<string?[]> head = [];
-                string?[][] tail = new string?[tailCount][];
+                List<string?[]> tail = [];
                 long total = 0;
                 int columnCount = schema.Count;
                 using IExcelRowEnumerator enumerator = selected.GetEnumerator();
@@ -264,7 +278,16 @@ namespace ExcelReader.Cli
                     }
                     if (total >= headCount && tailCount > 0)
                     {
-                        tail[(total - headCount) % tailCount] = Materialize(row, selected.IsDate1904, schema, filter);
+                        string?[] cells = Materialize(row, selected.IsDate1904, schema, filter);
+                        int slot = (int)((total - headCount) % tailCount);
+                        if (slot < tail.Count)
+                        {
+                            tail[slot] = cells;
+                        }
+                        if (slot == tail.Count)
+                        {
+                            tail.Add(cells);
+                        }
                     }
                     total++;
                     if (fast && total > rows)
@@ -282,7 +305,7 @@ namespace ExcelReader.Cli
                 }
                 for (long j = tailRegion - kept; j < tailRegion; j++)
                 {
-                    body.Add(tail[j % tailCount]);
+                    body.Add(tail[(int)(j % tailCount)]);
                 }
                 string shownTotal = fast && total > rows ? "?" : Underscored(total);
                 WriteTable(stdout, schema, shownTotal, selection ?? [.. Enumerable.Range(0, columnCount)], body, maxColumns, maxWidth);
