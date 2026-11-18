@@ -56,6 +56,16 @@ namespace ExcelReader.NetFramework.Tests.Writer
         public TimeSpan At { get; set; }
     }
 
+    public class HiddenCode
+    {
+        public string? Code { get; set; }
+    }
+
+    public sealed class HidingCode : HiddenCode
+    {
+        public new int Code { get; set; }
+    }
+
     public sealed class WriteSheetTests
     {
         private static readonly string[] Header = { "Nome", "Id", "Qty", "Small", "Tiny", "Price", "Ratio", "Amount", "Active", "When", "At", "MaybeQty", "MaybeWhen" };
@@ -140,6 +150,16 @@ namespace ExcelReader.NetFramework.Tests.Writer
             ExcelRow header = workbook.Sheet(0).ReadRows().First();
 
             Assert.Equal(Header, header.Cells.Select(c => c.Text).ToArray());
+        }
+
+        [Fact]
+        public void NewPropertyHidesTheBaseOne()
+        {
+            using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(ExcelFormat.Csv);
+            writer.WriteSheet("H", new[] { new HidingCode { Code = 7 } });
+            using ExcelWorkbook workbook = Open(writer.CloseToArray(), ExcelFormat.Csv);
+
+            Assert.Equal("Code|7", string.Join("|", workbook.Sheet(0).ReadRows().SelectMany(r => r.Cells).Select(c => c.Text)));
         }
 
         [Fact]

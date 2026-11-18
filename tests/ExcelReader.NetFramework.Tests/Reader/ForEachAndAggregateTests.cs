@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using ExcelReader.NetFramework.Reader;
+using ExcelReader.NetFramework.Writer;
 
 namespace ExcelReader.NetFramework.Tests.Reader
 {
@@ -77,6 +78,30 @@ namespace ExcelReader.NetFramework.Tests.Reader
             Assert.Equal(CsvTexts, texts, StringComparer.Ordinal);
         }
 
+        [Theory]
+        [InlineData(ExcelFormat.Xlsx)]
+        [InlineData(ExcelFormat.Xlsb)]
+        [InlineData(ExcelFormat.Xls)]
+        public void NumberTextRoundTrips(ExcelFormat format)
+        {
+            double[] values = { 0.84551240822557006, 0.1 + 0.2, 1.0 / 3, 5e-324, double.MaxValue };
+            using ExcelWorkbookWriter writer = ExcelWorkbookWriter.CreateInMemory(format);
+            writer.StartSheet("N");
+            foreach (double value in values)
+            {
+                writer.StartRow();
+                writer.Write(value);
+                writer.EndRow();
+            }
+
+            writer.EndSheet();
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(writer.CloseToArray(), new ExcelOpenOptions { Format = format });
+            List<string?> texts = new List<string?>();
+            workbook.Sheet(0).ForEach(row => texts.Add(row[0].GetText()));
+
+            Assert.Equal(values.Select(v => BitConverter.DoubleToInt64Bits(v)), texts.Select(t => BitConverter.DoubleToInt64Bits(double.Parse(t!, CultureInfo.InvariantCulture))));
+        }
+
         [Fact]
         public void RowViewIndexerRejectsOutOfRange()
         {
@@ -125,6 +150,14 @@ namespace ExcelReader.NetFramework.Tests.Reader
             using ExcelWorkbook workbook = ExcelWorkbook.Open(LargeCsv(), new ExcelOpenOptions { Format = ExcelFormat.Csv });
             InvalidTimeZoneException error = Assert.Throws<InvalidTimeZoneException>(() => workbook.Sheet(0).Aggregate(() => new Throwing()));
             Assert.Equal("boom", error.Message);
+        }
+
+        [Fact]
+        public void AggregateRethrowsTheFailureASequentialReadHits()
+        {
+            using ExcelWorkbook workbook = ExcelWorkbook.Open(LargeCsv(), new ExcelOpenOptions { Format = ExcelFormat.Csv });
+            InvalidTimeZoneException error = Assert.Throws<InvalidTimeZoneException>(() => workbook.Sheet(0).Aggregate(() => new ThrowingFrom(), degreeOfParallelism: 4));
+            Assert.Equal(ThrowingFrom.FirstFailingId.ToString(CultureInfo.InvariantCulture), error.Message);
         }
 
         [Fact]
@@ -193,6 +226,29 @@ namespace ExcelReader.NetFramework.Tests.Reader
             {
                 Ids.AddRange(other.Ids);
                 Sum += other.Sum;
+            }
+        }
+
+        private sealed class ThrowingFrom : IExcelAccumulator<ThrowingFrom>
+        {
+            internal const int FirstFailingId = 100;
+
+            public void Accumulate(ExcelRowView row)
+            {
+                int id = (int)row[0].Number!.Value;
+                if (id == FirstFailingId - 1)
+                {
+                    Thread.Sleep(300);
+                }
+
+                if (id >= FirstFailingId)
+                {
+                    throw new InvalidTimeZoneException(id.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+
+            public void Combine(ThrowingFrom other)
+            {
             }
         }
 
