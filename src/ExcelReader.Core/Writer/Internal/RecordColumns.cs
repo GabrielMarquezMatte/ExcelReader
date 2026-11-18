@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.Internal;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -21,9 +22,7 @@ namespace ExcelReader.Core.Writer.Internal
 
         private static PropertyInfo[] FilterProperties()
         {
-            return [.. typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(prop => prop.GetGetMethod() is not null && prop.GetIndexParameters().Length == 0
-                    && !Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))];
+            return [.. MappableProperties.Of(typeof(T)).Where(static prop => prop.GetGetMethod() is not null)];
         }
 
         private static string[] BuildHeaders(PropertyInfo[] props)

@@ -19,6 +19,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
         private readonly ReaderLifetime? _lease;
         private readonly object? _owner;
+        private readonly CancellationToken _ct;
 
         internal ParallelCsvEnumerable(
             CsvChunkSource source,
@@ -30,7 +31,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             ExcelParserOptions config,
             int degreeOfParallelism,
             ReaderLifetime? lease = null,
-            object? owner = null)
+            object? owner = null,
+            CancellationToken ct = default)
         {
             _source = source;
             _plan = plan;
@@ -42,6 +44,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             _dop = degreeOfParallelism;
             _lease = lease;
             _owner = owner;
+            _ct = ct;
         }
 
         [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks",
@@ -49,7 +52,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             _lease?.Acquire(_owner!);
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _ct);
             CancellationToken ct = cts.Token;
 
             int inFlight = _dop;

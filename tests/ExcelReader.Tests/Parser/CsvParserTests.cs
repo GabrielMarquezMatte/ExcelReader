@@ -428,5 +428,118 @@ namespace ExcelReader.Tests.Parser
 
             Assert.Throws<NotSupportedException>(e.Reset);
         }
+
+        [Fact]
+        public async Task ACsvSheetHeldAsIExcelSheetParsesLikeTheCsvOverload()
+        {
+            using var ms = Csv("At,Day\n01/15/2024 10:30:00,01/15/2024\n\n");
+            using var reader = Excel.FromCsv(ms);
+            IExcelSheet sheet = reader.FirstSheet;
+
+            StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(sheet).ToList());
+            StampRow asyncRow = Assert.Single(await ExcelParser.FromAttributes<StampRow>().Parse(sheet).ToListAsync(TestContext.Current.CancellationToken));
+
+            Assert.Equal(new DateTime(2024, 1, 15, 10, 30, 0), row.At);
+            Assert.Equal(new DateOnly(2024, 1, 15), row.Day);
+            Assert.Equal(row.At, asyncRow.At);
+        }
+
+        [Fact]
+        public void ACsvSheetHeldAsIExcelSheetSkipsBlankLinesWithoutARequiredFailure()
+        {
+            using var ms = Csv("Id,Note\n7,valid\n\n8,more\n\n");
+            using var reader = Excel.FromCsv(ms);
+            IExcelSheet sheet = reader.FirstSheet;
+
+            List<RequiredRow> rows = ExcelParser.FromAttributes<RequiredRow>().Parse(sheet).ToList();
+
+            Assert.Equal([7, 8], rows.Select(r => r.Id));
+        }
+
+        [Fact]
+        public void ACsvSheetHeldAsIExcelSheetRejectsAnIntegerTimeOnly()
+        {
+            using var ms = Csv("Start\n1230\n");
+            using var reader = Excel.FromCsv(ms);
+            IExcelSheet sheet = reader.FirstSheet;
+            var config = new ExcelParserOptions { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(sheet).ToList());
+            Assert.Equal("Start", ex.ColumnName);
+        }
+
+        private sealed class IndexedRow
+        {
+            private readonly string[] _extra = new string[4];
+
+            public int Id { get; set; }
+
+            public string this[int index]
+            {
+                get
+                {
+                    return _extra[index];
+                }
+                set
+                {
+                    _extra[index] = value;
+                }
+            }
+        }
+
+        [Fact]
+        public void AModelWithAPublicIndexerBindsItsOtherProperties()
+        {
+            using var ms = Csv("Id,Item\n7,x\n");
+            using var reader = Excel.FromCsv(ms);
+
+            IndexedRow row = Assert.Single(ExcelParser.FromAttributes<IndexedRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal(7, row.Id);
+        }
+
+        private class CodeBase
+        {
+            public int Code { get; set; }
+        }
+
+        private sealed class HiddenCodeRow : CodeBase
+        {
+            public new string? Code { get; set; }
+        }
+
+        [Fact]
+        public void APropertyHiddenWithNewBindsTheDerivedOne()
+        {
+            using var ms = Csv("Code" + Environment.NewLine + "A1" + Environment.NewLine);
+            using var reader = Excel.FromCsv(ms);
+
+            HiddenCodeRow row = Assert.Single(ExcelParser.FromAttributes<HiddenCodeRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Equal("A1", row.Code);
+        }
+
+        private class VirtualCodeBase
+        {
+            public virtual string? Code { get; set; }
+        }
+
+        private sealed class IgnoredOverrideRow : VirtualCodeBase
+        {
+            [ExcelIgnore]
+            public override string? Code { get; set; }
+        }
+
+        [Fact]
+        public void AnIgnoredOverrideIsNotBoundThroughTheBaseDeclaration()
+        {
+            using var ms = Csv("Code" + Environment.NewLine + "A1" + Environment.NewLine);
+            using var reader = Excel.FromCsv(ms);
+
+            IgnoredOverrideRow row = Assert.Single(ExcelParser.FromAttributes<IgnoredOverrideRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Null(row.Code);
+        }
     }
 }

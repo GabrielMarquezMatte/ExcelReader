@@ -400,5 +400,55 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Assert.Equal(20_000, actual.Count);
             Assert.Equal(19_999, actual[^1].Age);
         }
+
+        [Fact]
+        public async Task APartitionedParseHonorsTheTokenPassedToParseAsync()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(20_000));
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: cts.Token);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => DrainAsync(rows));
+        }
+
+        [Fact]
+        public async Task ASequentialParseKeepsTheParseAsyncTokenWhenEnumeratedWithAnother()
+        {
+            using CsvReader source = Excel.FromCsv(BuildCsv(3));
+            using var cts = new CancellationTokenSource();
+            using var other = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 1 }, ct: cts.Token);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await rows.ToListAsync(other.Token));
+        }
+
+        [Fact]
+        public async Task TheSequentialFallbackAfterAHugeHeaderCanBeEnumeratedTwice()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes("Name,Age," + new string('x', 300_000) + "\nada,1\ngrace,2\n");
+            using CsvReader source = Excel.FromCsv(csv);
+            IAsyncEnumerable<Row> rows = SheetParallel.ParseAsync(source.FirstSheet, ExcelParser.FromAttributes<Row>(), options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, (await DrainAsync(rows)).Count);
+            Assert.Equal(2, (await DrainAsync(rows)).Count);
+        }
+
+        [Fact]
+        public async Task ASourceShorterThanTheHeaderRowYieldsNothingLikeTheSequentialParser()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes("Name,Age\n" + new string('x', 300_000) + "\n");
+            var parser = ExcelParser.FromAttributes<Row>(new ExcelParserOptions { HeaderRow = 5 });
+            using CsvReader sequential = Excel.FromCsv(csv);
+            Assert.Empty(parser.Parse(sequential.FirstSheet).ToList());
+
+            using CsvReader source = Excel.FromCsv(csv);
+            List<Row> actual = await DrainAsync(SheetParallel.ParseAsync(source.FirstSheet, parser, options: new SheetParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Empty(actual);
+        }
     }
 }

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Xlsx;
 
 namespace ExcelReader.Core.Parser
@@ -90,7 +91,7 @@ namespace ExcelReader.Core.Parser
                 bool throwOnParseFailure = false)
                 : base(rows)
             {
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider, throwOnParseFailure);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider, throwOnParseFailure, rows is CsvReader.Enumerator);
             }
 
             private protected override ProjectionStep Classify()
@@ -122,7 +123,7 @@ namespace ExcelReader.Core.Parser
                 CancellationToken ct)
                 : base(sheet, ct)
             {
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, sheet.IsDate1904, provider, throwOnParseFailure);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, sheet.IsDate1904, provider, throwOnParseFailure, sheet is CsvSheet);
             }
 
             private protected override ProjectionStep Classify()
