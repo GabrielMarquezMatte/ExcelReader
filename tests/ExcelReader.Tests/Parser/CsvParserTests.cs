@@ -519,5 +519,27 @@ namespace ExcelReader.Tests.Parser
 
             Assert.Equal("A1", row.Code);
         }
+
+        private class VirtualCodeBase
+        {
+            public virtual string? Code { get; set; }
+        }
+
+        private sealed class IgnoredOverrideRow : VirtualCodeBase
+        {
+            [ExcelIgnore]
+            public override string? Code { get; set; }
+        }
+
+        [Fact]
+        public void AnIgnoredOverrideIsNotBoundThroughTheBaseDeclaration()
+        {
+            using var ms = Csv("Code" + Environment.NewLine + "A1" + Environment.NewLine);
+            using var reader = Excel.FromCsv(ms);
+
+            IgnoredOverrideRow row = Assert.Single(ExcelParser.FromAttributes<IgnoredOverrideRow>().Parse(reader.FirstSheet).ToList());
+
+            Assert.Null(row.Code);
+        }
     }
 }

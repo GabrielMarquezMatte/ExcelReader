@@ -15,7 +15,7 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 foreach (PropertyInfo prop in current.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                 {
-                    if (prop.GetIndexParameters().Length == 0 && !Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)) && seenNames.Add(prop.Name))
+                    if (prop.GetIndexParameters().Length == 0 && seenNames.Add(prop.Name) && !Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))
                     {
                         properties.Add(prop);
                     }
