@@ -52,6 +52,8 @@ ExcelReader.Core.Parser.ExcelParserOptions.HeaderNormalization.get -> ExcelReade
 ExcelReader.Core.Parser.ExcelParserOptions.HeaderNormalization.init -> void
 ExcelReader.Core.Parser.ExcelParserOptions.HeaderRow.get -> int
 ExcelReader.Core.Parser.ExcelParserOptions.HeaderRow.init -> void
+ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows.get -> bool
+ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows.init -> void
 ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure.get -> bool
 ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure.init -> void
 ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>
