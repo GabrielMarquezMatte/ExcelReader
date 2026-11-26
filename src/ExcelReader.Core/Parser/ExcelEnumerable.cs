@@ -48,7 +48,7 @@ namespace ExcelReader.Core.Parser
         public Enumerator GetEnumerator()
         {
             TEnumerator rows = _sheet.GetEnumerator();
-            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _sheet.IsDate1904, _config.Culture, _config.ThrowOnParseFailure);
+            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _sheet.IsDate1904, _config.Culture, _config.ThrowOnParseFailure, _config.SkipEmptyRows);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Parser
             Justification = "T allows ref struct so a row model can be a class, a struct or a ref struct; constraining it would break that.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, cancellationToken);
+            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _config.SkipEmptyRows, cancellationToken);
         }
 
         /// <summary>Enumerates rows synchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
@@ -88,10 +88,11 @@ namespace ExcelReader.Core.Parser
                 int headerRow,
                 bool isDate1904,
                 IFormatProvider provider,
-                bool throwOnParseFailure = false)
+                bool throwOnParseFailure = false,
+                bool skipEmptyRows = false)
                 : base(rows)
             {
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider, throwOnParseFailure, rows is CsvReader.Enumerator);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider, throwOnParseFailure, rows is CsvReader.Enumerator, skipEmptyRows);
             }
 
             private protected override ProjectionStep Classify()
@@ -120,10 +121,11 @@ namespace ExcelReader.Core.Parser
                 int headerRow,
                 IFormatProvider provider,
                 bool throwOnParseFailure,
+                bool skipEmptyRows,
                 CancellationToken ct)
                 : base(sheet, ct)
             {
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, sheet.IsDate1904, provider, throwOnParseFailure, sheet is CsvSheet);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, sheet.IsDate1904, provider, throwOnParseFailure, sheet is CsvSheet, skipEmptyRows);
             }
 
             private protected override ProjectionStep Classify()

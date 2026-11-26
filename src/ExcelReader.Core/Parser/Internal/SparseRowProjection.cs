@@ -69,6 +69,28 @@ namespace ExcelReader.Core.Parser.Internal
             return bindings;
         }
 
+        internal static bool HasBoundValue<TModel>(in Row row, ColumnBinding<TModel>[] bindings)
+            where TModel : allows ref struct
+        {
+            int bindingIndex = 0;
+            foreach (CellDesc cell in row.Descriptors)
+            {
+                while (bindingIndex < bindings.Length && bindings[bindingIndex].Column < cell.Column)
+                {
+                    bindingIndex++;
+                }
+                if (bindingIndex == bindings.Length)
+                {
+                    return false;
+                }
+                if (bindings[bindingIndex].Column == cell.Column && cell.Type != CellType.Empty)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         internal static void ParseRow<TModel>(
             in Row row,
             ColumnBinding<TModel>[] bindings,

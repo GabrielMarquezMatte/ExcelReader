@@ -45,7 +45,7 @@ namespace ExcelReader.Core.Parser
         public Enumerator GetEnumerator()
         {
             CsvReader.Enumerator rows = _sheet.GetEnumerator();
-            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure);
+            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _config.SkipEmptyRows);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -77,7 +77,7 @@ namespace ExcelReader.Core.Parser
 
         private AsyncEnumerator CreateAsyncEnumerator(CancellationTokenSource? linked, CancellationToken ct)
         {
-            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, linked, ct);
+            return new AsyncEnumerator(_sheet, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _config.SkipEmptyRows, linked, ct);
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
@@ -93,10 +93,11 @@ namespace ExcelReader.Core.Parser
                 HeaderNormalization normalization,
                 int headerRow,
                 IFormatProvider provider,
-                bool throwOnParseFailure = false)
+                bool throwOnParseFailure = false,
+                bool skipEmptyRows = false)
                 : base(rows)
             {
-                _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
+                _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure, skipEmptyRows);
             }
 
             private protected override ProjectionStep Classify()
@@ -125,11 +126,12 @@ namespace ExcelReader.Core.Parser
                 int headerRow,
                 IFormatProvider provider,
                 bool throwOnParseFailure,
+                bool skipEmptyRows,
                 CancellationTokenSource? linked,
                 CancellationToken ct)
                 : base(sheet, ct)
             {
-                _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
+                _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure, skipEmptyRows);
                 _linked = linked;
             }
 
@@ -191,13 +193,14 @@ namespace ExcelReader.Core.Parser
         private readonly int _headerRow;
         private readonly ExcelRowContext _context;
         private readonly bool _throwOnParseFailure;
+        private readonly bool _skipEmptyRows;
         private ColumnParser<T>[]? _fieldParsers;
         private string?[] _fieldNames;
         private bool[] _fieldRequired;
         private (int Field, string Name)[] _requiredFields;
         private int _rowNumber;
 
-        internal CsvRowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, IFormatProvider provider, bool throwOnParseFailure = false)
+        internal CsvRowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, IFormatProvider provider, bool throwOnParseFailure = false, bool skipEmptyRows = false)
         {
             _typeInfo = typeInfo;
             _comparer = comparer;
@@ -205,12 +208,13 @@ namespace ExcelReader.Core.Parser
             _headerRow = headerRow;
             _context = new ExcelRowContext { FormatProvider = provider };
             _throwOnParseFailure = throwOnParseFailure;
+            _skipEmptyRows = skipEmptyRows;
             _fieldNames = [];
             _fieldRequired = [];
             _requiredFields = [];
         }
 
-        internal CsvRowProjector(TypeMapInfo<T> typeInfo, CsvBoundColumnMap<T> map, IFormatProvider provider, bool throwOnParseFailure)
+        internal CsvRowProjector(TypeMapInfo<T> typeInfo, CsvBoundColumnMap<T> map, IFormatProvider provider, bool throwOnParseFailure, bool skipEmptyRows = false)
         {
             _typeInfo = typeInfo;
             _comparer = StringComparer.Ordinal;
@@ -218,6 +222,7 @@ namespace ExcelReader.Core.Parser
             _headerRow = -1;
             _context = new ExcelRowContext { FormatProvider = provider };
             _throwOnParseFailure = throwOnParseFailure;
+            _skipEmptyRows = skipEmptyRows;
             _fieldParsers = map.FieldParsers;
             _fieldNames = map.FieldNames;
             _fieldRequired = map.FieldRequired;
@@ -230,12 +235,35 @@ namespace ExcelReader.Core.Parser
             return rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty;
         }
 
+        private readonly ProjectionStep YieldUnlessBlank(CsvReader.Enumerator rows)
+        {
+            if (IsBlank(rows) || (_skipEmptyRows && !HasBoundValue(rows)))
+            {
+                return ProjectionStep.Skip;
+            }
+            return ProjectionStep.Yield;
+        }
+
+        private readonly bool HasBoundValue(CsvReader.Enumerator rows)
+        {
+            ColumnParser<T>[] parsers = _fieldParsers!;
+            int limit = Math.Min(rows.FieldCount, parsers.Length);
+            for (int i = 0; i < limit; i++)
+            {
+                if (parsers[i] is not null && rows.FieldAt(i).Type != CellType.Empty)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         internal ProjectionStep Classify(CsvReader.Enumerator rows)
         {
             if (_headerRow < 0)
             {
                 _rowNumber++;
-                return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
+                return YieldUnlessBlank(rows);
             }
             if (_typeInfo.IsIndexBased)
             {
@@ -244,12 +272,12 @@ namespace ExcelReader.Core.Parser
                     BuildIndexColumnMap();
                 }
                 _rowNumber++;
-                return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
+                return YieldUnlessBlank(rows);
             }
             if (_fieldParsers is not null && _rowNumber >= _headerRow)
             {
                 _rowNumber++;
-                return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
+                return YieldUnlessBlank(rows);
             }
             ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _fieldParsers is not null);
             if (step == ProjectionStep.BuildMap)
@@ -261,7 +289,7 @@ namespace ExcelReader.Core.Parser
             {
                 return step;
             }
-            return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
+            return YieldUnlessBlank(rows);
         }
 
         internal readonly T Project(CsvReader.Enumerator rows)

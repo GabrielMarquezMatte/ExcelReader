@@ -49,6 +49,10 @@ namespace ExcelReader.Core.Parser.SheetPipeline
                 return (ref Chunk chunk, Row row) =>
                 {
                     int rowInChunk = ++chunk.Rows;
+                    if (config.SkipEmptyRows && !SparseRowProjection.HasBoundValue(in row, bindings))
+                    {
+                        return;
+                    }
                     T model = info.CreateInstance();
                     Span<bool> seen = track ? (chunk.Seen ??= new bool[bindings.Length]) : default;
                     SparseRowProjection.ParseRow(in row, bindings, seen, track, in context, throwOnParseFailure, rowInChunk, ref model);

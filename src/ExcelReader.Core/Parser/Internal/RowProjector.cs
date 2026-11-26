@@ -14,12 +14,13 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly ExcelRowContext _context;
         private readonly bool _throwOnParseFailure;
         private readonly bool _skipBlankRows;
+        private readonly bool _skipEmptyRows;
         private ColumnBinding<T>[]? _bindings;
         private bool[] _seen;
         private int _requireValueCount;
         private int _rowNumber;
 
-        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904, IFormatProvider provider, bool throwOnParseFailure = false, bool skipBlankRows = false)
+        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904, IFormatProvider provider, bool throwOnParseFailure = false, bool skipBlankRows = false, bool skipEmptyRows = false)
         {
             _typeInfo = typeInfo;
             _comparer = comparer;
@@ -28,6 +29,7 @@ namespace ExcelReader.Core.Parser.Internal
             _context = new ExcelRowContext { IsDate1904 = isDate1904, FormatProvider = provider };
             _throwOnParseFailure = throwOnParseFailure;
             _skipBlankRows = skipBlankRows;
+            _skipEmptyRows = skipEmptyRows;
             _seen = [];
         }
 
@@ -59,6 +61,10 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly ProjectionStep YieldUnlessBlank(in Row row)
         {
             if (_skipBlankRows && row.Descriptors is [{ Type: CellType.Empty }])
+            {
+                return ProjectionStep.Skip;
+            }
+            if (_skipEmptyRows && !SparseRowProjection.HasBoundValue(in row, _bindings!))
             {
                 return ProjectionStep.Skip;
             }

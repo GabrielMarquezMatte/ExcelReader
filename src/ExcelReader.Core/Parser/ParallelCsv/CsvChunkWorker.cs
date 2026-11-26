@@ -144,7 +144,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             ColumnStringCaches? contentCache,
             CancellationToken ct)
         {
-            var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);
+            var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure, config.SkipEmptyRows);
             (long resolvedNextStart, ExceptionDispatchInfo? failure, int records) outcome;
 
             if (source.IsMemory)

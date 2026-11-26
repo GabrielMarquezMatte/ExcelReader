@@ -1,1 +1,3 @@
 #nullable enable
+ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows.get -> bool
+ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows.init -> void

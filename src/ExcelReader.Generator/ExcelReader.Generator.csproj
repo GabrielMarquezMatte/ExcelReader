@@ -27,6 +27,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The oldest compiler that can load the generator, in consumers' builds and in docfx. Do not bump routinely. -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all" />
   </ItemGroup>
 
