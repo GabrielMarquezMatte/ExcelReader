@@ -776,6 +776,19 @@ references:
   isSpec: "True"
   fullName: ExcelReader.Core.Parser.ExcelParserOptions.HeaderRow
   nameWithType: ExcelParserOptions.HeaderRow
+- uid: ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows
+  name: SkipEmptyRows
+  href: api/ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_SkipEmptyRows
+  commentId: P:ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows
+  fullName: ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows
+  nameWithType: ExcelParserOptions.SkipEmptyRows
+- uid: ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows*
+  name: SkipEmptyRows
+  href: api/ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_SkipEmptyRows_
+  commentId: Overload:ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows
+  isSpec: "True"
+  fullName: ExcelReader.Core.Parser.ExcelParserOptions.SkipEmptyRows
+  nameWithType: ExcelParserOptions.SkipEmptyRows
 - uid: ExcelReader.Core.Parser.ExcelParserOptions.ThrowOnParseFailure
   name: ThrowOnParseFailure
   href: api/ExcelReader.Core.Parser.ExcelParserOptions.html#ExcelReader_Core_Parser_ExcelParserOptions_ThrowOnParseFailure
