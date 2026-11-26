@@ -220,7 +220,16 @@ namespace ExcelReader.Core.Writer
             {
                 ct.ThrowIfCancellationRequested();
                 TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);
-                writeRow(row, record);
+                try
+                {
+                    writeRow(row, record);
+                }
+                catch
+                {
+                    // A row left open makes the sheet's Dispose throw in place of this failure.
+                    await FailureCleanup.DisposeAsync(row).ConfigureAwait(false);
+                    throw;
+                }
                 await row.DisposeAsync().ConfigureAwait(false);
             }
         }
@@ -246,7 +255,15 @@ namespace ExcelReader.Core.Writer
             await foreach (T record in records.WithCancellation(ct).ConfigureAwait(false))
             {
                 TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);
-                writeRow(row, record);
+                try
+                {
+                    writeRow(row, record);
+                }
+                catch
+                {
+                    await FailureCleanup.DisposeAsync(row).ConfigureAwait(false);
+                    throw;
+                }
                 await row.DisposeAsync().ConfigureAwait(false);
             }
         }
@@ -282,7 +299,15 @@ namespace ExcelReader.Core.Writer
             {
                 ct.ThrowIfCancellationRequested();
                 XlsxRowWriter row = sheet.StartRow();
-                writeRow(row, record);
+                try
+                {
+                    writeRow(row, record);
+                }
+                catch
+                {
+                    FailureCleanup.Dispose(row);
+                    throw;
+                }
                 row.Dispose();
             }
         }
