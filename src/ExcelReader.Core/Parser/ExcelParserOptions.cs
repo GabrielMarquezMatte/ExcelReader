@@ -32,5 +32,12 @@ namespace ExcelReader.Core.Parser
         /// parse of a required column regardless of this flag.
         /// </summary>
         public bool ThrowOnParseFailure { get; init; }
+
+        /// <summary>
+        /// Gets whether a data row in which no bound column holds a value is skipped instead of yielded, as a
+        /// hand-edited sheet with formatted-only rows needs. Values in unbound columns do not keep a row. A skipped
+        /// row still counts toward the row numbers in <c>ExcelParseException</c>. Defaults to <see langword="false"/>.
+        /// </summary>
+        public bool SkipEmptyRows { get; init; }
     }
 }

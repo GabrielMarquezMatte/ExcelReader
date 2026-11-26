@@ -9,6 +9,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
     {
         private const int StackallocLimit = 256;
 
+        private static bool Ignored(Row row, ColumnBinding<TModel>[] bindings, bool skipEmptyRows)
+        {
+            return row.IsEmptyRecord || (skipEmptyRows && !SparseRowProjection.HasBoundValue(in row, bindings));
+        }
+
         internal static RowAction<TState> Bind(
             ExcelParser<TModel> parser, TypeMapInfo<TModel> info, bool isDate1904, Row header, int headerRow, bool sequential, ModelSink<TState, TModel> sink)
         {
@@ -28,10 +33,11 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             ExcelRowContext context = new() { IsDate1904 = isDate1904, FormatProvider = config.Culture };
             bool throwOnParseFailure = config.ThrowOnParseFailure;
             int rowNumber = headerRow;
+            bool skipEmptyRows = config.SkipEmptyRows;
 
             void Plain(ref TState state, Row row)
             {
-                if (row.IsEmptyRecord)
+                if (Ignored(row, bindings, skipEmptyRows))
                 {
                     return;
                 }
@@ -43,7 +49,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             void PlainNumbered(ref TState state, Row row)
             {
                 int current = ++rowNumber;
-                if (row.IsEmptyRecord)
+                if (Ignored(row, bindings, skipEmptyRows))
                 {
                     return;
                 }
@@ -54,7 +60,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
             void Tracked(ref TState state, Row row)
             {
-                if (row.IsEmptyRecord)
+                if (Ignored(row, bindings, skipEmptyRows))
                 {
                     return;
                 }
@@ -74,7 +80,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             void TrackedNumbered(ref TState state, Row row)
             {
                 int current = ++rowNumber;
-                if (row.IsEmptyRecord)
+                if (Ignored(row, bindings, skipEmptyRows))
                 {
                     return;
                 }
