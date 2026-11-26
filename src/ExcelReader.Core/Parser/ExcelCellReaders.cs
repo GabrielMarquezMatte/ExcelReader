@@ -35,7 +35,7 @@ namespace ExcelReader.Core.Parser
         /// is read as a serial number, not as date text — there is no way to tell those two apart from
         /// the cell alone.
         /// </summary>
-        public static readonly ExcelCellReader<DateTime> DateTimeAuto = ReadDateTimeAuto;
+        public static readonly ExcelCellReader<DateTime> DateTimeAuto = ColumnParserFactory.ReadDateTimeAuto;
 
         /// <summary>Reads a cell as an Excel date serial number, truncated to its date component.</summary>
         public static readonly ExcelCellReader<DateOnly> DateOnlySerial = ColumnParserFactory.ReadDateOnly;
@@ -44,7 +44,7 @@ namespace ExcelReader.Core.Parser
         public static readonly ExcelCellReader<DateOnly> DateOnlyText = ColumnParserFactory.ReadTextDateOnly;
 
         /// <summary>Reads a cell as an Excel date serial number, falling back to date-only text when the cell isn't numeric — the <see cref="DateOnly"/> counterpart of <see cref="DateTimeAuto"/>, same trade-off.</summary>
-        public static readonly ExcelCellReader<DateOnly> DateOnlyAuto = ReadDateOnlyAuto;
+        public static readonly ExcelCellReader<DateOnly> DateOnlyAuto = ColumnParserFactory.ReadDateOnlyAuto;
 
         /// <summary>Reads a cell as an Excel time-of-day serial number (the fractional part of a day).</summary>
         public static readonly ExcelCellReader<TimeOnly> TimeOnlySerial = ColumnParserFactory.ReadTimeOnly;
@@ -60,18 +60,6 @@ namespace ExcelReader.Core.Parser
         {
             value = cell.GetString();
             return true;
-        }
-
-        private static bool ReadDateTimeAuto(in Cell cell, in ExcelRowContext context, out DateTime value)
-        {
-            return ColumnParserFactory.ReadDateTime(in cell, in context, out value)
-                || ColumnParserFactory.ReadTextDateTime(in cell, in context, out value);
-        }
-
-        private static bool ReadDateOnlyAuto(in Cell cell, in ExcelRowContext context, out DateOnly value)
-        {
-            return ColumnParserFactory.ReadDateOnly(in cell, in context, out value)
-                || ColumnParserFactory.ReadTextDateOnly(in cell, in context, out value);
         }
 
         private static bool ReadTimeOnlyAuto(in Cell cell, in ExcelRowContext context, out TimeOnly value)

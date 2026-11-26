@@ -262,6 +262,16 @@ namespace ExcelReader.Core.Parser.Internal
             return true;
         }
 
+        internal static bool ReadDateTimeAuto(in Cell cell, in ExcelRowContext context, out DateTime value)
+        {
+            return ReadDateTime(in cell, in context, out value) || ReadTextDateTime(in cell, in context, out value);
+        }
+
+        internal static bool ReadDateOnlyAuto(in Cell cell, in ExcelRowContext context, out DateOnly value)
+        {
+            return ReadDateOnly(in cell, in context, out value) || ReadTextDateOnly(in cell, in context, out value);
+        }
+
         internal static bool ReadTimeOnly(in Cell cell, in ExcelRowContext context, out TimeOnly value)
         {
             if (!cell.TryGetDouble(out double serial) || !double.IsFinite(serial))
@@ -335,12 +345,12 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static CellReader<DateTime> DateTimeReader(bool textDates)
         {
-            return textDates ? ReadTextDateTime : ReadDateTime;
+            return textDates ? ReadTextDateTime : ReadDateTimeAuto;
         }
 
         private static CellReader<DateOnly> DateOnlyReader(bool textDates)
         {
-            return textDates ? ReadTextDateOnly : ReadDateOnly;
+            return textDates ? ReadTextDateOnly : ReadDateOnlyAuto;
         }
 
         private static CellReader<TimeOnly> TimeOnlyReader(bool textDates)
